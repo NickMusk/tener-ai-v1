@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from typing import Any
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .db import Database
@@ -33,72 +32,121 @@ class WorkflowService:
         self.outreach_agent = outreach_agent
         self.faq_agent = faq_agent
 
-    def execute_job_workflow(self, job_id: int, limit: int = 30) -> WorkflowSummary:
-        job = self.db.get_job(job_id)
-        if not job:
-            raise ValueError(f"Job {job_id} not found")
-
-        self.db.log_operation(
-            operation="workflow.execute.start",
-            status="ok",
-            entity_type="job",
-            entity_id=str(job_id),
-            details={"limit": limit},
-        )
-
+    def source_candidates(self, job_id: int, limit: int = 30) -> Dict[str, Any]:
+        job = self._get_job_or_raise(job_id)
         profiles = self.sourcing_agent.find_candidates(job=job, limit=limit)
+
         self.db.log_operation(
             operation="agent.sourcing.search",
             status="ok",
             entity_type="job",
             entity_id=str(job_id),
-            details={"profiles_found": len(profiles)},
+            details={"profiles_found": len(profiles), "limit": limit},
         )
+        return {"job_id": job_id, "profiles": profiles, "total": len(profiles)}
 
-        verified_count = 0
-        rejected_count = 0
-        outreached_count = 0
-        conversation_ids: List[int] = []
+    def verify_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
+        job = self._get_job_or_raise(job_id)
+
+        items: List[Dict[str, Any]] = []
+        verified = 0
+        rejected = 0
 
         for profile in profiles:
-            candidate_id = self.db.upsert_candidate(profile, source="linkedin")
             score, status, notes = self.verification_agent.verify_candidate(job=job, profile=profile)
+            record = {
+                "profile": profile,
+                "score": score,
+                "status": status,
+                "notes": notes,
+            }
+            items.append(record)
 
+            if status == "verified":
+                verified += 1
+            else:
+                rejected += 1
+
+            entity_id = str(profile.get("linkedin_id") or profile.get("id") or "unknown")
+            self.db.log_operation(
+                operation="agent.verification.evaluate",
+                status="ok",
+                entity_type="candidate_profile",
+                entity_id=entity_id,
+                details={"job_id": job_id, "result": status, "score": score},
+            )
+
+        return {
+            "job_id": job_id,
+            "items": items,
+            "total": len(items),
+            "verified": verified,
+            "rejected": rejected,
+        }
+
+    def add_verified_candidates(self, job_id: int, verified_items: List[Dict[str, Any]]) -> Dict[str, Any]:
+        self._get_job_or_raise(job_id)
+
+        added: List[Dict[str, Any]] = []
+        for item in verified_items:
+            profile = item.get("profile") if isinstance(item, dict) else None
+            if not isinstance(profile, dict):
+                continue
+
+            score = float(item.get("score") or 0.0)
+            notes = item.get("notes") if isinstance(item.get("notes"), dict) else {}
+
+            candidate_id = self.db.upsert_candidate(profile, source="linkedin")
             self.db.create_candidate_match(
                 job_id=job_id,
                 candidate_id=candidate_id,
                 score=score,
-                status=status,
+                status="verified",
                 verification_notes=notes,
             )
             self.db.log_operation(
-                operation="agent.verification.evaluate",
+                operation="agent.add.persist",
                 status="ok",
                 entity_type="candidate",
                 entity_id=str(candidate_id),
-                details={
-                    "job_id": job_id,
-                    "result": status,
-                    "score": score,
-                },
+                details={"job_id": job_id, "score": score},
             )
+            added.append({"candidate_id": candidate_id, "profile": profile, "score": score})
 
-            if status != "verified":
-                rejected_count += 1
+        return {"job_id": job_id, "added": added, "total": len(added)}
+
+    def outreach_candidates(self, job_id: int, candidate_ids: List[int]) -> Dict[str, Any]:
+        job = self._get_job_or_raise(job_id)
+
+        out_items: List[Dict[str, Any]] = []
+        conversation_ids: List[int] = []
+        sent = 0
+        failed = 0
+
+        for raw_id in candidate_ids:
+            try:
+                candidate_id = int(raw_id)
+            except (TypeError, ValueError):
+                failed += 1
                 continue
 
-            verified_count += 1
             candidate = self.db.get_candidate(candidate_id)
             if not candidate:
+                failed += 1
                 continue
 
             language, message = self.outreach_agent.compose_intro(job=job, candidate=candidate)
             conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
-            delivery: Dict[str, Any]
+
             try:
-                delivery = self.sourcing_agent.send_outreach(candidate_profile=profile, message=message)
+                delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
+                if delivery.get("sent") is False:
+                    failed += 1
+                else:
+                    sent += 1
             except Exception as exc:
                 delivery = {"sent": False, "provider": "linkedin", "error": str(exc)}
+                failed += 1
                 self.db.log_operation(
                     operation="agent.outreach.delivery_error",
                     status="error",
@@ -122,16 +170,53 @@ class WorkflowService:
                 details={"candidate_id": candidate_id, "language": language, "delivery": delivery},
             )
 
+            out_items.append(
+                {
+                    "candidate_id": candidate_id,
+                    "conversation_id": conversation_id,
+                    "language": language,
+                    "delivery": delivery,
+                }
+            )
             conversation_ids.append(conversation_id)
-            outreached_count += 1
+
+        return {
+            "job_id": job_id,
+            "items": out_items,
+            "conversation_ids": conversation_ids,
+            "sent": sent,
+            "failed": failed,
+            "total": len(out_items),
+        }
+
+    def execute_job_workflow(self, job_id: int, limit: int = 30) -> WorkflowSummary:
+        self._get_job_or_raise(job_id)
+
+        self.db.log_operation(
+            operation="workflow.execute.start",
+            status="ok",
+            entity_type="job",
+            entity_id=str(job_id),
+            details={"limit": limit},
+        )
+
+        source_result = self.source_candidates(job_id=job_id, limit=limit)
+        verify_result = self.verify_profiles(job_id=job_id, profiles=source_result["profiles"])
+
+        verified_items = [item for item in verify_result["items"] if item.get("status") == "verified"]
+        add_result = self.add_verified_candidates(job_id=job_id, verified_items=verified_items)
+        outreach_result = self.outreach_candidates(
+            job_id=job_id,
+            candidate_ids=[x["candidate_id"] for x in add_result["added"]],
+        )
 
         summary = WorkflowSummary(
             job_id=job_id,
-            searched=len(profiles),
-            verified=verified_count,
-            rejected=rejected_count,
-            outreached=outreached_count,
-            conversation_ids=conversation_ids,
+            searched=source_result["total"],
+            verified=verify_result["verified"],
+            rejected=verify_result["rejected"],
+            outreached=outreach_result["total"],
+            conversation_ids=outreach_result["conversation_ids"],
         )
 
         self.db.log_operation(
@@ -146,7 +231,6 @@ class WorkflowService:
                 "outreached": summary.outreached,
             },
         )
-
         return summary
 
     def process_inbound_message(self, conversation_id: int, text: str) -> Dict[str, str]:
@@ -197,3 +281,9 @@ class WorkflowService:
         )
 
         return {"language": lang, "intent": intent, "reply": reply}
+
+    def _get_job_or_raise(self, job_id: int) -> Dict[str, Any]:
+        job = self.db.get_job(job_id)
+        if not job:
+            raise ValueError(f"Job {job_id} not found")
+        return job

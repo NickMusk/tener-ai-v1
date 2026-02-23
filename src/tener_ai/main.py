@@ -62,7 +62,15 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
 
-        if parsed.path == "/":
+        if parsed.path in {"/", "/dashboard"}:
+            dashboard = project_root() / "src" / "tener_ai" / "static" / "dashboard.html"
+            if not dashboard.exists():
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "dashboard file not found"})
+                return
+            self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
+            return
+
+        if parsed.path == "/api":
             self._json_response(
                 HTTPStatus.OK,
                 {
@@ -71,9 +79,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     "endpoints": {
                         "health": "GET /health",
                         "create_job": "POST /api/jobs",
+                        "list_jobs": "GET /api/jobs",
                         "get_job": "GET /api/jobs/{job_id}",
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
                         "run_workflow": "POST /api/workflows/execute",
+                        "source_step": "POST /api/steps/source",
+                        "verify_step": "POST /api/steps/verify",
+                        "add_step": "POST /api/steps/add",
+                        "outreach_step": "POST /api/steps/outreach",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "conversation_inbound": "POST /api/conversations/{conversation_id}/inbound",
                         "logs": "GET /api/logs?limit=100",
@@ -85,6 +98,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/health":
             self._json_response(HTTPStatus.OK, {"status": "ok"})
+            return
+
+        if parsed.path == "/api/jobs":
+            params = parse_qs(parsed.query or "")
+            limit = self._safe_int((params.get("limit") or ["100"])[0], 100)
+            items = SERVICES["db"].list_jobs(limit=limit or 100)
+            self._json_response(HTTPStatus.OK, {"items": items})
             return
 
         if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/candidates"):
@@ -169,6 +189,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/workflows/execute":
             body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
             job_id = self._safe_int(body.get("job_id"), None)
             if job_id is None:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_id is required"})
@@ -204,6 +227,99 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if parsed.path == "/api/steps/source":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            job_id = self._safe_int(body.get("job_id"), None)
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_id is required"})
+                return
+            limit = self._safe_int(body.get("limit"), 30)
+            try:
+                result = SERVICES["workflow"].source_candidates(job_id=job_id, limit=limit or 30)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "source step failed", "details": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
+        if parsed.path == "/api/steps/verify":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            job_id = self._safe_int(body.get("job_id"), None)
+            profiles = body.get("profiles")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_id is required"})
+                return
+            if not isinstance(profiles, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "profiles must be an array"})
+                return
+            try:
+                result = SERVICES["workflow"].verify_profiles(job_id=job_id, profiles=profiles)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "verify step failed", "details": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
+        if parsed.path == "/api/steps/add":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            job_id = self._safe_int(body.get("job_id"), None)
+            items = body.get("verified_items")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_id is required"})
+                return
+            if not isinstance(items, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "verified_items must be an array"})
+                return
+            try:
+                result = SERVICES["workflow"].add_verified_candidates(job_id=job_id, verified_items=items)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "add step failed", "details": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
+        if parsed.path == "/api/steps/outreach":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            job_id = self._safe_int(body.get("job_id"), None)
+            candidate_ids = body.get("candidate_ids")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_id is required"})
+                return
+            if not isinstance(candidate_ids, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "candidate_ids must be an array"})
+                return
+            try:
+                result = SERVICES["workflow"].outreach_candidates(job_id=job_id, candidate_ids=candidate_ids)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "outreach step failed", "details": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
         if parsed.path.startswith("/api/conversations/") and parsed.path.endswith("/inbound"):
             conversation_id = self._extract_id(parsed.path, pattern=r"^/api/conversations/(\d+)/inbound$")
             if conversation_id is None:
@@ -211,6 +327,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 return
 
             body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
             text = str(body.get("message") or "").strip()
             if not text:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "message is required"})
@@ -251,7 +370,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     def log_message(self, format: str, *args: Any) -> None:
         return
 
-    def _read_json_body(self) -> Optional[Dict[str, Any]]:
+    def _read_json_body(self) -> Any:
         length_raw = self.headers.get("Content-Length", "0")
         length = self._safe_int(length_raw, 0)
         if not length:
@@ -261,6 +380,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             return json.loads(raw.decode("utf-8"))
         except json.JSONDecodeError:
             return {"_error": "invalid json"}
+
+    def _html_response(self, status: HTTPStatus, content: str) -> None:
+        encoded = content.encode("utf-8")
+        self.send_response(status.value)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        self.wfile.write(encoded)
 
     def _json_response(self, status: HTTPStatus, payload: Dict[str, Any]) -> None:
         encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")

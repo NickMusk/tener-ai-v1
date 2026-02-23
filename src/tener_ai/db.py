@@ -134,6 +134,13 @@ class Database:
         row = self._conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         return self._row_to_dict(row) if row else None
 
+    def list_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM jobs ORDER BY id DESC LIMIT ?",
+            (max(1, min(limit, 1000)),),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def upsert_candidate(self, profile: Dict[str, Any], source: str = "linkedin") -> int:
         with self.transaction() as conn:
             existing = conn.execute(

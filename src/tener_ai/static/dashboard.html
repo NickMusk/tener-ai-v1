@@ -1,0 +1,848 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tener.ai Pipeline Control Center</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0a0e14;
+      --bg-card: #141921;
+      --bg-hover: #1a1f2a;
+      --accent-green: #00ff87;
+      --accent-green-dim: rgba(0, 255, 135, 0.12);
+      --accent-green-glow: rgba(0, 255, 135, 0.35);
+      --accent-blue: #00d4ff;
+      --accent-purple: #a855f7;
+      --accent-red: #ef4444;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --border-color: #30363d;
+      --ok: #10b981;
+      --warn: #f59e0b;
+      --err: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100vh;
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text-primary);
+      background: radial-gradient(circle at 20% 20%, var(--accent-green-dim) 0%, transparent 45%),
+                  radial-gradient(circle at 80% 10%, rgba(0, 212, 255, 0.08) 0%, transparent 35%),
+                  var(--bg-dark);
+      display: grid;
+      grid-template-columns: 280px 1fr;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--border-color);
+      background: rgba(20, 25, 33, 0.95);
+      padding: 26px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+
+    .logo {
+      font-family: 'Space Mono', monospace;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .logo span { color: var(--accent-green); }
+
+    .subnote {
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .nav-group {
+      display: grid;
+      gap: 8px;
+    }
+
+    .nav-item {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 10px;
+      padding: 10px 12px;
+      color: var(--text-secondary);
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .nav-item .mono { font-family: 'Space Mono', monospace; font-size: 11px; }
+
+    .main {
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .card {
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      background: var(--bg-card);
+      padding: 16px;
+    }
+
+    .header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 16px;
+      align-items: center;
+    }
+
+    .title {
+      font-family: 'Space Mono', monospace;
+      font-size: 22px;
+      line-height: 1.2;
+      background: linear-gradient(135deg, var(--text-primary), var(--accent-green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      font-size: 14px;
+      margin-top: 6px;
+    }
+
+    .button-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      border: 1px solid var(--border-color);
+      border-radius: 9px;
+      padding: 10px 13px;
+      background: var(--bg-hover);
+      color: var(--text-primary);
+      font-weight: 600;
+      cursor: pointer;
+      transition: all .2s ease;
+    }
+
+    button:hover { border-color: var(--accent-green); }
+
+    .btn-primary {
+      background: var(--accent-green);
+      color: #08120d;
+      border-color: var(--accent-green);
+      box-shadow: 0 0 20px var(--accent-green-glow);
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+
+    .metric .label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+    }
+
+    .metric .value {
+      margin-top: 4px;
+      font-family: 'Space Mono', monospace;
+      font-size: 26px;
+      color: var(--accent-green);
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1.4fr 1fr;
+      gap: 12px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .form-grid .full { grid-column: span 2; }
+
+    input, textarea, select {
+      width: 100%;
+      border: 1px solid var(--border-color);
+      background: #0f141c;
+      color: var(--text-primary);
+      border-radius: 9px;
+      padding: 10px 11px;
+      font-family: 'DM Sans', sans-serif;
+    }
+
+    textarea { min-height: 84px; resize: vertical; }
+
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(210px, 1fr));
+      gap: 10px;
+    }
+
+    .step-card {
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 12px;
+      background: #111722;
+      display: grid;
+      gap: 10px;
+    }
+
+    .step-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .status {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+    }
+
+    .status.running { color: var(--warn); border-color: var(--warn); }
+    .status.success { color: var(--ok); border-color: var(--ok); }
+    .status.error { color: var(--err); border-color: var(--err); }
+
+    .step-metrics {
+      color: var(--text-secondary);
+      font-size: 13px;
+      line-height: 1.5;
+      min-height: 58px;
+    }
+
+    .step-actions { display: flex; gap: 8px; }
+    .step-actions button { flex: 1; font-size: 12px; padding: 9px; }
+
+    .panels {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 12px;
+    }
+
+    .panel-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .mono { font-family: 'Space Mono', monospace; }
+
+    .log-box {
+      max-height: 300px;
+      overflow: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px;
+      background: #0f141c;
+      font-size: 12px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .log-row {
+      border-bottom: 1px dashed #2a3441;
+      padding-bottom: 8px;
+    }
+
+    .log-row:last-child { border-bottom: none; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    th, td {
+      border-bottom: 1px solid #242d3b;
+      padding: 9px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--text-secondary);
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+      background: #101722;
+    }
+
+    .muted { color: var(--text-secondary); }
+
+    @media (max-width: 1240px) {
+      body { grid-template-columns: 1fr; }
+      .sidebar { position: relative; height: auto; }
+      .controls, .panels { grid-template-columns: 1fr; }
+      .steps { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 760px) {
+      .main { padding: 14px; }
+      .steps { grid-template-columns: 1fr; }
+      .form-grid { grid-template-columns: 1fr; }
+      .form-grid .full { grid-column: span 1; }
+      .grid-3 { grid-template-columns: 1fr; }
+      .header { grid-template-columns: 1fr; }
+      .button-row { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div>
+      <div class="logo">Tener<span>.ai</span></div>
+      <p class="subnote">Pipeline Control Center<br>Manual orchestration + live diagnostics</p>
+    </div>
+
+    <div class="nav-group">
+      <div class="nav-item"><span>Source</span><span class="mono" id="nav-source">idle</span></div>
+      <div class="nav-item"><span>Verify</span><span class="mono" id="nav-verify">idle</span></div>
+      <div class="nav-item"><span>Add</span><span class="mono" id="nav-add">idle</span></div>
+      <div class="nav-item"><span>Outreach</span><span class="mono" id="nav-outreach">idle</span></div>
+      <div class="nav-item"><span>FAQ</span><span class="mono" id="nav-faq">idle</span></div>
+    </div>
+
+    <div class="card">
+      <div class="panel-title"><span>Current Job</span><span class="mono" id="job-label">none</span></div>
+      <div class="muted" id="job-meta">Create or select a job to begin.</div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <section class="card header">
+      <div>
+        <h1 class="title">Manual Hiring Pipeline Dashboard</h1>
+        <p class="subtitle">Run each step independently, inspect outputs, and monitor logs in real time.</p>
+      </div>
+      <div class="button-row">
+        <button id="refresh-btn">Refresh Data</button>
+        <button class="btn-primary" id="run-full-btn">Run Full Pipeline</button>
+      </div>
+    </section>
+
+    <section class="grid-3">
+      <div class="card metric">
+        <div class="label">Searched</div>
+        <div class="value" id="metric-searched">0</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Verified</div>
+        <div class="value" id="metric-verified">0</div>
+      </div>
+      <div class="card metric">
+        <div class="label">Outreached</div>
+        <div class="value" id="metric-outreached">0</div>
+      </div>
+    </section>
+
+    <section class="controls">
+      <div class="card">
+        <div class="panel-title"><span>Create Job</span><span class="mono">POST /api/jobs</span></div>
+        <div class="form-grid">
+          <div>
+            <label class="muted">Title</label>
+            <input id="job-title" placeholder="Senior Backend Engineer">
+          </div>
+          <div>
+            <label class="muted">Location</label>
+            <input id="job-location" placeholder="Germany / Remote">
+          </div>
+          <div>
+            <label class="muted">Seniority</label>
+            <select id="job-seniority">
+              <option value="">auto</option>
+              <option value="junior">junior</option>
+              <option value="middle">middle</option>
+              <option value="senior">senior</option>
+              <option value="lead">lead</option>
+            </select>
+          </div>
+          <div>
+            <label class="muted">Preferred Languages (comma)</label>
+            <input id="job-languages" placeholder="en, ru">
+          </div>
+          <div class="full">
+            <label class="muted">JD Text</label>
+            <textarea id="job-jd" placeholder="Need Python, Django, AWS, Docker, PostgreSQL..."></textarea>
+          </div>
+          <div class="full button-row" style="justify-content:flex-start;">
+            <button class="btn-primary" id="create-job-btn">Create Job</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="panel-title"><span>Select Job</span><span class="mono">GET /api/jobs</span></div>
+        <div class="form-grid">
+          <div class="full">
+            <label class="muted">Job</label>
+            <select id="job-select"></select>
+          </div>
+          <div>
+            <label class="muted">Source Limit</label>
+            <input id="source-limit" type="number" value="10" min="1" max="100">
+          </div>
+          <div>
+            <label class="muted">Logs Limit</label>
+            <input id="logs-limit" type="number" value="60" min="1" max="500">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="steps">
+      <article class="step-card">
+        <div class="step-title"><span>1. Source</span><span id="status-source" class="status">idle</span></div>
+        <div id="step-source-meta" class="step-metrics">Profiles: 0</div>
+        <div class="step-actions">
+          <button id="run-source-btn">Run</button>
+        </div>
+      </article>
+
+      <article class="step-card">
+        <div class="step-title"><span>2. Verify</span><span id="status-verify" class="status">idle</span></div>
+        <div id="step-verify-meta" class="step-metrics">Verified: 0, Rejected: 0</div>
+        <div class="step-actions">
+          <button id="run-verify-btn">Run</button>
+        </div>
+      </article>
+
+      <article class="step-card">
+        <div class="step-title"><span>3. Add</span><span id="status-add" class="status">idle</span></div>
+        <div id="step-add-meta" class="step-metrics">Added: 0</div>
+        <div class="step-actions">
+          <button id="run-add-btn">Run</button>
+        </div>
+      </article>
+
+      <article class="step-card">
+        <div class="step-title"><span>4. Outreach</span><span id="status-outreach" class="status">idle</span></div>
+        <div id="step-outreach-meta" class="step-metrics">Sent: 0</div>
+        <div class="step-actions">
+          <button id="run-outreach-btn">Run</button>
+        </div>
+      </article>
+
+      <article class="step-card">
+        <div class="step-title"><span>5. FAQ</span><span id="status-faq" class="status">manual</span></div>
+        <div class="step-metrics">Inbound auto-replies are triggered via conversation endpoint.</div>
+        <div class="step-actions">
+          <button disabled>Use API</button>
+        </div>
+      </article>
+    </section>
+
+    <section class="panels">
+      <div class="card">
+        <div class="panel-title"><span>Live Operation Logs</span><button id="logs-refresh-btn">Reload</button></div>
+        <div id="logs-box" class="log-box"></div>
+      </div>
+
+      <div class="card">
+        <div class="panel-title"><span>Step Output Snapshot</span><span class="mono" id="snapshot-label">none</span></div>
+        <div id="snapshot-box" class="log-box"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="panel-title"><span>Candidates for Selected Job</span><button id="cands-refresh-btn">Reload</button></div>
+      <div style="overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Status</th>
+              <th>Score</th>
+              <th>Location</th>
+              <th>Skills</th>
+            </tr>
+          </thead>
+          <tbody id="candidates-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      jobId: null,
+      sourceProfiles: [],
+      verifyItems: [],
+      addedCandidates: [],
+      outreachItems: []
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        ...opts,
+        headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || data.details || JSON.stringify(data));
+      }
+      return data;
+    }
+
+    function setStepStatus(step, status) {
+      const el = $("status-" + step);
+      el.className = "status";
+      if (status === "running") el.classList.add("running");
+      if (status === "success") el.classList.add("success");
+      if (status === "error") el.classList.add("error");
+      el.textContent = status;
+
+      const nav = $("nav-" + step);
+      if (nav) nav.textContent = status;
+    }
+
+    function setMetrics({searched = 0, verified = 0, outreached = 0}) {
+      $("metric-searched").textContent = searched;
+      $("metric-verified").textContent = verified;
+      $("metric-outreached").textContent = outreached;
+    }
+
+    function snapshot(title, payload) {
+      $("snapshot-label").textContent = title;
+      const lines = [JSON.stringify(payload, null, 2)];
+      $("snapshot-box").innerHTML = `<pre style="white-space:pre-wrap;">${escapeHtml(lines.join("\n"))}</pre>`;
+    }
+
+    function escapeHtml(str) {
+      return str
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;');
+    }
+
+    function selectedJobId() {
+      const fromSelect = $("job-select").value;
+      return Number(fromSelect || state.jobId || 0) || null;
+    }
+
+    async function loadJobs() {
+      const data = await api('/api/jobs?limit=200');
+      const select = $("job-select");
+      select.innerHTML = '';
+
+      if (!data.items || !data.items.length) {
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'No jobs yet';
+        select.appendChild(opt);
+        state.jobId = null;
+        $("job-label").textContent = 'none';
+        $("job-meta").textContent = 'Create a job to start manual pipeline.';
+        return;
+      }
+
+      data.items.forEach((job, idx) => {
+        const opt = document.createElement('option');
+        opt.value = job.id;
+        opt.textContent = `#${job.id} ${job.title}`;
+        if (idx === 0) opt.selected = true;
+        select.appendChild(opt);
+      });
+
+      state.jobId = Number(select.value);
+      syncJobMeta(data.items.find(x => x.id === state.jobId));
+    }
+
+    function syncJobMeta(job) {
+      if (!job) {
+        $("job-label").textContent = 'none';
+        $("job-meta").textContent = 'Create or select a job to begin.';
+        return;
+      }
+      $("job-label").textContent = `#${job.id}`;
+      $("job-meta").textContent = `${job.title} • ${job.seniority || 'auto'} • ${job.location || 'anywhere'}`;
+    }
+
+    async function createJob() {
+      const title = $("job-title").value.trim();
+      const jdText = $("job-jd").value.trim();
+      if (!title || !jdText) {
+        alert('Title and JD text are required');
+        return;
+      }
+
+      const payload = {
+        title,
+        jd_text: jdText,
+        location: $("job-location").value.trim() || null,
+        seniority: $("job-seniority").value || null,
+        preferred_languages: $("job-languages").value
+          .split(',')
+          .map(x => x.trim().toLowerCase())
+          .filter(Boolean)
+      };
+
+      const out = await api('/api/jobs', { method: 'POST', body: JSON.stringify(payload) });
+      snapshot('job.created', out);
+      await loadJobs();
+      await refreshCandidates();
+      await refreshLogs();
+    }
+
+    async function runSource() {
+      const jobId = selectedJobId();
+      if (!jobId) return alert('Select a job');
+      setStepStatus('source', 'running');
+      try {
+        const limit = Number($("source-limit").value || '10');
+        const out = await api('/api/steps/source', { method: 'POST', body: JSON.stringify({ job_id: jobId, limit }) });
+        state.sourceProfiles = out.profiles || [];
+        $("step-source-meta").textContent = `Profiles: ${out.total || 0}`;
+        setMetrics({ searched: out.total || 0, verified: state.verifyItems.filter(x => x.status === 'verified').length, outreached: state.outreachItems.length });
+        setStepStatus('source', 'success');
+        snapshot('source.result', out);
+      } catch (e) {
+        setStepStatus('source', 'error');
+        snapshot('source.error', { error: e.message });
+      }
+      await refreshLogs();
+    }
+
+    async function runVerify() {
+      const jobId = selectedJobId();
+      if (!jobId) return alert('Select a job');
+      if (!state.sourceProfiles.length) return alert('Run Source first');
+      setStepStatus('verify', 'running');
+      try {
+        const out = await api('/api/steps/verify', {
+          method: 'POST',
+          body: JSON.stringify({ job_id: jobId, profiles: state.sourceProfiles })
+        });
+        state.verifyItems = out.items || [];
+        $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Rejected: ${out.rejected || 0}`;
+        setMetrics({ searched: state.sourceProfiles.length, verified: out.verified || 0, outreached: state.outreachItems.length });
+        setStepStatus('verify', 'success');
+        snapshot('verify.result', out);
+      } catch (e) {
+        setStepStatus('verify', 'error');
+        snapshot('verify.error', { error: e.message });
+      }
+      await refreshLogs();
+    }
+
+    async function runAdd() {
+      const jobId = selectedJobId();
+      if (!jobId) return alert('Select a job');
+      const verifiedItems = state.verifyItems.filter(x => x.status === 'verified');
+      if (!verifiedItems.length) return alert('No verified profiles. Run Verify first.');
+
+      setStepStatus('add', 'running');
+      try {
+        const out = await api('/api/steps/add', {
+          method: 'POST',
+          body: JSON.stringify({ job_id: jobId, verified_items: verifiedItems })
+        });
+        state.addedCandidates = out.added || [];
+        $("step-add-meta").textContent = `Added: ${out.total || 0}`;
+        setStepStatus('add', 'success');
+        snapshot('add.result', out);
+      } catch (e) {
+        setStepStatus('add', 'error');
+        snapshot('add.error', { error: e.message });
+      }
+      await refreshCandidates();
+      await refreshLogs();
+    }
+
+    async function runOutreach() {
+      const jobId = selectedJobId();
+      if (!jobId) return alert('Select a job');
+      if (!state.addedCandidates.length) return alert('No added candidates. Run Add first.');
+
+      setStepStatus('outreach', 'running');
+      try {
+        const out = await api('/api/steps/outreach', {
+          method: 'POST',
+          body: JSON.stringify({
+            job_id: jobId,
+            candidate_ids: state.addedCandidates.map(x => x.candidate_id)
+          })
+        });
+        state.outreachItems = out.items || [];
+        $("step-outreach-meta").textContent = `Total: ${out.total || 0}, Sent: ${out.sent || 0}, Failed: ${out.failed || 0}`;
+        setMetrics({ searched: state.sourceProfiles.length, verified: state.verifyItems.filter(x => x.status === 'verified').length, outreached: out.total || 0 });
+        setStepStatus('outreach', 'success');
+        snapshot('outreach.result', out);
+      } catch (e) {
+        setStepStatus('outreach', 'error');
+        snapshot('outreach.error', { error: e.message });
+      }
+      await refreshCandidates();
+      await refreshLogs();
+    }
+
+    async function runFull() {
+      const jobId = selectedJobId();
+      if (!jobId) return alert('Select a job');
+      ['source', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'running'));
+
+      try {
+        const limit = Number($("source-limit").value || '10');
+        const out = await api('/api/workflows/execute', {
+          method: 'POST',
+          body: JSON.stringify({ job_id: jobId, limit })
+        });
+
+        $("step-source-meta").textContent = `Profiles: ${out.searched || 0}`;
+        $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Rejected: ${out.rejected || 0}`;
+        $("step-add-meta").textContent = `Added: ${out.verified || 0}`;
+        $("step-outreach-meta").textContent = `Outreached: ${out.outreached || 0}`;
+
+        ['source', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'success'));
+        setMetrics({ searched: out.searched || 0, verified: out.verified || 0, outreached: out.outreached || 0 });
+        snapshot('workflow.execute', out);
+      } catch (e) {
+        ['source', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'error'));
+        snapshot('workflow.error', { error: e.message });
+      }
+      await refreshCandidates();
+      await refreshLogs();
+    }
+
+    async function refreshLogs() {
+      const limit = Number($("logs-limit").value || '60');
+      try {
+        const data = await api(`/api/logs?limit=${encodeURIComponent(limit)}`);
+        const box = $("logs-box");
+        const rows = data.items || [];
+        if (!rows.length) {
+          box.innerHTML = '<div class="muted">No logs yet</div>';
+          return;
+        }
+
+        box.innerHTML = rows.map((item) => {
+          const details = escapeHtml(JSON.stringify(item.details || {}));
+          return `
+            <div class="log-row">
+              <div><b>${escapeHtml(item.operation)}</b> <span class="mono muted">${escapeHtml(item.created_at)}</span></div>
+              <div class="muted">entity: ${escapeHtml(item.entity_type || '-')}:${escapeHtml(item.entity_id || '-')} • status: ${escapeHtml(item.status || '-')}</div>
+              <div class="mono muted">${details}</div>
+            </div>
+          `;
+        }).join('');
+      } catch (e) {
+        $("logs-box").innerHTML = `<div class="muted">Failed to load logs: ${escapeHtml(e.message)}</div>`;
+      }
+    }
+
+    async function refreshCandidates() {
+      const jobId = selectedJobId();
+      const body = $("candidates-tbody");
+      body.innerHTML = '';
+      if (!jobId) {
+        body.innerHTML = '<tr><td colspan="6" class="muted">Select job</td></tr>';
+        return;
+      }
+
+      try {
+        const data = await api(`/api/jobs/${jobId}/candidates`);
+        const items = data.items || [];
+        if (!items.length) {
+          body.innerHTML = '<tr><td colspan="6" class="muted">No candidates yet</td></tr>';
+          return;
+        }
+
+        body.innerHTML = items.map((x) => {
+          const skills = (x.skills || []).slice(0, 6).join(', ');
+          return `
+            <tr>
+              <td class="mono">${x.candidate_id}</td>
+              <td>${escapeHtml(x.full_name || '-')}</td>
+              <td>${escapeHtml(x.status || '-')}</td>
+              <td class="mono">${x.score ?? '-'}</td>
+              <td>${escapeHtml(x.location || '-')}</td>
+              <td>${escapeHtml(skills || '-')}</td>
+            </tr>
+          `;
+        }).join('');
+      } catch (e) {
+        body.innerHTML = `<tr><td colspan="6" class="muted">Failed: ${escapeHtml(e.message)}</td></tr>`;
+      }
+    }
+
+    async function fullRefresh() {
+      await loadJobs();
+      await refreshCandidates();
+      await refreshLogs();
+      setStepStatus('source', 'idle');
+      setStepStatus('verify', 'idle');
+      setStepStatus('add', 'idle');
+      setStepStatus('outreach', 'idle');
+      setStepStatus('faq', 'manual');
+    }
+
+    function bindEvents() {
+      $("create-job-btn").addEventListener('click', () => createJob().catch(e => alert(e.message)));
+      $("run-source-btn").addEventListener('click', () => runSource());
+      $("run-verify-btn").addEventListener('click', () => runVerify());
+      $("run-add-btn").addEventListener('click', () => runAdd());
+      $("run-outreach-btn").addEventListener('click', () => runOutreach());
+      $("run-full-btn").addEventListener('click', () => runFull());
+      $("refresh-btn").addEventListener('click', () => fullRefresh());
+      $("logs-refresh-btn").addEventListener('click', () => refreshLogs());
+      $("cands-refresh-btn").addEventListener('click', () => refreshCandidates());
+
+      $("job-select").addEventListener('change', async (e) => {
+        state.jobId = Number(e.target.value || '0') || null;
+        if (state.jobId) {
+          try {
+            const job = await api(`/api/jobs/${state.jobId}`);
+            syncJobMeta(job);
+          } catch {
+            syncJobMeta(null);
+          }
+        } else {
+          syncJobMeta(null);
+        }
+        await refreshCandidates();
+        await refreshLogs();
+      });
+    }
+
+    bindEvents();
+    fullRefresh();
+  </script>
+</body>
+</html>
