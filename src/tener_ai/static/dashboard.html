@@ -239,6 +239,9 @@
 
     .step-actions { display: flex; gap: 8px; }
     .step-actions button { flex: 1; font-size: 12px; padding: 9px; }
+    .json-nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
+    .json-tab { font-size: 11px; padding: 7px 9px; }
+    .json-tab.active { border-color: var(--accent-green); color: var(--accent-green); }
 
     .panels {
       display: grid;
@@ -514,7 +517,15 @@
       </div>
 
       <div class="card">
-        <div class="panel-title"><span>Step Output Snapshot</span><span class="mono" id="snapshot-label">none</span></div>
+        <div class="panel-title"><span>Step JSON Outputs</span><span class="mono" id="snapshot-label">none</span></div>
+        <div class="json-nav">
+          <button class="json-tab" data-step="source" data-label="source">source</button>
+          <button class="json-tab" data-step="enrich" data-label="enrich">enrich</button>
+          <button class="json-tab" data-step="verify" data-label="verify">verify</button>
+          <button class="json-tab" data-step="add" data-label="add">add</button>
+          <button class="json-tab" data-step="outreach" data-label="outreach">outreach</button>
+          <button class="json-tab" data-step="workflow" data-label="workflow">workflow</button>
+        </div>
         <div id="snapshot-box" class="log-box"></div>
       </div>
     </section>
@@ -587,7 +598,16 @@
       enrichedProfiles: [],
       verifyItems: [],
       addedCandidates: [],
-      outreachItems: []
+      outreachItems: [],
+      selectedSnapshotStep: "source",
+      stepSnapshots: {
+        source: null,
+        enrich: null,
+        verify: null,
+        add: null,
+        outreach: null,
+        workflow: null
+      }
     };
 
     const $ = (id) => document.getElementById(id);
@@ -623,9 +643,51 @@
     }
 
     function snapshot(title, payload) {
-      $("snapshot-label").textContent = title;
+      const [stepName, kind] = String(title || "").split(".");
+      if (Object.prototype.hasOwnProperty.call(state.stepSnapshots, stepName)) {
+        state.stepSnapshots[stepName] = {
+          title,
+          kind: kind || "result",
+          payload,
+          updated_at: new Date().toISOString()
+        };
+        state.selectedSnapshotStep = stepName;
+        renderSnapshotTabs();
+        renderSelectedSnapshot();
+        return;
+      }
+      $("snapshot-label").textContent = title || "none";
       const lines = [JSON.stringify(payload, null, 2)];
       $("snapshot-box").innerHTML = `<pre style="white-space:pre-wrap;">${escapeHtml(lines.join("\n"))}</pre>`;
+    }
+
+    function renderSnapshotTabs() {
+      const tabs = document.querySelectorAll(".json-tab");
+      tabs.forEach((tab) => {
+        const step = tab.dataset.step;
+        const label = tab.dataset.label || step;
+        const hasOutput = Boolean(state.stepSnapshots[step]);
+        tab.textContent = hasOutput ? `${label} *` : label;
+        tab.classList.toggle("active", step === state.selectedSnapshotStep);
+      });
+    }
+
+    function renderSelectedSnapshot() {
+      const step = state.selectedSnapshotStep;
+      $("snapshot-label").textContent = step || "none";
+      const data = step ? state.stepSnapshots[step] : null;
+      if (!data) {
+        $("snapshot-box").innerHTML = `<div class="muted">No output for <span class="mono">${escapeHtml(step || "step")}</span> yet.</div>`;
+        return;
+      }
+      const wrapped = {
+        step,
+        title: data.title,
+        kind: data.kind,
+        updated_at: data.updated_at,
+        data: data.payload
+      };
+      $("snapshot-box").innerHTML = `<pre style="white-space:pre-wrap;">${escapeHtml(JSON.stringify(wrapped, null, 2))}</pre>`;
     }
 
     function escapeHtml(str) {
@@ -887,7 +949,11 @@
         state.outreachItems = out.items || [];
         $("step-outreach-meta").textContent = `Total: ${out.total || 0}, Sent: ${out.sent || 0}, Failed: ${out.failed || 0}`;
         setMetrics({ searched: state.sourceProfiles.length, verified: state.verifyItems.filter(x => x.status === 'verified').length, outreached: out.total || 0 });
-        setStepStatus('outreach', 'success');
+        if ((out.failed || 0) > 0) {
+          setStepStatus('outreach', 'error');
+        } else {
+          setStepStatus('outreach', 'success');
+        }
         snapshot('outreach.result', out);
       } catch (e) {
         setStepStatus('outreach', 'error');
@@ -913,9 +979,14 @@
         $("step-enrich-meta").textContent = `Profiles: ${out.searched || 0}, Failed: 0`;
         $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Rejected: ${out.rejected || 0}`;
         $("step-add-meta").textContent = `Added: ${out.verified || 0}`;
-        $("step-outreach-meta").textContent = `Outreached: ${out.outreached || 0}`;
+        $("step-outreach-meta").textContent = `Total: ${out.outreached || 0}, Sent: ${out.outreach_sent || 0}, Failed: ${out.outreach_failed || 0}`;
 
-        ['source', 'enrich', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'success'));
+        ['source', 'enrich', 'verify', 'add'].forEach(s => setStepStatus(s, 'success'));
+        if ((out.outreach_failed || 0) > 0) {
+          setStepStatus('outreach', 'error');
+        } else {
+          setStepStatus('outreach', 'success');
+        }
         setMetrics({ searched: out.searched || 0, verified: out.verified || 0, outreached: out.outreached || 0 });
         snapshot('workflow.execute', out);
       } catch (e) {
@@ -1014,6 +1085,13 @@
       $("refresh-btn").addEventListener('click', () => fullRefresh());
       $("logs-refresh-btn").addEventListener('click', () => refreshLogs());
       $("cands-refresh-btn").addEventListener('click', () => refreshCandidates());
+      document.querySelectorAll(".json-tab").forEach((tab) => {
+        tab.addEventListener("click", () => {
+          state.selectedSnapshotStep = tab.dataset.step || "source";
+          renderSnapshotTabs();
+          renderSelectedSnapshot();
+        });
+      });
 
       $("job-select").addEventListener('change', async (e) => {
         state.jobId = Number(e.target.value || '0') || null;
@@ -1037,6 +1115,8 @@
     }
 
     bindEvents();
+    renderSnapshotTabs();
+    renderSelectedSnapshot();
     fullRefresh();
   </script>
 </body>

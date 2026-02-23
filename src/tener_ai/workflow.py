@@ -14,6 +14,8 @@ class WorkflowSummary:
     verified: int
     rejected: int
     outreached: int
+    outreach_sent: int
+    outreach_failed: int
     conversation_ids: List[int]
 
 
@@ -232,6 +234,8 @@ class WorkflowService:
             verified=verify_result["verified"],
             rejected=verify_result["rejected"],
             outreached=outreach_result["total"],
+            outreach_sent=outreach_result["sent"],
+            outreach_failed=outreach_result["failed"],
             conversation_ids=outreach_result["conversation_ids"],
         )
 
@@ -245,6 +249,8 @@ class WorkflowService:
                 "verified": summary.verified,
                 "rejected": summary.rejected,
                 "outreached": summary.outreached,
+                "outreach_sent": summary.outreach_sent,
+                "outreach_failed": summary.outreach_failed,
             },
         )
         return summary

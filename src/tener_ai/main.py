@@ -223,6 +223,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     "verified": summary.verified,
                     "rejected": summary.rejected,
                     "outreached": summary.outreached,
+                    "outreach_sent": summary.outreach_sent,
+                    "outreach_failed": summary.outreach_failed,
                     "conversation_ids": summary.conversation_ids,
                 },
             )
