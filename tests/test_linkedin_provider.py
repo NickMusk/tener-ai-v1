@@ -109,6 +109,10 @@ class UnipileProviderParsingTests(unittest.TestCase):
         self.assertEqual(out[0]["full_name"], "Alex Morgan")
         self.assertTrue(any("/api/v1/linkedin/search" in call[1] for call in provider.calls))
 
+    def test_extract_years_from_headline(self) -> None:
+        self.assertEqual(self.provider._extract_years_from_text("Senior Backend Engineer | 7.6+ YOE"), 7)
+        self.assertEqual(self.provider._extract_years_from_text("Platform engineer with 10 years experience"), 10)
+
 
 if __name__ == "__main__":
     unittest.main()

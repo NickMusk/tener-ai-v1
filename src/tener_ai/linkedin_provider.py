@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -92,7 +93,7 @@ class UnipileLinkedInProvider(LinkedInProvider):
         last_error = "unipile_search_unknown_error"
         for path in self._candidate_search_paths():
             endpoint = self._with_account_id(self._build_url(path), self.account_id)
-            for method, payload, query_params in self._search_attempts(query=query, limit=limit):
+            for method, payload, query_params in self._search_attempts(path=path, query=query, limit=limit):
                 try:
                     if method == "GET":
                         url = f"{endpoint}{'&' if '?' in endpoint else '?'}{parse.urlencode(query_params)}"
@@ -257,8 +258,23 @@ class UnipileLinkedInProvider(LinkedInProvider):
             out.append(p)
         return out
 
-    def _search_attempts(self, query: str, limit: int) -> List[tuple[str, Optional[Dict[str, Any]], Dict[str, Any]]]:
-        return [
+    def _search_attempts(self, path: str, query: str, limit: int) -> List[tuple[str, Optional[Dict[str, Any]], Dict[str, Any]]]:
+        attempts: List[tuple[str, Optional[Dict[str, Any]], Dict[str, Any]]] = []
+
+        # Dedicated payload schema for this endpoint: api/category/keywords.
+        if path == "/api/v1/linkedin/search":
+            api_value = self.api_type or "classic"
+            attempts.extend(
+                [
+                    ("POST", {"api": api_value, "category": "people", "keywords": query, "limit": limit}, {}),
+                    ("POST", {"api": api_value, "category": "people", "keywords": query}, {}),
+                    ("POST", {"api": "classic", "category": "people", "keywords": query, "limit": limit}, {}),
+                    ("POST", {"api": "classic", "category": "people", "keywords": query}, {}),
+                ]
+            )
+
+        attempts.extend(
+            [
             ("POST", {"query": query, "limit": limit}, {}),
             ("POST", {"keywords": query, "limit": limit}, {}),
             ("POST", {"text": query, "limit": limit}, {}),
@@ -266,7 +282,9 @@ class UnipileLinkedInProvider(LinkedInProvider):
             ("GET", None, {"query": query, "limit": limit}),
             ("GET", None, {"keywords": query, "limit": limit}),
             ("GET", None, {"text": query, "limit": limit}),
-        ]
+            ]
+        )
+        return attempts
 
     @staticmethod
     def _looks_like_search_placeholder(items: List[Dict[str, Any]]) -> bool:
@@ -281,6 +299,7 @@ class UnipileLinkedInProvider(LinkedInProvider):
         first_name = (item.get("first_name") or "").strip()
         last_name = (item.get("last_name") or "").strip()
         full_name = item.get("full_name") or item.get("name") or f"{first_name} {last_name}".strip() or "Unknown"
+        headline = item.get("headline") or item.get("title") or ""
 
         profile_id = item.get("attendee_provider_id") or item.get("provider_id") or item.get("id") or item.get("linkedin_id")
         location = item.get("location") or item.get("geo") or ""
@@ -291,10 +310,14 @@ class UnipileLinkedInProvider(LinkedInProvider):
         skills = item.get("skills")
         if not isinstance(skills, list):
             skills = []
+        if not skills:
+            skills = self._extract_skills_from_text(headline)
 
         years_experience = item.get("years_experience") or item.get("experience_years") or 0
+        if not years_experience:
+            years_experience = self._extract_years_from_text(headline)
         try:
-            years_experience = int(years_experience)
+            years_experience = int(float(years_experience))
         except (TypeError, ValueError):
             years_experience = 0
 
@@ -303,7 +326,7 @@ class UnipileLinkedInProvider(LinkedInProvider):
             "unipile_profile_id": profile_id,
             "attendee_provider_id": item.get("attendee_provider_id") or profile_id,
             "full_name": full_name,
-            "headline": item.get("headline") or item.get("title") or "",
+            "headline": headline,
             "location": location,
             "languages": [str(x).lower() for x in languages if x],
             "skills": [str(x).lower() for x in skills if x],
@@ -311,6 +334,66 @@ class UnipileLinkedInProvider(LinkedInProvider):
             "raw": item,
         }
         return normalized
+
+    @staticmethod
+    def _extract_skills_from_text(text: str) -> List[str]:
+        if not isinstance(text, str) or not text.strip():
+            return []
+
+        candidates = [
+            "python",
+            "java",
+            "javascript",
+            "typescript",
+            "go",
+            "rust",
+            "node",
+            "django",
+            "flask",
+            "spring",
+            "react",
+            "angular",
+            "vue",
+            "postgresql",
+            "mysql",
+            "mongodb",
+            "redis",
+            "kafka",
+            "docker",
+            "kubernetes",
+            "aws",
+            "gcp",
+            "azure",
+            "terraform",
+            "ci/cd",
+            "machine learning",
+            "nlp",
+            "llm",
+            "qa",
+            "automation testing",
+        ]
+        normalized = re.sub(r"[^a-zA-Z0-9+/#.\-\s]", " ", text.lower())
+        return [skill for skill in candidates if skill in normalized]
+
+    @staticmethod
+    def _extract_years_from_text(text: str) -> int:
+        if not isinstance(text, str):
+            return 0
+        patterns = [
+            r"(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)\b",
+            r"(\d+(?:\.\d+)?)\s*\+?\s*yoe\b",
+            r"(\d+(?:\.\d+)?)\s*\+?\s*exp\b",
+        ]
+        lowered = text.lower()
+        for pattern in patterns:
+            m = re.search(pattern, lowered)
+            if not m:
+                continue
+            try:
+                return int(float(m.group(1)))
+            except (TypeError, ValueError):
+                continue
+        return 0
 
     @staticmethod
     def _safe_read_error(exc: error.HTTPError) -> str:

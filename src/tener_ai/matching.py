@@ -24,8 +24,13 @@ class MatchingEngine:
     def verify(self, job: Dict[str, Any], profile: Dict[str, Any]) -> MatchResult:
         rules = self.rules
         weights = rules.get("weights", {})
+        candidate_skills = self._candidate_skills(profile)
 
-        missing_fields = [field for field in rules.get("mandatory_fields", []) if not profile.get(field)]
+        missing_fields = [
+            field
+            for field in rules.get("mandatory_fields", [])
+            if self._field_is_missing(profile=profile, field=field, candidate_skills=candidate_skills)
+        ]
         if missing_fields:
             explanation = (
                 "Кандидат отклонен: в профиле не хватает обязательных полей "
@@ -44,7 +49,6 @@ class MatchingEngine:
 
         jd_text = (job.get("jd_text") or "").lower()
         required_skills = self._extract_required_skills(jd_text)
-        candidate_skills = {s.lower() for s in profile.get("skills", []) if isinstance(s, str)}
 
         if not required_skills:
             # If no skills are detected in JD, the role is broad; do not penalize heavily.
@@ -52,7 +56,8 @@ class MatchingEngine:
             matched_skills = []
         else:
             matched_skills = sorted(required_skills.intersection(candidate_skills))
-            skills_match = len(matched_skills) / len(required_skills)
+            effective_required_count = min(len(required_skills), 6)
+            skills_match = min(1.0, len(matched_skills) / effective_required_count)
 
         target_seniority = (job.get("seniority") or self._infer_seniority(jd_text) or "middle").lower()
         years = int(profile.get("years_experience") or 0)
@@ -72,6 +77,7 @@ class MatchingEngine:
         notes = {
             "required_skills": sorted(required_skills),
             "matched_skills": matched_skills,
+            "effective_required_skills_count": min(len(required_skills), 6) if required_skills else 0,
             "target_seniority": target_seniority,
             "candidate_years_experience": years,
             "components": {
@@ -189,10 +195,12 @@ class MatchingEngine:
     def _location_match(self, job_location: str | None, candidate_location: str | None) -> float:
         if not job_location:
             return 1.0
+        jl = job_location.lower()
+        if any(token in jl for token in ("remote", "anywhere", "global", "worldwide")):
+            return 1.0
         if not candidate_location:
             return 0.4
 
-        jl = job_location.lower()
         cl = candidate_location.lower()
         if jl in cl or cl in jl:
             return 1.0
@@ -213,6 +221,30 @@ class MatchingEngine:
         if overlap:
             return 1.0
         return 0.3
+
+    def _field_is_missing(self, profile: Dict[str, Any], field: str, candidate_skills: Set[str]) -> bool:
+        if field == "skills":
+            return len(candidate_skills) == 0
+        if field == "years_experience":
+            value = profile.get(field)
+            return value is None or value == ""
+        value = profile.get(field)
+        if value is None:
+            return True
+        if isinstance(value, str):
+            return not value.strip()
+        if isinstance(value, list):
+            return len(value) == 0
+        return False
+
+    def _candidate_skills(self, profile: Dict[str, Any]) -> Set[str]:
+        skills = {s.lower() for s in profile.get("skills", []) if isinstance(s, str) and s.strip()}
+        if skills:
+            return skills
+        headline = str(profile.get("headline") or "").lower()
+        dictionary = [s.lower() for s in self.rules.get("skill_dictionary", [])]
+        inferred = {skill for skill in dictionary if skill in headline}
+        return inferred
 
     def _load_rules(self) -> Dict[str, Any]:
         path = Path(self.rules_path)

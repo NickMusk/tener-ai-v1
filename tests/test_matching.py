@@ -49,6 +49,26 @@ class MatchingEngineTests(unittest.TestCase):
         self.assertEqual(result.status, "rejected")
         self.assertEqual(result.score, 0.0)
 
+    def test_remote_location_does_not_penalize(self) -> None:
+        job = {
+            "title": "Senior Backend Engineer",
+            "jd_text": "Need Python, AWS, Docker",
+            "location": "Remote",
+            "preferred_languages": ["en"],
+            "seniority": "senior",
+        }
+        profile = {
+            "linkedin_id": "ln_test_remote",
+            "full_name": "Remote Candidate",
+            "headline": "Senior Backend Engineer 8 years experience",
+            "location": "Dubai",
+            "languages": ["en"],
+            "skills": ["python", "aws", "docker"],
+            "years_experience": 8,
+        }
+        result = self.engine.verify(job=job, profile=profile)
+        self.assertEqual(result.notes["components"]["location_match"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()
