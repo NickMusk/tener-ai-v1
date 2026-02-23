@@ -75,6 +75,7 @@ class Database:
             candidate_id INTEGER NOT NULL,
             channel TEXT NOT NULL,
             status TEXT NOT NULL,
+            external_chat_id TEXT UNIQUE,
             last_message_at TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY(job_id) REFERENCES jobs(id),
@@ -133,9 +134,18 @@ class Database:
             details TEXT,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS webhook_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_key TEXT UNIQUE NOT NULL,
+            source TEXT NOT NULL,
+            payload TEXT,
+            created_at TEXT NOT NULL
+        );
         """
         with self.transaction() as conn:
             conn.executescript(schema)
+        self._migrate_schema()
 
     def insert_job(
         self,
@@ -310,6 +320,52 @@ class Database:
             return int(row["id"])
         return self.create_conversation(job_id=job_id, candidate_id=candidate_id, channel=channel)
 
+    def set_conversation_external_chat_id(self, conversation_id: int, external_chat_id: str) -> None:
+        if not external_chat_id:
+            return
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                UPDATE conversations
+                SET external_chat_id = ?
+                WHERE id = ?
+                """,
+                (external_chat_id, conversation_id),
+            )
+
+    def get_conversation_by_external_chat_id(self, external_chat_id: str) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            """
+            SELECT *
+            FROM conversations
+            WHERE external_chat_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (external_chat_id,),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def get_candidate_by_linkedin_id(self, linkedin_id: str) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            "SELECT * FROM candidates WHERE linkedin_id = ?",
+            (linkedin_id,),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def get_latest_conversation_for_candidate(self, candidate_id: int) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            """
+            SELECT *
+            FROM conversations
+            WHERE candidate_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (candidate_id,),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
     def add_message(
         self,
         conversation_id: int,
@@ -357,6 +413,7 @@ class Database:
             conv.candidate_id,
             conv.channel,
             conv.status AS conversation_status,
+            conv.external_chat_id,
             conv.last_message_at,
             j.title AS job_title,
             c.full_name AS candidate_name,
@@ -574,6 +631,17 @@ class Database:
             ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
+    def record_webhook_event(self, event_key: str, source: str, payload: Optional[Dict[str, Any]] = None) -> bool:
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                INSERT OR IGNORE INTO webhook_events (event_key, source, payload, created_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (event_key, source, json.dumps(payload or {}), utc_now_iso()),
+            )
+            return cur.rowcount > 0
+
     def update_candidate_match_status(
         self,
         job_id: int,
@@ -609,6 +677,17 @@ class Database:
                 """,
                 (status, json.dumps(merged_notes), job_id, candidate_id),
             )
+
+    def _migrate_schema(self) -> None:
+        columns = self._table_columns("conversations")
+        if "external_chat_id" not in columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE conversations ADD COLUMN external_chat_id TEXT")
+                conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_external_chat_id ON conversations(external_chat_id)")
+
+    def _table_columns(self, table_name: str) -> List[str]:
+        rows = self._conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        return [str(row["name"]) for row in rows]
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:

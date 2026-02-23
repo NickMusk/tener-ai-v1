@@ -1,7 +1,9 @@
 {
   "version": "v1",
   "agents": {
-    "sourcing": "Find relevant candidates from LinkedIn using JD title, location, and extracted keywords. Maximize breadth and avoid duplicates.",
+    "sourcing": {
+      "file": "instructions/linkedin_sourcing_guide.md"
+    },
     "enrich": "Enrich each sourced profile with detailed fields from provider profile endpoint before any screening decision.",
     "verification": "Run rule-based screening against matching rules and attach human-readable explanation. In contact-all mode use needs_resume instead of early reject.",
     "add": "Persist all non-rejected screening outcomes into internal DB with status and verification notes.",

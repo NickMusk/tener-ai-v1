@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 from http import HTTPStatus
@@ -164,6 +165,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "pre_resume_unreachable": "POST /api/pre-resume/sessions/{session_id}/unreachable",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "chats_overview": "GET /api/chats/overview?limit=200",
+                        "unipile_webhook": "POST /api/webhooks/unipile",
                         "conversation_inbound": "POST /api/conversations/{conversation_id}/inbound",
                         "logs": "GET /api/logs?limit=100",
                         "reload_rules": "POST /api/rules/reload",
@@ -278,6 +280,73 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         payload = self._read_json_body()
         if isinstance(payload, dict) and payload.get("_error"):
             self._json_response(HTTPStatus.BAD_REQUEST, payload)
+            return
+
+        if parsed.path == "/api/webhooks/unipile":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+
+            secret = os.environ.get("UNIPILE_WEBHOOK_SECRET")
+            if secret:
+                incoming = self.headers.get("X-Webhook-Secret", "")
+                if incoming != secret:
+                    self._json_response(HTTPStatus.UNAUTHORIZED, {"error": "invalid webhook secret"})
+                    return
+
+            event_id = self._pick_str(body, "event_id", "id", "message_id", "event.id", "message.id", "data.id")
+            external_chat_id = self._pick_str(body, "chat_id", "chat.id", "conversation_id", "data.chat_id", "data.chat.id")
+            text = self._pick_str(body, "text", "message", "content", "message.text", "data.text")
+            direction = self._pick_str(body, "direction", "message.direction", "data.direction").lower()
+            sender_provider_id = self._pick_str(body, "sender.provider_id", "sender_id", "from.provider_id", "from.id", "attendee_provider_id")
+            occurred_at = self._pick_str(body, "created_at", "timestamp", "occurred_at", "message.created_at")
+
+            if direction in {"outbound", "sent", "from_me", "self"}:
+                self._json_response(HTTPStatus.OK, {"status": "ignored", "reason": "outbound_event"})
+                return
+            if not text:
+                self._json_response(HTTPStatus.OK, {"status": "ignored", "reason": "empty_text"})
+                return
+
+            event_key = event_id or hashlib.sha256(
+                f"{external_chat_id}|{sender_provider_id}|{text}|{occurred_at}".encode("utf-8")
+            ).hexdigest()
+            is_new = SERVICES["db"].record_webhook_event(event_key=event_key, source="unipile", payload=body)
+            if not is_new:
+                self._json_response(HTTPStatus.OK, {"status": "duplicate", "event_key": event_key})
+                return
+
+            try:
+                result = SERVICES["workflow"].process_provider_inbound_message(
+                    external_chat_id=external_chat_id,
+                    text=text,
+                    sender_provider_id=sender_provider_id or None,
+                )
+            except Exception as exc:
+                SERVICES["db"].log_operation(
+                    operation="webhook.unipile.error",
+                    status="error",
+                    entity_type="webhook",
+                    entity_id=event_key,
+                    details={"error": str(exc)},
+                )
+                self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "webhook processing failed", "details": str(exc)})
+                return
+
+            SERVICES["db"].log_operation(
+                operation="webhook.unipile.inbound",
+                status="ok" if result.get("processed") else "ignored",
+                entity_type="webhook",
+                entity_id=event_key,
+                details={
+                    "external_chat_id": external_chat_id,
+                    "sender_provider_id": sender_provider_id,
+                    "processed": bool(result.get("processed")),
+                    "reason": result.get("reason"),
+                },
+            )
+            self._json_response(HTTPStatus.OK, {"status": "ok", "event_key": event_key, "result": result})
             return
 
         if parsed.path == "/api/jobs":
@@ -760,6 +829,23 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             return int(value)
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _pick_str(payload: Dict[str, Any], *paths: str) -> str:
+        for path in paths:
+            value = TenerRequestHandler._get_nested(payload, path)
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+        return ""
+
+    @staticmethod
+    def _get_nested(payload: Dict[str, Any], dotted_path: str) -> Any:
+        current: Any = payload
+        for part in dotted_path.split("."):
+            if not isinstance(current, dict):
+                return None
+            current = current.get(part)
+        return current
 
 
 def run() -> None:

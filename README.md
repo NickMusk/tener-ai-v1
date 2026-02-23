@@ -157,6 +157,9 @@ All funnel stages can be configured from a dedicated instruction file:
 - default path: `config/agent_instructions.json`
 - endpoint to inspect active instructions: `GET /api/instructions`
 - endpoint to reload file at runtime: `POST /api/instructions/reload`
+- long instructions can be stored in separate files via:
+  - `"sourcing": {"file": "instructions/linkedin_sourcing_guide.md"}`
+  - path is resolved relative to `agent_instructions.json`
 
 This enables per-stage instruction ownership without code edits (sourcing/enrich/verification/add/outreach/faq/pre_resume).
 

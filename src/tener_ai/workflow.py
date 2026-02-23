@@ -287,6 +287,10 @@ class WorkflowService:
                     details={"job_id": job_id, "error": str(exc)},
                 )
 
+            external_chat_id = str(delivery.get("chat_id") or "").strip()
+            if external_chat_id:
+                self.db.set_conversation_external_chat_id(conversation_id=conversation_id, external_chat_id=external_chat_id)
+
             self.db.add_message(
                 conversation_id=conversation_id,
                 direction="outbound",
@@ -299,6 +303,7 @@ class WorkflowService:
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
+                    "external_chat_id": external_chat_id or None,
                 },
             )
             self.db.log_operation(
@@ -313,6 +318,7 @@ class WorkflowService:
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
+                    "external_chat_id": external_chat_id or None,
                 },
             )
 
@@ -325,6 +331,7 @@ class WorkflowService:
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
+                    "external_chat_id": external_chat_id or None,
                 }
             )
             conversation_ids.append(conversation_id)
@@ -400,6 +407,9 @@ class WorkflowService:
         job = self.db.get_job(int(conversation["job_id"]))
         if not job:
             raise ValueError("Conversation is linked to missing job")
+        candidate = self.db.get_candidate(int(conversation["candidate_id"]))
+        if not candidate:
+            raise ValueError("Conversation is linked to missing candidate")
 
         messages = self.db.list_messages(conversation_id)
         previous_lang = None
@@ -456,6 +466,7 @@ class WorkflowService:
                 )
 
                 if outbound:
+                    delivery = self._send_auto_reply(candidate=candidate, message=outbound)
                     outbound_id = self.db.add_message(
                         conversation_id=conversation_id,
                         direction="outbound",
@@ -467,14 +478,21 @@ class WorkflowService:
                             "auto": True,
                             "session_id": session_id,
                             "state_status": (state_out or {}).get("status"),
+                            "delivery": delivery,
                         },
                     )
                     self.db.log_operation(
                         operation="agent.pre_resume.reply",
-                        status="ok",
+                        status="ok" if delivery.get("sent") else "error",
                         entity_type="message",
                         entity_id=str(outbound_id),
-                        details={"conversation_id": conversation_id, "intent": intent, "language": language, "session_id": session_id},
+                        details={
+                            "conversation_id": conversation_id,
+                            "intent": intent,
+                            "language": language,
+                            "session_id": session_id,
+                            "delivery": delivery,
+                        },
                     )
 
                 if (state_out or {}).get("status") == "resume_received":
@@ -501,22 +519,50 @@ class WorkflowService:
                 }
 
         lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=previous_lang)
+        delivery = self._send_auto_reply(candidate=candidate, message=reply)
         outbound_id = self.db.add_message(
             conversation_id=conversation_id,
             direction="outbound",
             content=reply,
             candidate_language=lang,
-            meta={"type": "faq_auto_reply", "intent": intent, "auto": True},
+            meta={"type": "faq_auto_reply", "intent": intent, "auto": True, "delivery": delivery},
         )
         self.db.log_operation(
             operation="agent.faq.reply",
-            status="ok",
+            status="ok" if delivery.get("sent") else "error",
             entity_type="message",
             entity_id=str(outbound_id),
-            details={"conversation_id": conversation_id, "intent": intent, "language": lang},
+            details={"conversation_id": conversation_id, "intent": intent, "language": lang, "delivery": delivery},
         )
 
         return {"language": lang, "intent": intent, "reply": reply}
+
+    def process_provider_inbound_message(
+        self,
+        external_chat_id: str,
+        text: str,
+        sender_provider_id: str | None = None,
+    ) -> Dict[str, Any]:
+        conversation = self.db.get_conversation_by_external_chat_id(external_chat_id) if external_chat_id else None
+        if not conversation and sender_provider_id:
+            candidate = self.db.get_candidate_by_linkedin_id(sender_provider_id)
+            if candidate:
+                conversation = self.db.get_latest_conversation_for_candidate(int(candidate["id"]))
+        if not conversation:
+            return {"processed": False, "reason": "conversation_not_found"}
+        result = self.process_inbound_message(conversation_id=int(conversation["id"]), text=text)
+        return {
+            "processed": True,
+            "conversation_id": int(conversation["id"]),
+            "external_chat_id": conversation.get("external_chat_id"),
+            "result": result,
+        }
+
+    def _send_auto_reply(self, candidate: Dict[str, Any], message: str) -> Dict[str, Any]:
+        try:
+            return self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
+        except Exception as exc:
+            return {"sent": False, "provider": "linkedin", "error": str(exc)}
 
     def _get_job_or_raise(self, job_id: int) -> Dict[str, Any]:
         job = self.db.get_job(job_id)

@@ -44,6 +44,41 @@ class AgentInstructions:
             data = json.load(f)
         if not isinstance(data, dict):
             return dict(DEFAULT_INSTRUCTIONS)
-        if not isinstance(data.get("agents"), dict):
+        raw_agents = data.get("agents")
+        if not isinstance(raw_agents, dict):
             data["agents"] = {}
+            return data
+
+        base_dir = file_path.parent
+        normalized: Dict[str, str] = {}
+        for key, value in raw_agents.items():
+            if not isinstance(key, str):
+                continue
+            normalized[key] = AgentInstructions._resolve_agent_instruction(value=value, base_dir=base_dir)
+        data["agents"] = normalized
         return data
+
+    @staticmethod
+    def _resolve_agent_instruction(value: Any, base_dir: Path) -> str:
+        if isinstance(value, str):
+            return value
+        if not isinstance(value, dict):
+            return ""
+
+        inline = value.get("text")
+        if isinstance(inline, str):
+            return inline
+
+        file_ref = value.get("file")
+        if not isinstance(file_ref, str) or not file_ref.strip():
+            return ""
+
+        target = Path(file_ref)
+        if not target.is_absolute():
+            target = base_dir / target
+        if not target.exists():
+            return ""
+        try:
+            return target.read_text(encoding="utf-8")
+        except OSError:
+            return ""
