@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import uuid4
 from typing import Any, Dict, List
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
@@ -346,6 +347,145 @@ class WorkflowService:
             "instruction": self.stage_instructions.get("outreach", ""),
         }
 
+    def add_manual_test_account(
+        self,
+        job_id: int,
+        full_name: str,
+        language: str = "en",
+        linkedin_id: str | None = None,
+        location: str | None = None,
+        headline: str | None = None,
+        external_chat_id: str | None = None,
+        scope_summary: str | None = None,
+    ) -> Dict[str, Any]:
+        job = self._get_job_or_raise(job_id)
+        name = full_name.strip()
+        if not name:
+            raise ValueError("full_name is required")
+
+        normalized_lang = (language or "en").strip().lower() or "en"
+        account_id = (linkedin_id or "").strip() or f"manual-{uuid4().hex[:12]}"
+        profile = {
+            "linkedin_id": account_id,
+            "full_name": name,
+            "headline": (headline or "Manual Test Candidate").strip(),
+            "location": (location or job.get("location") or "Remote").strip(),
+            "languages": [normalized_lang],
+            "skills": [],
+            "years_experience": 0,
+            "raw": {"manual": True},
+        }
+
+        candidate_id = self.db.upsert_candidate(profile, source="manual")
+        self.db.create_candidate_match(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            score=0.0,
+            status="needs_resume",
+            verification_notes={
+                "manual": True,
+                "human_explanation": "Manual test account. Screening is deferred until CV is received.",
+            },
+        )
+        conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="manual")
+        chat_id = (external_chat_id or "").strip() or f"manual-chat-{conversation_id}"
+        self.db.set_conversation_external_chat_id(conversation_id=conversation_id, external_chat_id=chat_id)
+
+        session_id = f"pre-{conversation_id}"
+        initial_outbound = ""
+        state: Dict[str, Any] | None = None
+
+        if self.pre_resume_service is not None:
+            session = self.db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
+            if session and isinstance(session.get("state_json"), dict):
+                state = session["state_json"]
+                if self.pre_resume_service.get_session(session_id) is None:
+                    self.pre_resume_service.seed_session(state)
+            else:
+                started = self.pre_resume_service.start_session(
+                    session_id=session_id,
+                    candidate_name=name,
+                    job_title=str(job.get("title") or "this role"),
+                    scope_summary=(scope_summary or str(job.get("jd_text") or "")).strip() or "Role details will be provided.",
+                    core_profile_summary=", ".join(
+                        self.outreach_agent.matching_engine.build_core_profile(job).get("core_skills") or []
+                    )
+                    or self.outreach_agent.matching_engine.summarize_scope(job),
+                    language=normalized_lang,
+                )
+                state = started.get("state") if isinstance(started.get("state"), dict) else None
+                initial_outbound = str(started.get("outbound") or "").strip()
+                if state:
+                    self.db.insert_pre_resume_event(
+                        session_id=session_id,
+                        conversation_id=conversation_id,
+                        event_type="session_started",
+                        intent="started",
+                        inbound_text=None,
+                        outbound_text=initial_outbound or None,
+                        state_status=state.get("status"),
+                        details={"job_id": job_id, "candidate_id": candidate_id, "source": "manual"},
+                    )
+            if state:
+                self.db.upsert_pre_resume_session(
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    state=state,
+                    instruction=self.stage_instructions.get("pre_resume", ""),
+                )
+
+        if not initial_outbound:
+            _, initial_outbound = self.outreach_agent.compose_screening_message(
+                job=job,
+                candidate=profile,
+                request_resume=True,
+            )
+
+        outbound_id = self.db.add_message(
+            conversation_id=conversation_id,
+            direction="outbound",
+            content=initial_outbound,
+            candidate_language=normalized_lang,
+            meta={
+                "type": "manual_account_start",
+                "auto": True,
+                "delivery": {"sent": True, "provider": "manual", "chat_id": chat_id, "mock": True},
+                "session_id": session_id,
+            },
+        )
+        self.db.log_operation(
+            operation="agent.manual_account.added",
+            status="ok",
+            entity_type="conversation",
+            entity_id=str(conversation_id),
+            details={"job_id": job_id, "candidate_id": candidate_id, "session_id": session_id},
+        )
+        self.db.log_operation(
+            operation="agent.pre_resume.reply",
+            status="ok",
+            entity_type="message",
+            entity_id=str(outbound_id),
+            details={
+                "conversation_id": conversation_id,
+                "intent": "started",
+                "language": normalized_lang,
+                "session_id": session_id,
+                "delivery": {"sent": True, "provider": "manual", "chat_id": chat_id, "mock": True},
+            },
+        )
+
+        return {
+            "job_id": job_id,
+            "candidate_id": candidate_id,
+            "conversation_id": conversation_id,
+            "session_id": session_id,
+            "external_chat_id": chat_id,
+            "candidate": profile,
+            "initial_outbound": initial_outbound,
+        }
+
     def execute_job_workflow(self, job_id: int, limit: int = 30) -> WorkflowSummary:
         self._get_job_or_raise(job_id)
 
@@ -466,7 +606,7 @@ class WorkflowService:
                 )
 
                 if outbound:
-                    delivery = self._send_auto_reply(candidate=candidate, message=outbound)
+                    delivery = self._send_auto_reply(candidate=candidate, message=outbound, conversation=conversation)
                     outbound_id = self.db.add_message(
                         conversation_id=conversation_id,
                         direction="outbound",
@@ -519,7 +659,7 @@ class WorkflowService:
                 }
 
         lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=previous_lang)
-        delivery = self._send_auto_reply(candidate=candidate, message=reply)
+        delivery = self._send_auto_reply(candidate=candidate, message=reply, conversation=conversation)
         outbound_id = self.db.add_message(
             conversation_id=conversation_id,
             direction="outbound",
@@ -558,7 +698,19 @@ class WorkflowService:
             "result": result,
         }
 
-    def _send_auto_reply(self, candidate: Dict[str, Any], message: str) -> Dict[str, Any]:
+    def _send_auto_reply(
+        self,
+        candidate: Dict[str, Any],
+        message: str,
+        conversation: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        if str(candidate.get("source") or "").lower() == "manual":
+            return {
+                "sent": True,
+                "provider": "manual",
+                "chat_id": (conversation or {}).get("external_chat_id"),
+                "mock": True,
+            }
         try:
             return self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
         except Exception as exc:

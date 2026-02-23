@@ -148,6 +148,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "list_jobs": "GET /api/jobs",
                         "get_job": "GET /api/jobs/{job_id}",
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
+                        "update_job_jd": "POST /api/jobs/{job_id}/jd",
                         "run_workflow": "POST /api/workflows/execute",
                         "source_step": "POST /api/steps/source",
                         "enrich_step": "POST /api/steps/enrich",
@@ -165,6 +166,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "pre_resume_unreachable": "POST /api/pre-resume/sessions/{session_id}/unreachable",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "chats_overview": "GET /api/chats/overview?limit=200",
+                        "add_manual_account": "POST /api/agent/accounts/manual",
                         "unipile_webhook": "POST /api/webhooks/unipile",
                         "conversation_inbound": "POST /api/conversations/{conversation_id}/inbound",
                         "logs": "GET /api/logs?limit=100",
@@ -280,6 +282,65 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         payload = self._read_json_body()
         if isinstance(payload, dict) and payload.get("_error"):
             self._json_response(HTTPStatus.BAD_REQUEST, payload)
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/jd"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/jd$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            jd_text = str(body.get("jd_text") or "").strip()
+            if not jd_text:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "jd_text is required"})
+                return
+            updated = SERVICES["db"].update_job_jd_text(job_id=job_id, jd_text=jd_text)
+            if not updated:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            SERVICES["db"].log_operation(
+                operation="job.jd.updated",
+                status="ok",
+                entity_type="job",
+                entity_id=str(job_id),
+                details={"length": len(jd_text)},
+            )
+            self._json_response(HTTPStatus.OK, {"job_id": job_id, "jd_text": jd_text})
+            return
+
+        if parsed.path == "/api/agent/accounts/manual":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            job_id = self._safe_int(body.get("job_id"), None)
+            full_name = str(body.get("full_name") or "").strip()
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_id is required"})
+                return
+            if not full_name:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "full_name is required"})
+                return
+            try:
+                result = SERVICES["workflow"].add_manual_test_account(
+                    job_id=job_id,
+                    full_name=full_name,
+                    language=str(body.get("language") or "en"),
+                    linkedin_id=(str(body.get("linkedin_id")).strip() if body.get("linkedin_id") else None),
+                    location=(str(body.get("location")).strip() if body.get("location") else None),
+                    headline=(str(body.get("headline")).strip() if body.get("headline") else None),
+                    external_chat_id=(str(body.get("external_chat_id")).strip() if body.get("external_chat_id") else None),
+                    scope_summary=(str(body.get("scope_summary")).strip() if body.get("scope_summary") else None),
+                )
+            except ValueError as exc:
+                text = str(exc)
+                status = HTTPStatus.NOT_FOUND if "not found" in text.lower() else HTTPStatus.BAD_REQUEST
+                self._json_response(status, {"error": text})
+                return
+            self._json_response(HTTPStatus.CREATED, result)
             return
 
         if parsed.path == "/api/webhooks/unipile":

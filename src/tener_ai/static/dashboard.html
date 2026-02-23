@@ -128,6 +128,26 @@
       justify-content: flex-end;
     }
 
+    .view-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .view-tab.active {
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+      box-shadow: 0 0 12px var(--accent-green-dim);
+    }
+
+    .view-section {
+      display: none;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .view-section.active { display: grid; }
+
     button {
       border: 1px solid var(--border-color);
       border-radius: 9px;
@@ -248,6 +268,33 @@
       grid-template-columns: 1.2fr 1fr;
       gap: 12px;
     }
+
+    .agent-layout {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 12px;
+    }
+
+    .chat-window {
+      max-height: 420px;
+      overflow: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px;
+      background: #0f141c;
+      display: grid;
+      gap: 8px;
+    }
+
+    .chat-msg {
+      border: 1px solid #2a3441;
+      border-radius: 10px;
+      padding: 8px;
+    }
+
+    .chat-msg.inbound { border-color: #31506b; }
+    .chat-msg.outbound { border-color: #2a6b52; }
+    .row-selected { outline: 1px solid var(--accent-green); outline-offset: -1px; }
 
     .panel-title {
       display: flex;
@@ -371,6 +418,7 @@
       .sidebar { position: relative; height: auto; }
       .controls, .panels { grid-template-columns: 1fr; }
       .steps { grid-template-columns: 1fr 1fr; }
+      .agent-layout { grid-template-columns: 1fr; }
     }
 
     @media (max-width: 760px) {
@@ -419,6 +467,14 @@
       </div>
     </section>
 
+    <section class="card">
+      <div class="view-tabs">
+        <button id="view-tab-pipeline" class="view-tab active">Pipeline</button>
+        <button id="view-tab-agent" class="view-tab">Recruiter Agent</button>
+      </div>
+    </section>
+
+    <section id="view-pipeline" class="view-section active">
     <section class="grid-3">
       <div class="card metric">
         <div class="label">Searched</div>
@@ -549,6 +605,95 @@
         </table>
       </div>
     </section>
+    </section>
+
+    <section id="view-agent" class="view-section">
+      <section class="card">
+        <div class="panel-title">
+          <span>Recruiter Agent: <span class="mono">pre_resume</span></span>
+          <span class="mono" id="agent-job-title">no job selected</span>
+        </div>
+        <div class="form-grid">
+          <div class="full">
+            <label class="muted">Job</label>
+            <select id="agent-job-select"></select>
+          </div>
+          <div class="full">
+            <label class="muted">JD Description (agent context)</label>
+            <textarea id="agent-jd-text" placeholder="Paste job description here..."></textarea>
+          </div>
+          <div class="full button-row" style="justify-content:flex-start;">
+            <button id="agent-save-jd-btn">Save JD</button>
+            <button id="agent-refresh-accounts-btn">Refresh Accounts</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="agent-layout">
+        <div class="card">
+          <div class="panel-title"><span>Accounts In Active Communication</span><span class="mono">GET /api/chats/overview</span></div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Conversation</th>
+                  <th>Candidate</th>
+                  <th>Source</th>
+                  <th>Pre-resume</th>
+                  <th>Last Message</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="agent-accounts-tbody">
+                <tr><td colspan="6" class="muted">Select job</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="panel-title"><span>Add Manual Account (test)</span><span class="mono">POST /api/agent/accounts/manual</span></div>
+          <div class="form-grid">
+            <div>
+              <label class="muted">Candidate Name</label>
+              <input id="agent-manual-name" placeholder="Test Candidate">
+            </div>
+            <div>
+              <label class="muted">Language</label>
+              <input id="agent-manual-language" value="en" placeholder="en">
+            </div>
+            <div>
+              <label class="muted">LinkedIn ID (optional)</label>
+              <input id="agent-manual-linkedin-id" placeholder="manual-linkedin-id">
+            </div>
+            <div>
+              <label class="muted">External Chat ID (optional)</label>
+              <input id="agent-manual-chat-id" placeholder="manual-chat-1">
+            </div>
+            <div class="full button-row" style="justify-content:flex-start;">
+              <button id="agent-add-manual-btn">Add Account</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="panel-title"><span>Agent Chat Simulator</span><span class="mono" id="agent-chat-title">No conversation selected</span></div>
+        <div id="agent-chat-messages" class="chat-window">
+          <div class="muted">Open any account to see dialogue.</div>
+        </div>
+        <div class="form-grid" style="margin-top:10px;">
+          <div class="full">
+            <label class="muted">Candidate inbound message</label>
+            <textarea id="agent-inbound-input" placeholder="Type candidate reply and send to agent..."></textarea>
+          </div>
+          <div class="full button-row" style="justify-content:flex-start;">
+            <button id="agent-send-inbound-btn">Send Candidate Message</button>
+            <button id="agent-refresh-chat-btn">Reload Chat</button>
+          </div>
+        </div>
+      </section>
+    </section>
   </main>
 
   <div id="create-job-modal" class="modal" aria-hidden="true">
@@ -595,11 +740,14 @@
   <script>
     const state = {
       jobId: null,
+      activeView: "pipeline",
       sourceProfiles: [],
       enrichedProfiles: [],
       verifyItems: [],
       addedCandidates: [],
       outreachItems: [],
+      agentAccounts: [],
+      agentConversationId: null,
       selectedSnapshotStep: "source",
       stepSnapshots: {
         source: null,
@@ -705,9 +853,70 @@
         .replaceAll('>', '&gt;');
     }
 
+    function shortText(value, limit = 90) {
+      const text = String(value || '').trim();
+      if (!text) return '';
+      if (text.length <= limit) return text;
+      return text.slice(0, limit - 1) + '…';
+    }
+
     function selectedJobId() {
-      const fromSelect = $("job-select").value;
-      return Number(fromSelect || state.jobId || 0) || null;
+      const fromPipeline = $("job-select") ? $("job-select").value : "";
+      const fromAgent = $("agent-job-select") ? $("agent-job-select").value : "";
+      return Number(fromPipeline || fromAgent || state.jobId || 0) || null;
+    }
+
+    function selectedAgentJobId() {
+      const fromAgent = $("agent-job-select") ? $("agent-job-select").value : "";
+      return Number(fromAgent || state.jobId || 0) || null;
+    }
+
+    function setActiveView(view) {
+      state.activeView = view === "agent" ? "agent" : "pipeline";
+      $("view-tab-pipeline").classList.toggle("active", state.activeView === "pipeline");
+      $("view-tab-agent").classList.toggle("active", state.activeView === "agent");
+      $("view-pipeline").classList.toggle("active", state.activeView === "pipeline");
+      $("view-agent").classList.toggle("active", state.activeView === "agent");
+    }
+
+    function setAgentJobMeta(job) {
+      if (!job) {
+        $("agent-job-title").textContent = "no job selected";
+        $("agent-jd-text").value = "";
+        return;
+      }
+      $("agent-job-title").textContent = `#${job.id} ${job.title}`;
+      $("agent-jd-text").value = job.jd_text || "";
+    }
+
+    function syncJobSelectors() {
+      const value = state.jobId ? String(state.jobId) : "";
+      if ($("job-select")) $("job-select").value = value;
+      if ($("agent-job-select")) $("agent-job-select").value = value;
+    }
+
+    async function onSelectedJobChanged(jobId) {
+      state.jobId = Number(jobId || 0) || null;
+      syncJobSelectors();
+      if (!state.jobId) {
+        syncJobMeta(null);
+        setAgentJobMeta(null);
+        await refreshCandidates();
+        await refreshLogs();
+        await refreshAgentAccounts();
+        return;
+      }
+      try {
+        const job = await api(`/api/jobs/${state.jobId}`);
+        syncJobMeta(job);
+        setAgentJobMeta(job);
+      } catch {
+        syncJobMeta(null);
+        setAgentJobMeta(null);
+      }
+      await refreshCandidates();
+      await refreshLogs();
+      await refreshAgentAccounts();
     }
 
     function openCreateModal() {
@@ -730,30 +939,49 @@
 
     async function loadJobs() {
       const data = await api('/api/jobs?limit=200');
-      const select = $("job-select");
-      select.innerHTML = '';
+      const pipelineSelect = $("job-select");
+      const agentSelect = $("agent-job-select");
+      if (pipelineSelect) pipelineSelect.innerHTML = '';
+      if (agentSelect) agentSelect.innerHTML = '';
 
       if (!data.items || !data.items.length) {
         const opt = document.createElement('option');
         opt.value = '';
         opt.textContent = 'No jobs yet';
-        select.appendChild(opt);
+        if (pipelineSelect) pipelineSelect.appendChild(opt.cloneNode(true));
+        if (agentSelect) agentSelect.appendChild(opt);
         state.jobId = null;
         $("job-label").textContent = 'none';
         $("job-meta").textContent = 'Create a job from modal window to start manual pipeline.';
+        setAgentJobMeta(null);
+        await refreshAgentAccounts();
         return;
       }
 
-      data.items.forEach((job, idx) => {
+      const preferredJobId = state.jobId && data.items.some((x) => Number(x.id) === Number(state.jobId))
+        ? Number(state.jobId)
+        : Number(data.items[0].id);
+
+      data.items.forEach((job) => {
         const opt = document.createElement('option');
         opt.value = job.id;
         opt.textContent = `#${job.id} ${job.title}`;
-        if (idx === 0) opt.selected = true;
-        select.appendChild(opt);
+        if (pipelineSelect) {
+          const clone = opt.cloneNode(true);
+          if (Number(job.id) === preferredJobId) clone.selected = true;
+          pipelineSelect.appendChild(clone);
+        }
+        if (agentSelect) {
+          if (Number(job.id) === preferredJobId) opt.selected = true;
+          agentSelect.appendChild(opt);
+        }
       });
 
-      state.jobId = Number(select.value);
-      syncJobMeta(data.items.find(x => x.id === state.jobId));
+      state.jobId = preferredJobId;
+      syncJobSelectors();
+      const selected = data.items.find((x) => Number(x.id) === state.jobId) || null;
+      syncJobMeta(selected);
+      setAgentJobMeta(selected);
     }
 
     function syncJobMeta(job) {
@@ -790,6 +1018,156 @@
       resetCreateJobForm();
       closeCreateModal();
       await loadJobs();
+      await onSelectedJobChanged(state.jobId);
+    }
+
+    async function saveAgentJd() {
+      const jobId = selectedAgentJobId();
+      if (!jobId) return alert('Select a job');
+      const jdText = $("agent-jd-text").value.trim();
+      if (!jdText) return alert('JD description is required');
+      const out = await api(`/api/jobs/${jobId}/jd`, {
+        method: 'POST',
+        body: JSON.stringify({ jd_text: jdText })
+      });
+      snapshot('agent.jd_saved', out);
+      await loadJobs();
+      await onSelectedJobChanged(jobId);
+    }
+
+    function renderAgentAccounts() {
+      const body = $("agent-accounts-tbody");
+      const accounts = state.agentAccounts || [];
+      if (!accounts.length) {
+        body.innerHTML = '<tr><td colspan="6" class="muted">No active conversations for this job</td></tr>';
+        return;
+      }
+      body.innerHTML = accounts.map((row) => {
+        const selected = Number(row.conversation_id) === Number(state.agentConversationId) ? 'row-selected' : '';
+        const candidate = escapeHtml(row.candidate_name || `Candidate ${row.candidate_id}`);
+        const source = escapeHtml(row.candidate_source || '-');
+        const status = escapeHtml(row.pre_resume_status || row.conversation_status || '-');
+        const last = escapeHtml(shortText(row.last_message || '-', 100));
+        return `
+          <tr class="${selected}">
+            <td class="mono">${row.conversation_id}</td>
+            <td>${candidate}</td>
+            <td>${source}</td>
+            <td>${status}</td>
+            <td>${last}</td>
+            <td><button class="agent-open-chat-btn" data-conversation-id="${row.conversation_id}">Open</button></td>
+          </tr>
+        `;
+      }).join('');
+
+      document.querySelectorAll('.agent-open-chat-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const conversationId = Number(btn.dataset.conversationId || '0');
+          if (!conversationId) return;
+          state.agentConversationId = conversationId;
+          renderAgentAccounts();
+          await openAgentConversation(conversationId);
+        });
+      });
+    }
+
+    async function refreshAgentAccounts() {
+      const jobId = selectedAgentJobId();
+      if (!jobId) {
+        state.agentAccounts = [];
+        state.agentConversationId = null;
+        renderAgentAccounts();
+        $("agent-chat-title").textContent = "No conversation selected";
+        $("agent-chat-messages").innerHTML = '<div class="muted">Select job first.</div>';
+        return;
+      }
+      const out = await api(`/api/chats/overview?limit=300&job_id=${encodeURIComponent(jobId)}`);
+      state.agentAccounts = out.items || [];
+      if (!state.agentAccounts.some((x) => Number(x.conversation_id) === Number(state.agentConversationId))) {
+        state.agentConversationId = null;
+      }
+      renderAgentAccounts();
+      if (state.agentConversationId) {
+        await openAgentConversation(state.agentConversationId);
+      }
+    }
+
+    async function openAgentConversation(conversationId) {
+      if (!conversationId) return;
+      const out = await api(`/api/conversations/${conversationId}/messages`);
+      const convo = out.conversation || {};
+      const account = (state.agentAccounts || []).find((x) => Number(x.conversation_id) === Number(conversationId));
+      const title = account
+        ? `${account.candidate_name || 'Candidate'} • #${conversationId}`
+        : `Conversation #${conversationId}`;
+      $("agent-chat-title").textContent = title;
+      const items = out.items || [];
+      if (!items.length) {
+        $("agent-chat-messages").innerHTML = '<div class="muted">No messages yet</div>';
+        return;
+      }
+      $("agent-chat-messages").innerHTML = items.map((msg) => {
+        const direction = escapeHtml(msg.direction || '-');
+        const kind = direction === 'inbound' ? 'inbound' : 'outbound';
+        const created = escapeHtml(msg.created_at || '');
+        const content = escapeHtml(msg.content || '');
+        return `
+          <div class="chat-msg ${kind}">
+            <div style="display:flex;justify-content:space-between;gap:8px;">
+              <b>${direction}</b>
+              <span class="mono muted">${created}</span>
+            </div>
+            <div style="margin-top:6px;white-space:pre-wrap;">${content}</div>
+          </div>
+        `;
+      }).join('');
+      state.agentConversationId = Number(conversationId);
+      if (convo && convo.job_id && Number(convo.job_id) !== Number(state.jobId)) {
+        await onSelectedJobChanged(Number(convo.job_id));
+      }
+    }
+
+    async function addManualAgentAccount() {
+      const jobId = selectedAgentJobId();
+      if (!jobId) return alert('Select a job');
+      const fullName = $("agent-manual-name").value.trim();
+      if (!fullName) return alert('Candidate name is required');
+      const payload = {
+        job_id: jobId,
+        full_name: fullName,
+        language: $("agent-manual-language").value.trim() || "en",
+        linkedin_id: $("agent-manual-linkedin-id").value.trim() || null,
+        external_chat_id: $("agent-manual-chat-id").value.trim() || null,
+        scope_summary: $("agent-jd-text").value.trim() || null,
+      };
+      const out = await api('/api/agent/accounts/manual', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      snapshot('agent.account_added', out);
+      $("agent-manual-name").value = '';
+      $("agent-manual-linkedin-id").value = '';
+      $("agent-manual-chat-id").value = '';
+      state.agentConversationId = Number(out.conversation_id);
+      await refreshAgentAccounts();
+      await openAgentConversation(state.agentConversationId);
+      await refreshCandidates();
+      await refreshLogs();
+    }
+
+    async function sendAgentInboundMessage() {
+      const conversationId = Number(state.agentConversationId || 0);
+      if (!conversationId) return alert('Open conversation first');
+      const text = $("agent-inbound-input").value.trim();
+      if (!text) return alert('Message is required');
+      const out = await api(`/api/conversations/${conversationId}/inbound`, {
+        method: 'POST',
+        body: JSON.stringify({ message: text }),
+      });
+      snapshot('agent.inbound', out);
+      $("agent-inbound-input").value = '';
+      await openAgentConversation(conversationId);
+      await refreshAgentAccounts();
       await refreshCandidates();
       await refreshLogs();
     }
@@ -1069,8 +1447,7 @@
 
     async function fullRefresh() {
       await loadJobs();
-      await refreshCandidates();
-      await refreshLogs();
+      await onSelectedJobChanged(state.jobId);
       setStepStatus('source', 'idle');
       setStepStatus('enrich', 'idle');
       setStepStatus('verify', 'idle');
@@ -1081,6 +1458,8 @@
     }
 
     function bindEvents() {
+      $("view-tab-pipeline").addEventListener('click', () => setActiveView('pipeline'));
+      $("view-tab-agent").addEventListener('click', () => setActiveView('agent'));
       $("create-job-btn").addEventListener('click', () => createJob().catch(e => alert(e.message)));
       $("open-create-modal-btn").addEventListener('click', () => openCreateModal());
       $("close-create-modal-btn").addEventListener('click', () => closeCreateModal());
@@ -1094,6 +1473,14 @@
       $("refresh-btn").addEventListener('click', () => fullRefresh());
       $("logs-refresh-btn").addEventListener('click', () => refreshLogs());
       $("cands-refresh-btn").addEventListener('click', () => refreshCandidates());
+      $("agent-save-jd-btn").addEventListener('click', () => saveAgentJd().catch(e => alert(e.message)));
+      $("agent-refresh-accounts-btn").addEventListener('click', () => refreshAgentAccounts().catch(e => alert(e.message)));
+      $("agent-add-manual-btn").addEventListener('click', () => addManualAgentAccount().catch(e => alert(e.message)));
+      $("agent-send-inbound-btn").addEventListener('click', () => sendAgentInboundMessage().catch(e => alert(e.message)));
+      $("agent-refresh-chat-btn").addEventListener('click', () => {
+        if (!state.agentConversationId) return;
+        openAgentConversation(state.agentConversationId).catch(e => alert(e.message));
+      });
       document.querySelectorAll(".json-tab").forEach((tab) => {
         tab.addEventListener("click", () => {
           state.selectedSnapshotStep = tab.dataset.step || "source";
@@ -1103,19 +1490,11 @@
       });
 
       $("job-select").addEventListener('change', async (e) => {
-        state.jobId = Number(e.target.value || '0') || null;
-        if (state.jobId) {
-          try {
-            const job = await api(`/api/jobs/${state.jobId}`);
-            syncJobMeta(job);
-          } catch {
-            syncJobMeta(null);
-          }
-        } else {
-          syncJobMeta(null);
-        }
-        await refreshCandidates();
-        await refreshLogs();
+        await onSelectedJobChanged(Number(e.target.value || '0') || null);
+      });
+
+      $("agent-job-select").addEventListener('change', async (e) => {
+        await onSelectedJobChanged(Number(e.target.value || '0') || null);
       });
 
       document.addEventListener('keydown', (event) => {

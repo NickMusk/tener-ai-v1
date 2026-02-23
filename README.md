@@ -24,9 +24,9 @@ Core services:
 - LinkedIn provider layer: `src/tener_ai/linkedin_provider.py`
 - Standalone pre-resume service: `src/tener_ai/pre_resume_service.py`
 
-## Standalone Pre-Resume Service (Not Integrated Yet)
+## Pre-Resume Service
 
-The pre-resume block is implemented as a separate service and is not wired into the main workflow yet.
+The pre-resume block is implemented as a separate service and integrated into the main workflow/webhook path.
 
 It supports:
 - state machine (`awaiting_reply`, `engaged_no_resume`, `resume_promised`, `resume_received`, `not_interested`, `unreachable`, `stalled`)
@@ -172,6 +172,14 @@ Tracking endpoints:
 - `GET /api/chats/overview` — all candidate chats with latest message + pre-resume status.
 - `GET /api/pre-resume/sessions` — current pre-resume sessions across candidates.
 - `GET /api/pre-resume/events` — chronological updates/events across all sessions.
+- `POST /api/jobs/{job_id}/jd` — update JD text used by recruiter agent context.
+- `POST /api/agent/accounts/manual` — add a manual test account + start pre-resume dialog.
+
+Dashboard (`/dashboard`) now includes a dedicated `Recruiter Agent` tab:
+- edit JD context for selected job
+- see active accounts/conversations
+- add manual test accounts
+- send inbound candidate messages and observe agent replies in-chat
 
 ## How To Test Standalone Pre-Resume Service
 

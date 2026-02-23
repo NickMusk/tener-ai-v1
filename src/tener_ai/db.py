@@ -176,6 +176,18 @@ class Database:
         row = self._conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
         return self._row_to_dict(row) if row else None
 
+    def update_job_jd_text(self, job_id: int, jd_text: str) -> bool:
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                UPDATE jobs
+                SET jd_text = ?
+                WHERE id = ?
+                """,
+                (jd_text, job_id),
+            )
+            return cur.rowcount > 0
+
     def list_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
         rows = self._conn.execute(
             "SELECT * FROM jobs ORDER BY id DESC LIMIT ?",
@@ -417,6 +429,8 @@ class Database:
             conv.last_message_at,
             j.title AS job_title,
             c.full_name AS candidate_name,
+            c.linkedin_id AS candidate_linkedin_id,
+            c.source AS candidate_source,
             c.location AS candidate_location,
             prs.session_id AS pre_resume_session_id,
             prs.status AS pre_resume_status,
