@@ -11,8 +11,10 @@ from urllib.parse import parse_qs, urlparse
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .db import Database
+from .instructions import AgentInstructions
 from .linkedin_provider import build_linkedin_provider
 from .matching import MatchingEngine
+from .pre_resume_service import PreResumeCommunicationService
 from .workflow import WorkflowService
 
 
@@ -27,23 +29,62 @@ def env_bool(name: str, default: bool) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def apply_agent_instructions(services: Dict[str, Any]) -> None:
+    instructions: AgentInstructions = services["instructions"]
+    workflow: WorkflowService = services["workflow"]
+
+    workflow.sourcing_agent.instruction = instructions.get("sourcing")
+    workflow.verification_agent.instruction = instructions.get("verification")
+    workflow.outreach_agent.instruction = instructions.get("outreach")
+    workflow.faq_agent.instruction = instructions.get("faq")
+    workflow.stage_instructions = {
+        "sourcing": instructions.get("sourcing"),
+        "enrich": instructions.get("enrich"),
+        "verification": instructions.get("verification"),
+        "add": instructions.get("add"),
+        "outreach": instructions.get("outreach"),
+        "faq": instructions.get("faq"),
+    }
+    services["pre_resume"].instruction = instructions.get("pre_resume")
+
+
 def build_services() -> Dict[str, Any]:
     root = project_root()
     db_path = os.environ.get("TENER_DB_PATH", str(root / "runtime" / "tener_v1.sqlite3"))
     rules_path = os.environ.get("TENER_MATCHING_RULES_PATH", str(root / "config" / "matching_rules.json"))
     templates_path = os.environ.get("TENER_TEMPLATES_PATH", str(root / "config" / "outreach_templates.json"))
+    instructions_path = os.environ.get("TENER_AGENT_INSTRUCTIONS_PATH", str(root / "config" / "agent_instructions.json"))
     mock_profiles_path = os.environ.get("TENER_MOCK_LINKEDIN_DATA_PATH", str(root / "data" / "mock_linkedin_profiles.json"))
 
     db = Database(db_path=db_path)
     db.init_schema()
 
+    instructions = AgentInstructions(path=instructions_path)
     matching_engine = MatchingEngine(rules_path=rules_path)
     linkedin_provider = build_linkedin_provider(mock_dataset_path=mock_profiles_path)
 
-    sourcing_agent = SourcingAgent(linkedin_provider=linkedin_provider)
-    verification_agent = VerificationAgent(matching_engine=matching_engine)
-    outreach_agent = OutreachAgent(templates_path=templates_path, matching_engine=matching_engine)
-    faq_agent = FAQAgent(templates_path=templates_path, matching_engine=matching_engine)
+    sourcing_agent = SourcingAgent(
+        linkedin_provider=linkedin_provider,
+        instruction=instructions.get("sourcing"),
+    )
+    verification_agent = VerificationAgent(
+        matching_engine=matching_engine,
+        instruction=instructions.get("verification"),
+    )
+    outreach_agent = OutreachAgent(
+        templates_path=templates_path,
+        matching_engine=matching_engine,
+        instruction=instructions.get("outreach"),
+    )
+    faq_agent = FAQAgent(
+        templates_path=templates_path,
+        matching_engine=matching_engine,
+        instruction=instructions.get("faq"),
+    )
+    pre_resume_service = PreResumeCommunicationService(
+        templates_path=templates_path,
+        instruction=instructions.get("pre_resume"),
+    )
 
     workflow = WorkflowService(
         db=db,
@@ -53,13 +94,25 @@ def build_services() -> Dict[str, Any]:
         faq_agent=faq_agent,
         contact_all_mode=env_bool("TENER_CONTACT_ALL_MODE", True),
         require_resume_before_final_verify=env_bool("TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY", True),
+        stage_instructions={
+            "sourcing": instructions.get("sourcing"),
+            "enrich": instructions.get("enrich"),
+            "verification": instructions.get("verification"),
+            "add": instructions.get("add"),
+            "outreach": instructions.get("outreach"),
+            "faq": instructions.get("faq"),
+        },
     )
 
-    return {
+    services = {
         "db": db,
+        "instructions": instructions,
         "matching_engine": matching_engine,
+        "pre_resume": pre_resume_service,
         "workflow": workflow,
     }
+    apply_agent_instructions(services)
+    return services
 
 
 SERVICES = build_services()
@@ -97,6 +150,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "verify_step": "POST /api/steps/verify",
                         "add_step": "POST /api/steps/add",
                         "outreach_step": "POST /api/steps/outreach",
+                        "instructions": "GET /api/instructions",
+                        "reload_instructions": "POST /api/instructions/reload",
+                        "pre_resume_start": "POST /api/pre-resume/sessions/start",
+                        "pre_resume_get": "GET /api/pre-resume/sessions/{session_id}",
+                        "pre_resume_inbound": "POST /api/pre-resume/sessions/{session_id}/inbound",
+                        "pre_resume_followup": "POST /api/pre-resume/sessions/{session_id}/followup",
+                        "pre_resume_unreachable": "POST /api/pre-resume/sessions/{session_id}/unreachable",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "conversation_inbound": "POST /api/conversations/{conversation_id}/inbound",
                         "logs": "GET /api/logs?limit=100",
@@ -109,6 +169,21 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             self._json_response(HTTPStatus.OK, {"status": "ok"})
             return
+
+        if parsed.path == "/api/instructions":
+            self._json_response(HTTPStatus.OK, SERVICES["instructions"].to_dict())
+            return
+
+        if parsed.path.startswith("/api/pre-resume/sessions/"):
+            match = re.match(r"^/api/pre-resume/sessions/([^/]+)$", parsed.path)
+            if match:
+                session_id = match.group(1)
+                session = SERVICES["pre_resume"].get_session(session_id)
+                if not session:
+                    self._json_response(HTTPStatus.NOT_FOUND, {"error": "session not found"})
+                    return
+                self._json_response(HTTPStatus.OK, session)
+                return
 
         if parsed.path == "/api/jobs":
             params = parse_qs(parsed.query or "")
@@ -357,6 +432,99 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, result)
             return
 
+        if parsed.path == "/api/pre-resume/sessions/start":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            session_id = str(body.get("session_id") or "").strip()
+            candidate_name = str(body.get("candidate_name") or "").strip()
+            job_title = str(body.get("job_title") or "").strip()
+            scope_summary = str(body.get("scope_summary") or "").strip()
+            core_profile_summary = str(body.get("core_profile_summary") or "").strip()
+            language = str(body.get("language") or "").strip() or None
+            if not session_id:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "session_id is required"})
+                return
+            if not candidate_name:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "candidate_name is required"})
+                return
+            if not job_title:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_title is required"})
+                return
+            if not scope_summary:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "scope_summary is required"})
+                return
+            try:
+                result = SERVICES["pre_resume"].start_session(
+                    session_id=session_id,
+                    candidate_name=candidate_name,
+                    job_title=job_title,
+                    scope_summary=scope_summary,
+                    core_profile_summary=core_profile_summary or None,
+                    language=language,
+                )
+            except ValueError as exc:
+                self._json_response(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
+            self._json_response(HTTPStatus.CREATED, result)
+            return
+
+        if parsed.path.startswith("/api/pre-resume/sessions/") and parsed.path.endswith("/inbound"):
+            match = re.match(r"^/api/pre-resume/sessions/([^/]+)/inbound$", parsed.path)
+            if not match:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid session id"})
+                return
+            session_id = match.group(1)
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            text = str(body.get("message") or "").strip()
+            if not text:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "message is required"})
+                return
+            try:
+                result = SERVICES["pre_resume"].handle_inbound(session_id=session_id, text=text)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
+        if parsed.path.startswith("/api/pre-resume/sessions/") and parsed.path.endswith("/followup"):
+            match = re.match(r"^/api/pre-resume/sessions/([^/]+)/followup$", parsed.path)
+            if not match:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid session id"})
+                return
+            session_id = match.group(1)
+            try:
+                result = SERVICES["pre_resume"].build_followup(session_id=session_id)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
+        if parsed.path.startswith("/api/pre-resume/sessions/") and parsed.path.endswith("/unreachable"):
+            match = re.match(r"^/api/pre-resume/sessions/([^/]+)/unreachable$", parsed.path)
+            if not match:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid session id"})
+                return
+            session_id = match.group(1)
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            error = str(body.get("error") or "delivery_failed")
+            try:
+                result = SERVICES["pre_resume"].mark_unreachable(session_id=session_id, error=error)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
         if parsed.path.startswith("/api/conversations/") and parsed.path.endswith("/inbound"):
             conversation_id = self._extract_id(parsed.path, pattern=r"^/api/conversations/(\d+)/inbound$")
             if conversation_id is None:
@@ -400,6 +568,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 entity_id="rules",
             )
             self._json_response(HTTPStatus.OK, {"status": "reloaded"})
+            return
+
+        if parsed.path == "/api/instructions/reload":
+            SERVICES["instructions"].reload()
+            apply_agent_instructions(SERVICES)
+            self._json_response(HTTPStatus.OK, SERVICES["instructions"].to_dict())
             return
 
         self._json_response(HTTPStatus.NOT_FOUND, {"error": "route not found"})

@@ -10,8 +10,9 @@ from .matching import MatchingEngine
 
 
 class SourcingAgent:
-    def __init__(self, linkedin_provider: Any) -> None:
+    def __init__(self, linkedin_provider: Any, instruction: str = "") -> None:
         self.linkedin_provider = linkedin_provider
+        self.instruction = instruction
 
     def find_candidates(self, job: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
         limit = max(1, min(int(limit or 1), 100))
@@ -136,8 +137,9 @@ class SourcingAgent:
 
 
 class VerificationAgent:
-    def __init__(self, matching_engine: MatchingEngine) -> None:
+    def __init__(self, matching_engine: MatchingEngine, instruction: str = "") -> None:
         self.matching_engine = matching_engine
+        self.instruction = instruction
 
     def verify_candidate(self, job: Dict[str, Any], profile: Dict[str, Any]) -> Tuple[float, str, Dict[str, Any]]:
         result = self.matching_engine.verify(job=job, profile=profile)
@@ -145,9 +147,10 @@ class VerificationAgent:
 
 
 class OutreachAgent:
-    def __init__(self, templates_path: str, matching_engine: MatchingEngine) -> None:
+    def __init__(self, templates_path: str, matching_engine: MatchingEngine, instruction: str = "") -> None:
         self.templates = self._load_templates(templates_path)
         self.matching_engine = matching_engine
+        self.instruction = instruction
 
     def compose_intro(self, job: Dict[str, Any], candidate: Dict[str, Any]) -> Tuple[str, str]:
         candidate_lang = pick_candidate_language(candidate.get("languages"), fallback=self.templates.get("default_language", "en"))
@@ -197,9 +200,10 @@ class OutreachAgent:
 
 
 class FAQAgent:
-    def __init__(self, templates_path: str, matching_engine: MatchingEngine) -> None:
+    def __init__(self, templates_path: str, matching_engine: MatchingEngine, instruction: str = "") -> None:
         self.templates = self._load_templates(templates_path)
         self.matching_engine = matching_engine
+        self.instruction = instruction
 
     def auto_reply(self, inbound_text: str, job: Dict[str, Any], candidate_lang: str | None = None) -> Tuple[str, str, str]:
         lang = candidate_lang or detect_language_from_text(inbound_text, fallback=self.templates.get("default_language", "en"))

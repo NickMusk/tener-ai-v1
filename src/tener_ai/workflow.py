@@ -30,6 +30,7 @@ class WorkflowService:
         faq_agent: FAQAgent,
         contact_all_mode: bool = False,
         require_resume_before_final_verify: bool = False,
+        stage_instructions: Dict[str, str] | None = None,
     ) -> None:
         self.db = db
         self.sourcing_agent = sourcing_agent
@@ -38,6 +39,7 @@ class WorkflowService:
         self.faq_agent = faq_agent
         self.contact_all_mode = contact_all_mode
         self.require_resume_before_final_verify = require_resume_before_final_verify
+        self.stage_instructions = dict(stage_instructions or {})
 
     def source_candidates(self, job_id: int, limit: int = 30) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
@@ -50,7 +52,12 @@ class WorkflowService:
             entity_id=str(job_id),
             details={"profiles_found": len(profiles), "limit": limit},
         )
-        return {"job_id": job_id, "profiles": profiles, "total": len(profiles)}
+        return {
+            "job_id": job_id,
+            "profiles": profiles,
+            "total": len(profiles),
+            "instruction": self.stage_instructions.get("sourcing", ""),
+        }
 
     def verify_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
@@ -112,6 +119,7 @@ class WorkflowService:
             "rejected": rejected,
             "enriched_total": enrich_result["total"],
             "enrich_failed": enrich_result["failed"],
+            "instruction": self.stage_instructions.get("verification", ""),
         }
 
     def enrich_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -124,7 +132,13 @@ class WorkflowService:
             entity_id=str(job_id),
             details={"input_profiles": len(profiles), "enriched": len(enriched_profiles), "failed": failed},
         )
-        return {"job_id": job_id, "profiles": enriched_profiles, "total": len(enriched_profiles), "failed": failed}
+        return {
+            "job_id": job_id,
+            "profiles": enriched_profiles,
+            "total": len(enriched_profiles),
+            "failed": failed,
+            "instruction": self.stage_instructions.get("enrich", ""),
+        }
 
     def add_verified_candidates(self, job_id: int, verified_items: List[Dict[str, Any]]) -> Dict[str, Any]:
         self._get_job_or_raise(job_id)
@@ -158,7 +172,12 @@ class WorkflowService:
             )
             added.append({"candidate_id": candidate_id, "profile": profile, "score": score, "status": screening_status})
 
-        return {"job_id": job_id, "added": added, "total": len(added)}
+        return {
+            "job_id": job_id,
+            "added": added,
+            "total": len(added),
+            "instruction": self.stage_instructions.get("add", ""),
+        }
 
     def outreach_candidates(self, job_id: int, candidate_ids: List[int]) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
@@ -260,6 +279,7 @@ class WorkflowService:
             "sent": sent,
             "failed": failed,
             "total": len(out_items),
+            "instruction": self.stage_instructions.get("outreach", ""),
         }
 
     def execute_job_workflow(self, job_id: int, limit: int = 30) -> WorkflowSummary:

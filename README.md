@@ -15,12 +15,42 @@ Agents:
 - `VerificationAgent`: scoring + pass/reject using `config/matching_rules.json`
 - `OutreachAgent`: first contact message generation
 - `FAQAgent`: autonomous Q&A
+- `PreResumeCommunicationService` (standalone): manages candidate dialog until CV/resume is received
 
 Core services:
 - API server: `src/tener_ai/main.py`
 - Workflow orchestration: `src/tener_ai/workflow.py`
 - Internal storage: SQLite (`runtime/tener_v1.sqlite3`)
 - LinkedIn provider layer: `src/tener_ai/linkedin_provider.py`
+- Standalone pre-resume service: `src/tener_ai/pre_resume_service.py`
+
+## Standalone Pre-Resume Service (Not Integrated Yet)
+
+The pre-resume block is implemented as a separate service and is not wired into the main workflow yet.
+
+It supports:
+- state machine (`awaiting_reply`, `engaged_no_resume`, `resume_promised`, `resume_received`, `not_interested`, `unreachable`, `stalled`)
+- intent routing for inbound messages
+- follow-up cadence with max follow-up cap
+- multilingual template fallback
+
+Example:
+
+```python
+from tener_ai.pre_resume_service import PreResumeCommunicationService
+
+service = PreResumeCommunicationService()
+start = service.start_session(
+    session_id="candidate-1",
+    candidate_name="Alex",
+    job_title="Senior Backend Engineer",
+    scope_summary="python, aws, distributed systems",
+)
+print(start["outbound"])
+
+reply = service.handle_inbound("candidate-1", "What is the salary range?")
+print(reply["intent"], reply["outbound"])
+```
 
 ## Run
 
@@ -107,6 +137,7 @@ Recommended env vars:
 - `UNIPILE_LINKEDIN_API_TYPE`: optional, e.g. `classic` or `recruiter`.
 - `UNIPILE_LINKEDIN_INMAIL`: optional (`true/false`) to force InMail flag.
 - `UNIPILE_DRY_RUN`: optional (`true/false`) to disable actual outbound send.
+- `TENER_AGENT_INSTRUCTIONS_PATH`: optional path to agent/stage instruction file (default `config/agent_instructions.json`).
 
 Flow with Unipile enabled:
 
@@ -119,6 +150,79 @@ Workflow mode env vars:
 
 - `TENER_CONTACT_ALL_MODE`: default `true`; converts pre-CV rejects to `needs_resume`.
 - `TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY`: default `true`; first outreach asks for CV/resume.
+
+## Agent Instructions File
+
+All funnel stages can be configured from a dedicated instruction file:
+- default path: `config/agent_instructions.json`
+- endpoint to inspect active instructions: `GET /api/instructions`
+- endpoint to reload file at runtime: `POST /api/instructions/reload`
+
+This enables per-stage instruction ownership without code edits (sourcing/enrich/verification/add/outreach/faq/pre_resume).
+
+## How To Test Standalone Pre-Resume Service
+
+### Automated tests
+
+```bash
+cd "/Users/Nick/Documents/Tener prototype"
+PYTHONPATH=src python3 -m unittest tests/test_pre_resume_service.py -v
+```
+
+### Full test suite
+
+```bash
+PYTHONPATH=src python3 -m unittest discover -s tests -p 'test_*.py'
+```
+
+### API smoke test (standalone service endpoints)
+
+1) Start server:
+
+```bash
+PYTHONPATH=src python3 -m tener_ai
+```
+
+2) Start a pre-resume session:
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/pre-resume/sessions/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "session_id": "cand-1",
+    "candidate_name": "Alex",
+    "job_title": "Senior Backend Engineer",
+    "scope_summary": "python, aws, distributed systems"
+  }'
+```
+
+3) Send inbound candidate message:
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/pre-resume/sessions/cand-1/inbound \
+  -H "Content-Type: application/json" \
+  -d '{"message":"What is the salary range?"}'
+```
+
+4) Trigger follow-up:
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/pre-resume/sessions/cand-1/followup
+```
+
+5) Mark unreachable:
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/pre-resume/sessions/cand-1/unreachable \
+  -H "Content-Type: application/json" \
+  -d '{"error":"no_connection_with_recipient"}'
+```
+
+6) Read session state:
+
+```bash
+curl -s http://127.0.0.1:8080/api/pre-resume/sessions/cand-1
+```
 
 ## Deploy
 

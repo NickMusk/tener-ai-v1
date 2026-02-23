@@ -1,1 +1,1 @@
-__all__ = ["main"]
+__all__ = ["main", "pre_resume_service", "instructions"]
