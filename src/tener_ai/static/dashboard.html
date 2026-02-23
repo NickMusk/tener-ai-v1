@@ -612,6 +612,13 @@
     };
 
     const $ = (id) => document.getElementById(id);
+    const DEFAULT_JOB_TEMPLATE = {
+      title: "Senior Backend Engineer",
+      location: "Germany",
+      seniority: "senior",
+      preferred_languages: "en",
+      jd_text: "Need Python, Django, AWS, Docker, PostgreSQL for backend microservices."
+    };
 
     async function api(path, opts = {}) {
       const res = await fetch(path, {
@@ -714,11 +721,11 @@
     }
 
     function resetCreateJobForm() {
-      $("job-title").value = "";
-      $("job-location").value = "";
-      $("job-seniority").value = "";
-      $("job-languages").value = "";
-      $("job-jd").value = "";
+      $("job-title").value = DEFAULT_JOB_TEMPLATE.title;
+      $("job-location").value = DEFAULT_JOB_TEMPLATE.location;
+      $("job-seniority").value = DEFAULT_JOB_TEMPLATE.seniority;
+      $("job-languages").value = DEFAULT_JOB_TEMPLATE.preferred_languages;
+      $("job-jd").value = DEFAULT_JOB_TEMPLATE.jd_text;
     }
 
     async function loadJobs() {
@@ -1117,6 +1124,7 @@
     }
 
     bindEvents();
+    resetCreateJobForm();
     renderSnapshotTabs();
     renderSelectedSnapshot();
     fullRefresh();
