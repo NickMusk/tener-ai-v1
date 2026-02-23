@@ -84,6 +84,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
                         "run_workflow": "POST /api/workflows/execute",
                         "source_step": "POST /api/steps/source",
+                        "enrich_step": "POST /api/steps/enrich",
                         "verify_step": "POST /api/steps/verify",
                         "add_step": "POST /api/steps/add",
                         "outreach_step": "POST /api/steps/outreach",
@@ -268,6 +269,30 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 return
             except Exception as exc:
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "verify step failed", "details": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
+        if parsed.path == "/api/steps/enrich":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            job_id = self._safe_int(body.get("job_id"), None)
+            profiles = body.get("profiles")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_id is required"})
+                return
+            if not isinstance(profiles, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "profiles must be an array"})
+                return
+            try:
+                result = SERVICES["workflow"].enrich_profiles(job_id=job_id, profiles=profiles)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "enrich step failed", "details": str(exc)})
                 return
             self._json_response(HTTPStatus.OK, result)
             return

@@ -196,7 +196,7 @@
 
     .steps {
       display: grid;
-      grid-template-columns: repeat(5, minmax(210px, 1fr));
+      grid-template-columns: repeat(6, minmax(190px, 1fr));
       gap: 10px;
     }
 
@@ -389,6 +389,7 @@
 
     <div class="nav-group">
       <div class="nav-item"><span>Source</span><span class="mono" id="nav-source">idle</span></div>
+      <div class="nav-item"><span>Enrich</span><span class="mono" id="nav-enrich">idle</span></div>
       <div class="nav-item"><span>Verify</span><span class="mono" id="nav-verify">idle</span></div>
       <div class="nav-item"><span>Add</span><span class="mono" id="nav-add">idle</span></div>
       <div class="nav-item"><span>Outreach</span><span class="mono" id="nav-outreach">idle</span></div>
@@ -459,7 +460,15 @@
       </article>
 
       <article class="step-card">
-        <div class="step-title"><span>2. Verify</span><span id="status-verify" class="status">idle</span></div>
+        <div class="step-title"><span>2. Enrich</span><span id="status-enrich" class="status">idle</span></div>
+        <div id="step-enrich-meta" class="step-metrics">Profiles: 0, Failed: 0</div>
+        <div class="step-actions">
+          <button id="run-enrich-btn">Run</button>
+        </div>
+      </article>
+
+      <article class="step-card">
+        <div class="step-title"><span>3. Verify</span><span id="status-verify" class="status">idle</span></div>
         <div id="step-verify-meta" class="step-metrics">Verified: 0, Rejected: 0</div>
         <div class="step-actions">
           <button id="run-verify-btn">Run</button>
@@ -467,7 +476,7 @@
       </article>
 
       <article class="step-card">
-        <div class="step-title"><span>3. Add</span><span id="status-add" class="status">idle</span></div>
+        <div class="step-title"><span>4. Add</span><span id="status-add" class="status">idle</span></div>
         <div id="step-add-meta" class="step-metrics">Added: 0</div>
         <div class="step-actions">
           <button id="run-add-btn">Run</button>
@@ -475,7 +484,7 @@
       </article>
 
       <article class="step-card">
-        <div class="step-title"><span>4. Outreach</span><span id="status-outreach" class="status">idle</span></div>
+        <div class="step-title"><span>5. Outreach</span><span id="status-outreach" class="status">idle</span></div>
         <div id="step-outreach-meta" class="step-metrics">Sent: 0</div>
         <div class="step-actions">
           <button id="run-outreach-btn">Run</button>
@@ -483,7 +492,7 @@
       </article>
 
       <article class="step-card">
-        <div class="step-title"><span>5. FAQ</span><span id="status-faq" class="status">manual</span></div>
+        <div class="step-title"><span>6. FAQ</span><span id="status-faq" class="status">manual</span></div>
         <div class="step-metrics">Inbound auto-replies are triggered via conversation endpoint.</div>
         <div class="step-actions">
           <button disabled>Use API</button>
@@ -575,6 +584,7 @@
     const state = {
       jobId: null,
       sourceProfiles: [],
+      enrichedProfiles: [],
       verifyItems: [],
       addedCandidates: [],
       outreachItems: []
@@ -755,8 +765,21 @@
         const limit = Number($("source-limit").value || '10');
         const out = await api('/api/steps/source', { method: 'POST', body: JSON.stringify({ job_id: jobId, limit }) });
         state.sourceProfiles = out.profiles || [];
+        state.enrichedProfiles = [];
+        state.verifyItems = [];
+        state.addedCandidates = [];
+        state.outreachItems = [];
         $("step-source-meta").textContent = `Profiles: ${out.total || 0}`;
-        setMetrics({ searched: out.total || 0, verified: state.verifyItems.filter(x => x.status === 'verified').length, outreached: state.outreachItems.length });
+        $("step-enrich-meta").textContent = "Profiles: 0, Failed: 0";
+        $("step-verify-meta").textContent = "Verified: 0, Rejected: 0";
+        $("step-add-meta").textContent = "Added: 0";
+        $("step-outreach-meta").textContent = "Sent: 0";
+        setStepStatus('enrich', 'idle');
+        setStepStatus('verify', 'idle');
+        setStepStatus('add', 'idle');
+        setStepStatus('outreach', 'idle');
+        renderVerificationExplanations([]);
+        setMetrics({ searched: out.total || 0, verified: 0, outreached: 0 });
         setStepStatus('source', 'success');
         snapshot('source.result', out);
       } catch (e) {
@@ -766,18 +789,52 @@
       await refreshLogs();
     }
 
+    async function runEnrich() {
+      const jobId = selectedJobId();
+      if (!jobId) return alert('Select a job');
+      if (!state.sourceProfiles.length) return alert('Run Source first');
+      setStepStatus('enrich', 'running');
+      try {
+        const out = await api('/api/steps/enrich', {
+          method: 'POST',
+          body: JSON.stringify({ job_id: jobId, profiles: state.sourceProfiles })
+        });
+        state.enrichedProfiles = out.profiles || [];
+        state.verifyItems = [];
+        state.addedCandidates = [];
+        state.outreachItems = [];
+        $("step-enrich-meta").textContent = `Profiles: ${out.total || 0}, Failed: ${out.failed || 0}`;
+        $("step-verify-meta").textContent = "Verified: 0, Rejected: 0";
+        $("step-add-meta").textContent = "Added: 0";
+        $("step-outreach-meta").textContent = "Sent: 0";
+        setStepStatus('verify', 'idle');
+        setStepStatus('add', 'idle');
+        setStepStatus('outreach', 'idle');
+        renderVerificationExplanations([]);
+        setMetrics({ searched: state.sourceProfiles.length, verified: 0, outreached: 0 });
+        setStepStatus('enrich', 'success');
+        snapshot('enrich.result', out);
+      } catch (e) {
+        setStepStatus('enrich', 'error');
+        snapshot('enrich.error', { error: e.message });
+      }
+      await refreshLogs();
+    }
+
     async function runVerify() {
       const jobId = selectedJobId();
       if (!jobId) return alert('Select a job');
       if (!state.sourceProfiles.length) return alert('Run Source first');
+      if (!state.enrichedProfiles.length) return alert('Run Enrich first');
       setStepStatus('verify', 'running');
       try {
         const out = await api('/api/steps/verify', {
           method: 'POST',
-          body: JSON.stringify({ job_id: jobId, profiles: state.sourceProfiles })
+          body: JSON.stringify({ job_id: jobId, profiles: state.enrichedProfiles })
         });
         state.verifyItems = out.items || [];
         $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Rejected: ${out.rejected || 0}`;
+        $("step-enrich-meta").textContent = `Profiles: ${out.enriched_total || state.enrichedProfiles.length}, Failed: ${out.enrich_failed || 0}`;
         renderVerificationExplanations(state.verifyItems);
         setMetrics({ searched: state.sourceProfiles.length, verified: out.verified || 0, outreached: state.outreachItems.length });
         setStepStatus('verify', 'success');
@@ -843,7 +900,7 @@
     async function runFull() {
       const jobId = selectedJobId();
       if (!jobId) return alert('Select a job');
-      ['source', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'running'));
+      ['source', 'enrich', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'running'));
 
       try {
         const limit = Number($("source-limit").value || '10');
@@ -853,15 +910,16 @@
         });
 
         $("step-source-meta").textContent = `Profiles: ${out.searched || 0}`;
+        $("step-enrich-meta").textContent = `Profiles: ${out.searched || 0}, Failed: 0`;
         $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Rejected: ${out.rejected || 0}`;
         $("step-add-meta").textContent = `Added: ${out.verified || 0}`;
         $("step-outreach-meta").textContent = `Outreached: ${out.outreached || 0}`;
 
-        ['source', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'success'));
+        ['source', 'enrich', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'success'));
         setMetrics({ searched: out.searched || 0, verified: out.verified || 0, outreached: out.outreached || 0 });
         snapshot('workflow.execute', out);
       } catch (e) {
-        ['source', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'error'));
+        ['source', 'enrich', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'error'));
         snapshot('workflow.error', { error: e.message });
       }
       await refreshCandidates();
@@ -934,6 +992,7 @@
       await refreshCandidates();
       await refreshLogs();
       setStepStatus('source', 'idle');
+      setStepStatus('enrich', 'idle');
       setStepStatus('verify', 'idle');
       setStepStatus('add', 'idle');
       setStepStatus('outreach', 'idle');
@@ -947,6 +1006,7 @@
       $("close-create-modal-btn").addEventListener('click', () => closeCreateModal());
       $("create-job-modal-backdrop").addEventListener('click', () => closeCreateModal());
       $("run-source-btn").addEventListener('click', () => runSource());
+      $("run-enrich-btn").addEventListener('click', () => runEnrich());
       $("run-verify-btn").addEventListener('click', () => runVerify());
       $("run-add-btn").addEventListener('click', () => runAdd());
       $("run-outreach-btn").addEventListener('click', () => runOutreach());

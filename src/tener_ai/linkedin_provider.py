@@ -13,6 +13,9 @@ class LinkedInProvider:
     def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
+    def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        raise NotImplementedError
+
     def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
         raise NotImplementedError
 
@@ -49,6 +52,18 @@ class MockLinkedInProvider(LinkedInProvider):
             "candidate": candidate_profile.get("linkedin_id"),
             "preview": message[:120],
         }
+
+    def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        enriched = dict(profile)
+        raw = enriched.get("raw")
+        if isinstance(raw, dict):
+            merged_raw = dict(raw)
+            merged_raw["enriched"] = True
+            merged_raw["provider"] = "mock"
+            enriched["raw"] = merged_raw
+        else:
+            enriched["raw"] = {"enriched": True, "provider": "mock"}
+        return enriched
 
     def _load_profiles(self) -> List[Dict[str, Any]]:
         path = Path(self.dataset_path)
@@ -160,6 +175,34 @@ class UnipileLinkedInProvider(LinkedInProvider):
             "attendee_provider_id": attendee_id,
             "chat_id": chat_id,
         }
+
+    def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        provider_id = self._extract_attendee_id(profile)
+        if not provider_id:
+            return profile
+        if not self.account_id:
+            return profile
+
+        endpoint = self._build_url(f"/api/v1/users/{provider_id}")
+        endpoint = self._with_account_id(endpoint, self.account_id)
+        detail = self._request_json("GET", endpoint)
+
+        merged = dict(profile)
+        # Apply richer detail fields while preserving sourced defaults.
+        for key in ("first_name", "last_name", "full_name", "name", "headline", "location", "primary_locale", "languages", "skills"):
+            if detail.get(key):
+                merged[key] = detail.get(key)
+
+        merged_id = detail.get("provider_id") or profile.get("linkedin_id")
+        if merged_id:
+            merged["provider_id"] = merged_id
+            merged["linkedin_id"] = merged_id
+            merged["unipile_profile_id"] = merged_id
+            merged["attendee_provider_id"] = merged_id
+
+        merged_raw: Dict[str, Any] = {"search": profile.get("raw"), "detail": detail}
+        merged["raw"] = merged_raw
+        return self._normalize_profile(merged)
 
     def _extract_attendee_id(self, candidate_profile: Dict[str, Any]) -> Optional[str]:
         candidates = [

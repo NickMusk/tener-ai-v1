@@ -40,6 +40,22 @@ class SourcingAgent:
     def send_outreach(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
         return self.linkedin_provider.send_message(candidate_profile=candidate_profile, message=message)
 
+    def enrich_candidates(self, profiles: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
+        enriched: List[Dict[str, Any]] = []
+        failed = 0
+        for profile in profiles:
+            try:
+                enriched_profile = self.linkedin_provider.enrich_profile(profile)
+                if isinstance(enriched_profile, dict):
+                    enriched.append(enriched_profile)
+                else:
+                    enriched.append(profile)
+                    failed += 1
+            except Exception:
+                enriched.append(profile)
+                failed += 1
+        return enriched, failed
+
     @staticmethod
     def _candidate_key(profile: Dict[str, Any]) -> str:
         for field in ("linkedin_id", "unipile_profile_id", "attendee_provider_id", "provider_id", "id"):

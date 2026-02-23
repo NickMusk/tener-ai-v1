@@ -47,12 +47,14 @@ class WorkflowService:
 
     def verify_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
+        enrich_result = self.enrich_profiles(job_id=job_id, profiles=profiles)
+        enriched_profiles = enrich_result["profiles"]
 
         items: List[Dict[str, Any]] = []
         verified = 0
         rejected = 0
 
-        for profile in profiles:
+        for profile in enriched_profiles:
             score, status, notes = self.verification_agent.verify_candidate(job=job, profile=profile)
             record = {
                 "profile": profile,
@@ -82,7 +84,21 @@ class WorkflowService:
             "total": len(items),
             "verified": verified,
             "rejected": rejected,
+            "enriched_total": enrich_result["total"],
+            "enrich_failed": enrich_result["failed"],
         }
+
+    def enrich_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
+        self._get_job_or_raise(job_id)
+        enriched_profiles, failed = self.sourcing_agent.enrich_candidates(profiles)
+        self.db.log_operation(
+            operation="agent.sourcing.enrich",
+            status="ok" if failed == 0 else "partial",
+            entity_type="job",
+            entity_id=str(job_id),
+            details={"input_profiles": len(profiles), "enriched": len(enriched_profiles), "failed": failed},
+        )
+        return {"job_id": job_id, "profiles": enriched_profiles, "total": len(enriched_profiles), "failed": failed}
 
     def add_verified_candidates(self, job_id: int, verified_items: List[Dict[str, Any]]) -> Dict[str, Any]:
         self._get_job_or_raise(job_id)
