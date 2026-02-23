@@ -62,6 +62,27 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
 
+        if parsed.path == "/":
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "service": "Tener AI V1 API",
+                    "status": "ok",
+                    "endpoints": {
+                        "health": "GET /health",
+                        "create_job": "POST /api/jobs",
+                        "get_job": "GET /api/jobs/{job_id}",
+                        "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
+                        "run_workflow": "POST /api/workflows/execute",
+                        "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
+                        "conversation_inbound": "POST /api/conversations/{conversation_id}/inbound",
+                        "logs": "GET /api/logs?limit=100",
+                        "reload_rules": "POST /api/rules/reload",
+                    },
+                },
+            )
+            return
+
         if parsed.path == "/health":
             self._json_response(HTTPStatus.OK, {"status": "ok"})
             return
