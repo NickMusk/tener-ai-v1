@@ -89,32 +89,32 @@ class UnipileLinkedInProvider(LinkedInProvider):
             raise RuntimeError("UNIPILE_ACCOUNT_ID is required for Unipile search")
 
         limit = max(1, min(limit, 100))
-        endpoint = self._build_url(self.search_path)
-        endpoint = self._with_account_id(endpoint, self.account_id)
-
-        attempts = [
-            ("POST", {"query": query, "limit": limit}),
-            ("POST", {"keywords": query, "limit": limit}),
-            ("POST", {"text": query, "limit": limit}),
-            ("GET", None),
-        ]
-
         last_error = "unipile_search_unknown_error"
-        for method, payload in attempts:
-            try:
-                if method == "GET":
-                    url = f"{endpoint}{'&' if '?' in endpoint else '?'}{parse.urlencode({'q': query, 'limit': limit})}"
-                    response = self._request_json("GET", url)
-                else:
-                    response = self._request_json("POST", endpoint, payload)
+        for path in self._candidate_search_paths():
+            endpoint = self._with_account_id(self._build_url(path), self.account_id)
+            for method, payload, query_params in self._search_attempts(query=query, limit=limit):
+                try:
+                    if method == "GET":
+                        url = f"{endpoint}{'&' if '?' in endpoint else '?'}{parse.urlencode(query_params)}"
+                        response = self._request_json("GET", url)
+                    else:
+                        body = dict(payload or {})
+                        if self.api_type:
+                            body["api"] = self.api_type
+                        response = self._request_json("POST", endpoint, body)
 
-                items = self._extract_results(response)
-                if not items:
+                    items = self._extract_results(response)
+                    if not items:
+                        continue
+
+                    # /users/search may sometimes resolve as /users/{id} and return "search" placeholder.
+                    if self._looks_like_search_placeholder(items):
+                        continue
+
+                    return [self._normalize_profile(item) for item in items]
+                except RuntimeError as exc:
+                    last_error = str(exc)
                     continue
-                return [self._normalize_profile(item) for item in items]
-            except RuntimeError as exc:
-                last_error = str(exc)
-                continue
 
         raise RuntimeError(f"Unipile search failed: {last_error}")
 
@@ -235,6 +235,47 @@ class UnipileLinkedInProvider(LinkedInProvider):
             return [payload]
 
         return []
+
+    def _candidate_search_paths(self) -> List[str]:
+        candidates = [
+            self.search_path,
+            "/api/v1/linkedin/search",
+            "/api/v1/search",
+            "/api/v1/users",
+        ]
+        out: List[str] = []
+        seen = set()
+        for path in candidates:
+            p = (path or "").strip()
+            if not p:
+                continue
+            if not p.startswith("/"):
+                p = f"/{p}"
+            if p in seen:
+                continue
+            seen.add(p)
+            out.append(p)
+        return out
+
+    def _search_attempts(self, query: str, limit: int) -> List[tuple[str, Optional[Dict[str, Any]], Dict[str, Any]]]:
+        return [
+            ("POST", {"query": query, "limit": limit}, {}),
+            ("POST", {"keywords": query, "limit": limit}, {}),
+            ("POST", {"text": query, "limit": limit}, {}),
+            ("GET", None, {"q": query, "limit": limit}),
+            ("GET", None, {"query": query, "limit": limit}),
+            ("GET", None, {"keywords": query, "limit": limit}),
+            ("GET", None, {"text": query, "limit": limit}),
+        ]
+
+    @staticmethod
+    def _looks_like_search_placeholder(items: List[Dict[str, Any]]) -> bool:
+        if len(items) != 1:
+            return False
+        item = items[0]
+        public_identifier = (item.get("public_identifier") or "").strip().lower()
+        obj = (item.get("object") or "").strip()
+        return obj == "UserProfile" and public_identifier == "search"
 
     def _normalize_profile(self, item: Dict[str, Any]) -> Dict[str, Any]:
         first_name = (item.get("first_name") or "").strip()
