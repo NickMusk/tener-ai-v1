@@ -2,7 +2,7 @@
 
 V1 backend prototype for autonomous hiring workflow:
 - search candidates on LinkedIn (mock provider by default, Unipile-ready adapter included)
-- verify candidates with editable matchmaking rules
+- verify candidates with editable matchmaking rules and JD core-profile extraction
 - add candidates to internal DB
 - outreach via LinkedIn channel
 - auto-answer candidate questions in candidate language
@@ -111,8 +111,14 @@ Recommended env vars:
 Flow with Unipile enabled:
 
 1. Candidate sourcing uses Unipile LinkedIn Search.
-2. Verified outreach is written to DB and additionally sent via Unipile Chats API.
-3. Delivery result is stored in message `meta.delivery` and operation logs.
+2. In `contact-all` mode (default), low-confidence candidates are marked as `needs_resume` (not rejected) and CV is requested automatically in outreach.
+3. Outreach is written to DB and additionally sent via Unipile Chats API.
+4. Delivery result is stored in message `meta.delivery` and operation logs.
+
+Workflow mode env vars:
+
+- `TENER_CONTACT_ALL_MODE`: default `true`; converts pre-CV rejects to `needs_resume`.
+- `TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY`: default `true`; first outreach asks for CV/resume.
 
 ## Deploy
 

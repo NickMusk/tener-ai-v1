@@ -335,6 +335,7 @@
     }
 
     .pill.verified { color: var(--ok); border-color: var(--ok); }
+    .pill.needs_resume { color: var(--warn); border-color: var(--warn); }
     .pill.rejected { color: var(--err); border-color: var(--err); }
 
     .modal {
@@ -472,7 +473,7 @@
 
       <article class="step-card">
         <div class="step-title"><span>3. Verify</span><span id="status-verify" class="status">idle</span></div>
-        <div id="step-verify-meta" class="step-metrics">Verified: 0, Rejected: 0</div>
+        <div id="step-verify-meta" class="step-metrics">Verified: 0, Needs resume: 0, Rejected: 0</div>
         <div class="step-actions">
           <button id="run-verify-btn">Run</button>
         </div>
@@ -794,8 +795,9 @@
       }
 
       const prioritized = [
+        ...items.filter(x => x.status === 'needs_resume'),
         ...items.filter(x => x.status === 'rejected'),
-        ...items.filter(x => x.status !== 'rejected')
+        ...items.filter(x => x.status !== 'rejected' && x.status !== 'needs_resume')
       ].slice(0, 12);
 
       box.innerHTML = prioritized.map((x) => {
@@ -833,7 +835,7 @@
         state.outreachItems = [];
         $("step-source-meta").textContent = `Profiles: ${out.total || 0}`;
         $("step-enrich-meta").textContent = "Profiles: 0, Failed: 0";
-        $("step-verify-meta").textContent = "Verified: 0, Rejected: 0";
+        $("step-verify-meta").textContent = "Verified: 0, Needs resume: 0, Rejected: 0";
         $("step-add-meta").textContent = "Added: 0";
         $("step-outreach-meta").textContent = "Sent: 0";
         setStepStatus('enrich', 'idle');
@@ -866,7 +868,7 @@
         state.addedCandidates = [];
         state.outreachItems = [];
         $("step-enrich-meta").textContent = `Profiles: ${out.total || 0}, Failed: ${out.failed || 0}`;
-        $("step-verify-meta").textContent = "Verified: 0, Rejected: 0";
+        $("step-verify-meta").textContent = "Verified: 0, Needs resume: 0, Rejected: 0";
         $("step-add-meta").textContent = "Added: 0";
         $("step-outreach-meta").textContent = "Sent: 0";
         setStepStatus('verify', 'idle');
@@ -895,7 +897,7 @@
           body: JSON.stringify({ job_id: jobId, profiles: state.enrichedProfiles })
         });
         state.verifyItems = out.items || [];
-        $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Rejected: ${out.rejected || 0}`;
+        $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Needs resume: ${out.needs_resume || 0}, Rejected: ${out.rejected || 0}`;
         $("step-enrich-meta").textContent = `Profiles: ${out.enriched_total || state.enrichedProfiles.length}, Failed: ${out.enrich_failed || 0}`;
         renderVerificationExplanations(state.verifyItems);
         setMetrics({ searched: state.sourceProfiles.length, verified: out.verified || 0, outreached: state.outreachItems.length });
@@ -911,14 +913,14 @@
     async function runAdd() {
       const jobId = selectedJobId();
       if (!jobId) return alert('Select a job');
-      const verifiedItems = state.verifyItems.filter(x => x.status === 'verified');
-      if (!verifiedItems.length) return alert('No verified profiles. Run Verify first.');
+      const screeningItems = state.verifyItems.filter(x => x.status !== 'rejected');
+      if (!screeningItems.length) return alert('No screening candidates. Run Verify first.');
 
       setStepStatus('add', 'running');
       try {
         const out = await api('/api/steps/add', {
           method: 'POST',
-          body: JSON.stringify({ job_id: jobId, verified_items: verifiedItems })
+          body: JSON.stringify({ job_id: jobId, verified_items: screeningItems })
         });
         state.addedCandidates = out.added || [];
         $("step-add-meta").textContent = `Added: ${out.total || 0}`;
@@ -977,8 +979,8 @@
 
         $("step-source-meta").textContent = `Profiles: ${out.searched || 0}`;
         $("step-enrich-meta").textContent = `Profiles: ${out.searched || 0}, Failed: 0`;
-        $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Rejected: ${out.rejected || 0}`;
-        $("step-add-meta").textContent = `Added: ${out.verified || 0}`;
+        $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Needs resume: ${out.needs_resume || 0}, Rejected: ${out.rejected || 0}`;
+        $("step-add-meta").textContent = `Added: ${(out.verified || 0) + (out.needs_resume || 0)}`;
         $("step-outreach-meta").textContent = `Total: ${out.outreached || 0}, Sent: ${out.outreach_sent || 0}, Failed: ${out.outreach_failed || 0}`;
 
         ['source', 'enrich', 'verify', 'add'].forEach(s => setStepStatus(s, 'success'));

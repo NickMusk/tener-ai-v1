@@ -5,6 +5,11 @@
     "ru": "Привет, {name}! Нашли ваш профиль, и он подходит под роль \"{job_title}\". Скоуп: {scope_summary}. Если интересно, могу отправить детали и следующие шаги.",
     "es": "Hola {name}, encontré tu perfil y parece relevante para el puesto \"{job_title}\". Alcance: {scope_summary}. Si te interesa, te comparto detalles y próximos pasos."
   },
+  "outreach_resume_request": {
+    "en": "Hi {name}, thanks for connecting regarding \"{job_title}\". To run final matching on real scope ({core_profile_summary}), could you share your latest CV/resume and key project highlights?",
+    "ru": "Привет, {name}! Спасибо за интерес к роли \"{job_title}\". Чтобы сделать финальный мэтчинг по ключевому профилю ({core_profile_summary}), отправьте, пожалуйста, актуальное CV/резюме и 2-3 релевантных проекта.",
+    "es": "Hola {name}, gracias por tu interés en \"{job_title}\". Para hacer el matching final sobre el perfil clave ({core_profile_summary}), ¿puedes compartir tu CV actualizado y 2-3 proyectos relevantes?"
+  },
   "faq": {
     "salary": {
       "en": "Compensation depends on seniority and scope fit. If you share expectations, I can confirm range quickly.",

@@ -12,6 +12,7 @@ class WorkflowSummary:
     job_id: int
     searched: int
     verified: int
+    needs_resume: int
     rejected: int
     outreached: int
     outreach_sent: int
@@ -27,12 +28,16 @@ class WorkflowService:
         verification_agent: VerificationAgent,
         outreach_agent: OutreachAgent,
         faq_agent: FAQAgent,
+        contact_all_mode: bool = False,
+        require_resume_before_final_verify: bool = False,
     ) -> None:
         self.db = db
         self.sourcing_agent = sourcing_agent
         self.verification_agent = verification_agent
         self.outreach_agent = outreach_agent
         self.faq_agent = faq_agent
+        self.contact_all_mode = contact_all_mode
+        self.require_resume_before_final_verify = require_resume_before_final_verify
 
     def source_candidates(self, job_id: int, limit: int = 30) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
@@ -54,10 +59,26 @@ class WorkflowService:
 
         items: List[Dict[str, Any]] = []
         verified = 0
+        needs_resume = 0
         rejected = 0
 
         for profile in enriched_profiles:
             score, status, notes = self.verification_agent.verify_candidate(job=job, profile=profile)
+            if self.contact_all_mode and status == "rejected":
+                status = "needs_resume"
+                notes = dict(notes)
+                notes["pre_resume_status"] = "rejected"
+                notes["screening_outcome"] = "needs_resume"
+                existing = str(notes.get("human_explanation") or "").strip()
+                if existing:
+                    notes["human_explanation"] = (
+                        existing
+                        + " Решение на этом этапе: запросить CV и уточнить опыт перед финальным вердиктом."
+                    )
+                else:
+                    notes["human_explanation"] = (
+                        "Недостаточно подтвержденных данных в профиле. Запрашиваем CV для финального решения."
+                    )
             record = {
                 "profile": profile,
                 "score": score,
@@ -68,6 +89,8 @@ class WorkflowService:
 
             if status == "verified":
                 verified += 1
+            elif status == "needs_resume":
+                needs_resume += 1
             else:
                 rejected += 1
 
@@ -85,6 +108,7 @@ class WorkflowService:
             "items": items,
             "total": len(items),
             "verified": verified,
+            "needs_resume": needs_resume,
             "rejected": rejected,
             "enriched_total": enrich_result["total"],
             "enrich_failed": enrich_result["failed"],
@@ -113,13 +137,16 @@ class WorkflowService:
 
             score = float(item.get("score") or 0.0)
             notes = item.get("notes") if isinstance(item.get("notes"), dict) else {}
+            screening_status = str(item.get("status") or "verified").strip().lower()
+            if screening_status not in {"verified", "needs_resume", "rejected"}:
+                screening_status = "verified"
 
             candidate_id = self.db.upsert_candidate(profile, source="linkedin")
             self.db.create_candidate_match(
                 job_id=job_id,
                 candidate_id=candidate_id,
                 score=score,
-                status="verified",
+                status=screening_status,
                 verification_notes=notes,
             )
             self.db.log_operation(
@@ -127,9 +154,9 @@ class WorkflowService:
                 status="ok",
                 entity_type="candidate",
                 entity_id=str(candidate_id),
-                details={"job_id": job_id, "score": score},
+                details={"job_id": job_id, "score": score, "status": screening_status},
             )
-            added.append({"candidate_id": candidate_id, "profile": profile, "score": score})
+            added.append({"candidate_id": candidate_id, "profile": profile, "score": score, "status": screening_status})
 
         return {"job_id": job_id, "added": added, "total": len(added)}
 
@@ -153,13 +180,27 @@ class WorkflowService:
                 failed += 1
                 continue
 
-            language, message = self.outreach_agent.compose_intro(job=job, candidate=candidate)
+            match = self.db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
+            screening_status = str((match or {}).get("status") or "")
+            request_resume = self.require_resume_before_final_verify or screening_status == "needs_resume"
+            language, message = self.outreach_agent.compose_screening_message(
+                job=job,
+                candidate=candidate,
+                request_resume=request_resume,
+            )
             conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
 
             try:
                 delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
                 if delivery.get("sent") is False:
                     failed += 1
+                    self.db.log_operation(
+                        operation="agent.outreach.delivery_error",
+                        status="error",
+                        entity_type="candidate",
+                        entity_id=str(candidate_id),
+                        details={"job_id": job_id, "delivery": delivery},
+                    )
                 else:
                     sent += 1
             except Exception as exc:
@@ -178,14 +219,26 @@ class WorkflowService:
                 direction="outbound",
                 content=message,
                 candidate_language=language,
-                meta={"type": "outreach", "auto": True, "delivery": delivery},
+                meta={
+                    "type": "outreach",
+                    "auto": True,
+                    "delivery": delivery,
+                    "request_resume": request_resume,
+                    "screening_status": screening_status or None,
+                },
             )
             self.db.log_operation(
                 operation="agent.outreach.send",
-                status="ok",
+                status="ok" if delivery.get("sent") else "error",
                 entity_type="conversation",
                 entity_id=str(conversation_id),
-                details={"candidate_id": candidate_id, "language": language, "delivery": delivery},
+                details={
+                    "candidate_id": candidate_id,
+                    "language": language,
+                    "delivery": delivery,
+                    "request_resume": request_resume,
+                    "screening_status": screening_status or None,
+                },
             )
 
             out_items.append(
@@ -194,6 +247,8 @@ class WorkflowService:
                     "conversation_id": conversation_id,
                     "language": language,
                     "delivery": delivery,
+                    "request_resume": request_resume,
+                    "screening_status": screening_status or None,
                 }
             )
             conversation_ids.append(conversation_id)
@@ -221,8 +276,11 @@ class WorkflowService:
         source_result = self.source_candidates(job_id=job_id, limit=limit)
         verify_result = self.verify_profiles(job_id=job_id, profiles=source_result["profiles"])
 
-        verified_items = [item for item in verify_result["items"] if item.get("status") == "verified"]
-        add_result = self.add_verified_candidates(job_id=job_id, verified_items=verified_items)
+        if self.contact_all_mode:
+            eligible_items = [item for item in verify_result["items"] if item.get("status") in {"verified", "needs_resume"}]
+        else:
+            eligible_items = [item for item in verify_result["items"] if item.get("status") == "verified"]
+        add_result = self.add_verified_candidates(job_id=job_id, verified_items=eligible_items)
         outreach_result = self.outreach_candidates(
             job_id=job_id,
             candidate_ids=[x["candidate_id"] for x in add_result["added"]],
@@ -232,6 +290,7 @@ class WorkflowService:
             job_id=job_id,
             searched=source_result["total"],
             verified=verify_result["verified"],
+            needs_resume=verify_result.get("needs_resume", 0),
             rejected=verify_result["rejected"],
             outreached=outreach_result["total"],
             outreach_sent=outreach_result["sent"],
@@ -247,6 +306,7 @@ class WorkflowService:
             details={
                 "searched": summary.searched,
                 "verified": summary.verified,
+                "needs_resume": summary.needs_resume,
                 "rejected": summary.rejected,
                 "outreached": summary.outreached,
                 "outreach_sent": summary.outreach_sent,

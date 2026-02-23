@@ -160,6 +160,31 @@ class OutreachAgent:
         )
         return candidate_lang, msg
 
+    def compose_screening_message(
+        self,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        request_resume: bool,
+    ) -> Tuple[str, str]:
+        if request_resume:
+            return self.compose_resume_request(job=job, candidate=candidate)
+        return self.compose_intro(job=job, candidate=candidate)
+
+    def compose_resume_request(self, job: Dict[str, Any], candidate: Dict[str, Any]) -> Tuple[str, str]:
+        candidate_lang = pick_candidate_language(candidate.get("languages"), fallback=self.templates.get("default_language", "en"))
+        group = self.templates.get("outreach_resume_request") or self.templates.get("outreach", {})
+        template = self._pick_template(group, candidate_lang)
+        scope_summary = self.matching_engine.summarize_scope(job)
+        core = self.matching_engine.build_core_profile(job)
+        core_summary = ", ".join(core.get("core_skills") or []) or scope_summary
+        msg = template.format(
+            name=candidate.get("full_name", "there"),
+            job_title=job.get("title", "this role"),
+            scope_summary=scope_summary,
+            core_profile_summary=core_summary,
+        )
+        return candidate_lang, msg
+
     def _pick_template(self, group: Dict[str, str], language: str) -> str:
         if language in group:
             return group[language]

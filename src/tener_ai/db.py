@@ -245,6 +245,19 @@ class Database:
         rows = self._conn.execute(query, (job_id,)).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
+    def get_candidate_match(self, job_id: int, candidate_id: int) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            """
+            SELECT *
+            FROM candidate_job_matches
+            WHERE job_id = ? AND candidate_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (job_id, candidate_id),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
     def create_conversation(self, job_id: int, candidate_id: int, channel: str = "linkedin") -> int:
         with self.transaction() as conn:
             cur = conn.execute(

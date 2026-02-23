@@ -25,6 +25,7 @@ class MatchingEngine:
         rules = self.rules
         weights = rules.get("weights", {})
         candidate_skills = self._candidate_skills(profile)
+        core_profile = self.build_core_profile(job)
 
         missing_fields = [
             field
@@ -75,6 +76,7 @@ class MatchingEngine:
 
         status = "verified" if score >= float(rules.get("min_score", 0.65)) else "rejected"
         notes = {
+            "core_profile": core_profile,
             "required_skills": sorted(required_skills),
             "matched_skills": matched_skills,
             "effective_required_skills_count": min(len(required_skills), 6) if required_skills else 0,
@@ -101,6 +103,23 @@ class MatchingEngine:
             language_match=round(language_match, 3),
         )
         return MatchResult(score=round(score, 3), status=status, notes=notes)
+
+    def build_core_profile(self, job: Dict[str, Any], max_skills: int = 6) -> Dict[str, Any]:
+        jd_text = (job.get("jd_text") or "").lower()
+        title = str(job.get("title") or "").strip()
+        target_seniority = (job.get("seniority") or self._infer_seniority(jd_text) or "middle").lower()
+        required_skills = sorted(self._extract_required_skills(jd_text))
+        if required_skills:
+            core_skills = required_skills[:max_skills]
+        else:
+            core_skills = self._extract_jd_keywords(jd_text, max_items=max_skills)
+        return {
+            "title": title,
+            "target_seniority": target_seniority,
+            "core_skills": core_skills,
+            "location": job.get("location"),
+            "preferred_languages": job.get("preferred_languages") or [],
+        }
 
     def _build_human_explanation(
         self,
@@ -154,8 +173,8 @@ class MatchingEngine:
         )
 
     def summarize_scope(self, job: Dict[str, Any], max_items: int = 5) -> str:
-        jd_text = (job.get("jd_text") or "").lower()
-        skills = sorted(self._extract_required_skills(jd_text))[:max_items]
+        core = self.build_core_profile(job=job, max_skills=max_items)
+        skills = core.get("core_skills") or []
         if skills:
             return ", ".join(skills)
         title = job.get("title") or "the role"
@@ -245,6 +264,54 @@ class MatchingEngine:
         dictionary = [s.lower() for s in self.rules.get("skill_dictionary", [])]
         inferred = {skill for skill in dictionary if skill in headline}
         return inferred
+
+    def _extract_jd_keywords(self, jd_text: str, max_items: int = 6) -> List[str]:
+        stopwords = {
+            "and",
+            "the",
+            "for",
+            "with",
+            "from",
+            "this",
+            "that",
+            "you",
+            "are",
+            "will",
+            "have",
+            "our",
+            "your",
+            "team",
+            "role",
+            "need",
+            "must",
+            "plus",
+            "senior",
+            "middle",
+            "junior",
+            "lead",
+            "engineer",
+            "developer",
+            "experience",
+            "years",
+            "strong",
+            "good",
+            "excellent",
+        }
+        tokens = [x.strip(".,:;()[]{}!?") for x in jd_text.split()]
+        result: List[str] = []
+        seen: Set[str] = set()
+        for token in tokens:
+            if len(token) < 3:
+                continue
+            if token in stopwords:
+                continue
+            if token in seen:
+                continue
+            seen.add(token)
+            result.append(token)
+            if len(result) >= max_items:
+                break
+        return result
 
     def _load_rules(self) -> Dict[str, Any]:
         path = Path(self.rules_path)

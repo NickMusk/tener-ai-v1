@@ -20,6 +20,13 @@ def project_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def env_bool(name: str, default: bool) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def build_services() -> Dict[str, Any]:
     root = project_root()
     db_path = os.environ.get("TENER_DB_PATH", str(root / "runtime" / "tener_v1.sqlite3"))
@@ -44,6 +51,8 @@ def build_services() -> Dict[str, Any]:
         verification_agent=verification_agent,
         outreach_agent=outreach_agent,
         faq_agent=faq_agent,
+        contact_all_mode=env_bool("TENER_CONTACT_ALL_MODE", True),
+        require_resume_before_final_verify=env_bool("TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY", True),
     )
 
     return {
@@ -221,6 +230,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     "job_id": summary.job_id,
                     "searched": summary.searched,
                     "verified": summary.verified,
+                    "needs_resume": summary.needs_resume,
                     "rejected": summary.rejected,
                     "outreached": summary.outreached,
                     "outreach_sent": summary.outreach_sent,
