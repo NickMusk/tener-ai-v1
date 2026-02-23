@@ -102,7 +102,7 @@ Recommended env vars:
 - `UNIPILE_API_KEY`: API key from Unipile.
 - `UNIPILE_BASE_URL`: API base URL (default `https://api.unipile.com`).
 - `UNIPILE_ACCOUNT_ID`: required for LinkedIn search and outbound delivery.
-- `UNIPILE_LINKEDIN_SEARCH_PATH`: default `/api/v1/linkedin/search`.
+- `UNIPILE_LINKEDIN_SEARCH_PATH`: default `/api/v1/users/search`.
 - `UNIPILE_CHAT_CREATE_PATH`: default `/api/v1/chats`.
 - `UNIPILE_LINKEDIN_API_TYPE`: optional, e.g. `classic` or `recruiter`.
 - `UNIPILE_LINKEDIN_INMAIL`: optional (`true/false`) to force InMail flag.

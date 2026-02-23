@@ -78,7 +78,7 @@ class UnipileLinkedInProvider(LinkedInProvider):
         self.account_id = account_id
         self.timeout_seconds = max(5, timeout_seconds)
 
-        self.search_path = os.environ.get("UNIPILE_LINKEDIN_SEARCH_PATH", "/api/v1/linkedin/search")
+        self.search_path = os.environ.get("UNIPILE_LINKEDIN_SEARCH_PATH", "/api/v1/users/search")
         self.chat_create_path = os.environ.get("UNIPILE_CHAT_CREATE_PATH", "/api/v1/chats")
         self.api_type = (os.environ.get("UNIPILE_LINKEDIN_API_TYPE") or "").strip()
         self.force_inmail = (os.environ.get("UNIPILE_LINKEDIN_INMAIL") or "").strip().lower() in {"1", "true", "yes"}
@@ -211,6 +211,9 @@ class UnipileLinkedInProvider(LinkedInProvider):
     def _extract_results(self, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         if isinstance(payload, list):
             return [x for x in payload if isinstance(x, dict)]
+
+        if payload.get("object") == "UserProfile" or payload.get("provider_id"):
+            return [payload]
 
         for key in ("results", "items", "data", "profiles"):
             bucket = payload.get(key)
