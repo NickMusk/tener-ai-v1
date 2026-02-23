@@ -1,0 +1,40 @@
+{
+  "scenarios": [
+    {
+      "id": "unipile_backend_global",
+      "title": "Unipile: Senior Backend Engineer (global)",
+      "job": {
+        "title": "Senior Backend Engineer",
+        "jd_text": "Need Python, Django, AWS, Docker, PostgreSQL, microservices.",
+        "location": "Remote",
+        "preferred_languages": ["en"],
+        "seniority": "senior"
+      },
+      "source_limit": 15,
+      "expected": {
+        "source_min": 1,
+        "source_max": 15,
+        "verified_min": 0,
+        "verified_max": 15
+      }
+    },
+    {
+      "id": "unipile_frontend_global",
+      "title": "Unipile: Frontend Engineer (global)",
+      "job": {
+        "title": "Frontend Engineer",
+        "jd_text": "Need React, TypeScript, JavaScript, Node.",
+        "location": "Remote",
+        "preferred_languages": ["en", "es"],
+        "seniority": "middle"
+      },
+      "source_limit": 15,
+      "expected": {
+        "source_min": 1,
+        "source_max": 15,
+        "verified_min": 0,
+        "verified_max": 15
+      }
+    }
+  ]
+}

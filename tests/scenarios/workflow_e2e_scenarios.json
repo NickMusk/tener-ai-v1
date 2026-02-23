@@ -1,0 +1,67 @@
+{
+  "scenarios": [
+    {
+      "id": "senior_backend_germany",
+      "title": "Senior Backend Engineer (Germany)",
+      "job": {
+        "title": "Senior Backend Engineer",
+        "jd_text": "Need Python, Django, AWS, Docker, PostgreSQL for backend microservices.",
+        "location": "Germany",
+        "preferred_languages": ["en"],
+        "seniority": "senior"
+      },
+      "source_limit": 10,
+      "expected": {
+        "source_min": 6,
+        "source_max": 10,
+        "verified_min": 1,
+        "verified_max": 2,
+        "rejected_min": 4,
+        "rejected_max": 9,
+        "expected_verified_names": ["Alex Morgan"]
+      }
+    },
+    {
+      "id": "frontend_typescript_spain",
+      "title": "Frontend Engineer (Spain)",
+      "job": {
+        "title": "Frontend Engineer",
+        "jd_text": "Need React, TypeScript, JavaScript, Node, Figma for product frontend.",
+        "location": "Spain",
+        "preferred_languages": ["es", "en"],
+        "seniority": "middle"
+      },
+      "source_limit": 10,
+      "expected": {
+        "source_min": 8,
+        "source_max": 10,
+        "verified_min": 1,
+        "verified_max": 2,
+        "rejected_min": 6,
+        "rejected_max": 9,
+        "expected_verified_names": ["Miguel Santos"]
+      }
+    },
+    {
+      "id": "qa_automation_georgia",
+      "title": "QA Automation Engineer (Georgia)",
+      "job": {
+        "title": "QA Automation Engineer",
+        "jd_text": "Need QA, automation testing, Python, CI/CD.",
+        "location": "Georgia",
+        "preferred_languages": ["ru", "en"],
+        "seniority": "middle"
+      },
+      "source_limit": 8,
+      "expected": {
+        "source_min": 6,
+        "source_max": 8,
+        "verified_min": 1,
+        "verified_max": 2,
+        "rejected_min": 4,
+        "rejected_max": 7,
+        "expected_verified_names": ["Anastasia Volkova"]
+      }
+    }
+  ]
+}
