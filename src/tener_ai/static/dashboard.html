@@ -170,7 +170,7 @@
 
     .controls {
       display: grid;
-      grid-template-columns: 1.4fr 1fr;
+      grid-template-columns: 1fr;
       gap: 12px;
     }
 
@@ -303,6 +303,65 @@
 
     .muted { color: var(--text-secondary); }
 
+    .verify-list {
+      display: grid;
+      gap: 8px;
+      max-height: 240px;
+      overflow: auto;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      background: #0f141c;
+      padding: 10px;
+    }
+
+    .verify-item {
+      border-bottom: 1px dashed #2a3441;
+      padding-bottom: 8px;
+    }
+
+    .verify-item:last-child { border-bottom: none; }
+
+    .pill {
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      border-radius: 999px;
+      padding: 2px 8px;
+      border: 1px solid var(--border-color);
+      color: var(--text-secondary);
+      display: inline-block;
+    }
+
+    .pill.verified { color: var(--ok); border-color: var(--ok); }
+    .pill.rejected { color: var(--err); border-color: var(--err); }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      display: none;
+      place-items: center;
+      z-index: 50;
+      padding: 16px;
+    }
+
+    .modal.open { display: grid; }
+
+    .modal-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 6, 11, 0.8);
+      backdrop-filter: blur(2px);
+    }
+
+    .modal-card {
+      position: relative;
+      width: min(840px, 100%);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      background: var(--bg-card);
+      padding: 16px;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    }
+
     @media (max-width: 1240px) {
       body { grid-template-columns: 1fr; }
       .sidebar { position: relative; height: auto; }
@@ -349,6 +408,7 @@
         <p class="subtitle">Run each step independently, inspect outputs, and monitor logs in real time.</p>
       </div>
       <div class="button-row">
+        <button id="open-create-modal-btn">Create Job</button>
         <button id="refresh-btn">Refresh Data</button>
         <button class="btn-primary" id="run-full-btn">Run Full Pipeline</button>
       </div>
@@ -370,41 +430,6 @@
     </section>
 
     <section class="controls">
-      <div class="card">
-        <div class="panel-title"><span>Create Job</span><span class="mono">POST /api/jobs</span></div>
-        <div class="form-grid">
-          <div>
-            <label class="muted">Title</label>
-            <input id="job-title" placeholder="Senior Backend Engineer">
-          </div>
-          <div>
-            <label class="muted">Location</label>
-            <input id="job-location" placeholder="Germany / Remote">
-          </div>
-          <div>
-            <label class="muted">Seniority</label>
-            <select id="job-seniority">
-              <option value="">auto</option>
-              <option value="junior">junior</option>
-              <option value="middle">middle</option>
-              <option value="senior">senior</option>
-              <option value="lead">lead</option>
-            </select>
-          </div>
-          <div>
-            <label class="muted">Preferred Languages (comma)</label>
-            <input id="job-languages" placeholder="en, ru">
-          </div>
-          <div class="full">
-            <label class="muted">JD Text</label>
-            <textarea id="job-jd" placeholder="Need Python, Django, AWS, Docker, PostgreSQL..."></textarea>
-          </div>
-          <div class="full button-row" style="justify-content:flex-start;">
-            <button class="btn-primary" id="create-job-btn">Create Job</button>
-          </div>
-        </div>
-      </div>
-
       <div class="card">
         <div class="panel-title"><span>Select Job</span><span class="mono">GET /api/jobs</span></div>
         <div class="form-grid">
@@ -466,6 +491,13 @@
       </article>
     </section>
 
+    <section class="card">
+      <div class="panel-title"><span>Verification Explanations</span><span class="mono">rules-based</span></div>
+      <div id="verify-explanations-box" class="verify-list">
+        <div class="muted">Run Verify to see human-readable decision reasons.</div>
+      </div>
+    </section>
+
     <section class="panels">
       <div class="card">
         <div class="panel-title"><span>Live Operation Logs</span><button id="logs-refresh-btn">Reload</button></div>
@@ -497,6 +529,47 @@
       </div>
     </section>
   </main>
+
+  <div id="create-job-modal" class="modal" aria-hidden="true">
+    <div class="modal-backdrop" id="create-job-modal-backdrop"></div>
+    <section class="modal-card">
+      <div class="panel-title">
+        <span>Create Job</span>
+        <button id="close-create-modal-btn">Close</button>
+      </div>
+      <div class="form-grid">
+        <div>
+          <label class="muted">Title</label>
+          <input id="job-title" placeholder="Senior Backend Engineer">
+        </div>
+        <div>
+          <label class="muted">Location</label>
+          <input id="job-location" placeholder="Germany / Remote">
+        </div>
+        <div>
+          <label class="muted">Seniority</label>
+          <select id="job-seniority">
+            <option value="">auto</option>
+            <option value="junior">junior</option>
+            <option value="middle">middle</option>
+            <option value="senior">senior</option>
+            <option value="lead">lead</option>
+          </select>
+        </div>
+        <div>
+          <label class="muted">Preferred Languages (comma)</label>
+          <input id="job-languages" placeholder="en, ru">
+        </div>
+        <div class="full">
+          <label class="muted">JD Text</label>
+          <textarea id="job-jd" placeholder="Need Python, Django, AWS, Docker, PostgreSQL..."></textarea>
+        </div>
+        <div class="full button-row" style="justify-content:flex-start;">
+          <button class="btn-primary" id="create-job-btn">Create Job</button>
+        </div>
+      </div>
+    </section>
+  </div>
 
   <script>
     const state = {
@@ -557,6 +630,24 @@
       return Number(fromSelect || state.jobId || 0) || null;
     }
 
+    function openCreateModal() {
+      $("create-job-modal").classList.add("open");
+      $("create-job-modal").setAttribute("aria-hidden", "false");
+    }
+
+    function closeCreateModal() {
+      $("create-job-modal").classList.remove("open");
+      $("create-job-modal").setAttribute("aria-hidden", "true");
+    }
+
+    function resetCreateJobForm() {
+      $("job-title").value = "";
+      $("job-location").value = "";
+      $("job-seniority").value = "";
+      $("job-languages").value = "";
+      $("job-jd").value = "";
+    }
+
     async function loadJobs() {
       const data = await api('/api/jobs?limit=200');
       const select = $("job-select");
@@ -569,7 +660,7 @@
         select.appendChild(opt);
         state.jobId = null;
         $("job-label").textContent = 'none';
-        $("job-meta").textContent = 'Create a job to start manual pipeline.';
+        $("job-meta").textContent = 'Create a job from modal window to start manual pipeline.';
         return;
       }
 
@@ -616,9 +707,44 @@
 
       const out = await api('/api/jobs', { method: 'POST', body: JSON.stringify(payload) });
       snapshot('job.created', out);
+      resetCreateJobForm();
+      closeCreateModal();
       await loadJobs();
       await refreshCandidates();
       await refreshLogs();
+    }
+
+    function renderVerificationExplanations(items) {
+      const box = $("verify-explanations-box");
+      if (!items || !items.length) {
+        box.innerHTML = '<div class="muted">Run Verify to see human-readable decision reasons.</div>';
+        return;
+      }
+
+      const prioritized = [
+        ...items.filter(x => x.status === 'rejected'),
+        ...items.filter(x => x.status !== 'rejected')
+      ].slice(0, 12);
+
+      box.innerHTML = prioritized.map((x) => {
+        const profile = x.profile || {};
+        const name = escapeHtml(profile.full_name || profile.name || 'Unknown');
+        const score = typeof x.score === 'number' ? x.score.toFixed(3) : escapeHtml(String(x.score ?? '-'));
+        const status = escapeHtml(String(x.status || '-'));
+        const explanation = escapeHtml(
+          (x.notes && x.notes.human_explanation)
+            || 'No explanation generated by rules engine.'
+        );
+        return `
+          <div class="verify-item">
+            <div style="display:flex;justify-content:space-between;gap:8px;align-items:center;">
+              <div><b>${name}</b> <span class="mono muted">score ${score}</span></div>
+              <span class="pill ${status}">${status}</span>
+            </div>
+            <div class="muted" style="margin-top:6px;">${explanation}</div>
+          </div>
+        `;
+      }).join('');
     }
 
     async function runSource() {
@@ -652,6 +778,7 @@
         });
         state.verifyItems = out.items || [];
         $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Rejected: ${out.rejected || 0}`;
+        renderVerificationExplanations(state.verifyItems);
         setMetrics({ searched: state.sourceProfiles.length, verified: out.verified || 0, outreached: state.outreachItems.length });
         setStepStatus('verify', 'success');
         snapshot('verify.result', out);
@@ -811,10 +938,14 @@
       setStepStatus('add', 'idle');
       setStepStatus('outreach', 'idle');
       setStepStatus('faq', 'manual');
+      renderVerificationExplanations([]);
     }
 
     function bindEvents() {
       $("create-job-btn").addEventListener('click', () => createJob().catch(e => alert(e.message)));
+      $("open-create-modal-btn").addEventListener('click', () => openCreateModal());
+      $("close-create-modal-btn").addEventListener('click', () => closeCreateModal());
+      $("create-job-modal-backdrop").addEventListener('click', () => closeCreateModal());
       $("run-source-btn").addEventListener('click', () => runSource());
       $("run-verify-btn").addEventListener('click', () => runVerify());
       $("run-add-btn").addEventListener('click', () => runAdd());
@@ -838,6 +969,10 @@
         }
         await refreshCandidates();
         await refreshLogs();
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') closeCreateModal();
       });
     }
 

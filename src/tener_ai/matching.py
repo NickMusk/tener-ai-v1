@@ -27,10 +27,19 @@ class MatchingEngine:
 
         missing_fields = [field for field in rules.get("mandatory_fields", []) if not profile.get(field)]
         if missing_fields:
+            explanation = (
+                "Кандидат отклонен: в профиле не хватает обязательных полей "
+                + ", ".join(missing_fields)
+                + "."
+            )
             return MatchResult(
                 score=0.0,
                 status="rejected",
-                notes={"reason": "missing_mandatory_fields", "missing_fields": missing_fields},
+                notes={
+                    "reason": "missing_mandatory_fields",
+                    "missing_fields": missing_fields,
+                    "human_explanation": explanation,
+                },
             )
 
         jd_text = (job.get("jd_text") or "").lower()
@@ -74,7 +83,69 @@ class MatchingEngine:
             "min_score": rules.get("min_score", 0.65),
             "rules_version": rules.get("version", "unknown"),
         }
+        notes["human_explanation"] = self._build_human_explanation(
+            status=status,
+            score=round(score, 3),
+            min_score=float(rules.get("min_score", 0.65)),
+            required_skills=sorted(required_skills),
+            matched_skills=matched_skills,
+            target_seniority=target_seniority,
+            years=years,
+            location_match=round(location_match, 3),
+            language_match=round(language_match, 3),
+        )
         return MatchResult(score=round(score, 3), status=status, notes=notes)
+
+    def _build_human_explanation(
+        self,
+        status: str,
+        score: float,
+        min_score: float,
+        required_skills: List[str],
+        matched_skills: List[str],
+        target_seniority: str,
+        years: int,
+        location_match: float,
+        language_match: float,
+    ) -> str:
+        skills_total = len(required_skills)
+        skills_matched = len(matched_skills)
+        skills_part = (
+            f"скиллы: {skills_matched}/{skills_total}"
+            if skills_total
+            else "скиллы: в JD не выделены, компонент смягчен"
+        )
+        seniority_part = f"seniority: целевой уровень {target_seniority}, у кандидата {years} лет опыта"
+        location_part = f"локация: коэффициент {location_match}"
+        language_part = f"языки: коэффициент {language_match}"
+
+        if status == "verified":
+            return (
+                f"Кандидат верифицирован: итоговый score {score} выше порога {min_score}. "
+                f"Факторы: {skills_part}; {seniority_part}; {location_part}; {language_part}."
+            )
+
+        gaps: List[str] = []
+        if skills_total and skills_matched == 0:
+            gaps.append("не совпали обязательные навыки из JD")
+        elif skills_total and skills_matched < skills_total:
+            missing = [s for s in required_skills if s not in set(matched_skills)]
+            if missing:
+                gaps.append("не хватает навыков: " + ", ".join(missing[:5]))
+
+        if years <= 1 and target_seniority in {"middle", "senior", "lead"}:
+            gaps.append("недостаточный опыт для целевого seniority")
+        if location_match <= 0.4:
+            gaps.append("слабое совпадение по локации")
+        if language_match <= 0.3:
+            gaps.append("нет совпадения по предпочтительным языкам")
+
+        gaps_text = "; ".join(gaps) if gaps else "ключевые компоненты дали score ниже порога"
+        return (
+            f"Кандидат отклонен: итоговый score {score} ниже порога {min_score}. "
+            f"Причины: {gaps_text}. "
+            f"Факторы: {skills_part}; {seniority_part}; {location_part}; {language_part}."
+        )
 
     def summarize_scope(self, job: Dict[str, Any], max_items: int = 5) -> str:
         jd_text = (job.get("jd_text") or "").lower()
