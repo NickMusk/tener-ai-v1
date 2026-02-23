@@ -212,9 +212,6 @@ class UnipileLinkedInProvider(LinkedInProvider):
         if isinstance(payload, list):
             return [x for x in payload if isinstance(x, dict)]
 
-        if payload.get("object") == "UserProfile" or payload.get("provider_id"):
-            return [payload]
-
         for key in ("results", "items", "data", "profiles"):
             bucket = payload.get(key)
             if isinstance(bucket, list):
@@ -226,6 +223,16 @@ class UnipileLinkedInProvider(LinkedInProvider):
                 bucket = data.get(key)
                 if isinstance(bucket, list):
                     return [x for x in bucket if isinstance(x, dict)]
+
+        if payload.get("object") == "UserProfile":
+            return [payload]
+
+        # Some envelope payloads may include provider_id metadata and an items list.
+        # Treat as a single profile only when profile-like fields are present.
+        if payload.get("provider_id") and any(
+            payload.get(k) for k in ("full_name", "name", "headline", "first_name", "last_name", "skills")
+        ):
+            return [payload]
 
         return []
 
