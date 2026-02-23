@@ -16,6 +16,9 @@ class SourcingAgent:
         query = f"{job.get('title', '')} {job.get('jd_text', '')}"
         return self.linkedin_provider.search_profiles(query=query, limit=limit)
 
+    def send_outreach(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+        return self.linkedin_provider.send_message(candidate_profile=candidate_profile, message=message)
+
 
 class VerificationAgent:
     def __init__(self, matching_engine: MatchingEngine) -> None:

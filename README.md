@@ -93,10 +93,26 @@ If `UNIPILE_API_KEY` is set, provider switches from mock dataset to Unipile API.
 ```bash
 export UNIPILE_API_KEY="<key>"
 export UNIPILE_BASE_URL="https://api.unipile.com"
+export UNIPILE_ACCOUNT_ID="<your_account_id>"
 PYTHONPATH=src python3 -m tener_ai
 ```
 
-If API endpoint shape differs, update normalization in `src/tener_ai/linkedin_provider.py`.
+Recommended env vars:
+
+- `UNIPILE_API_KEY`: API key from Unipile.
+- `UNIPILE_BASE_URL`: API base URL (default `https://api.unipile.com`).
+- `UNIPILE_ACCOUNT_ID`: required for LinkedIn search and outbound delivery.
+- `UNIPILE_LINKEDIN_SEARCH_PATH`: default `/api/v1/linkedin/search`.
+- `UNIPILE_CHAT_CREATE_PATH`: default `/api/v1/chats`.
+- `UNIPILE_LINKEDIN_API_TYPE`: optional, e.g. `classic` or `recruiter`.
+- `UNIPILE_LINKEDIN_INMAIL`: optional (`true/false`) to force InMail flag.
+- `UNIPILE_DRY_RUN`: optional (`true/false`) to disable actual outbound send.
+
+Flow with Unipile enabled:
+
+1. Candidate sourcing uses Unipile LinkedIn Search.
+2. Verified outreach is written to DB and additionally sent via Unipile Chats API.
+3. Delivery result is stored in message `meta.delivery` and operation logs.
 
 ## Deploy
 
@@ -104,6 +120,7 @@ Render:
 - `render.yaml` is included.
 - Push this repo to GitHub and create a new Render Blueprint from the repo.
 - Runtime is Docker, health check is `/health`.
+- Add env vars in Render dashboard (`UNIPILE_API_KEY`, `UNIPILE_ACCOUNT_ID`, etc.) if you want real LinkedIn integration.
 
 Railway:
 - `railway.toml` is included.

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from dataclasses import dataclass
 from typing import Dict, List
 
@@ -93,19 +94,32 @@ class WorkflowService:
 
             language, message = self.outreach_agent.compose_intro(job=job, candidate=candidate)
             conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+            delivery: Dict[str, Any]
+            try:
+                delivery = self.sourcing_agent.send_outreach(candidate_profile=profile, message=message)
+            except Exception as exc:
+                delivery = {"sent": False, "provider": "linkedin", "error": str(exc)}
+                self.db.log_operation(
+                    operation="agent.outreach.delivery_error",
+                    status="error",
+                    entity_type="candidate",
+                    entity_id=str(candidate_id),
+                    details={"job_id": job_id, "error": str(exc)},
+                )
+
             self.db.add_message(
                 conversation_id=conversation_id,
                 direction="outbound",
                 content=message,
                 candidate_language=language,
-                meta={"type": "outreach", "auto": True},
+                meta={"type": "outreach", "auto": True, "delivery": delivery},
             )
             self.db.log_operation(
                 operation="agent.outreach.send",
                 status="ok",
                 entity_type="conversation",
                 entity_id=str(conversation_id),
-                details={"candidate_id": candidate_id, "language": language},
+                details={"candidate_id": candidate_id, "language": language, "delivery": delivery},
             )
 
             conversation_ids.append(conversation_id)
