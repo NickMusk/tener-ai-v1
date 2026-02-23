@@ -44,6 +44,7 @@ def apply_agent_instructions(services: Dict[str, Any]) -> None:
         "add": instructions.get("add"),
         "outreach": instructions.get("outreach"),
         "faq": instructions.get("faq"),
+        "pre_resume": instructions.get("pre_resume"),
     }
     services["pre_resume"].instruction = instructions.get("pre_resume")
 
@@ -92,6 +93,7 @@ def build_services() -> Dict[str, Any]:
         verification_agent=verification_agent,
         outreach_agent=outreach_agent,
         faq_agent=faq_agent,
+        pre_resume_service=pre_resume_service,
         contact_all_mode=env_bool("TENER_CONTACT_ALL_MODE", True),
         require_resume_before_final_verify=env_bool("TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY", True),
         stage_instructions={
@@ -101,6 +103,7 @@ def build_services() -> Dict[str, Any]:
             "add": instructions.get("add"),
             "outreach": instructions.get("outreach"),
             "faq": instructions.get("faq"),
+            "pre_resume": instructions.get("pre_resume"),
         },
     )
 
@@ -153,11 +156,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "instructions": "GET /api/instructions",
                         "reload_instructions": "POST /api/instructions/reload",
                         "pre_resume_start": "POST /api/pre-resume/sessions/start",
+                        "pre_resume_list": "GET /api/pre-resume/sessions?limit=100&status=awaiting_reply",
                         "pre_resume_get": "GET /api/pre-resume/sessions/{session_id}",
+                        "pre_resume_events": "GET /api/pre-resume/events?limit=200",
                         "pre_resume_inbound": "POST /api/pre-resume/sessions/{session_id}/inbound",
                         "pre_resume_followup": "POST /api/pre-resume/sessions/{session_id}/followup",
                         "pre_resume_unreachable": "POST /api/pre-resume/sessions/{session_id}/unreachable",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
+                        "chats_overview": "GET /api/chats/overview?limit=200",
                         "conversation_inbound": "POST /api/conversations/{conversation_id}/inbound",
                         "logs": "GET /api/logs?limit=100",
                         "reload_rules": "POST /api/rules/reload",
@@ -174,11 +180,34 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, SERVICES["instructions"].to_dict())
             return
 
+        if parsed.path == "/api/pre-resume/sessions":
+            params = parse_qs(parsed.query or "")
+            limit = self._safe_int((params.get("limit") or ["100"])[0], 100)
+            status = (params.get("status") or [None])[0]
+            job_id_raw = (params.get("job_id") or [None])[0]
+            job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
+            items = SERVICES["db"].list_pre_resume_sessions(limit=limit or 100, status=status, job_id=job_id)
+            self._json_response(HTTPStatus.OK, {"items": items})
+            return
+
+        if parsed.path == "/api/pre-resume/events":
+            params = parse_qs(parsed.query or "")
+            limit = self._safe_int((params.get("limit") or ["200"])[0], 200)
+            session_id = (params.get("session_id") or [None])[0]
+            items = SERVICES["db"].list_pre_resume_events(limit=limit or 200, session_id=session_id)
+            self._json_response(HTTPStatus.OK, {"items": items})
+            return
+
         if parsed.path.startswith("/api/pre-resume/sessions/"):
             match = re.match(r"^/api/pre-resume/sessions/([^/]+)$", parsed.path)
             if match:
                 session_id = match.group(1)
                 session = SERVICES["pre_resume"].get_session(session_id)
+                if not session:
+                    db_row = SERVICES["db"].get_pre_resume_session(session_id)
+                    if db_row and isinstance(db_row.get("state_json"), dict):
+                        SERVICES["pre_resume"].seed_session(db_row["state_json"])
+                        session = SERVICES["pre_resume"].get_session(session_id)
                 if not session:
                     self._json_response(HTTPStatus.NOT_FOUND, {"error": "session not found"})
                     return
@@ -224,6 +253,15 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 return
             items = SERVICES["db"].list_messages(conversation_id)
             self._json_response(HTTPStatus.OK, {"conversation": conversation, "items": items})
+            return
+
+        if parsed.path == "/api/chats/overview":
+            params = parse_qs(parsed.query or "")
+            limit = self._safe_int((params.get("limit") or ["200"])[0], 200)
+            job_id_raw = (params.get("job_id") or [None])[0]
+            job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
+            items = SERVICES["db"].list_conversations_overview(limit=limit or 200, job_id=job_id)
+            self._json_response(HTTPStatus.OK, {"items": items})
             return
 
         if parsed.path == "/api/logs":
@@ -443,6 +481,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             scope_summary = str(body.get("scope_summary") or "").strip()
             core_profile_summary = str(body.get("core_profile_summary") or "").strip()
             language = str(body.get("language") or "").strip() or None
+            conversation_id = self._safe_int(body.get("conversation_id"), None)
+            job_id = self._safe_int(body.get("job_id"), None)
+            candidate_id = self._safe_int(body.get("candidate_id"), None)
             if not session_id:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "session_id is required"})
                 return
@@ -467,6 +508,26 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 self._json_response(HTTPStatus.CONFLICT, {"error": str(exc)})
                 return
+            state = result.get("state") if isinstance(result, dict) else None
+            if isinstance(state, dict) and conversation_id is not None and job_id is not None and candidate_id is not None:
+                SERVICES["db"].upsert_pre_resume_session(
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    state=state,
+                    instruction=SERVICES["instructions"].get("pre_resume"),
+                )
+                SERVICES["db"].insert_pre_resume_event(
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    event_type="session_started",
+                    intent="started",
+                    inbound_text=None,
+                    outbound_text=result.get("outbound"),
+                    state_status=state.get("status"),
+                    details={"job_id": job_id, "candidate_id": candidate_id, "source": "api"},
+                )
             self._json_response(HTTPStatus.CREATED, result)
             return
 
@@ -484,11 +545,36 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if not text:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "message is required"})
                 return
+            if SERVICES["pre_resume"].get_session(session_id) is None:
+                row = SERVICES["db"].get_pre_resume_session(session_id)
+                if row and isinstance(row.get("state_json"), dict):
+                    SERVICES["pre_resume"].seed_session(row["state_json"])
             try:
                 result = SERVICES["pre_resume"].handle_inbound(session_id=session_id, text=text)
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
+            row = SERVICES["db"].get_pre_resume_session(session_id)
+            state = result.get("state") if isinstance(result.get("state"), dict) else None
+            if row and isinstance(state, dict):
+                SERVICES["db"].upsert_pre_resume_session(
+                    session_id=session_id,
+                    conversation_id=int(row["conversation_id"]),
+                    job_id=int(row["job_id"]),
+                    candidate_id=int(row["candidate_id"]),
+                    state=state,
+                    instruction=SERVICES["instructions"].get("pre_resume"),
+                )
+                SERVICES["db"].insert_pre_resume_event(
+                    session_id=session_id,
+                    conversation_id=int(row["conversation_id"]),
+                    event_type="inbound_processed",
+                    intent=result.get("intent"),
+                    inbound_text=text,
+                    outbound_text=result.get("outbound"),
+                    state_status=state.get("status"),
+                    details={"source": "api"},
+                )
             self._json_response(HTTPStatus.OK, result)
             return
 
@@ -498,11 +584,36 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid session id"})
                 return
             session_id = match.group(1)
+            if SERVICES["pre_resume"].get_session(session_id) is None:
+                row = SERVICES["db"].get_pre_resume_session(session_id)
+                if row and isinstance(row.get("state_json"), dict):
+                    SERVICES["pre_resume"].seed_session(row["state_json"])
             try:
                 result = SERVICES["pre_resume"].build_followup(session_id=session_id)
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
+            row = SERVICES["db"].get_pre_resume_session(session_id)
+            state = result.get("state") if isinstance(result.get("state"), dict) else None
+            if row and isinstance(state, dict):
+                SERVICES["db"].upsert_pre_resume_session(
+                    session_id=session_id,
+                    conversation_id=int(row["conversation_id"]),
+                    job_id=int(row["job_id"]),
+                    candidate_id=int(row["candidate_id"]),
+                    state=state,
+                    instruction=SERVICES["instructions"].get("pre_resume"),
+                )
+                SERVICES["db"].insert_pre_resume_event(
+                    session_id=session_id,
+                    conversation_id=int(row["conversation_id"]),
+                    event_type="followup_sent" if result.get("sent") else "followup_skipped",
+                    intent=None,
+                    inbound_text=None,
+                    outbound_text=result.get("outbound"),
+                    state_status=state.get("status"),
+                    details={"reason": result.get("reason"), "source": "api"},
+                )
             self._json_response(HTTPStatus.OK, result)
             return
 
@@ -517,11 +628,36 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
                 return
             error = str(body.get("error") or "delivery_failed")
+            if SERVICES["pre_resume"].get_session(session_id) is None:
+                row = SERVICES["db"].get_pre_resume_session(session_id)
+                if row and isinstance(row.get("state_json"), dict):
+                    SERVICES["pre_resume"].seed_session(row["state_json"])
             try:
                 result = SERVICES["pre_resume"].mark_unreachable(session_id=session_id, error=error)
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
+            row = SERVICES["db"].get_pre_resume_session(session_id)
+            state = result.get("state") if isinstance(result.get("state"), dict) else None
+            if row and isinstance(state, dict):
+                SERVICES["db"].upsert_pre_resume_session(
+                    session_id=session_id,
+                    conversation_id=int(row["conversation_id"]),
+                    job_id=int(row["job_id"]),
+                    candidate_id=int(row["candidate_id"]),
+                    state=state,
+                    instruction=SERVICES["instructions"].get("pre_resume"),
+                )
+                SERVICES["db"].insert_pre_resume_event(
+                    session_id=session_id,
+                    conversation_id=int(row["conversation_id"]),
+                    event_type="session_unreachable",
+                    intent=None,
+                    inbound_text=None,
+                    outbound_text=None,
+                    state_status=state.get("status"),
+                    details={"error": error, "source": "api"},
+                )
             self._json_response(HTTPStatus.OK, result)
             return
 

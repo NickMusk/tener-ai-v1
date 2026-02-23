@@ -101,6 +101,38 @@ class Database:
             details TEXT,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS pre_resume_sessions (
+            session_id TEXT PRIMARY KEY,
+            conversation_id INTEGER UNIQUE NOT NULL,
+            job_id INTEGER NOT NULL,
+            candidate_id INTEGER NOT NULL,
+            status TEXT NOT NULL,
+            language TEXT,
+            last_intent TEXT,
+            followups_sent INTEGER NOT NULL DEFAULT 0,
+            turns INTEGER NOT NULL DEFAULT 0,
+            last_error TEXT,
+            resume_links TEXT,
+            next_followup_at TEXT,
+            state_json TEXT NOT NULL,
+            instruction TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS pre_resume_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL,
+            conversation_id INTEGER NOT NULL,
+            event_type TEXT NOT NULL,
+            intent TEXT,
+            inbound_text TEXT,
+            outbound_text TEXT,
+            state_status TEXT,
+            details TEXT,
+            created_at TEXT NOT NULL
+        );
         """
         with self.transaction() as conn:
             conn.executescript(schema)
@@ -311,6 +343,46 @@ class Database:
         row = self._conn.execute("SELECT * FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
         return self._row_to_dict(row) if row else None
 
+    def list_conversations_overview(self, limit: int = 200, job_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(limit, 2000))
+        where = ""
+        args: List[Any] = []
+        if job_id is not None:
+            where = "WHERE conv.job_id = ?"
+            args.append(job_id)
+        query = f"""
+        SELECT
+            conv.id AS conversation_id,
+            conv.job_id,
+            conv.candidate_id,
+            conv.channel,
+            conv.status AS conversation_status,
+            conv.last_message_at,
+            j.title AS job_title,
+            c.full_name AS candidate_name,
+            c.location AS candidate_location,
+            prs.session_id AS pre_resume_session_id,
+            prs.status AS pre_resume_status,
+            prs.next_followup_at AS pre_resume_next_followup_at,
+            (
+                SELECT m.content
+                FROM messages m
+                WHERE m.conversation_id = conv.id
+                ORDER BY m.id DESC
+                LIMIT 1
+            ) AS last_message
+        FROM conversations conv
+        LEFT JOIN jobs j ON j.id = conv.job_id
+        LEFT JOIN candidates c ON c.id = conv.candidate_id
+        LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+        {where}
+        ORDER BY conv.last_message_at DESC, conv.id DESC
+        LIMIT ?
+        """
+        args.append(safe_limit)
+        rows = self._conn.execute(query, tuple(args)).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def list_messages(self, conversation_id: int) -> List[Dict[str, Any]]:
         rows = self._conn.execute(
             "SELECT * FROM messages WHERE conversation_id = ? ORDER BY id ASC",
@@ -349,10 +421,199 @@ class Database:
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
+    def upsert_pre_resume_session(
+        self,
+        session_id: str,
+        conversation_id: int,
+        job_id: int,
+        candidate_id: int,
+        state: Dict[str, Any],
+        instruction: str = "",
+    ) -> None:
+        status = str(state.get("status") or "awaiting_reply")
+        language = state.get("language")
+        last_intent = state.get("last_intent")
+        followups_sent = int(state.get("followups_sent") or 0)
+        turns = int(state.get("turns") or 0)
+        last_error = state.get("last_error")
+        resume_links = json.dumps(state.get("resume_links") or [])
+        next_followup_at = state.get("next_followup_at")
+        state_json = json.dumps(state)
+        created_at = state.get("created_at") or utc_now_iso()
+        updated_at = state.get("updated_at") or utc_now_iso()
+
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO pre_resume_sessions
+                (
+                    session_id, conversation_id, job_id, candidate_id, status, language,
+                    last_intent, followups_sent, turns, last_error, resume_links,
+                    next_followup_at, state_json, instruction, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    conversation_id,
+                    job_id,
+                    candidate_id,
+                    status,
+                    language,
+                    last_intent,
+                    followups_sent,
+                    turns,
+                    last_error,
+                    resume_links,
+                    next_followup_at,
+                    state_json,
+                    instruction,
+                    created_at,
+                    updated_at,
+                ),
+            )
+
+    def get_pre_resume_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            "SELECT * FROM pre_resume_sessions WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def get_pre_resume_session_by_conversation(self, conversation_id: int) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            "SELECT * FROM pre_resume_sessions WHERE conversation_id = ?",
+            (conversation_id,),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def list_pre_resume_sessions(
+        self,
+        limit: int = 100,
+        status: Optional[str] = None,
+        job_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(limit, 1000))
+        query = """
+        SELECT
+            prs.*,
+            c.full_name AS candidate_name,
+            j.title AS job_title
+        FROM pre_resume_sessions prs
+        LEFT JOIN candidates c ON c.id = prs.candidate_id
+        LEFT JOIN jobs j ON j.id = prs.job_id
+        """
+        args: List[Any] = []
+        where: List[str] = []
+        if status:
+            where.append("prs.status = ?")
+            args.append(status)
+        if job_id is not None:
+            where.append("prs.job_id = ?")
+            args.append(job_id)
+        if where:
+            query += " WHERE " + " AND ".join(where)
+        query += " ORDER BY prs.updated_at DESC LIMIT ?"
+        args.append(safe_limit)
+
+        rows = self._conn.execute(query, tuple(args)).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def insert_pre_resume_event(
+        self,
+        session_id: str,
+        conversation_id: int,
+        event_type: str,
+        intent: Optional[str],
+        inbound_text: Optional[str],
+        outbound_text: Optional[str],
+        state_status: Optional[str],
+        details: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO pre_resume_events
+                (session_id, conversation_id, event_type, intent, inbound_text, outbound_text, state_status, details, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    conversation_id,
+                    event_type,
+                    intent,
+                    inbound_text,
+                    outbound_text,
+                    state_status,
+                    json.dumps(details or {}),
+                    utc_now_iso(),
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def list_pre_resume_events(self, limit: int = 200, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(limit, 2000))
+        if session_id:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM pre_resume_events
+                WHERE session_id = ?
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (session_id, safe_limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM pre_resume_events
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def update_candidate_match_status(
+        self,
+        job_id: int,
+        candidate_id: int,
+        status: str,
+        extra_notes: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        with self.transaction() as conn:
+            row = conn.execute(
+                """
+                SELECT verification_notes
+                FROM candidate_job_matches
+                WHERE job_id = ? AND candidate_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (job_id, candidate_id),
+            ).fetchone()
+            merged_notes: Dict[str, Any] = {}
+            if row and row["verification_notes"]:
+                try:
+                    merged_notes = json.loads(row["verification_notes"])
+                except json.JSONDecodeError:
+                    merged_notes = {}
+            if extra_notes:
+                merged_notes.update(extra_notes)
+
+            conn.execute(
+                """
+                UPDATE candidate_job_matches
+                SET status = ?, verification_notes = ?
+                WHERE job_id = ? AND candidate_id = ?
+                """,
+                (status, json.dumps(merged_notes), job_id, candidate_id),
+            )
+
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
         item = dict(row)
-        for field in ("preferred_languages", "languages", "skills", "verification_notes", "meta", "details"):
+        for field in ("preferred_languages", "languages", "skills", "verification_notes", "meta", "details", "resume_links", "state_json"):
             if field in item and item[field]:
                 try:
                     item[field] = json.loads(item[field])

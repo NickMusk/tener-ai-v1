@@ -5,6 +5,7 @@ from typing import Any, Dict, List
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .db import Database
+from .pre_resume_service import PreResumeCommunicationService
 
 
 @dataclass
@@ -28,6 +29,7 @@ class WorkflowService:
         verification_agent: VerificationAgent,
         outreach_agent: OutreachAgent,
         faq_agent: FAQAgent,
+        pre_resume_service: PreResumeCommunicationService | None = None,
         contact_all_mode: bool = False,
         require_resume_before_final_verify: bool = False,
         stage_instructions: Dict[str, str] | None = None,
@@ -37,6 +39,7 @@ class WorkflowService:
         self.verification_agent = verification_agent
         self.outreach_agent = outreach_agent
         self.faq_agent = faq_agent
+        self.pre_resume_service = pre_resume_service
         self.contact_all_mode = contact_all_mode
         self.require_resume_before_final_verify = require_resume_before_final_verify
         self.stage_instructions = dict(stage_instructions or {})
@@ -202,12 +205,63 @@ class WorkflowService:
             match = self.db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
             screening_status = str((match or {}).get("status") or "")
             request_resume = self.require_resume_before_final_verify or screening_status == "needs_resume"
-            language, message = self.outreach_agent.compose_screening_message(
-                job=job,
-                candidate=candidate,
-                request_resume=request_resume,
-            )
             conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+            language = str((candidate.get("languages") or ["en"])[0]).lower()
+            message = ""
+            pre_resume_session_id = None
+            if request_resume and self.pre_resume_service is not None:
+                pre_resume_session_id = f"pre-{conversation_id}"
+                session = self.db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
+                if session and isinstance(session.get("state_json"), dict):
+                    if self.pre_resume_service.get_session(pre_resume_session_id) is None:
+                        self.pre_resume_service.seed_session(session["state_json"])
+                    session_state = session["state_json"]
+                    language = str(session_state.get("language") or language)
+                else:
+                    started = self.pre_resume_service.start_session(
+                        session_id=pre_resume_session_id,
+                        candidate_name=str(candidate.get("full_name") or "there"),
+                        job_title=str(job.get("title") or "this role"),
+                        scope_summary=self.outreach_agent.matching_engine.summarize_scope(job),
+                        core_profile_summary=", ".join(
+                            self.outreach_agent.matching_engine.build_core_profile(job).get("core_skills") or []
+                        )
+                        or self.outreach_agent.matching_engine.summarize_scope(job),
+                        language=str((candidate.get("languages") or ["en"])[0]).lower(),
+                    )
+                    session_state = started["state"]
+                    language = str(session_state.get("language") or "en")
+                    message = str(started.get("outbound") or "")
+                    self.db.insert_pre_resume_event(
+                        session_id=pre_resume_session_id,
+                        conversation_id=conversation_id,
+                        event_type="session_started",
+                        intent="started",
+                        inbound_text=None,
+                        outbound_text=message,
+                        state_status=session_state.get("status"),
+                        details={"job_id": job_id, "candidate_id": candidate_id},
+                    )
+                self.db.upsert_pre_resume_session(
+                    session_id=pre_resume_session_id,
+                    conversation_id=conversation_id,
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    state=session_state,
+                    instruction=self.stage_instructions.get("pre_resume", ""),
+                )
+                if not message:
+                    language, message = self.outreach_agent.compose_screening_message(
+                        job=job,
+                        candidate=candidate,
+                        request_resume=True,
+                    )
+            else:
+                language, message = self.outreach_agent.compose_screening_message(
+                    job=job,
+                    candidate=candidate,
+                    request_resume=request_resume,
+                )
 
             try:
                 delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
@@ -244,6 +298,7 @@ class WorkflowService:
                     "delivery": delivery,
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
+                    "pre_resume_session_id": pre_resume_session_id,
                 },
             )
             self.db.log_operation(
@@ -257,6 +312,7 @@ class WorkflowService:
                     "delivery": delivery,
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
+                    "pre_resume_session_id": pre_resume_session_id,
                 },
             )
 
@@ -268,6 +324,7 @@ class WorkflowService:
                     "delivery": delivery,
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
+                    "pre_resume_session_id": pre_resume_session_id,
                 }
             )
             conversation_ids.append(conversation_id)
@@ -335,7 +392,7 @@ class WorkflowService:
         )
         return summary
 
-    def process_inbound_message(self, conversation_id: int, text: str) -> Dict[str, str]:
+    def process_inbound_message(self, conversation_id: int, text: str) -> Dict[str, Any]:
         conversation = self.db.get_conversation(conversation_id)
         if not conversation:
             raise ValueError(f"Conversation {conversation_id} not found")
@@ -365,6 +422,83 @@ class WorkflowService:
             entity_id=str(inbound_id),
             details={"conversation_id": conversation_id},
         )
+
+        pre_resume = self.db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
+        if pre_resume and self.pre_resume_service is not None:
+            session_id = str(pre_resume.get("session_id") or "")
+            state = pre_resume.get("state_json")
+            if session_id and isinstance(state, dict):
+                if self.pre_resume_service.get_session(session_id) is None:
+                    self.pre_resume_service.seed_session(state)
+                result = self.pre_resume_service.handle_inbound(session_id=session_id, text=text)
+                state_out = result.get("state") if isinstance(result.get("state"), dict) else state
+                if isinstance(state_out, dict):
+                    self.db.upsert_pre_resume_session(
+                        session_id=session_id,
+                        conversation_id=conversation_id,
+                        job_id=int(conversation["job_id"]),
+                        candidate_id=int(conversation["candidate_id"]),
+                        state=state_out,
+                        instruction=self.stage_instructions.get("pre_resume", ""),
+                    )
+                outbound = str(result.get("outbound") or "").strip()
+                intent = str(result.get("intent") or "default")
+                language = str((state_out or {}).get("language") or previous_lang or "en")
+                self.db.insert_pre_resume_event(
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    event_type="inbound_processed",
+                    intent=intent,
+                    inbound_text=text,
+                    outbound_text=outbound or None,
+                    state_status=(state_out or {}).get("status"),
+                    details={"result_event": result.get("event")},
+                )
+
+                if outbound:
+                    outbound_id = self.db.add_message(
+                        conversation_id=conversation_id,
+                        direction="outbound",
+                        content=outbound,
+                        candidate_language=language,
+                        meta={
+                            "type": "pre_resume_auto_reply",
+                            "intent": intent,
+                            "auto": True,
+                            "session_id": session_id,
+                            "state_status": (state_out or {}).get("status"),
+                        },
+                    )
+                    self.db.log_operation(
+                        operation="agent.pre_resume.reply",
+                        status="ok",
+                        entity_type="message",
+                        entity_id=str(outbound_id),
+                        details={"conversation_id": conversation_id, "intent": intent, "language": language, "session_id": session_id},
+                    )
+
+                if (state_out or {}).get("status") == "resume_received":
+                    self.db.update_candidate_match_status(
+                        job_id=int(conversation["job_id"]),
+                        candidate_id=int(conversation["candidate_id"]),
+                        status="resume_received",
+                        extra_notes={"resume_received_at": (state_out or {}).get("updated_at")},
+                    )
+                    self.db.log_operation(
+                        operation="candidate.resume.received",
+                        status="ok",
+                        entity_type="candidate",
+                        entity_id=str(conversation["candidate_id"]),
+                        details={"conversation_id": conversation_id, "session_id": session_id},
+                    )
+
+                return {
+                    "language": language,
+                    "intent": intent,
+                    "reply": outbound,
+                    "mode": "pre_resume",
+                    "state": state_out,
+                }
 
         lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=previous_lang)
         outbound_id = self.db.add_message(

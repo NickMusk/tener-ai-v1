@@ -160,6 +160,16 @@ All funnel stages can be configured from a dedicated instruction file:
 
 This enables per-stage instruction ownership without code edits (sourcing/enrich/verification/add/outreach/faq/pre_resume).
 
+## Integrated Pre-Resume Flow
+
+When a candidate is in `needs_resume`, outreach creates a pre-resume session and all inbound messages for that conversation are routed through pre-resume policy until terminal status.
+
+Tracking endpoints:
+
+- `GET /api/chats/overview` — all candidate chats with latest message + pre-resume status.
+- `GET /api/pre-resume/sessions` — current pre-resume sessions across candidates.
+- `GET /api/pre-resume/events` — chronological updates/events across all sessions.
+
 ## How To Test Standalone Pre-Resume Service
 
 ### Automated tests

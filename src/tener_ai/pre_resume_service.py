@@ -83,6 +83,16 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
 }
 
 
+def merge_template_dict(base: Dict[str, Any], override: Dict[str, Any]) -> Dict[str, Any]:
+    merged: Dict[str, Any] = dict(base)
+    for key, value in override.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = merge_template_dict(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
 def utc_now() -> datetime:
     return datetime.now(UTC)
 
@@ -138,6 +148,26 @@ class PreResumeSession:
             "next_followup_at": self.next_followup_at,
         }
 
+    @staticmethod
+    def from_dict(payload: Dict[str, Any]) -> "PreResumeSession":
+        return PreResumeSession(
+            session_id=str(payload.get("session_id") or ""),
+            candidate_name=str(payload.get("candidate_name") or "there"),
+            job_title=str(payload.get("job_title") or "this role"),
+            scope_summary=str(payload.get("scope_summary") or "role scope"),
+            core_profile_summary=str(payload.get("core_profile_summary") or payload.get("scope_summary") or "role scope"),
+            language=str(payload.get("language") or "en"),
+            status=str(payload.get("status") or "awaiting_reply"),
+            followups_sent=int(payload.get("followups_sent") or 0),
+            turns=int(payload.get("turns") or 0),
+            last_intent=str(payload.get("last_intent") or "started"),
+            last_error=str(payload.get("last_error")) if payload.get("last_error") is not None else None,
+            resume_links=list(payload.get("resume_links") or []),
+            created_at=str(payload.get("created_at") or iso(utc_now())),
+            updated_at=str(payload.get("updated_at") or iso(utc_now())),
+            next_followup_at=str(payload.get("next_followup_at")) if payload.get("next_followup_at") else None,
+        )
+
 
 class PreResumeCommunicationService:
     def __init__(
@@ -185,6 +215,13 @@ class PreResumeCommunicationService:
             "outbound": outbound,
             "state": session.to_dict(),
         }
+
+    def seed_session(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        session = PreResumeSession.from_dict(state)
+        if not session.session_id:
+            raise ValueError("session_id is required in state")
+        self.sessions[session.session_id] = session
+        return session.to_dict()
 
     def handle_inbound(self, session_id: str, text: str, now: Optional[datetime] = None) -> Dict[str, Any]:
         session = self._require_session(session_id)
@@ -329,7 +366,7 @@ class PreResumeCommunicationService:
 
     def _render(self, group: str, language: str, session: PreResumeSession) -> str:
         block = self.templates.get(group, {})
-        template = block.get(language) or block.get(self.templates.get("default_language", "en")) or next(iter(block.values()))
+        template = self._pick_template(block, language, fallback="{scope_summary}")
         return template.format(
             name=session.candidate_name,
             job_title=session.job_title,
@@ -341,7 +378,7 @@ class PreResumeCommunicationService:
         answers = self.templates.get("intent_answers", {})
         block = answers.get(intent) or answers.get("default", {})
         language = session.language
-        template = block.get(language) or block.get(self.templates.get("default_language", "en")) or next(iter(block.values()))
+        template = self._pick_template(block, language, fallback="")
         return template.format(
             name=session.candidate_name,
             job_title=session.job_title,
@@ -354,13 +391,24 @@ class PreResumeCommunicationService:
         key = str(followup_number)
         block = followups.get(key) or followups.get(str(self.max_followups), {})
         language = session.language
-        template = block.get(language) or block.get(self.templates.get("default_language", "en")) or next(iter(block.values()))
+        template = self._pick_template(block, language, fallback="Please share your CV/resume.")
         return template.format(
             name=session.candidate_name,
             job_title=session.job_title,
             scope_summary=session.scope_summary,
             core_profile_summary=session.core_profile_summary,
         )
+
+    def _pick_template(self, block: Dict[str, Any], language: str, fallback: str) -> str:
+        if not isinstance(block, dict) or not block:
+            return fallback
+        selected = block.get(language) or block.get(self.templates.get("default_language", "en"))
+        if isinstance(selected, str):
+            return selected
+        for value in block.values():
+            if isinstance(value, str):
+                return value
+        return fallback
 
     def _next_followup_at(self, session: PreResumeSession, now: datetime) -> Optional[str]:
         if session.status in TERMINAL_STATUSES:
@@ -380,7 +428,12 @@ class PreResumeCommunicationService:
     @staticmethod
     def _load_templates(path: Optional[str]) -> Dict[str, Any]:
         if not path:
-            return DEFAULT_TEMPLATES
+            return dict(DEFAULT_TEMPLATES)
         file_path = Path(path)
+        if not file_path.exists():
+            return dict(DEFAULT_TEMPLATES)
         with file_path.open("r", encoding="utf-8") as f:
-            return json.load(f)
+            loaded = json.load(f)
+        if not isinstance(loaded, dict):
+            return dict(DEFAULT_TEMPLATES)
+        return merge_template_dict(DEFAULT_TEMPLATES, loaded)
