@@ -1,0 +1,30 @@
+{
+  "default_language": "en",
+  "outreach": {
+    "en": "Hi {name}, I found your profile and it looks relevant to our role \"{job_title}\". Scope: {scope_summary}. If you are open to a short chat, I can share details and next steps.",
+    "ru": "Привет, {name}! Нашли ваш профиль, и он подходит под роль \"{job_title}\". Скоуп: {scope_summary}. Если интересно, могу отправить детали и следующие шаги.",
+    "es": "Hola {name}, encontré tu perfil y parece relevante para el puesto \"{job_title}\". Alcance: {scope_summary}. Si te interesa, te comparto detalles y próximos pasos."
+  },
+  "faq": {
+    "salary": {
+      "en": "Compensation depends on seniority and scope fit. If you share expectations, I can confirm range quickly.",
+      "ru": "Компенсация зависит от уровня и соответствия скоупу. Если поделитесь ожиданиями, я быстро подтвержу вилку.",
+      "es": "La compensación depende del seniority y encaje con el alcance. Si compartes expectativas, te confirmo el rango rápido."
+    },
+    "stack": {
+      "en": "Core stack is defined by the job scope. Main requirements are: {scope_summary}.",
+      "ru": "Основной стек определяется скоупом роли. Ключевые требования: {scope_summary}.",
+      "es": "El stack principal lo define el alcance del puesto. Requisitos clave: {scope_summary}."
+    },
+    "timeline": {
+      "en": "Current timeline is active now. After short screening we can schedule interview steps promptly.",
+      "ru": "Найм идет сейчас. После короткого скрининга быстро назначим этапы интервью.",
+      "es": "El proceso está activo ahora. Tras un breve screening, coordinamos entrevistas rápidamente."
+    },
+    "default": {
+      "en": "Thanks for the question. I can clarify role scope, process, timeline, and compensation details if you share what matters most.",
+      "ru": "Спасибо за вопрос. Могу уточнить скоуп роли, процесс, сроки и детали компенсации, если подскажете, что важнее всего.",
+      "es": "Gracias por tu pregunta. Puedo aclarar alcance del rol, proceso, tiempos y compensación si me dices qué te importa más."
+    }
+  }
+}

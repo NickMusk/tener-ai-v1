@@ -1,0 +1,110 @@
+[
+  {
+    "linkedin_id": "ln_1001",
+    "full_name": "Alex Morgan",
+    "headline": "Senior Backend Engineer | Python | AWS",
+    "location": "Berlin, Germany",
+    "languages": ["en", "de"],
+    "skills": ["python", "django", "aws", "docker", "postgresql"],
+    "years_experience": 7
+  },
+  {
+    "linkedin_id": "ln_1002",
+    "full_name": "Irina Petrova",
+    "headline": "Talent Acquisition Lead | Tech Hiring",
+    "location": "Warsaw, Poland",
+    "languages": ["ru", "en"],
+    "skills": ["recruiting", "talent acquisition", "linkedin", "interviewing"],
+    "years_experience": 8
+  },
+  {
+    "linkedin_id": "ln_1003",
+    "full_name": "Miguel Santos",
+    "headline": "Frontend Engineer | React | TypeScript",
+    "location": "Madrid, Spain",
+    "languages": ["es", "en"],
+    "skills": ["react", "typescript", "javascript", "node", "figma"],
+    "years_experience": 4
+  },
+  {
+    "linkedin_id": "ln_1004",
+    "full_name": "Anastasia Volkova",
+    "headline": "QA Automation Engineer",
+    "location": "Tbilisi, Georgia",
+    "languages": ["ru", "en"],
+    "skills": ["qa", "automation testing", "python", "ci/cd"],
+    "years_experience": 5
+  },
+  {
+    "linkedin_id": "ln_1005",
+    "full_name": "Daniel Park",
+    "headline": "Product Manager | B2B SaaS",
+    "location": "Seoul, South Korea",
+    "languages": ["en", "ko"],
+    "skills": ["product management", "analytics", "go-to-market"],
+    "years_experience": 6
+  },
+  {
+    "linkedin_id": "ln_1006",
+    "full_name": "Natalia Ruiz",
+    "headline": "ML Engineer | NLP | LLM",
+    "location": "Mexico City, Mexico",
+    "languages": ["es", "en"],
+    "skills": ["machine learning", "nlp", "llm", "python", "kubernetes"],
+    "years_experience": 5
+  },
+  {
+    "linkedin_id": "ln_1007",
+    "full_name": "Oleg Smirnov",
+    "headline": "DevOps Engineer | Kubernetes | Terraform",
+    "location": "Belgrade, Serbia",
+    "languages": ["ru", "en"],
+    "skills": ["kubernetes", "docker", "terraform", "aws", "ci/cd"],
+    "years_experience": 9
+  },
+  {
+    "linkedin_id": "ln_1008",
+    "full_name": "Sara Kim",
+    "headline": "UX Designer | Product Design",
+    "location": "Toronto, Canada",
+    "languages": ["en"],
+    "skills": ["ux", "figma", "design systems", "research"],
+    "years_experience": 4
+  },
+  {
+    "linkedin_id": "ln_1009",
+    "full_name": "Ivan Hrytsenko",
+    "headline": "Middle Java Engineer",
+    "location": "Kyiv, Ukraine",
+    "languages": ["ru", "en", "uk"],
+    "skills": ["java", "spring", "postgresql", "kafka"],
+    "years_experience": 3
+  },
+  {
+    "linkedin_id": "ln_1010",
+    "full_name": "Lina Chen",
+    "headline": "Business Development Manager",
+    "location": "Singapore",
+    "languages": ["en", "zh"],
+    "skills": ["sales", "business development", "crm", "negotiation"],
+    "years_experience": 7
+  },
+  {
+    "linkedin_id": "ln_1011",
+    "full_name": "Peter Novak",
+    "headline": "Junior Data Engineer",
+    "location": "Prague, Czechia",
+    "languages": ["en", "cs"],
+    "skills": ["python", "sql", "airflow", "aws"],
+    "years_experience": 1
+  },
+  {
+    "linkedin_id": "ln_1012",
+    "full_name": "Elena Garcia",
+    "headline": "Senior Full Stack Engineer",
+    "location": "Lisbon, Portugal",
+    "languages": ["es", "en", "pt"],
+    "skills": ["typescript", "react", "node", "postgresql", "docker"],
+    "years_experience": 8
+  }
+]
