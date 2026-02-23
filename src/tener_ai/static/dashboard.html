@@ -545,9 +545,10 @@
 
       <article class="step-card">
         <div class="step-title"><span>5. Outreach</span><span id="status-outreach" class="status">idle</span></div>
-        <div id="step-outreach-meta" class="step-metrics">Sent: 0</div>
+        <div id="step-outreach-meta" class="step-metrics">Total: 0, Sent: 0, Pending: 0, Failed: 0</div>
         <div class="step-actions">
           <button id="run-outreach-btn">Run</button>
+          <button id="poll-connections-btn">Poll</button>
         </div>
       </article>
 
@@ -1222,7 +1223,7 @@
         $("step-enrich-meta").textContent = "Profiles: 0, Failed: 0";
         $("step-verify-meta").textContent = "Verified: 0, Needs resume: 0, Rejected: 0";
         $("step-add-meta").textContent = "Added: 0";
-        $("step-outreach-meta").textContent = "Sent: 0";
+        $("step-outreach-meta").textContent = "Total: 0, Sent: 0, Pending: 0, Failed: 0";
         setStepStatus('enrich', 'idle');
         setStepStatus('verify', 'idle');
         setStepStatus('add', 'idle');
@@ -1255,7 +1256,7 @@
         $("step-enrich-meta").textContent = `Profiles: ${out.total || 0}, Failed: ${out.failed || 0}`;
         $("step-verify-meta").textContent = "Verified: 0, Needs resume: 0, Rejected: 0";
         $("step-add-meta").textContent = "Added: 0";
-        $("step-outreach-meta").textContent = "Sent: 0";
+        $("step-outreach-meta").textContent = "Total: 0, Sent: 0, Pending: 0, Failed: 0";
         setStepStatus('verify', 'idle');
         setStepStatus('add', 'idle');
         setStepStatus('outreach', 'idle');
@@ -1322,7 +1323,19 @@
     async function runOutreach() {
       const jobId = selectedJobId();
       if (!jobId) return alert('Select a job');
-      if (!state.addedCandidates.length) return alert('No added candidates. Run Add first.');
+      let candidateIds = state.addedCandidates.map(x => x.candidate_id);
+      if (!candidateIds.length) {
+        try {
+          const dbRows = await api(`/api/jobs/${jobId}/candidates`);
+          candidateIds = (dbRows.items || [])
+            .filter((x) => !['rejected', 'resume_received'].includes(String(x.status || '').toLowerCase()))
+            .map((x) => Number(x.candidate_id))
+            .filter((x) => Number.isFinite(x) && x > 0);
+        } catch {
+          candidateIds = [];
+        }
+      }
+      if (!candidateIds.length) return alert('No eligible candidates for outreach. Run Add first.');
 
       setStepStatus('outreach', 'running');
       try {
@@ -1330,13 +1343,13 @@
           method: 'POST',
           body: JSON.stringify({
             job_id: jobId,
-            candidate_ids: state.addedCandidates.map(x => x.candidate_id)
+            candidate_ids: candidateIds
           })
         });
         state.outreachItems = out.items || [];
-        $("step-outreach-meta").textContent = `Total: ${out.total || 0}, Sent: ${out.sent || 0}, Failed: ${out.failed || 0}`;
+        $("step-outreach-meta").textContent = `Total: ${out.total || 0}, Sent: ${out.sent || 0}, Pending: ${out.pending_connection || 0}, Failed: ${out.failed || 0}`;
         setMetrics({ searched: state.sourceProfiles.length, verified: state.verifyItems.filter(x => x.status === 'verified').length, outreached: out.total || 0 });
-        if ((out.failed || 0) > 0) {
+        if ((out.failed || 0) > 0 && (out.sent || 0) === 0 && (out.pending_connection || 0) === 0) {
           setStepStatus('outreach', 'error');
         } else {
           setStepStatus('outreach', 'success');
@@ -1347,6 +1360,31 @@
         snapshot('outreach.error', { error: e.message });
       }
       await refreshCandidates();
+      await refreshLogs();
+    }
+
+    async function runOutreachPollConnections() {
+      const jobId = selectedJobId();
+      if (!jobId) return alert('Select a job');
+      setStepStatus('outreach', 'running');
+      try {
+        const out = await api('/api/outreach/poll-connections', {
+          method: 'POST',
+          body: JSON.stringify({ job_id: jobId, limit: 200 })
+        });
+        $("step-outreach-meta").textContent = `Poll checked: ${out.checked || 0}, connected: ${out.connected || 0}, sent: ${out.sent || 0}, waiting: ${out.still_waiting || 0}, failed: ${out.failed || 0}`;
+        if ((out.failed || 0) > 0 && (out.sent || 0) === 0) {
+          setStepStatus('outreach', 'error');
+        } else {
+          setStepStatus('outreach', 'success');
+        }
+        snapshot('outreach.poll_connections', out);
+      } catch (e) {
+        setStepStatus('outreach', 'error');
+        snapshot('outreach.poll_error', { error: e.message });
+      }
+      await refreshCandidates();
+      await refreshAgentAccounts();
       await refreshLogs();
     }
 
@@ -1366,10 +1404,10 @@
         $("step-enrich-meta").textContent = `Profiles: ${out.searched || 0}, Failed: 0`;
         $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Needs resume: ${out.needs_resume || 0}, Rejected: ${out.rejected || 0}`;
         $("step-add-meta").textContent = `Added: ${(out.verified || 0) + (out.needs_resume || 0)}`;
-        $("step-outreach-meta").textContent = `Total: ${out.outreached || 0}, Sent: ${out.outreach_sent || 0}, Failed: ${out.outreach_failed || 0}`;
+        $("step-outreach-meta").textContent = `Total: ${out.outreached || 0}, Sent: ${out.outreach_sent || 0}, Pending: ${out.outreach_pending_connection || 0}, Failed: ${out.outreach_failed || 0}`;
 
         ['source', 'enrich', 'verify', 'add'].forEach(s => setStepStatus(s, 'success'));
-        if ((out.outreach_failed || 0) > 0) {
+        if ((out.outreach_failed || 0) > 0 && (out.outreach_sent || 0) === 0 && (out.outreach_pending_connection || 0) === 0) {
           setStepStatus('outreach', 'error');
         } else {
           setStepStatus('outreach', 'success');
@@ -1469,6 +1507,7 @@
       $("run-verify-btn").addEventListener('click', () => runVerify());
       $("run-add-btn").addEventListener('click', () => runAdd());
       $("run-outreach-btn").addEventListener('click', () => runOutreach());
+      $("poll-connections-btn").addEventListener('click', () => runOutreachPollConnections());
       $("run-full-btn").addEventListener('click', () => runFull());
       $("refresh-btn").addEventListener('click', () => fullRefresh());
       $("logs-refresh-btn").addEventListener('click', () => refreshLogs());

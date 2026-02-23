@@ -41,6 +41,26 @@ class SourcingAgent:
     def send_outreach(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
         return self.linkedin_provider.send_message(candidate_profile=candidate_profile, message=message)
 
+    def send_connection_request(self, candidate_profile: Dict[str, Any], message: str | None = None) -> Dict[str, Any]:
+        fn = getattr(self.linkedin_provider, "send_connection_request", None)
+        if callable(fn):
+            return fn(candidate_profile=candidate_profile, message=message)
+        return {
+            "provider": "unknown",
+            "sent": False,
+            "reason": "connection_request_not_supported",
+        }
+
+    def check_connection_status(self, candidate_profile: Dict[str, Any]) -> Dict[str, Any]:
+        fn = getattr(self.linkedin_provider, "check_connection_status", None)
+        if callable(fn):
+            return fn(candidate_profile=candidate_profile)
+        return {
+            "provider": "unknown",
+            "connected": False,
+            "reason": "connection_status_not_supported",
+        }
+
     def enrich_candidates(self, profiles: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
         enriched: List[Dict[str, Any]] = []
         failed = 0
@@ -187,6 +207,30 @@ class OutreachAgent:
             core_profile_summary=core_summary,
         )
         return candidate_lang, msg
+
+    def compose_connection_request(self, job: Dict[str, Any], candidate: Dict[str, Any]) -> Tuple[str, str]:
+        candidate_lang = pick_candidate_language(candidate.get("languages"), fallback=self.templates.get("default_language", "en"))
+        group = self.templates.get("outreach_connect_request") or {}
+        if isinstance(group, dict) and group:
+            template = self._pick_template(group, candidate_lang)
+            scope_summary = self.matching_engine.summarize_scope(job)
+            msg = template.format(
+                name=candidate.get("full_name", "there"),
+                job_title=job.get("title", "this role"),
+                scope_summary=scope_summary,
+            )
+            return candidate_lang, msg
+
+        fallback = {
+            "en": "Hi {name}, sending a connection request regarding the role \"{job_title}\". If relevant, happy to share details.",
+            "ru": "Привет, {name}! Отправляю запрос в контакты по роли \"{job_title}\". Если релевантно, отправлю детали.",
+            "es": "Hola {name}, te envío solicitud de conexión sobre la posición \"{job_title}\". Si encaja, te comparto detalles.",
+        }
+        template = fallback.get(candidate_lang, fallback["en"])
+        return candidate_lang, template.format(
+            name=candidate.get("full_name", "there"),
+            job_title=job.get("title", "this role"),
+        )
 
     def _pick_template(self, group: Dict[str, str], language: str) -> str:
         if language in group:

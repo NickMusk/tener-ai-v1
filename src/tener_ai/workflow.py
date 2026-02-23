@@ -18,6 +18,7 @@ class WorkflowSummary:
     rejected: int
     outreached: int
     outreach_sent: int
+    outreach_pending_connection: int
     outreach_failed: int
     conversation_ids: List[int]
 
@@ -189,6 +190,7 @@ class WorkflowService:
         out_items: List[Dict[str, Any]] = []
         conversation_ids: List[int] = []
         sent = 0
+        pending_connection = 0
         failed = 0
 
         for raw_id in candidate_ids:
@@ -264,28 +266,70 @@ class WorkflowService:
                     request_resume=request_resume,
                 )
 
+            connect_request = None
+            delivery_status = "failed"
             try:
                 delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
-                if delivery.get("sent") is False:
+            except Exception as exc:
+                delivery = {"sent": False, "provider": "linkedin", "error": str(exc)}
+
+            if delivery.get("sent"):
+                sent += 1
+                delivery_status = "sent"
+                self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+                self.db.update_candidate_match_status(
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    status="outreach_sent",
+                    extra_notes={"outreach_state": "sent"},
+                )
+            elif self._is_connection_required_error(delivery):
+                _, connect_message = self.outreach_agent.compose_connection_request(job=job, candidate=candidate)
+                try:
+                    connect_request = self.sourcing_agent.send_connection_request(
+                        candidate_profile=candidate,
+                        message=connect_message,
+                    )
+                except Exception as exc:
+                    connect_request = {"sent": False, "provider": "linkedin", "error": str(exc)}
+
+                if connect_request.get("sent"):
+                    pending_connection += 1
+                    delivery_status = "pending_connection"
+                    self.db.update_conversation_status(conversation_id=conversation_id, status="waiting_connection")
+                    self.db.update_candidate_match_status(
+                        job_id=job_id,
+                        candidate_id=candidate_id,
+                        status="outreach_pending_connection",
+                        extra_notes={
+                            "outreach_state": "waiting_connection",
+                            "connect_request": connect_request,
+                        },
+                    )
+                    self.db.log_operation(
+                        operation="agent.outreach.connect_request",
+                        status="ok",
+                        entity_type="candidate",
+                        entity_id=str(candidate_id),
+                        details={"job_id": job_id, "connect_request": connect_request},
+                    )
+                else:
                     failed += 1
                     self.db.log_operation(
-                        operation="agent.outreach.delivery_error",
+                        operation="agent.outreach.connect_request",
                         status="error",
                         entity_type="candidate",
                         entity_id=str(candidate_id),
-                        details={"job_id": job_id, "delivery": delivery},
+                        details={"job_id": job_id, "connect_request": connect_request, "delivery": delivery},
                     )
-                else:
-                    sent += 1
-            except Exception as exc:
-                delivery = {"sent": False, "provider": "linkedin", "error": str(exc)}
+            else:
                 failed += 1
                 self.db.log_operation(
                     operation="agent.outreach.delivery_error",
                     status="error",
                     entity_type="candidate",
                     entity_id=str(candidate_id),
-                    details={"job_id": job_id, "error": str(exc)},
+                    details={"job_id": job_id, "delivery": delivery},
                 )
 
             external_chat_id = str(delivery.get("chat_id") or "").strip()
@@ -298,9 +342,12 @@ class WorkflowService:
                 content=message,
                 candidate_language=language,
                 meta={
-                    "type": "outreach",
+                    "type": "outreach" if delivery_status == "sent" else "outreach_pending_connection",
                     "auto": True,
                     "delivery": delivery,
+                    "delivery_status": delivery_status,
+                    "connect_request": connect_request,
+                    "pending_delivery": delivery_status == "pending_connection",
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
@@ -309,13 +356,15 @@ class WorkflowService:
             )
             self.db.log_operation(
                 operation="agent.outreach.send",
-                status="ok" if delivery.get("sent") else "error",
+                status="ok" if delivery_status in {"sent", "pending_connection"} else "error",
                 entity_type="conversation",
                 entity_id=str(conversation_id),
                 details={
                     "candidate_id": candidate_id,
                     "language": language,
                     "delivery": delivery,
+                    "delivery_status": delivery_status,
+                    "connect_request": connect_request,
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
@@ -329,6 +378,8 @@ class WorkflowService:
                     "conversation_id": conversation_id,
                     "language": language,
                     "delivery": delivery,
+                    "delivery_status": delivery_status,
+                    "connect_request": connect_request,
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
@@ -342,9 +393,86 @@ class WorkflowService:
             "items": out_items,
             "conversation_ids": conversation_ids,
             "sent": sent,
+            "pending_connection": pending_connection,
             "failed": failed,
             "total": len(out_items),
             "instruction": self.stage_instructions.get("outreach", ""),
+        }
+
+    def poll_pending_connections(self, job_id: int | None = None, limit: int = 200) -> Dict[str, Any]:
+        rows = self.db.list_conversations_by_status(status="waiting_connection", limit=limit, job_id=job_id)
+        checked = 0
+        connected = 0
+        sent = 0
+        still_waiting = 0
+        failed = 0
+        items: List[Dict[str, Any]] = []
+
+        for row in rows:
+            checked += 1
+            conversation_id = int(row["conversation_id"])
+            candidate_id = int(row["candidate_id"])
+            candidate = self.db.get_candidate(candidate_id)
+            if not candidate:
+                failed += 1
+                items.append({"conversation_id": conversation_id, "status": "candidate_missing"})
+                continue
+
+            try:
+                connection = self.sourcing_agent.check_connection_status(candidate_profile=candidate)
+            except Exception as exc:
+                connection = {"connected": False, "error": str(exc)}
+
+            if not connection.get("connected"):
+                still_waiting += 1
+                items.append(
+                    {
+                        "conversation_id": conversation_id,
+                        "candidate_id": candidate_id,
+                        "status": "waiting_connection",
+                        "connection": connection,
+                    }
+                )
+                continue
+
+            connected += 1
+            send_result = self._deliver_pending_outreach_message(conversation_id=conversation_id, candidate=candidate)
+            if send_result.get("sent"):
+                sent += 1
+            else:
+                failed += 1
+            items.append(
+                {
+                    "conversation_id": conversation_id,
+                    "candidate_id": candidate_id,
+                    "status": "connected",
+                    "connection": connection,
+                    "delivery": send_result,
+                }
+            )
+
+        self.db.log_operation(
+            operation="agent.outreach.poll_connections",
+            status="ok" if failed == 0 else "partial",
+            entity_type="job" if job_id is not None else "system",
+            entity_id=str(job_id) if job_id is not None else None,
+            details={
+                "checked": checked,
+                "connected": connected,
+                "sent": sent,
+                "still_waiting": still_waiting,
+                "failed": failed,
+            },
+        )
+
+        return {
+            "job_id": job_id,
+            "checked": checked,
+            "connected": connected,
+            "sent": sent,
+            "still_waiting": still_waiting,
+            "failed": failed,
+            "items": items,
         }
 
     def add_manual_test_account(
@@ -518,6 +646,7 @@ class WorkflowService:
             rejected=verify_result["rejected"],
             outreached=outreach_result["total"],
             outreach_sent=outreach_result["sent"],
+            outreach_pending_connection=outreach_result.get("pending_connection", 0),
             outreach_failed=outreach_result["failed"],
             conversation_ids=outreach_result["conversation_ids"],
         )
@@ -534,6 +663,7 @@ class WorkflowService:
                 "rejected": summary.rejected,
                 "outreached": summary.outreached,
                 "outreach_sent": summary.outreach_sent,
+                "outreach_pending_connection": summary.outreach_pending_connection,
                 "outreach_failed": summary.outreach_failed,
             },
         )
@@ -698,6 +828,30 @@ class WorkflowService:
             "result": result,
         }
 
+    def process_connection_event(
+        self,
+        sender_provider_id: str | None = None,
+        external_chat_id: str | None = None,
+    ) -> Dict[str, Any]:
+        conversation = self.db.get_conversation_by_external_chat_id(external_chat_id) if external_chat_id else None
+        if not conversation and sender_provider_id:
+            candidate = self.db.get_candidate_by_linkedin_id(sender_provider_id)
+            if candidate:
+                conversation = self.db.get_latest_conversation_for_candidate(int(candidate["id"]))
+        if not conversation:
+            return {"processed": False, "reason": "conversation_not_found"}
+        candidate = self.db.get_candidate(int(conversation["candidate_id"]))
+        if not candidate:
+            return {"processed": False, "reason": "candidate_not_found", "conversation_id": int(conversation["id"])}
+        if str(conversation.get("status") or "") != "waiting_connection":
+            return {"processed": False, "reason": "conversation_not_waiting_connection", "conversation_id": int(conversation["id"])}
+        delivery = self._deliver_pending_outreach_message(conversation_id=int(conversation["id"]), candidate=candidate)
+        return {
+            "processed": True,
+            "conversation_id": int(conversation["id"]),
+            "delivery": delivery,
+        }
+
     def _send_auto_reply(
         self,
         candidate: Dict[str, Any],
@@ -715,6 +869,99 @@ class WorkflowService:
             return self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
         except Exception as exc:
             return {"sent": False, "provider": "linkedin", "error": str(exc)}
+
+    @staticmethod
+    def _is_connection_required_error(delivery: Dict[str, Any]) -> bool:
+        if not isinstance(delivery, dict):
+            return False
+        if delivery.get("sent"):
+            return False
+        reason = str(delivery.get("reason") or "").lower()
+        error = str(delivery.get("error") or "").lower()
+        text = f"{reason} {error}"
+        needles = (
+            "no_connection_with_recipient",
+            "recipient cannot be reached",
+            "not to be first degree",
+            "not first degree",
+            "first degree connection",
+        )
+        return any(token in text for token in needles)
+
+    def _deliver_pending_outreach_message(self, conversation_id: int, candidate: Dict[str, Any]) -> Dict[str, Any]:
+        messages = self.db.list_messages(conversation_id=conversation_id)
+        pending = None
+        for msg in reversed(messages):
+            if str(msg.get("direction") or "") != "outbound":
+                continue
+            meta = msg.get("meta") if isinstance(msg.get("meta"), dict) else {}
+            if str(meta.get("delivery_status") or "") == "pending_connection":
+                pending = msg
+                break
+            if str(meta.get("type") or "") == "outreach_pending_connection":
+                pending = msg
+                break
+        if not pending:
+            self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+            return {"sent": False, "reason": "pending_message_not_found"}
+
+        message = str(pending.get("content") or "").strip()
+        if not message:
+            self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+            return {"sent": False, "reason": "pending_message_empty"}
+
+        try:
+            delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
+        except Exception as exc:
+            delivery = {"sent": False, "provider": "linkedin", "error": str(exc)}
+
+        if delivery.get("sent"):
+            self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+            chat_id = str(delivery.get("chat_id") or "").strip()
+            if chat_id:
+                self.db.set_conversation_external_chat_id(conversation_id=conversation_id, external_chat_id=chat_id)
+            conversation = self.db.get_conversation(conversation_id)
+            if conversation:
+                self.db.update_candidate_match_status(
+                    job_id=int(conversation["job_id"]),
+                    candidate_id=int(conversation["candidate_id"]),
+                    status="outreach_sent",
+                    extra_notes={"outreach_state": "sent_after_connection"},
+                )
+            self.db.add_message(
+                conversation_id=conversation_id,
+                direction="outbound",
+                content=message,
+                candidate_language=str((candidate.get("languages") or ["en"])[0]).lower(),
+                meta={
+                    "type": "outreach_after_connection",
+                    "auto": True,
+                    "delivery": delivery,
+                    "trigger": "connection_accepted",
+                },
+            )
+            self.db.log_operation(
+                operation="agent.outreach.send_after_connection",
+                status="ok",
+                entity_type="conversation",
+                entity_id=str(conversation_id),
+                details={"delivery": delivery},
+            )
+            return delivery
+
+        if self._is_connection_required_error(delivery):
+            self.db.update_conversation_status(conversation_id=conversation_id, status="waiting_connection")
+        else:
+            self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+
+        self.db.log_operation(
+            operation="agent.outreach.send_after_connection",
+            status="error",
+            entity_type="conversation",
+            entity_id=str(conversation_id),
+            details={"delivery": delivery},
+        )
+        return delivery
 
     def _get_job_or_raise(self, job_id: int) -> Dict[str, Any]:
         job = self.db.get_job(job_id)

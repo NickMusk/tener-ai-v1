@@ -155,6 +155,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "verify_step": "POST /api/steps/verify",
                         "add_step": "POST /api/steps/add",
                         "outreach_step": "POST /api/steps/outreach",
+                        "outreach_poll_connections": "POST /api/outreach/poll-connections",
                         "instructions": "GET /api/instructions",
                         "reload_instructions": "POST /api/instructions/reload",
                         "pre_resume_start": "POST /api/pre-resume/sessions/start",
@@ -357,6 +358,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     return
 
             event_id = self._pick_str(body, "event_id", "id", "message_id", "event.id", "message.id", "data.id")
+            event_type = self._pick_str(body, "type", "event", "event.type", "data.type").lower()
             external_chat_id = self._pick_str(body, "chat_id", "chat.id", "conversation_id", "data.chat_id", "data.chat.id")
             text = self._pick_str(body, "text", "message", "content", "message.text", "data.text")
             direction = self._pick_str(body, "direction", "message.direction", "data.direction").lower()
@@ -366,16 +368,51 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if direction in {"outbound", "sent", "from_me", "self"}:
                 self._json_response(HTTPStatus.OK, {"status": "ignored", "reason": "outbound_event"})
                 return
-            if not text:
+            connection_event = ("connect" in event_type or "invitation" in event_type) and (
+                "accept" in event_type or "connected" in event_type
+            )
+            if not text and not connection_event:
                 self._json_response(HTTPStatus.OK, {"status": "ignored", "reason": "empty_text"})
                 return
 
             event_key = event_id or hashlib.sha256(
-                f"{external_chat_id}|{sender_provider_id}|{text}|{occurred_at}".encode("utf-8")
+                f"{event_type}|{external_chat_id}|{sender_provider_id}|{text}|{occurred_at}".encode("utf-8")
             ).hexdigest()
             is_new = SERVICES["db"].record_webhook_event(event_key=event_key, source="unipile", payload=body)
             if not is_new:
                 self._json_response(HTTPStatus.OK, {"status": "duplicate", "event_key": event_key})
+                return
+
+            if connection_event:
+                try:
+                    result = SERVICES["workflow"].process_connection_event(
+                        sender_provider_id=sender_provider_id or None,
+                        external_chat_id=external_chat_id or None,
+                    )
+                except Exception as exc:
+                    SERVICES["db"].log_operation(
+                        operation="webhook.unipile.connection_error",
+                        status="error",
+                        entity_type="webhook",
+                        entity_id=event_key,
+                        details={"error": str(exc), "event_type": event_type},
+                    )
+                    self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "webhook processing failed", "details": str(exc)})
+                    return
+                SERVICES["db"].log_operation(
+                    operation="webhook.unipile.connection_event",
+                    status="ok" if result.get("processed") else "ignored",
+                    entity_type="webhook",
+                    entity_id=event_key,
+                    details={
+                        "event_type": event_type,
+                        "external_chat_id": external_chat_id,
+                        "sender_provider_id": sender_provider_id,
+                        "processed": bool(result.get("processed")),
+                        "reason": result.get("reason"),
+                    },
+                )
+                self._json_response(HTTPStatus.OK, {"status": "ok", "event_key": event_key, "result": result})
                 return
 
             try:
@@ -477,6 +514,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     "rejected": summary.rejected,
                     "outreached": summary.outreached,
                     "outreach_sent": summary.outreach_sent,
+                    "outreach_pending_connection": summary.outreach_pending_connection,
                     "outreach_failed": summary.outreach_failed,
                     "conversation_ids": summary.conversation_ids,
                 },
@@ -596,6 +634,24 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 return
             except Exception as exc:
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "outreach step failed", "details": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
+        if parsed.path == "/api/outreach/poll-connections":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            job_id = self._safe_int(body.get("job_id"), None)
+            limit = self._safe_int(body.get("limit"), 200) or 200
+            try:
+                result = SERVICES["workflow"].poll_pending_connections(job_id=job_id, limit=limit)
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "poll pending connections failed", "details": str(exc)},
+                )
                 return
             self._json_response(HTTPStatus.OK, result)
             return

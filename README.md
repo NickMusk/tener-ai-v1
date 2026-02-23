@@ -134,6 +134,7 @@ Recommended env vars:
 - `UNIPILE_ACCOUNT_ID`: required for LinkedIn search and outbound delivery.
 - `UNIPILE_LINKEDIN_SEARCH_PATH`: default `/api/v1/users/search`.
 - `UNIPILE_CHAT_CREATE_PATH`: default `/api/v1/chats`.
+- `UNIPILE_CONNECT_CREATE_PATH`: default `/api/v1/users/invite` (override to your workspace endpoint).
 - `UNIPILE_LINKEDIN_API_TYPE`: optional, e.g. `classic` or `recruiter`.
 - `UNIPILE_LINKEDIN_INMAIL`: optional (`true/false`) to force InMail flag.
 - `UNIPILE_DRY_RUN`: optional (`true/false`) to disable actual outbound send.
@@ -143,8 +144,10 @@ Flow with Unipile enabled:
 
 1. Candidate sourcing uses Unipile LinkedIn Search.
 2. In `contact-all` mode (default), low-confidence candidates are marked as `needs_resume` (not rejected) and CV is requested automatically in outreach.
-3. Outreach is written to DB and additionally sent via Unipile Chats API.
-4. Delivery result is stored in message `meta.delivery` and operation logs.
+3. Outreach first attempts direct message via Unipile Chats API.
+4. If candidate is not first-degree connection, system sends connection request and marks conversation as `waiting_connection` (`pending_connection` in outreach result).
+5. After connection accepted, pending outreach is sent automatically by webhook (if connection event is available) or by polling endpoint.
+6. Delivery result is stored in message `meta.delivery` and operation logs.
 
 Workflow mode env vars:
 
@@ -174,6 +177,7 @@ Tracking endpoints:
 - `GET /api/pre-resume/events` — chronological updates/events across all sessions.
 - `POST /api/jobs/{job_id}/jd` — update JD text used by recruiter agent context.
 - `POST /api/agent/accounts/manual` — add a manual test account + start pre-resume dialog.
+- `POST /api/outreach/poll-connections` — cron-friendly poll to detect accepted connections and send pending outreach.
 
 Dashboard (`/dashboard`) now includes a dedicated `Recruiter Agent` tab:
 - edit JD context for selected job

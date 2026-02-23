@@ -19,6 +19,12 @@ class LinkedInProvider:
     def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
         raise NotImplementedError
 
+    def send_connection_request(self, candidate_profile: Dict[str, Any], message: str | None = None) -> Dict[str, Any]:
+        raise NotImplementedError
+
+    def check_connection_status(self, candidate_profile: Dict[str, Any]) -> Dict[str, Any]:
+        raise NotImplementedError
+
 
 class MockLinkedInProvider(LinkedInProvider):
     def __init__(self, dataset_path: str) -> None:
@@ -51,6 +57,23 @@ class MockLinkedInProvider(LinkedInProvider):
             "reason": "mock_provider_no_external_delivery",
             "candidate": candidate_profile.get("linkedin_id"),
             "preview": message[:120],
+        }
+
+    def send_connection_request(self, candidate_profile: Dict[str, Any], message: str | None = None) -> Dict[str, Any]:
+        return {
+            "provider": "mock",
+            "sent": True,
+            "reason": "mock_connection_requested",
+            "candidate": candidate_profile.get("linkedin_id"),
+            "preview": (message or "")[:120],
+        }
+
+    def check_connection_status(self, candidate_profile: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "provider": "mock",
+            "connected": False,
+            "reason": "mock_no_real_connection_state",
+            "candidate": candidate_profile.get("linkedin_id"),
         }
 
     def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -96,6 +119,7 @@ class UnipileLinkedInProvider(LinkedInProvider):
 
         self.search_path = os.environ.get("UNIPILE_LINKEDIN_SEARCH_PATH", "/api/v1/users/search")
         self.chat_create_path = os.environ.get("UNIPILE_CHAT_CREATE_PATH", "/api/v1/chats")
+        self.connect_create_path = os.environ.get("UNIPILE_CONNECT_CREATE_PATH", "/api/v1/users/invite")
         self.api_type = (os.environ.get("UNIPILE_LINKEDIN_API_TYPE") or "").strip()
         self.force_inmail = (os.environ.get("UNIPILE_LINKEDIN_INMAIL") or "").strip().lower() in {"1", "true", "yes"}
         self.dry_run = (os.environ.get("UNIPILE_DRY_RUN") or "").strip().lower() in {"1", "true", "yes"}
@@ -204,6 +228,88 @@ class UnipileLinkedInProvider(LinkedInProvider):
         merged["raw"] = merged_raw
         return self._normalize_profile(merged)
 
+    def send_connection_request(self, candidate_profile: Dict[str, Any], message: str | None = None) -> Dict[str, Any]:
+        if self.dry_run:
+            return {
+                "provider": "unipile",
+                "sent": True,
+                "reason": "dry_run_connection_requested",
+                "candidate": candidate_profile.get("linkedin_id"),
+                "preview": (message or "")[:120],
+            }
+        if not self.account_id:
+            return {"provider": "unipile", "sent": False, "reason": "missing_account_id"}
+
+        attendee_id = self._extract_attendee_id(candidate_profile)
+        if not attendee_id:
+            return {"provider": "unipile", "sent": False, "reason": "missing_attendee_provider_id"}
+
+        last_error = "unknown_connection_request_error"
+        paths = self._candidate_connect_paths()
+        payloads = self._connect_payloads(attendee_id=attendee_id, message=message)
+        for path in paths:
+            endpoint = self._build_url(path)
+            for payload in payloads:
+                try:
+                    response = self._request_json("POST", endpoint, payload)
+                    request_id = (
+                        response.get("id")
+                        or response.get("request_id")
+                        or (response.get("data") or {}).get("id")
+                    )
+                    return {
+                        "provider": "unipile",
+                        "sent": True,
+                        "attendee_provider_id": attendee_id,
+                        "request_id": request_id,
+                        "path": path,
+                    }
+                except RuntimeError as exc:
+                    last_error = str(exc)
+                    continue
+
+        return {
+            "provider": "unipile",
+            "sent": False,
+            "attendee_provider_id": attendee_id,
+            "reason": "connection_request_failed",
+            "error": last_error,
+        }
+
+    def check_connection_status(self, candidate_profile: Dict[str, Any]) -> Dict[str, Any]:
+        attendee_id = self._extract_attendee_id(candidate_profile)
+        if not attendee_id:
+            return {"provider": "unipile", "connected": False, "reason": "missing_attendee_provider_id"}
+
+        profile = dict(candidate_profile)
+        try:
+            profile = self.enrich_profile(candidate_profile)
+        except Exception:
+            # Keep best-effort: fallback to source profile when enrich fails.
+            profile = dict(candidate_profile)
+
+        raw = profile.get("raw")
+        connected = False
+        network_distance = ""
+        if isinstance(raw, dict):
+            detail = raw.get("detail") if isinstance(raw.get("detail"), dict) else {}
+            source = raw.get("search") if isinstance(raw.get("search"), dict) else {}
+            network_distance = str(
+                detail.get("network_distance")
+                or source.get("network_distance")
+                or raw.get("network_distance")
+                or ""
+            ).upper()
+            connected = network_distance in {"FIRST_DEGREE", "SELF"}
+
+        return {
+            "provider": "unipile",
+            "connected": connected,
+            "attendee_provider_id": attendee_id,
+            "network_distance": network_distance or None,
+            "profile": profile,
+        }
+
     def _extract_attendee_id(self, candidate_profile: Dict[str, Any]) -> Optional[str]:
         candidates = [
             candidate_profile.get("attendee_provider_id"),
@@ -300,6 +406,53 @@ class UnipileLinkedInProvider(LinkedInProvider):
             seen.add(p)
             out.append(p)
         return out
+
+    def _candidate_connect_paths(self) -> List[str]:
+        candidates = [
+            self.connect_create_path,
+            "/api/v1/users/invite",
+            "/api/v1/invitations",
+            "/api/v1/linkedin/invite",
+        ]
+        out: List[str] = []
+        seen = set()
+        for path in candidates:
+            p = (path or "").strip()
+            if not p:
+                continue
+            if not p.startswith("/"):
+                p = f"/{p}"
+            if p in seen:
+                continue
+            seen.add(p)
+            out.append(p)
+        return out
+
+    def _connect_payloads(self, attendee_id: str, message: str | None) -> List[Dict[str, Any]]:
+        text = (message or "").strip()
+        payloads: List[Dict[str, Any]] = [
+            {"account_id": self.account_id, "provider_id": attendee_id},
+            {"account_id": self.account_id, "attendee_id": attendee_id},
+            {"account_id": self.account_id, "attendees_ids": attendee_id},
+        ]
+        if text:
+            payloads.extend(
+                [
+                    {"account_id": self.account_id, "provider_id": attendee_id, "message": text},
+                    {"account_id": self.account_id, "provider_id": attendee_id, "text": text},
+                    {"account_id": self.account_id, "attendee_id": attendee_id, "message": text},
+                    {"account_id": self.account_id, "attendee_id": attendee_id, "text": text},
+                    {"account_id": self.account_id, "attendees_ids": attendee_id, "text": text},
+                ]
+            )
+        if self.api_type:
+            with_api = []
+            for payload in payloads:
+                p = dict(payload)
+                p["api"] = self.api_type
+                with_api.append(p)
+            payloads = with_api + payloads
+        return payloads
 
     def _search_attempts(self, path: str, query: str, limit: int) -> List[tuple[str, Optional[Dict[str, Any]], Dict[str, Any]]]:
         attempts: List[tuple[str, Optional[Dict[str, Any]], Dict[str, Any]]] = []

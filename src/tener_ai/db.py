@@ -411,6 +411,18 @@ class Database:
         row = self._conn.execute("SELECT * FROM conversations WHERE id = ?", (conversation_id,)).fetchone()
         return self._row_to_dict(row) if row else None
 
+    def update_conversation_status(self, conversation_id: int, status: str) -> bool:
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                UPDATE conversations
+                SET status = ?
+                WHERE id = ?
+                """,
+                (status, conversation_id),
+            )
+            return cur.rowcount > 0
+
     def list_conversations_overview(self, limit: int = 200, job_id: Optional[int] = None) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(limit, 2000))
         where = ""
@@ -446,6 +458,42 @@ class Database:
         LEFT JOIN jobs j ON j.id = conv.job_id
         LEFT JOIN candidates c ON c.id = conv.candidate_id
         LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+        {where}
+        ORDER BY conv.last_message_at DESC, conv.id DESC
+        LIMIT ?
+        """
+        args.append(safe_limit)
+        rows = self._conn.execute(query, tuple(args)).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def list_conversations_by_status(
+        self,
+        status: str,
+        limit: int = 200,
+        job_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(limit, 2000))
+        args: List[Any] = [status]
+        where = "WHERE conv.status = ?"
+        if job_id is not None:
+            where += " AND conv.job_id = ?"
+            args.append(job_id)
+        query = f"""
+        SELECT
+            conv.id AS conversation_id,
+            conv.job_id,
+            conv.candidate_id,
+            conv.channel,
+            conv.status AS conversation_status,
+            conv.external_chat_id,
+            conv.last_message_at,
+            j.title AS job_title,
+            c.full_name AS candidate_name,
+            c.linkedin_id AS candidate_linkedin_id,
+            c.source AS candidate_source
+        FROM conversations conv
+        LEFT JOIN jobs j ON j.id = conv.job_id
+        LEFT JOIN candidates c ON c.id = conv.candidate_id
         {where}
         ORDER BY conv.last_message_at DESC, conv.id DESC
         LIMIT ?
