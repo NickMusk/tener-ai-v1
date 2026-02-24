@@ -1246,11 +1246,20 @@ class WorkflowService:
             if direct_public and direct_public in targets:
                 return direct_public
 
-        buckets = [raw]
-        if isinstance(raw.get("detail"), dict):
-            buckets.append(raw["detail"])
-        if isinstance(raw.get("search"), dict):
-            buckets.append(raw["search"])
+        buckets: List[Dict[str, Any]] = []
+        stack: List[Dict[str, Any]] = [raw]
+        seen_obj_ids: set[int] = set()
+        while stack:
+            bucket = stack.pop()
+            bucket_id = id(bucket)
+            if bucket_id in seen_obj_ids:
+                continue
+            seen_obj_ids.add(bucket_id)
+            buckets.append(bucket)
+            for key in ("raw", "detail", "search", "data"):
+                nested = bucket.get(key)
+                if isinstance(nested, dict):
+                    stack.append(nested)
 
         for bucket in buckets:
             forced_identifier = str(bucket.get("forced_test_identifier") or "").strip().lower()
@@ -1259,6 +1268,8 @@ class WorkflowService:
             public_identifier = str(bucket.get("public_identifier") or "").strip().lower()
             if public_identifier and public_identifier in targets:
                 return public_identifier
+            if bool(bucket.get("forced_test_candidate")) and len(targets) == 1:
+                return next(iter(targets))
         return None
 
     def _load_forced_test_identifiers(self) -> List[str]:

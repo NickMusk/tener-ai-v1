@@ -53,7 +53,7 @@ class FakeUnipileProvider:
         enriched["attendee_provider_id"] = "ACoAADc0-FUBAMKDmKggoixvfVaLiocMh19_JDU"
         enriched["unipile_profile_id"] = "ACoAADc0-FUBAMKDmKggoixvfVaLiocMh19_JDU"
         enriched["raw"] = {
-            "search": {"forced_test_candidate": True, "public_identifier": FORCED_TEST_ID},
+            "raw": {"search": {"forced_test_candidate": True, "public_identifier": FORCED_TEST_ID}},
             "detail": {"first_name": "Olena", "last_name": "Bachek"},
         }
         return enriched
