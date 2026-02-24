@@ -458,7 +458,10 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
             return cfg.public_base_url.rstrip("/")
         host = self.headers.get("Host")
         if host:
-            return f"http://{host}"
+            proto = str(self.headers.get("X-Forwarded-Proto") or "").strip().lower()
+            if proto not in {"http", "https"}:
+                proto = "https" if ".onrender.com" in host else "http"
+            return f"{proto}://{host}"
         return f"http://{cfg.host}:{cfg.port}"
 
     @staticmethod
