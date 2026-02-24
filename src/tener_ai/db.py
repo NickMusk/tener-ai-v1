@@ -1069,7 +1069,7 @@ class Database:
                 bucket["latest_status"] = item.get("status") or "unknown"
 
         interview = scorecard.get("interview_evaluation")
-        if interview and interview.get("latest_stage") is None:
+        if interview:
             notes = candidate_row.get("verification_notes") if isinstance(candidate_row.get("verification_notes"), dict) else {}
             interview_score = None
             for key in ("interview_total_score", "interview_score", "final_interview_score"):
@@ -1083,18 +1083,35 @@ class Database:
                 if interview_score is not None:
                     break
             if interview_score is not None:
-                interview["latest_stage"] = "interview_results"
-                interview["latest_score"] = interview_score
-                interview["latest_status"] = "scored"
-                interview["stages"] = [
-                    {
-                        "stage_key": "interview_results",
-                        "score": interview_score,
-                        "status": "scored",
-                        "reason": "Loaded from candidate verification notes.",
-                        "updated_at": candidate_row.get("last_message_created_at") or candidate_row.get("created_at"),
-                    }
-                ]
+                notes_status = str((notes or {}).get("interview_status") or "").strip().lower()
+                normalized_notes_status = "scored" if notes_status == "scored" else ""
+                if interview.get("latest_stage") is None:
+                    interview["latest_stage"] = "interview_results"
+                    interview["latest_score"] = interview_score
+                    interview["latest_status"] = normalized_notes_status or "scored"
+                    interview["stages"] = [
+                        {
+                            "stage_key": "interview_results",
+                            "score": interview_score,
+                            "status": normalized_notes_status or "scored",
+                            "reason": "Loaded from candidate verification notes.",
+                            "updated_at": candidate_row.get("last_message_created_at") or candidate_row.get("created_at"),
+                        }
+                    ]
+                elif interview.get("latest_score") is None:
+                    interview["latest_score"] = interview_score
+                    if normalized_notes_status:
+                        interview["latest_status"] = normalized_notes_status
+                    stages = interview.get("stages") if isinstance(interview.get("stages"), list) else []
+                    if stages:
+                        first = stages[0]
+                        if isinstance(first, dict) and first.get("score") is None:
+                            first["score"] = interview_score
+                            if normalized_notes_status:
+                                first["status"] = normalized_notes_status
+                            reason = str(first.get("reason") or "").strip()
+                            suffix = "Score loaded from candidate verification notes."
+                            first["reason"] = f"{reason} {suffix}".strip() if reason else suffix
 
         return scorecard
 

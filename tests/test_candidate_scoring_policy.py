@@ -10,10 +10,20 @@ class CandidateScoringPolicyTests(unittest.TestCase):
         self.policy = CandidateScoringPolicy(path=None)
 
     @staticmethod
-    def _scorecard(source: float | None, communication: float | None, interview: float | None, communication_status: str = "in_dialogue"):
+    def _scorecard(
+        source: float | None,
+        communication: float | None,
+        interview: float | None,
+        communication_status: str = "in_dialogue",
+        communication_stage: str = "dialogue",
+    ):
         return {
             "sourcing_vetting": {"latest_score": source, "latest_status": "qualified" if source is not None else "not_started"},
-            "communication": {"latest_score": communication, "latest_status": communication_status},
+            "communication": {
+                "latest_score": communication,
+                "latest_status": communication_status,
+                "latest_stage": communication_stage,
+            },
             "interview_evaluation": {"latest_score": interview, "latest_status": "scored" if interview is not None else "not_started"},
         }
 
@@ -33,9 +43,9 @@ class CandidateScoringPolicyTests(unittest.TestCase):
         self.assertEqual(out["overall_status"], "blocked")
         self.assertEqual(float(out["overall_score"]), 0.0)
 
-    def test_cap_without_cv(self) -> None:
+    def test_cap_without_cv_when_not_all_stages_scored(self) -> None:
         out = self.policy.compute_overall(
-            scorecard=self._scorecard(source=95.0, communication=95.0, interview=95.0),
+            scorecard=self._scorecard(source=95.0, communication=95.0, interview=None),
             current_status_key="in_dialogue",
         )
         self.assertLessEqual(float(out["overall_score"]), 70.0)
@@ -48,6 +58,28 @@ class CandidateScoringPolicyTests(unittest.TestCase):
         )
         self.assertLessEqual(float(out["overall_score"]), 80.0)
         self.assertIn("cap_without_interview_score", out["gates_applied"])
+
+    def test_all_three_scores_use_weighted_average_even_without_cv_status(self) -> None:
+        out = self.policy.compute_overall(
+            scorecard=self._scorecard(source=90.0, communication=80.0, interview=70.0),
+            current_status_key="in_dialogue",
+        )
+        self.assertEqual(float(out["overall_score"]), 81.0)
+        self.assertTrue(bool(out["has_all_scores"]))
+        self.assertNotIn("cap_without_cv", out["gates_applied"])
+
+    def test_communication_score_is_na_until_dialogue_stage(self) -> None:
+        out = self.policy.compute_overall(
+            scorecard=self._scorecard(
+                source=90.0,
+                communication=88.0,
+                interview=86.0,
+                communication_stage="outreach",
+            ),
+            current_status_key="in_dialogue",
+        )
+        inputs = out.get("inputs") if isinstance(out.get("inputs"), dict) else {}
+        self.assertIsNone(inputs.get("communication"))
 
 
 if __name__ == "__main__":

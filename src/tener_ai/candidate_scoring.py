@@ -49,7 +49,7 @@ class CandidateScoringPolicy:
         gates = self._gates()
 
         source_score = self._score_of(scorecard, "sourcing_vetting")
-        communication_score = self._score_of(scorecard, "communication")
+        communication_score = self._communication_dialogue_score(scorecard)
         interview_score = self._score_of(scorecard, "interview_evaluation")
 
         inputs = {
@@ -83,13 +83,18 @@ class CandidateScoringPolicy:
                 block_reason = "blocked_gate"
             gate_reasons.append(f"blocked:{block_reason}")
 
-        has_cv = current_status_key == "cv_received" or communication_status == "cv_received"
-        if not has_cv and final_score > gates["cap_without_cv"]:
+        has_all_scores = all(value is not None for value in (source_score, communication_score, interview_score))
+        has_cv = (
+            current_status_key in {"cv_received", "interview_invited", "interview_in_progress", "interview_completed", "interview_scored"}
+            or communication_status == "cv_received"
+            or has_all_scores
+        )
+        if not has_all_scores and not has_cv and final_score > gates["cap_without_cv"]:
             final_score = gates["cap_without_cv"]
             gate_reasons.append("cap_without_cv")
 
         has_interview_score = interview_score is not None
-        if not has_interview_score and final_score > gates["cap_without_interview_score"]:
+        if not has_all_scores and not has_interview_score and final_score > gates["cap_without_interview_score"]:
             final_score = gates["cap_without_interview_score"]
             gate_reasons.append("cap_without_interview_score")
 
@@ -113,6 +118,7 @@ class CandidateScoringPolicy:
             "gates_applied": gate_reasons,
             "has_cv": has_cv,
             "has_interview_score": has_interview_score,
+            "has_all_scores": has_all_scores,
         }
 
     def to_dict(self) -> Dict[str, Any]:
@@ -164,6 +170,14 @@ class CandidateScoringPolicy:
     def _status_of(scorecard: Dict[str, Any], key: str) -> str:
         item = scorecard.get(key) if isinstance(scorecard.get(key), dict) else {}
         return str(item.get("latest_status") or "").strip().lower()
+
+    @classmethod
+    def _communication_dialogue_score(cls, scorecard: Dict[str, Any]) -> float | None:
+        entry = scorecard.get("communication") if isinstance(scorecard.get("communication"), dict) else {}
+        stage = str(entry.get("latest_stage") or "").strip().lower()
+        if stage != "dialogue":
+            return None
+        return cls._score_of(scorecard, "communication")
 
     @staticmethod
     def _safe_float(value: Any, fallback: float) -> float:

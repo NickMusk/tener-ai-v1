@@ -193,6 +193,58 @@ class AgentAssessmentsTests(unittest.TestCase):
             self.assertIsInstance(rich_score, (int, float))
             self.assertGreater(float(rich_score), float(short_score))
 
+    def test_interview_score_loaded_from_notes_when_assessment_score_missing(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "agent_assessments_interview_fallback.sqlite3"))
+            db.init_schema()
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python and AWS",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            candidate_id = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-agent-interview-fallback",
+                    "full_name": "Interview Score Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python", "aws"],
+                    "years_experience": 5,
+                }
+            )
+            db.create_candidate_match(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                score=0.81,
+                status="interview_completed",
+                verification_notes={
+                    "interview_session_id": "iv_123",
+                    "interview_status": "scored",
+                    "interview_total_score": 82.5,
+                },
+            )
+            db.upsert_candidate_agent_assessment(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                agent_key="interview_evaluation",
+                agent_name="Jordan AI (Lead Interviewer)",
+                stage_key="interview_results",
+                score=None,
+                status="invited",
+                reason="Interview invite created.",
+                details={"session_id": "iv_123"},
+            )
+
+            rows = db.list_candidates_for_job(job_id)
+            self.assertEqual(len(rows), 1)
+            interview = (rows[0].get("agent_scorecard") or {}).get("interview_evaluation") or {}
+            self.assertAlmostEqual(float(interview.get("latest_score")), 82.5, places=2)
+            self.assertEqual(str(interview.get("latest_status")), "scored")
+
 
 if __name__ == "__main__":
     unittest.main()
