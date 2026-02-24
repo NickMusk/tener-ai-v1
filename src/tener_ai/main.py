@@ -12,6 +12,7 @@ from typing import Any, Dict, Optional
 from urllib.parse import parse_qs, urlparse
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
+from .candidate_scoring import CandidateScoringPolicy
 from .db import Database
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
 from .llm_responder import CandidateLLMResponder
@@ -70,6 +71,10 @@ def build_services() -> Dict[str, Any]:
         "TENER_AGENT_EVAL_INSTRUCTIONS_PATH",
         str(root / "config" / "agent_evaluation_instructions.json"),
     )
+    scoring_formula_path = os.environ.get(
+        "TENER_SCORING_FORMULA_PATH",
+        str(root / "config" / "candidate_scoring_formula.json"),
+    )
     mock_profiles_path = os.environ.get("TENER_MOCK_LINKEDIN_DATA_PATH", str(root / "data" / "mock_linkedin_profiles.json"))
     forced_test_ids_path = os.environ.get(
         "TENER_FORCED_TEST_IDS_PATH",
@@ -92,6 +97,7 @@ def build_services() -> Dict[str, Any]:
 
     instructions = AgentInstructions(path=instructions_path)
     evaluation_playbook = AgentEvaluationPlaybook(path=evaluation_playbook_path)
+    scoring_formula = CandidateScoringPolicy(path=scoring_formula_path)
     matching_engine = MatchingEngine(rules_path=rules_path)
     linkedin_provider = build_linkedin_provider(mock_dataset_path=mock_profiles_path)
 
@@ -177,6 +183,7 @@ def build_services() -> Dict[str, Any]:
         "db": db,
         "instructions": instructions,
         "evaluation_playbook": evaluation_playbook,
+        "scoring_formula": scoring_formula,
         "matching_engine": matching_engine,
         "pre_resume": pre_resume_service,
         "workflow": workflow,
@@ -274,6 +281,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         },
                     },
                     "evaluation_playbook": SERVICES["evaluation_playbook"].to_dict(),
+                    "scoring_formula": SERVICES["scoring_formula"].to_dict(),
                 },
             )
             return
@@ -325,6 +333,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
                 return
             rows = SERVICES["db"].list_candidates_for_job(job_id)
+            rows = [SERVICES["scoring_formula"].decorate_candidate_row(row) for row in rows]
             self._json_response(HTTPStatus.OK, {"job_id": job_id, "items": rows})
             return
 
@@ -1189,12 +1198,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/instructions/reload":
             SERVICES["instructions"].reload()
             SERVICES["evaluation_playbook"].reload()
+            SERVICES["scoring_formula"].reload()
             apply_agent_instructions(SERVICES)
             self._json_response(
                 HTTPStatus.OK,
                 {
                     "instructions": SERVICES["instructions"].to_dict(),
                     "evaluation_playbook": SERVICES["evaluation_playbook"].to_dict(),
+                    "scoring_formula": SERVICES["scoring_formula"].to_dict(),
                 },
             )
             return

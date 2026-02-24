@@ -606,6 +606,7 @@
               <th>Vetting</th>
               <th>Communication</th>
               <th>Interview</th>
+              <th>Overall</th>
               <th>Location</th>
               <th>Skills</th>
             </tr>
@@ -848,7 +849,7 @@
       if ($("view-tab-agent")) $("view-tab-agent").textContent = communicationName;
       if ($("agent-comm-panel-title")) $("agent-comm-panel-title").innerHTML = `${escapeHtml(communicationName)}: <span class="mono">pre_resume</span>`;
       const headerCells = document.querySelectorAll("#candidates-table thead tr th");
-      if (headerCells && headerCells.length >= 8) {
+      if (headerCells && headerCells.length >= 9) {
         headerCells[3].textContent = sourcingName;
         headerCells[4].textContent = communicationName;
         headerCells[5].textContent = interviewName;
@@ -947,6 +948,23 @@
       return `
         <div class="mono">${escapeHtml(scoreLabel)}</div>
         <div class="muted mono" style="font-size:11px;">${escapeHtml(stage)} • ${escapeHtml(status)}</div>
+      `;
+    }
+
+    function formatOverallCell(item) {
+      const overall = (item && item.overall_scoring) || {};
+      const score = overall.overall_score;
+      const status = String(overall.overall_status || item.overall_status || "-");
+      const blockReason = String(overall.block_reason || item.overall_block_reason || "");
+      const scoreLabel = (typeof score === 'number' && Number.isFinite(score))
+        ? score.toFixed(1)
+        : '-';
+      const tail = blockReason
+        ? `${status} • ${blockReason}`
+        : status;
+      return `
+        <div class="mono">${escapeHtml(scoreLabel)}</div>
+        <div class="muted mono" style="font-size:11px;">${escapeHtml(tail)}</div>
       `;
     }
 
@@ -1705,7 +1723,7 @@
       const body = $("candidates-tbody");
       body.innerHTML = '';
       if (!jobId) {
-        body.innerHTML = '<tr><td colspan="8" class="muted">Select job</td></tr>';
+        body.innerHTML = '<tr><td colspan="9" class="muted">Select job</td></tr>';
         return;
       }
 
@@ -1713,7 +1731,7 @@
         const data = await api(`/api/jobs/${jobId}/candidates`);
         const items = data.items || [];
         if (!items.length) {
-          body.innerHTML = '<tr><td colspan="8" class="muted">No candidates yet</td></tr>';
+          body.innerHTML = '<tr><td colspan="9" class="muted">No candidates yet</td></tr>';
           return;
         }
 
@@ -1734,13 +1752,14 @@
               <td>${formatAgentAssessmentCell(scorecard, 'sourcing_vetting')}</td>
               <td>${formatAgentAssessmentCell(scorecard, 'communication')}</td>
               <td>${formatAgentAssessmentCell(scorecard, 'interview_evaluation')}</td>
+              <td>${formatOverallCell(x)}</td>
               <td>${escapeHtml(x.location || '-')}</td>
               <td>${escapeHtml(skills || '-')}</td>
             </tr>
           `;
         }).join('');
       } catch (e) {
-        body.innerHTML = `<tr><td colspan="8" class="muted">Failed: ${escapeHtml(e.message)}</td></tr>`;
+        body.innerHTML = `<tr><td colspan="9" class="muted">Failed: ${escapeHtml(e.message)}</td></tr>`;
       }
     }
 

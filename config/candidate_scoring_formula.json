@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "weights": {
+    "sourcing_vetting": 0.45,
+    "communication": 0.2,
+    "interview_evaluation": 0.35
+  },
+  "gates": {
+    "blocked_statuses": ["not_interested", "unreachable"],
+    "cap_without_cv": 70,
+    "cap_without_interview_score": 80
+  },
+  "decisions": {
+    "shortlist_min": 80,
+    "pipeline_min": 65
+  }
+}
