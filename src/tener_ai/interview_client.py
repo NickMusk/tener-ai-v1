@@ -64,6 +64,10 @@ class InterviewAPIClient:
         qs = parse.urlencode(query)
         return self._request_json("GET", f"/api/interviews/sessions?{qs}", None)
 
+    def get_scorecard(self, session_id: str) -> Dict[str, Any]:
+        sid = parse.quote(str(session_id or "").strip(), safe="")
+        return self._request_json("GET", f"/api/interviews/sessions/{sid}/scorecard", None)
+
     def _request_json(self, method: str, path: str, payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         if not self.base_url:
             raise RuntimeError("Interview API base URL is not configured")

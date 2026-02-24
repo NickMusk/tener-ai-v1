@@ -1542,6 +1542,8 @@ class WorkflowService:
                 total_score = float(total_score) if total_score is not None else None
             except (TypeError, ValueError):
                 total_score = None
+            if interview_status == "scored" and total_score is None:
+                total_score = self._load_interview_total_score(session_id=session_id)
 
             changed = self._apply_interview_progress_update(
                 job_id=int(row["job_id"]),
@@ -2174,6 +2176,25 @@ class WorkflowService:
                 "total_score": item.get("total_score"),
             },
         }
+
+    def _load_interview_total_score(self, session_id: str) -> float | None:
+        if self.interview_client is None:
+            return None
+        fn = getattr(self.interview_client, "get_scorecard", None)
+        if not callable(fn):
+            return None
+        try:
+            payload = fn(session_id=session_id)
+        except Exception:
+            return None
+        scorecard = payload.get("scorecard") if isinstance(payload, dict) else None
+        if not isinstance(scorecard, dict):
+            return None
+        raw = scorecard.get("total_score")
+        try:
+            return float(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
 
     def _record_sourcing_vetting_assessment(
         self,
