@@ -602,7 +602,7 @@
             <tr>
               <th>ID</th>
               <th>Name</th>
-              <th>Status</th>
+              <th>Current Status</th>
               <th>Score</th>
               <th>Location</th>
               <th>Skills</th>
@@ -1660,11 +1660,17 @@
 
         body.innerHTML = items.map((x) => {
           const skills = (x.skills || []).slice(0, 6).join(', ');
+          const currentStatus = escapeHtml(x.current_status_label || x.status || '-');
+          const rawStatus = escapeHtml(x.status || '-');
+          const preResumeStatus = escapeHtml(x.pre_resume_status || '-');
           return `
             <tr>
               <td class="mono">${x.candidate_id}</td>
               <td>${escapeHtml(x.full_name || '-')}</td>
-              <td>${escapeHtml(x.status || '-')}</td>
+              <td>
+                <div>${currentStatus}</div>
+                <div class="muted mono" style="font-size:11px;">raw:${rawStatus} • pre:${preResumeStatus}</div>
+              </td>
               <td class="mono">${x.score ?? '-'}</td>
               <td>${escapeHtml(x.location || '-')}</td>
               <td>${escapeHtml(skills || '-')}</td>

@@ -300,14 +300,49 @@ class Database:
             c.location,
             c.languages,
             c.skills,
-            c.years_experience
+            c.years_experience,
+            conv.id AS conversation_id,
+            conv.status AS conversation_status,
+            conv.external_chat_id,
+            conv.last_message_at,
+            prs.session_id AS pre_resume_session_id,
+            prs.status AS pre_resume_status,
+            prs.next_followup_at AS pre_resume_next_followup_at,
+            (
+                SELECT msg.direction
+                FROM messages msg
+                WHERE msg.conversation_id = conv.id
+                ORDER BY msg.id DESC
+                LIMIT 1
+            ) AS last_message_direction,
+            (
+                SELECT msg.created_at
+                FROM messages msg
+                WHERE msg.conversation_id = conv.id
+                ORDER BY msg.id DESC
+                LIMIT 1
+            ) AS last_message_created_at
         FROM candidate_job_matches m
         JOIN candidates c ON c.id = m.candidate_id
+        LEFT JOIN conversations conv ON conv.id = (
+            SELECT c2.id
+            FROM conversations c2
+            WHERE c2.job_id = m.job_id
+              AND c2.candidate_id = m.candidate_id
+            ORDER BY c2.id DESC
+            LIMIT 1
+        )
+        LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
         WHERE m.job_id = ?
         ORDER BY m.score DESC
         """
         rows = self._conn.execute(query, (job_id,)).fetchall()
-        return [self._row_to_dict(r) for r in rows]
+        items = [self._row_to_dict(r) for r in rows]
+        for item in items:
+            key, label = self._derive_candidate_current_status(item)
+            item["current_status_key"] = key
+            item["current_status_label"] = label
+        return items
 
     def get_candidate_match(self, job_id: int, candidate_id: int) -> Optional[Dict[str, Any]]:
         row = self._conn.execute(
@@ -889,3 +924,38 @@ class Database:
                 except json.JSONDecodeError:
                     pass
         return item
+
+    @staticmethod
+    def _derive_candidate_current_status(item: Dict[str, Any]) -> tuple[str, str]:
+        match_status = str(item.get("status") or "").strip().lower()
+        conversation_status = str(item.get("conversation_status") or "").strip().lower()
+        pre_resume_status = str(item.get("pre_resume_status") or "").strip().lower()
+        last_message_direction = str(item.get("last_message_direction") or "").strip().lower()
+
+        if pre_resume_status == "resume_received" or match_status == "resume_received":
+            return "cv_received", "CV Received"
+        if pre_resume_status == "not_interested":
+            return "not_interested", "Not Interested"
+        if pre_resume_status == "unreachable":
+            return "unreachable", "Unreachable"
+        if pre_resume_status == "stalled":
+            return "stalled", "Stalled"
+        if pre_resume_status in {"engaged_no_resume", "will_send_later"}:
+            return "in_dialogue", "In Dialogue"
+        if match_status == "rejected":
+            return "rejected", "Rejected"
+        if conversation_status == "waiting_connection" or match_status == "outreach_pending_connection":
+            return "outreach_pending_connection", "Outreach Pending Connection"
+        if conversation_status == "active" and last_message_direction == "inbound":
+            return "in_dialogue", "In Dialogue"
+        if (
+            match_status in {"outreach_sent"}
+            or conversation_status == "active"
+            or pre_resume_status in {"awaiting_reply"}
+        ):
+            return "outreached", "Outreached"
+        if match_status in {"verified", "needs_resume"}:
+            return "added", "Added"
+        if match_status:
+            return match_status, match_status.replace("_", " ").title()
+        return "unknown", "Unknown"
