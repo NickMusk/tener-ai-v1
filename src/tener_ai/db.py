@@ -142,6 +142,16 @@ class Database:
             payload TEXT,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS job_step_progress (
+            job_id INTEGER NOT NULL,
+            step TEXT NOT NULL,
+            status TEXT NOT NULL,
+            output_json TEXT,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(job_id, step),
+            FOREIGN KEY(job_id) REFERENCES jobs(id)
+        );
         """
         with self.transaction() as conn:
             conn.executescript(schema)
@@ -704,6 +714,45 @@ class Database:
             )
             return cur.rowcount > 0
 
+    def upsert_job_step_progress(
+        self,
+        job_id: int,
+        step: str,
+        status: str,
+        output: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO job_step_progress (job_id, step, status, output_json, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(job_id, step)
+                DO UPDATE SET
+                    status = excluded.status,
+                    output_json = excluded.output_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    job_id,
+                    step,
+                    status,
+                    json.dumps(output or {}),
+                    utc_now_iso(),
+                ),
+            )
+
+    def list_job_step_progress(self, job_id: int) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            """
+            SELECT job_id, step, status, output_json, updated_at
+            FROM job_step_progress
+            WHERE job_id = ?
+            ORDER BY updated_at DESC
+            """,
+            (job_id,),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def update_candidate_match_status(
         self,
         job_id: int,
@@ -754,7 +803,17 @@ class Database:
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
         item = dict(row)
-        for field in ("preferred_languages", "languages", "skills", "verification_notes", "meta", "details", "resume_links", "state_json"):
+        for field in (
+            "preferred_languages",
+            "languages",
+            "skills",
+            "verification_notes",
+            "meta",
+            "details",
+            "resume_links",
+            "state_json",
+            "output_json",
+        ):
             if field in item and item[field]:
                 try:
                     item[field] = json.loads(item[field])

@@ -1,7 +1,16 @@
 services:
   - type: web
     name: tener-ai-v1
-    runtime: docker
+    runtime: python
     plan: starter
     autoDeploy: true
+    buildCommand: pip install .
+    startCommand: PYTHONPATH=src python -m tener_ai
     healthCheckPath: /health
+    envVars:
+      - key: TENER_DB_PATH
+        value: /var/data/tener_v1.sqlite3
+    disk:
+      name: tener-data
+      mountPath: /var/data
+      sizeGB: 1

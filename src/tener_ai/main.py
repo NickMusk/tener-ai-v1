@@ -53,7 +53,8 @@ def apply_agent_instructions(services: Dict[str, Any]) -> None:
 
 def build_services() -> Dict[str, Any]:
     root = project_root()
-    db_path = os.environ.get("TENER_DB_PATH", str(root / "runtime" / "tener_v1.sqlite3"))
+    default_db_path = "/var/data/tener_v1.sqlite3" if os.environ.get("RENDER") else str(root / "runtime" / "tener_v1.sqlite3")
+    db_path = os.environ.get("TENER_DB_PATH", default_db_path)
     rules_path = os.environ.get("TENER_MATCHING_RULES_PATH", str(root / "config" / "matching_rules.json"))
     templates_path = os.environ.get("TENER_TEMPLATES_PATH", str(root / "config" / "outreach_templates.json"))
     instructions_path = os.environ.get("TENER_AGENT_INSTRUCTIONS_PATH", str(root / "config" / "agent_instructions.json"))
@@ -175,6 +176,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "create_job": "POST /api/jobs",
                         "list_jobs": "GET /api/jobs",
                         "get_job": "GET /api/jobs/{job_id}",
+                        "job_progress": "GET /api/jobs/{job_id}/progress",
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
                         "update_job_jd": "POST /api/jobs/{job_id}/jd",
                         "run_workflow": "POST /api/workflows/execute",
@@ -261,6 +263,19 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 return
             rows = SERVICES["db"].list_candidates_for_job(job_id)
             self._json_response(HTTPStatus.OK, {"job_id": job_id, "items": rows})
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/progress"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/progress$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            job = SERVICES["db"].get_job(job_id)
+            if not job:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            steps = SERVICES["db"].list_job_step_progress(job_id=job_id)
+            self._json_response(HTTPStatus.OK, {"job_id": job_id, "items": steps})
             return
 
         if parsed.path.startswith("/api/jobs/"):
@@ -522,6 +537,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
             except Exception as exc:
+                self._persist_job_step_progress(job_id=job_id, step="workflow", status="error", output={"error": str(exc)})
                 SERVICES["db"].log_operation(
                     operation="workflow.execute.error",
                     status="error",
@@ -532,20 +548,65 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "workflow failed", "details": str(exc)})
                 return
 
-            self._json_response(
-                HTTPStatus.OK,
-                {
-                    "job_id": summary.job_id,
-                    "searched": summary.searched,
+            outreach_status = (
+                "error"
+                if summary.outreach_failed > 0 and summary.outreach_sent == 0 and summary.outreach_pending_connection == 0
+                else "success"
+            )
+            workflow_payload = {
+                "job_id": summary.job_id,
+                "searched": summary.searched,
+                "verified": summary.verified,
+                "needs_resume": summary.needs_resume,
+                "rejected": summary.rejected,
+                "outreached": summary.outreached,
+                "outreach_sent": summary.outreach_sent,
+                "outreach_pending_connection": summary.outreach_pending_connection,
+                "outreach_failed": summary.outreach_failed,
+                "conversation_ids": summary.conversation_ids,
+            }
+            self._persist_job_step_progress(job_id=job_id, step="source", status="success", output={"total": summary.searched})
+            self._persist_job_step_progress(
+                job_id=job_id,
+                step="enrich",
+                status="success",
+                output={"total": summary.searched, "failed": 0},
+            )
+            self._persist_job_step_progress(
+                job_id=job_id,
+                step="verify",
+                status="success",
+                output={
                     "verified": summary.verified,
                     "needs_resume": summary.needs_resume,
                     "rejected": summary.rejected,
-                    "outreached": summary.outreached,
-                    "outreach_sent": summary.outreach_sent,
-                    "outreach_pending_connection": summary.outreach_pending_connection,
-                    "outreach_failed": summary.outreach_failed,
+                    "enriched_total": summary.searched,
+                    "enrich_failed": 0,
+                },
+            )
+            self._persist_job_step_progress(
+                job_id=job_id,
+                step="add",
+                status="success",
+                output={"total": summary.verified + summary.needs_resume},
+            )
+            self._persist_job_step_progress(
+                job_id=job_id,
+                step="outreach",
+                status=outreach_status,
+                output={
+                    "total": summary.outreached,
+                    "sent": summary.outreach_sent,
+                    "pending_connection": summary.outreach_pending_connection,
+                    "failed": summary.outreach_failed,
                     "conversation_ids": summary.conversation_ids,
                 },
+            )
+            self._persist_job_step_progress(job_id=job_id, step="workflow", status="success", output=workflow_payload)
+
+            self._json_response(
+                HTTPStatus.OK,
+                workflow_payload,
             )
             return
 
@@ -565,8 +626,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
             except Exception as exc:
+                self._persist_job_step_progress(job_id=job_id, step="source", status="error", output={"error": str(exc)})
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "source step failed", "details": str(exc)})
                 return
+            self._persist_job_step_progress(job_id=job_id, step="source", status="success", output=result)
+            for step in ("enrich", "verify", "add", "outreach", "workflow"):
+                self._persist_job_step_progress(job_id=job_id, step=step, status="idle", output={})
             self._json_response(HTTPStatus.OK, result)
             return
 
@@ -589,8 +654,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
             except Exception as exc:
+                self._persist_job_step_progress(job_id=job_id, step="verify", status="error", output={"error": str(exc)})
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "verify step failed", "details": str(exc)})
                 return
+            self._persist_job_step_progress(job_id=job_id, step="verify", status="success", output=result)
             self._json_response(HTTPStatus.OK, result)
             return
 
@@ -613,8 +680,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
             except Exception as exc:
+                self._persist_job_step_progress(job_id=job_id, step="enrich", status="error", output={"error": str(exc)})
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "enrich step failed", "details": str(exc)})
                 return
+            self._persist_job_step_progress(job_id=job_id, step="enrich", status="success", output=result)
+            for step in ("verify", "add", "outreach", "workflow"):
+                self._persist_job_step_progress(job_id=job_id, step=step, status="idle", output={})
             self._json_response(HTTPStatus.OK, result)
             return
 
@@ -637,8 +708,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
             except Exception as exc:
+                self._persist_job_step_progress(job_id=job_id, step="add", status="error", output={"error": str(exc)})
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "add step failed", "details": str(exc)})
                 return
+            self._persist_job_step_progress(job_id=job_id, step="add", status="success", output=result)
+            for step in ("outreach", "workflow"):
+                self._persist_job_step_progress(job_id=job_id, step=step, status="idle", output={})
             self._json_response(HTTPStatus.OK, result)
             return
 
@@ -661,8 +736,16 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
             except Exception as exc:
+                self._persist_job_step_progress(job_id=job_id, step="outreach", status="error", output={"error": str(exc)})
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "outreach step failed", "details": str(exc)})
                 return
+            outreach_status = (
+                "error"
+                if (result.get("failed") or 0) > 0 and (result.get("sent") or 0) == 0 and (result.get("pending_connection") or 0) == 0
+                else "success"
+            )
+            self._persist_job_step_progress(job_id=job_id, step="outreach", status=outreach_status, output=result)
+            self._persist_job_step_progress(job_id=job_id, step="workflow", status="idle", output={})
             self._json_response(HTTPStatus.OK, result)
             return
 
@@ -676,11 +759,20 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             try:
                 result = SERVICES["workflow"].poll_pending_connections(job_id=job_id, limit=limit)
             except Exception as exc:
+                if job_id is not None:
+                    self._persist_job_step_progress(job_id=job_id, step="outreach", status="error", output={"error": str(exc)})
                 self._json_response(
                     HTTPStatus.INTERNAL_SERVER_ERROR,
                     {"error": "poll pending connections failed", "details": str(exc)},
                 )
                 return
+            if job_id is not None:
+                outreach_status = (
+                    "error"
+                    if (result.get("failed") or 0) > 0 and (result.get("sent") or 0) == 0
+                    else "success"
+                )
+                self._persist_job_step_progress(job_id=job_id, step="outreach", status=outreach_status, output=result)
             self._json_response(HTTPStatus.OK, result)
             return
 
@@ -927,6 +1019,18 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             return
 
         self._json_response(HTTPStatus.NOT_FOUND, {"error": "route not found"})
+
+    def _persist_job_step_progress(self, job_id: int, step: str, status: str, output: Dict[str, Any] | None = None) -> None:
+        try:
+            SERVICES["db"].upsert_job_step_progress(
+                job_id=job_id,
+                step=step,
+                status=status,
+                output=output or {},
+            )
+        except Exception:
+            # Progress persistence must not break primary API response path.
+            return
 
     def log_message(self, format: str, *args: Any) -> None:
         return

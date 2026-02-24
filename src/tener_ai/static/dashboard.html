@@ -739,6 +739,20 @@
   </div>
 
   <script>
+    function defaultStepSnapshots() {
+      return {
+        source: null,
+        enrich: null,
+        verify: null,
+        add: null,
+        outreach: null,
+        workflow: null
+      };
+    }
+
+    const SELECTED_JOB_STORAGE_KEY = "tener.selectedJobId";
+    const PIPELINE_STEPS = ["source", "enrich", "verify", "add", "outreach"];
+
     const state = {
       jobId: null,
       activeView: "pipeline",
@@ -750,14 +764,7 @@
       agentAccounts: [],
       agentConversationId: null,
       selectedSnapshotStep: "source",
-      stepSnapshots: {
-        source: null,
-        enrich: null,
-        verify: null,
-        add: null,
-        outreach: null,
-        workflow: null
-      }
+      stepSnapshots: defaultStepSnapshots()
     };
 
     const $ = (id) => document.getElementById(id);
@@ -872,6 +879,143 @@
       return Number(fromAgent || state.jobId || 0) || null;
     }
 
+    function resetPipelineVisuals() {
+      $("step-source-meta").textContent = "Profiles: 0";
+      $("step-enrich-meta").textContent = "Profiles: 0, Failed: 0";
+      $("step-verify-meta").textContent = "Verified: 0, Needs resume: 0, Rejected: 0";
+      $("step-add-meta").textContent = "Added: 0";
+      $("step-outreach-meta").textContent = "Total: 0, Sent: 0, Pending: 0, Failed: 0";
+      setMetrics({ searched: 0, verified: 0, outreached: 0 });
+      PIPELINE_STEPS.forEach((step) => setStepStatus(step, "idle"));
+      setStepStatus("faq", "manual");
+    }
+
+    function resetPipelineMemory() {
+      state.sourceProfiles = [];
+      state.enrichedProfiles = [];
+      state.verifyItems = [];
+      state.addedCandidates = [];
+      state.outreachItems = [];
+      state.stepSnapshots = defaultStepSnapshots();
+      state.selectedSnapshotStep = "source";
+    }
+
+    function applyStepOutput(step, output) {
+      const out = output || {};
+      if (step === "source") {
+        state.sourceProfiles = out.profiles || [];
+        $("step-source-meta").textContent = `Profiles: ${out.total || 0}`;
+        setMetrics({ searched: out.total || 0, verified: state.verifyItems.filter(x => x.status === "verified").length, outreached: state.outreachItems.length });
+        return;
+      }
+      if (step === "enrich") {
+        state.enrichedProfiles = out.profiles || [];
+        $("step-enrich-meta").textContent = `Profiles: ${out.total || 0}, Failed: ${out.failed || 0}`;
+        return;
+      }
+      if (step === "verify") {
+        state.verifyItems = out.items || [];
+        $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Needs resume: ${out.needs_resume || 0}, Rejected: ${out.rejected || 0}`;
+        if (out.enriched_total != null) {
+          $("step-enrich-meta").textContent = `Profiles: ${out.enriched_total || 0}, Failed: ${out.enrich_failed || 0}`;
+        }
+        renderVerificationExplanations(state.verifyItems);
+        setMetrics({
+          searched: state.sourceProfiles.length || Number(out.enriched_total || 0),
+          verified: out.verified || 0,
+          outreached: state.outreachItems.length
+        });
+        return;
+      }
+      if (step === "add") {
+        state.addedCandidates = out.added || [];
+        $("step-add-meta").textContent = `Added: ${out.total || 0}`;
+        return;
+      }
+      if (step === "outreach") {
+        state.outreachItems = out.items || [];
+        if (out.checked != null || out.connected != null || out.still_waiting != null) {
+          $("step-outreach-meta").textContent = `Poll checked: ${out.checked || 0}, connected: ${out.connected || 0}, sent: ${out.sent || 0}, waiting: ${out.still_waiting || 0}, failed: ${out.failed || 0}`;
+        } else {
+          $("step-outreach-meta").textContent = `Total: ${out.total || 0}, Sent: ${out.sent || 0}, Pending: ${out.pending_connection || 0}, Failed: ${out.failed || 0}`;
+        }
+        setMetrics({
+          searched: state.sourceProfiles.length,
+          verified: state.verifyItems.filter(x => x.status === "verified").length,
+          outreached: out.total || out.sent || 0
+        });
+        return;
+      }
+      if (step === "workflow") {
+        $("step-source-meta").textContent = `Profiles: ${out.searched || 0}`;
+        $("step-enrich-meta").textContent = `Profiles: ${out.searched || 0}, Failed: 0`;
+        $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Needs resume: ${out.needs_resume || 0}, Rejected: ${out.rejected || 0}`;
+        $("step-add-meta").textContent = `Added: ${(out.verified || 0) + (out.needs_resume || 0)}`;
+        $("step-outreach-meta").textContent = `Total: ${out.outreached || 0}, Sent: ${out.outreach_sent || 0}, Pending: ${out.outreach_pending_connection || 0}, Failed: ${out.outreach_failed || 0}`;
+        setMetrics({ searched: out.searched || 0, verified: out.verified || 0, outreached: out.outreached || 0 });
+      }
+    }
+
+    async function loadJobProgress(jobId) {
+      resetPipelineMemory();
+      resetPipelineVisuals();
+      renderVerificationExplanations([]);
+
+      if (!jobId) {
+        renderSnapshotTabs();
+        renderSelectedSnapshot();
+        return;
+      }
+
+      let data = { items: [] };
+      try {
+        data = await api(`/api/jobs/${jobId}/progress`);
+      } catch {
+        renderSnapshotTabs();
+        renderSelectedSnapshot();
+        return;
+      }
+
+      const items = Array.isArray(data.items) ? data.items : [];
+      const byStep = {};
+      items.forEach((item) => {
+        if (item && item.step && !byStep[item.step]) {
+          byStep[item.step] = item;
+        }
+      });
+
+      const stepsInOrder = ["source", "enrich", "verify", "add", "outreach", "workflow"];
+      let latestStep = "source";
+      let latestUpdated = "";
+
+      stepsInOrder.forEach((step) => {
+        const item = byStep[step];
+        if (!item) return;
+        const status = String(item.status || "idle");
+        const payload = item.output_json || {};
+        if (Object.prototype.hasOwnProperty.call(state.stepSnapshots, step)) {
+          state.stepSnapshots[step] = {
+            title: `${step}.restored`,
+            kind: status,
+            payload,
+            updated_at: item.updated_at || null
+          };
+        }
+        if (step !== "workflow") setStepStatus(step, status);
+        applyStepOutput(step, payload);
+        if (item.updated_at && String(item.updated_at) > latestUpdated) {
+          latestUpdated = String(item.updated_at);
+          latestStep = step;
+        }
+      });
+
+      if (latestStep && Object.prototype.hasOwnProperty.call(state.stepSnapshots, latestStep)) {
+        state.selectedSnapshotStep = latestStep;
+      }
+      renderSnapshotTabs();
+      renderSelectedSnapshot();
+    }
+
     function setActiveView(view) {
       state.activeView = view === "agent" ? "agent" : "pipeline";
       $("view-tab-pipeline").classList.toggle("active", state.activeView === "pipeline");
@@ -898,10 +1042,16 @@
 
     async function onSelectedJobChanged(jobId) {
       state.jobId = Number(jobId || 0) || null;
+      if (state.jobId) {
+        localStorage.setItem(SELECTED_JOB_STORAGE_KEY, String(state.jobId));
+      } else {
+        localStorage.removeItem(SELECTED_JOB_STORAGE_KEY);
+      }
       syncJobSelectors();
       if (!state.jobId) {
         syncJobMeta(null);
         setAgentJobMeta(null);
+        await loadJobProgress(null);
         await refreshCandidates();
         await refreshLogs();
         await refreshAgentAccounts();
@@ -915,6 +1065,7 @@
         syncJobMeta(null);
         setAgentJobMeta(null);
       }
+      await loadJobProgress(state.jobId);
       await refreshCandidates();
       await refreshLogs();
       await refreshAgentAccounts();
@@ -959,9 +1110,12 @@
         return;
       }
 
+      const rememberedJobId = Number(localStorage.getItem(SELECTED_JOB_STORAGE_KEY) || "0") || null;
       const preferredJobId = state.jobId && data.items.some((x) => Number(x.id) === Number(state.jobId))
         ? Number(state.jobId)
-        : Number(data.items[0].id);
+        : (rememberedJobId && data.items.some((x) => Number(x.id) === rememberedJobId))
+          ? rememberedJobId
+          : Number(data.items[0].id);
 
       data.items.forEach((job) => {
         const opt = document.createElement('option');
@@ -1486,13 +1640,6 @@
     async function fullRefresh() {
       await loadJobs();
       await onSelectedJobChanged(state.jobId);
-      setStepStatus('source', 'idle');
-      setStepStatus('enrich', 'idle');
-      setStepStatus('verify', 'idle');
-      setStepStatus('add', 'idle');
-      setStepStatus('outreach', 'idle');
-      setStepStatus('faq', 'manual');
-      renderVerificationExplanations([]);
     }
 
     function bindEvents() {

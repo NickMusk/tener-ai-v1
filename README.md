@@ -20,7 +20,7 @@ Agents:
 Core services:
 - API server: `src/tener_ai/main.py`
 - Workflow orchestration: `src/tener_ai/workflow.py`
-- Internal storage: SQLite (`runtime/tener_v1.sqlite3`)
+- Internal storage: SQLite (`TENER_DB_PATH`, default local `runtime/tener_v1.sqlite3`, on Render default `/var/data/tener_v1.sqlite3`)
 - LinkedIn provider layer: `src/tener_ai/linkedin_provider.py`
 - Standalone pre-resume service: `src/tener_ai/pre_resume_service.py`
 
@@ -90,6 +90,12 @@ curl -s -X POST http://127.0.0.1:8080/api/workflows/execute \
 
 ```bash
 curl -s http://127.0.0.1:8080/api/jobs/1/candidates
+```
+
+### 3.1) Get Saved Job Progress (for dashboard refresh)
+
+```bash
+curl -s http://127.0.0.1:8080/api/jobs/1/progress
 ```
 
 ### 4) Simulate Inbound Candidate Message
@@ -169,6 +175,12 @@ Workflow mode env vars:
 
 - `TENER_CONTACT_ALL_MODE`: default `true`; converts pre-CV rejects to `needs_resume`.
 - `TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY`: default `true`; first outreach asks for CV/resume.
+
+Persistent DB on Render:
+
+- Set `TENER_DB_PATH=/var/data/tener_v1.sqlite3`.
+- Attach a persistent disk mounted at `/var/data`.
+- Without a disk, redeploy creates a new container filesystem and SQLite data is lost.
 
 Forced test candidate file:
 
