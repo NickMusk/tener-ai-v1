@@ -616,7 +616,7 @@
       </article>
 
       <article class="step-card">
-        <div class="step-title"><span>6. Dialogue <span class="muted mono" id="agent-name-communication-inline-2">Casey AI (Hiring Coordinator)</span></span><span id="status-faq" class="status">manual</span></div>
+        <div class="step-title"><span>6. Dialogue <span class="muted mono" id="agent-name-communication-inline-2">Casey AI (Hiring Coordinator)</span></span><span id="status-faq" class="status">ongoing</span></div>
         <div class="step-metrics">Inbound auto-replies are triggered via conversation endpoint.</div>
         <div class="step-actions">
           <button disabled>Use API</button>
@@ -1095,7 +1095,7 @@
       $("step-outreach-meta").textContent = "Total: 0, Sent: 0, Pending: 0, Failed: 0";
       setMetrics({ searched: 0, verified: 0, outreached: 0 });
       PIPELINE_STEPS.forEach((step) => setStepStatus(step, "idle"));
-      setStepStatus("faq", "manual");
+      setStepStatus("faq", "ongoing");
     }
 
     function resetPipelineMemory() {
