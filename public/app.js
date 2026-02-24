@@ -38,6 +38,30 @@ const showToast = (message) => {
 
 const normalizeStatus = (status) => String(status || "NOT_STARTED").toUpperCase();
 
+const lifecycleLabel = (lifecycle) => {
+  const value = String(lifecycle || "");
+  if (value === "READY_NOW") return "ГОТОВО СЕЙЧАС";
+  if (value === "RUNNING") return "ЗАПУЩЕНО";
+  if (value === "COMPLETED") return "ЗАВЕРШЕНО";
+  if (value === "WAITING_INTEGRATION") return "ЖДЕМ ИНТЕГРАЦИЮ";
+  if (value === "WAITING_PARTNERSHIP") return "ЖДЕМ ПАРТНЕРСТВО";
+  if (value === "WAITING_MANUAL_RESPONSE") return "ЖДЕМ ОТВЕТ";
+  if (value === "BLOCKED") return "ЗАБЛОКИРОВАНО";
+  return "НЕИЗВЕСТНО";
+};
+
+const lifecycleClass = (lifecycle) => {
+  const value = String(lifecycle || "");
+  if (value === "READY_NOW") return "life-ready";
+  if (value === "RUNNING") return "life-running";
+  if (value === "COMPLETED") return "life-completed";
+  if (value === "WAITING_INTEGRATION") return "life-waiting";
+  if (value === "WAITING_PARTNERSHIP") return "life-waiting";
+  if (value === "WAITING_MANUAL_RESPONSE") return "life-manual";
+  if (value === "BLOCKED") return "life-blocked";
+  return "life-waiting";
+};
+
 const statusClass = (status) => {
   const value = normalizeStatus(status);
   if (value === "COMPLETED") {
@@ -75,7 +99,47 @@ const trafficClass = (trafficLight) => {
 const renderCandidate = (candidate) => {
   const profile = candidate.profile || {};
   const compliance = candidate.compliance || {};
+  const full = candidate.fullCompliance;
   const light = compliance.trafficLight || "N/A";
+  const linkedinLink = profile.linkedinProfileUrl
+    ? `<a class="linkedin-link" href="${profile.linkedinProfileUrl}" target="_blank" rel="noopener noreferrer">LinkedIn profile →</a>`
+    : `<span class="candidate-meta">LinkedIn profile: not available</span>`;
+
+  const fullSummary = full
+    ? `
+      <div class="full-summary">
+        <span>PASS: ${full.summary.pass}</span>
+        <span>FLAG: ${full.summary.flagged}</span>
+        <span>СЕЙЧАС: ${full.summary.canRunNow}/${full.summary.total}</span>
+        <span>ЖДЕМ: ${full.summary.pending}</span>
+      </div>
+    `
+    : `<div class="candidate-meta">Full checks are unavailable.</div>`;
+
+  const fullChecks = full
+    ? `
+      <ul class="full-check-list">
+        ${full.checks
+          .map(
+            (check) => `
+          <li class="full-check-item">
+            <div class="full-check-top">
+              <span class="full-check-title">${check.title}</span>
+              <span class="full-check-result result-${String(check.result).toLowerCase()}">${check.result}</span>
+            </div>
+            <div class="full-check-meta">
+              <span class="lifecycle-pill ${lifecycleClass(check.lifecycle)}">${lifecycleLabel(check.lifecycle)}</span>
+              <span>ETA: ${check.eta}</span>
+              <span>${check.tier}</span>
+            </div>
+            <div class="full-check-meta">${check.source} • ${check.details}</div>
+          </li>
+        `
+          )
+          .join("")}
+      </ul>
+    `
+    : "";
 
   return `
     <li class="candidate-item">
@@ -85,6 +149,12 @@ const renderCandidate = (candidate) => {
       </div>
       <div class="candidate-meta">${profile.headline || "No headline"} • ${profile.source || "MANUAL"}</div>
       <div class="candidate-meta">Progress: ${compliance.progress || "0/0"}</div>
+      <div class="candidate-links">${linkedinLink}</div>
+      <details class="full-checks">
+        <summary>Все проверки (15): что уже прошло, что запущено и что ждём</summary>
+        ${fullSummary}
+        ${fullChecks}
+      </details>
     </li>
   `;
 };
@@ -192,7 +262,20 @@ const loadDashboard = async () => {
   const jdWithCandidates = await Promise.all(
     jds.map(async (jd) => {
       const candidatesResponse = await request(`/api/v1/jds/${jd.id}/candidates`);
-      return { jd, candidates: candidatesResponse.items || [] };
+      const baseCandidates = candidatesResponse.items || [];
+
+      const candidates = await Promise.all(
+        baseCandidates.map(async (candidate) => {
+          try {
+            const fullCompliance = await request(`/api/v1/candidates/${candidate.id}/compliance/full`);
+            return { ...candidate, fullCompliance };
+          } catch (_error) {
+            return candidate;
+          }
+        })
+      );
+
+      return { jd, candidates };
     })
   );
 

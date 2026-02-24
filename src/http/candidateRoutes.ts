@@ -58,6 +58,15 @@ export const buildCandidateRoutes = (candidateService: CandidateService): Router
     }
   });
 
+  router.get("/:candidateId/compliance/full", async (req, res, next) => {
+    try {
+      const full = await candidateService.getFullCompliance(req.params.candidateId);
+      res.json(full);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/:candidateId/compliance/run", async (req, res, next) => {
     try {
       const job = await candidateService.enqueueTier1Compliance(req.params.candidateId);

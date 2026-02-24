@@ -1,3 +1,4 @@
+import { buildFullComplianceView, FullComplianceView } from "../compliance/fullCompliance";
 import { Candidate, CandidateProfile, ComplianceState } from "../domain/model";
 import { HttpError } from "../http/httpError";
 import { VerificationJobQueue, VerificationJobSnapshot } from "../queue/types";
@@ -41,6 +42,11 @@ export class CandidateService {
 
   async getCompliance(candidateId: string): Promise<ComplianceState> {
     return (await this.getCandidate(candidateId)).compliance;
+  }
+
+  async getFullCompliance(candidateId: string): Promise<FullComplianceView> {
+    const candidate = await this.getCandidate(candidateId);
+    return buildFullComplianceView(candidate);
   }
 
   async runTier1ComplianceNow(candidateId: string): Promise<ComplianceState> {

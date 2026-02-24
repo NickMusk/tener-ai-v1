@@ -60,6 +60,7 @@ npm run dev
 - `GET /api/v1/candidates`
 - `GET /api/v1/candidates/:candidateId`
 - `GET /api/v1/candidates/:candidateId/compliance`
+- `GET /api/v1/candidates/:candidateId/compliance/full` (all 15 checks with lifecycle + ETA)
 - `POST /api/v1/candidates/:candidateId/compliance/run` (async enqueue, returns `202`)
 - `POST /api/v1/candidates/:candidateId/compliance/run-sync` (direct run)
 - `GET /api/v1/candidates/compliance-jobs/:jobId`
