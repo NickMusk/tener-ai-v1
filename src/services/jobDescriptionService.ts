@@ -1,4 +1,5 @@
 import { JobDescription } from "../domain/jobDescription";
+import { DEFAULT_TEST_JD_ID } from "../domain/defaultJobDescription";
 import { HttpError } from "../http/httpError";
 import { LinkedInProvider } from "../linkedin/provider";
 import { CreateJobDescriptionInput, JobDescriptionRepository } from "../repositories/jobDescriptionRepository";
@@ -35,6 +36,10 @@ export class JobDescriptionService {
     }
 
     return jobDescription;
+  }
+
+  async getDefaultJobDescription(): Promise<JobDescription> {
+    return this.getJobDescription(DEFAULT_TEST_JD_ID);
   }
 
   getLinkedInStatus(): { connected: boolean; mode: "default" | "disabled" } {

@@ -8,6 +8,7 @@ Implemented in this version:
 - Tier 1 verification orchestrator with provider abstraction.
 - JD-centered manual workflow API + UI:
   - LinkedIn is connected by default.
+  - Default test JD is hardcoded and seeded in storage on startup.
   - Add JD.
   - Run each step manually for selected JD:
     1) LinkedIn search
@@ -48,6 +49,7 @@ npm run dev
 - `GET /health`
 - `GET /api/v1/linkedin/status`
 - `GET /api/v1/jds`
+- `GET /api/v1/jds/default`
 - `POST /api/v1/jds`
 - `GET /api/v1/jds/:jobDescriptionId`
 - `POST /api/v1/jds/:jobDescriptionId/steps/linkedin-search`
@@ -68,6 +70,8 @@ Open UI:
 ```bash
 open http://localhost:3000
 ```
+
+In UI, you can use the "Quick Run Default Test JD" block without selecting a JD card.
 
 Create candidate:
 ```bash

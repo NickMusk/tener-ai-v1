@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { JobDescription } from "../domain/jobDescription";
+import { buildDefaultTestJobDescription, DEFAULT_TEST_JD_ID } from "../domain/defaultJobDescription";
 import { CreateJobDescriptionInput, JobDescriptionRepository } from "./jobDescriptionRepository";
 
 const buildInitialJobDescription = (input: CreateJobDescriptionInput): JobDescription => {
@@ -27,6 +28,11 @@ const buildInitialJobDescription = (input: CreateJobDescriptionInput): JobDescri
 export class InMemoryJobDescriptionRepository implements JobDescriptionRepository {
   private readonly store = new Map<string, JobDescription>();
 
+  constructor() {
+    const seeded = buildDefaultTestJobDescription();
+    this.store.set(seeded.id, seeded);
+  }
+
   async create(input: CreateJobDescriptionInput): Promise<JobDescription> {
     const jobDescription = buildInitialJobDescription(input);
     this.store.set(jobDescription.id, jobDescription);
@@ -43,6 +49,16 @@ export class InMemoryJobDescriptionRepository implements JobDescriptionRepositor
   }
 
   async list(): Promise<JobDescription[]> {
-    return [...this.store.values()].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    return [...this.store.values()].sort((a, b) => {
+      if (a.id === DEFAULT_TEST_JD_ID && b.id !== DEFAULT_TEST_JD_ID) {
+        return -1;
+      }
+
+      if (a.id !== DEFAULT_TEST_JD_ID && b.id === DEFAULT_TEST_JD_ID) {
+        return 1;
+      }
+
+      return b.createdAt.localeCompare(a.createdAt);
+    });
   }
 }

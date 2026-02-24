@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { Pool } from "pg";
+import { buildDefaultTestJobDescription, DEFAULT_TEST_JD_ID } from "../domain/defaultJobDescription";
 import { JobDescription } from "../domain/jobDescription";
 import { CreateJobDescriptionInput, JobDescriptionRepository } from "./jobDescriptionRepository";
 
@@ -51,6 +52,16 @@ export class PostgresJobDescriptionRepository implements JobDescriptionRepositor
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+
+    const seeded = buildDefaultTestJobDescription();
+    await this.pool.query(
+      `
+      INSERT INTO job_descriptions (id, document, created_at, updated_at)
+      VALUES ($1, $2::jsonb, $3, $4)
+      ON CONFLICT (id) DO NOTHING
+      `,
+      [seeded.id, JSON.stringify(seeded), seeded.createdAt, seeded.updatedAt]
+    );
   }
 
   async create(input: CreateJobDescriptionInput): Promise<JobDescription> {
@@ -100,8 +111,9 @@ export class PostgresJobDescriptionRepository implements JobDescriptionRepositor
       `
       SELECT id, document, created_at, updated_at
       FROM job_descriptions
-      ORDER BY created_at DESC
-      `
+      ORDER BY (id = $1) DESC, created_at DESC
+      `,
+      [DEFAULT_TEST_JD_ID]
     );
 
     return rows.map(mapRow);

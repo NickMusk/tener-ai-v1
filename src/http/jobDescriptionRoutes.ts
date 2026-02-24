@@ -24,6 +24,14 @@ export const buildJobDescriptionRoutes = (jobDescriptionService: JobDescriptionS
     }
   });
 
+  router.get("/jds/default", async (_req, res, next) => {
+    try {
+      res.json(await jobDescriptionService.getDefaultJobDescription());
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.post("/jds", async (req, res, next) => {
     const parsed = createJobDescriptionSchema.safeParse(req.body);
     if (!parsed.success) {

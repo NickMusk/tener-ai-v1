@@ -1,6 +1,7 @@
 const jdListEl = document.getElementById("jd-list");
 const jdFormEl = document.getElementById("jd-form");
 const linkedInStatusEl = document.getElementById("linkedin-status");
+const DEFAULT_TEST_JD_ID = "jd-default-ls-smoke";
 
 const request = async (url, options = {}) => {
   const response = await fetch(url, {
@@ -33,11 +34,12 @@ const renderCandidate = (candidate) => {
 const renderJdCard = async (jd) => {
   const candidatesResponse = await request(`/api/v1/jds/${jd.id}/candidates`);
   const candidates = candidatesResponse.items || [];
+  const titleSuffix = jd.id === DEFAULT_TEST_JD_ID ? " (default)" : "";
 
   return `
     <article class="jd-card" data-id="${jd.id}">
       <div class="row">
-        <h3>${jd.title}</h3>
+        <h3>${jd.title}${titleSuffix}</h3>
         <span class="muted">${jd.company}${jd.location ? ` • ${jd.location}` : ""}</span>
       </div>
       <div class="row">
@@ -123,6 +125,36 @@ jdListEl.addEventListener("click", async (event) => {
 
     if (action === "verify") {
       await request(`/api/v1/jds/${jdId}/steps/run-verification`, { method: "POST" });
+    }
+
+    await loadJds();
+  } catch (error) {
+    window.alert(error.message);
+  }
+});
+
+document.body.addEventListener("click", async (event) => {
+  const target = event.target;
+  if (!(target instanceof HTMLButtonElement)) {
+    return;
+  }
+
+  const action = target.dataset.quickAction;
+  if (!action) {
+    return;
+  }
+
+  try {
+    if (action === "linkedin-search") {
+      await request(`/api/v1/jds/${DEFAULT_TEST_JD_ID}/steps/linkedin-search`, { method: "POST" });
+    }
+
+    if (action === "import") {
+      await request(`/api/v1/jds/${DEFAULT_TEST_JD_ID}/steps/import-candidates`, { method: "POST" });
+    }
+
+    if (action === "verify") {
+      await request(`/api/v1/jds/${DEFAULT_TEST_JD_ID}/steps/run-verification`, { method: "POST" });
     }
 
     await loadJds();
