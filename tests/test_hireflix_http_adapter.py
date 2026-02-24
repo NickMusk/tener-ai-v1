@@ -109,6 +109,48 @@ class HireflixHttpAdapterTests(unittest.TestCase):
         self.assertEqual(out["assessment_id"], "pos_1")
         self.assertEqual(out["candidate_id"], "jane@example.com")
         self.assertEqual(out["interview_url"], "https://app.hireflix.com/hash_1")
+        invite_input = adapter.calls[0]["variables"]["input"]
+        self.assertNotIn("externalId", invite_input)
+
+    def test_create_invitation_with_explicit_external_id(self) -> None:
+        adapter = _FakeAdapter(
+            HireflixConfig(api_key="k", position_id="pos_1"),
+            scripted_responses=[
+                {
+                    "data": {
+                        "inviteCandidateToInterview": {
+                            "__typename": "InterviewType",
+                            "id": "int_2",
+                            "hash": "hash_2",
+                            "url": {"public": "https://app.hireflix.com/hash_2"},
+                        }
+                    }
+                },
+                {
+                    "data": {
+                        "interview": {
+                            "id": "int_2",
+                            "status": "pending",
+                            "hash": "hash_2",
+                            "url": {"public": "https://app.hireflix.com/hash_2"},
+                            "candidate": {"email": "jane@example.com"},
+                        }
+                    }
+                },
+            ],
+        )
+
+        out = adapter.create_invitation(
+            {
+                "candidate_name": "Jane Doe",
+                "candidate_email": "jane@example.com",
+                "external_id": "cand-42",
+            }
+        )
+
+        self.assertEqual(out["invitation_id"], "int_2")
+        invite_input = adapter.calls[0]["variables"]["input"]
+        self.assertEqual(invite_input.get("externalId"), "cand-42")
 
     def test_create_invitation_falls_back_to_legacy_mutation(self) -> None:
         adapter = _FakeAdapter(
@@ -153,7 +195,16 @@ class HireflixHttpAdapterTests(unittest.TestCase):
         adapter = _FakeAdapter(
             HireflixConfig(api_key="k", position_id="pos_1", allow_legacy_invite_fallback=False),
             scripted_responses=[
-                {"data": {"inviteCandidateToInterview": {"__typename": "ExceededInvitesThisPeriodError"}}},
+                {
+                    "data": {
+                        "inviteCandidateToInterview": {
+                            "__typename": "ExceededInvitesThisPeriodError",
+                            "code": 403,
+                            "name": "ExceededInvitesThisPeriodError",
+                            "message": "Accessing Mutation.inviteCandidateToInterview requires an active subscription",
+                        }
+                    }
+                },
             ],
         )
 
@@ -165,6 +216,7 @@ class HireflixHttpAdapterTests(unittest.TestCase):
                 }
             )
         self.assertIn("inviteCandidateToInterview failed", str(ctx.exception))
+        self.assertIn("active subscription", str(ctx.exception).lower())
 
     def test_status_mapping(self) -> None:
         adapter = _FakeAdapter(

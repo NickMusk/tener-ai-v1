@@ -114,7 +114,7 @@ class HireflixHTTPAdapter:
                 first_name=first_name,
                 last_name=last_name,
                 candidate_email=candidate_email,
-                external_id=str(payload.get("external_id") or payload.get("candidate_id") or "").strip() or None,
+                external_id=str(payload.get("external_id") or "").strip() or None,
                 phone=str(payload.get("candidate_phone") or "").strip() or None,
             )
         except Exception as exc:
@@ -335,10 +335,31 @@ class HireflixHTTPAdapter:
             return None
         typename = str(out.get("__typename") or "")
         if typename and typename != "InterviewType":
-            return None
+            error_message = self._invite_union_error_message(out=out, typename=typename)
+            raise ValueError(error_message)
         if out.get("id"):
             return out
+        if typename == "InterviewType":
+            raise ValueError("inviteCandidateToInterview returned InterviewType without id")
         return None
+
+    @staticmethod
+    def _invite_union_error_message(*, out: Dict[str, Any], typename: str) -> str:
+        code = str(out.get("code") or "").strip()
+        message = str(out.get("message") or out.get("vmsg") or "").strip()
+        name = str(out.get("name") or "").strip()
+        parts: List[str] = []
+        if typename:
+            parts.append(typename)
+        if name and name != typename:
+            parts.append(name)
+        if code:
+            parts.append(f"code={code}")
+        if message:
+            parts.append(message)
+        if parts:
+            return " ".join(parts)
+        return "inviteCandidateToInterview was rejected"
 
     def _invite_with_legacy_mutation(self, *, position_id: str, candidate_name: str, candidate_email: str) -> Dict[str, Any]:
         query = """
