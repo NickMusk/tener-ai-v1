@@ -1148,9 +1148,6 @@ class WorkflowService:
             if public_identifier == self.forced_test_public_identifier:
                 return profile
 
-        first = found[0]
-        if isinstance(first, dict):
-            return first
         return fallback
 
     def _mark_forced_test_candidate(self, profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -1180,12 +1177,13 @@ class WorkflowService:
         target = self.forced_test_public_identifier
         for field in ("linkedin_id", "attendee_provider_id", "unipile_profile_id", "provider_id"):
             value = str(profile.get(field) or "").strip().lower()
-            if value == target:
+            if value == target or target in value:
                 return True
 
         raw = profile.get("raw")
         if not isinstance(raw, dict):
-            return False
+            full_name = str(profile.get("full_name") or "").strip().lower()
+            return "olena bachek" in full_name
 
         if bool(raw.get("forced_test_candidate")):
             return True
@@ -1197,9 +1195,18 @@ class WorkflowService:
             buckets.append(raw["search"])
 
         for bucket in buckets:
-            public_identifier = str(bucket.get("public_identifier") or "").strip().lower()
-            if public_identifier == target:
+            if bool(bucket.get("forced_test_candidate")):
                 return True
+            public_identifier = str(bucket.get("public_identifier") or "").strip().lower()
+            if public_identifier == target or target in public_identifier:
+                return True
+            first_name = str(bucket.get("first_name") or "").strip().lower()
+            last_name = str(bucket.get("last_name") or "").strip().lower()
+            if first_name == "olena" and last_name == "bachek":
+                return True
+        full_name = str(profile.get("full_name") or "").strip().lower()
+        if "olena bachek" in full_name:
+            return True
         return False
 
     @staticmethod

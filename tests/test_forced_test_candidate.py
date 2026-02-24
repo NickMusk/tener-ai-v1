@@ -46,7 +46,15 @@ class FakeUnipileProvider:
         ]
 
     def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
-        return dict(profile)
+        enriched = dict(profile)
+        enriched["linkedin_id"] = "ACoAADc0-FUBAMKDmKggoixvfVaLiocMh19_JDU"
+        enriched["attendee_provider_id"] = "ACoAADc0-FUBAMKDmKggoixvfVaLiocMh19_JDU"
+        enriched["unipile_profile_id"] = "ACoAADc0-FUBAMKDmKggoixvfVaLiocMh19_JDU"
+        enriched["raw"] = {
+            "search": {"forced_test_candidate": True},
+            "detail": {"first_name": "Olena", "last_name": "Bachek"},
+        }
+        return enriched
 
     def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
         return {"provider": "fake", "sent": False}
