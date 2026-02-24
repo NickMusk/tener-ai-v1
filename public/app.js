@@ -120,12 +120,14 @@ const renderCandidate = (candidate) => {
     : `<span class="candidate-meta">LinkedIn profile: not available</span>`;
 
   const sortedChecks = full?.checks ? [...full.checks].sort((a, b) => lifecycleSortOrder(a.lifecycle) - lifecycleSortOrder(b.lifecycle)) : [];
+  const completedCount = sortedChecks.filter((check) => normalizeLifecycle(check.lifecycle) === "COMPLETED").length;
   const runningCount = sortedChecks.filter((check) => normalizeLifecycle(check.lifecycle) === "RUNNING").length;
   const waitingCount = sortedChecks.filter((check) => normalizeLifecycle(check.lifecycle).startsWith("WAITING")).length;
 
   const fullSummary = full
     ? `
       <div class="full-summary">
+        <span>COMPLETED: ${completedCount}</span>
         <span>PASS: ${full.summary.pass}</span>
         <span>FLAG: ${full.summary.flagged}</span>
         <span>RUNNING: ${runningCount}</span>
