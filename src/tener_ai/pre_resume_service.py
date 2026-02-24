@@ -106,7 +106,10 @@ def parse_resume_links(text: str) -> List[str]:
     selected: List[str] = []
     for link in links:
         lowered = link.lower()
-        if any(marker in lowered for marker in ("resume", "cv", ".pdf", ".doc", ".docx", "drive.", "dropbox", "notion.")):
+        if any(
+            marker in lowered
+            for marker in ("resume", "cv", "curriculum", "currículum", ".pdf", ".doc", ".docx", "drive.", "dropbox", "notion.")
+        ):
             selected.append(link)
     return selected
 
@@ -340,19 +343,95 @@ class PreResumeCommunicationService:
 
         if links:
             return "resume_shared", links
-        if any(marker in lowered for marker in ("my cv", "my resume", "attached cv", "attached resume", "here is resume")):
+        if any(
+            marker in lowered
+            for marker in (
+                "my cv",
+                "my resume",
+                "attached cv",
+                "attached resume",
+                "here is resume",
+                "here's my resume",
+                "вот резюме",
+                "прикрепил резюме",
+                "отправил резюме",
+                "adjunto cv",
+                "adjunto mi cv",
+                "te envío mi cv",
+                "aqui esta mi cv",
+                "aquí está mi cv",
+            )
+        ):
             return "resume_shared", links
 
-        if any(marker in lowered for marker in ("not interested", "no thanks", "stop", "unsubscribe", "not looking")):
+        if any(
+            marker in lowered
+            for marker in (
+                "not interested",
+                "no thanks",
+                "stop",
+                "unsubscribe",
+                "not looking",
+                "не интересно",
+                "не актуально",
+                "не ищу",
+                "no me interesa",
+                "ya no estoy interesado",
+            )
+        ):
             return "not_interested", links
 
-        if any(marker in lowered for marker in ("will send", "send later", "tomorrow", "next week", "later")):
+        if any(
+            marker in lowered
+            for marker in (
+                "will send",
+                "send later",
+                "tomorrow",
+                "next week",
+                "later",
+                "пришлю позже",
+                "отправлю позже",
+                "завтра отправлю",
+                "позже",
+                "lo envio luego",
+                "lo envío luego",
+                "te lo envio mañana",
+                "te lo envío mañana",
+                "despues",
+                "después",
+            )
+        ):
             return "will_send_later", links
 
-        salary_markers = ("salary", "compensation", "pay", "range")
-        stack_markers = ("stack", "technology", "tech", "tools", "requirements")
-        timeline_markers = ("timeline", "process", "interview", "steps", "when")
-        details_markers = ("send jd", "job description", "details first", "share details", "more details")
+        salary_markers = ("salary", "compensation", "pay", "range", "зарплат", "вилка", "salario", "compensación", "compensacion")
+        stack_markers = ("stack", "technology", "tech", "tools", "requirements", "стек", "технолог", "tecnolog", "stack técnico")
+        timeline_markers = (
+            "timeline",
+            "process",
+            "interview",
+            "steps",
+            "when",
+            "срок",
+            "этап",
+            "процесс",
+            "proceso",
+            "entrevista",
+            "cuando",
+            "cuándo",
+        )
+        details_markers = (
+            "send jd",
+            "job description",
+            "details first",
+            "share details",
+            "more details",
+            "пришлите jd",
+            "подробности",
+            "описание вакансии",
+            "manda jd",
+            "descripcion del puesto",
+            "descripción del puesto",
+        )
 
         if any(marker in lowered for marker in salary_markers):
             return "salary", links

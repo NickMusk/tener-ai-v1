@@ -68,9 +68,10 @@ class CandidateLLMResponder:
             "You are Tener AI recruiter communication agent.",
             f"Communication mode: {mode}.",
             f"Reply language must be: {language}.",
+            "Output plain text only (no markdown, no JSON, no code blocks).",
             "Use only role-relevant facts from instruction, JD, and conversation context.",
             "Do not invent compensation numbers, interview steps, or policy details that are not provided.",
-            "Keep reply concise, natural, and human.",
+            "Keep reply concise, natural, and human (2-5 short sentences).",
             "If mode is pre_resume and resume was not received, include clear CTA to share CV/resume.",
         ]
         if instruction.strip():
@@ -100,6 +101,7 @@ class CandidateLLMResponder:
         return {
             "model": self.model,
             "temperature": 0.3,
+            "max_tokens": 220,
             "messages": [
                 {"role": "system", "content": "\n".join(system_rules)},
                 {"role": "user", "content": json.dumps(user_context, ensure_ascii=False)},

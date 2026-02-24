@@ -54,6 +54,20 @@ class PreResumeServiceTests(unittest.TestCase):
         self.assertEqual(stop["state"]["status"], "not_interested")
         self.assertIsNone(stop["state"]["next_followup_at"])
 
+    def test_multilingual_intents_are_classified(self) -> None:
+        service = PreResumeCommunicationService()
+        self._start_default_session(service)
+
+        ru_later = service.handle_inbound("s1", "Пришлю резюме позже, завтра")
+        self.assertEqual(ru_later["intent"], "will_send_later")
+        self.assertEqual(ru_later["state"]["status"], "resume_promised")
+
+        service = PreResumeCommunicationService()
+        self._start_default_session(service)
+        es_resume = service.handle_inbound("s1", "Aqui esta mi CV")
+        self.assertEqual(es_resume["intent"], "resume_shared")
+        self.assertEqual(es_resume["state"]["status"], "resume_received")
+
     def test_followup_sequence_and_stalled_state(self) -> None:
         service = PreResumeCommunicationService(max_followups=3)
         self._start_default_session(service)

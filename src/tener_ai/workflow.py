@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from uuid import uuid4
 from typing import Any, Dict, List
 
@@ -972,6 +973,8 @@ class WorkflowService:
             return fallback
         if self.llm_responder is None:
             return fallback
+        source = "fallback"
+        reason = "llm_unavailable"
         try:
             generated = self.llm_responder.generate_candidate_reply(
                 mode=mode,
@@ -994,9 +997,100 @@ class WorkflowService:
             )
             return fallback
         generated_text = str(generated or "").strip()
-        if not generated_text:
-            return fallback
-        return generated_text
+        if generated_text:
+            source = "llm"
+            reason = "generated"
+        else:
+            generated_text = fallback
+            reason = "empty_generation"
+
+        final_text = self._sanitize_reply_text(generated_text)
+        if not final_text:
+            final_text = fallback
+            source = "fallback"
+            reason = "empty_after_sanitize"
+
+        if self._contains_template_placeholders(final_text):
+            final_text = fallback
+            source = "fallback"
+            reason = "template_placeholder"
+
+        if mode == "pre_resume" and self._should_require_resume_cta(state):
+            if not self._has_resume_cta(final_text):
+                cta = self._extract_resume_cta(fallback, language=language)
+                if cta:
+                    final_text = f"{final_text.rstrip()} {cta}".strip()
+                source = "llm_guarded" if source == "llm" else source
+                reason = "resume_cta_enforced"
+
+        self.db.log_operation(
+            operation="agent.llm.reply",
+            status="ok" if source in {"llm", "llm_guarded"} else "partial",
+            entity_type="candidate",
+            entity_id=str(candidate.get("id") or candidate.get("linkedin_id") or "unknown"),
+            details={
+                "mode": mode,
+                "source": source,
+                "reason": reason,
+                "language": language,
+                "used_fallback": source == "fallback",
+            },
+        )
+
+        return final_text or fallback
+
+    @staticmethod
+    def _sanitize_reply_text(text: str, limit: int = 600) -> str:
+        normalized = " ".join(str(text or "").strip().split())
+        if not normalized:
+            return ""
+        if len(normalized) <= limit:
+            return normalized
+        clipped = normalized[:limit].rstrip()
+        if " " in clipped:
+            clipped = clipped.rsplit(" ", 1)[0]
+        return clipped.strip()
+
+    @staticmethod
+    def _contains_template_placeholders(text: str) -> bool:
+        return bool(re.search(r"\{[a-zA-Z_][^{}]{0,40}\}", str(text or "")))
+
+    @staticmethod
+    def _should_require_resume_cta(state: Dict[str, Any] | None) -> bool:
+        if not isinstance(state, dict):
+            return True
+        status = str(state.get("status") or "").strip().lower()
+        return status not in {"resume_received", "not_interested", "unreachable", "stalled"}
+
+    @staticmethod
+    def _has_resume_cta(text: str) -> bool:
+        lowered = str(text or "").lower()
+        markers = (
+            "cv",
+            "resume",
+            "résumé",
+            "curriculum",
+            "currículum",
+            "резюме",
+        )
+        return any(marker in lowered for marker in markers)
+
+    @classmethod
+    def _extract_resume_cta(cls, text: str, language: str = "en") -> str:
+        fallback_by_lang = {
+            "en": "Please share your CV/resume so we can proceed.",
+            "ru": "Пожалуйста, отправьте ваше резюме, чтобы мы могли продолжить.",
+            "es": "Comparte tu CV para que podamos continuar.",
+        }
+        source = str(text or "").strip()
+        if source:
+            parts = [x.strip() for x in re.split(r"(?<=[.!?])\s+", source) if x.strip()]
+            for part in parts:
+                if cls._has_resume_cta(part):
+                    return part
+            if cls._has_resume_cta(source):
+                return source
+        return fallback_by_lang.get(str(language or "en").lower(), fallback_by_lang["en"])
 
     @staticmethod
     def _build_llm_history(messages: List[Dict[str, Any]], latest_inbound: str) -> List[Dict[str, str]]:
