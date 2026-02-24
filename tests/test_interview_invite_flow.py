@@ -146,6 +146,7 @@ class InterviewInviteFlowTests(unittest.TestCase):
             self.assertEqual(result["mode"], "pre_resume")
             self.assertEqual(result["intent"], "pre_vetting_opt_in")
             self.assertTrue((result.get("interview") or {}).get("started"))
+            self.assertIn("interview.local", str(result.get("reply") or ""))
 
             row = db.list_candidates_for_job(job_id)[0]
             notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
@@ -167,6 +168,13 @@ class InterviewInviteFlowTests(unittest.TestCase):
             types = {(m.get("meta") or {}).get("type") for m in messages}
             self.assertIn("interview_invite", types)
             self.assertIn("interview_followup", types)
+            pre_resume_opt_in = [
+                m
+                for m in messages
+                if (m.get("meta") or {}).get("type") == "pre_resume_auto_reply"
+                and (m.get("meta") or {}).get("intent") == "pre_vetting_opt_in"
+            ]
+            self.assertEqual(len(pre_resume_opt_in), 0)
 
             session_id = str((notes or {}).get("interview_session_id") or "")
             interview.sessions[session_id]["status"] = "scored"

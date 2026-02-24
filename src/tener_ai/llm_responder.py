@@ -65,7 +65,21 @@ class CandidateLLMResponder:
         state: Dict[str, Any],
     ) -> Dict[str, Any]:
         normalized_mode = str(mode or "").strip().lower()
-        outreach_mode = normalized_mode in {"linkedin_outreach", "linkedin_followup"}
+        multiline_modes = {
+            "linkedin_outreach",
+            "linkedin_followup",
+            "linkedin_interview_invite",
+            "linkedin_interview_followup",
+        }
+        outreach_mode = normalized_mode in multiline_modes
+        chat_style_modes = {
+            "pre_resume",
+            "faq",
+            "linkedin_outreach",
+            "linkedin_followup",
+            "linkedin_interview_invite",
+            "linkedin_interview_followup",
+        }
 
         system_rules = [
             "You are Tener AI recruiter communication agent.",
@@ -81,6 +95,16 @@ class CandidateLLMResponder:
             ),
             "If mode is pre_resume and resume was not received, include clear CTA to share CV/resume.",
         ]
+        if normalized_mode in chat_style_modes:
+            system_rules.extend(
+                [
+                    "Write in informal recruiter chat tone, not corporate copy.",
+                    "Use natural rhythm with mixed short and longer lines.",
+                    "Avoid perfect polished structure and template transitions.",
+                    "Do not use phrases like As an AI or Let me clarify.",
+                    "Use context from the conversation instead of generic textbook replies.",
+                ]
+            )
         if instruction.strip():
             system_rules.append(f"Agent instruction:\n{instruction.strip()}")
 
