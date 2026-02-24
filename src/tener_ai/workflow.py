@@ -153,8 +153,8 @@ class WorkflowService:
                 notes["forced_test_identifier"] = forced_identifier
                 notes["forced_score"] = self.forced_test_score
                 notes["human_explanation"] = (
-                    "Тестовый кандидат принудительно приоритизирован: "
-                    f"score установлен на {self.forced_test_score}."
+                    "Forced test candidate prioritized: "
+                    f"score set to {self.forced_test_score}."
                 )
             if self.contact_all_mode and status == "rejected":
                 status = "needs_resume"
@@ -165,11 +165,11 @@ class WorkflowService:
                 if existing:
                     notes["human_explanation"] = (
                         existing
-                        + " Решение на этом этапе: запросить CV и уточнить опыт перед финальным вердиктом."
+                        + " Decision at this stage: request CV/resume and clarify experience before final verdict."
                     )
                 else:
                     notes["human_explanation"] = (
-                        "Недостаточно подтвержденных данных в профиле. Запрашиваем CV для финального решения."
+                        "Insufficient confirmed profile data. Requesting CV/resume for final decision."
                     )
             record = {
                 "profile": profile,
