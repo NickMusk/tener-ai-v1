@@ -108,6 +108,79 @@ class InboundPollingTests(unittest.TestCase):
             outbound_auto = [m for m in messages if m.get("direction") == "outbound" and (m.get("meta") or {}).get("type") == "pre_resume_auto_reply"]
             self.assertTrue(outbound_auto)
 
+    def test_poll_provider_inbound_processes_attachment_only_message(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "inbound_polling_attachment.sqlite3"))
+            db.init_schema()
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = _PollingProvider()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=PreResumeCommunicationService(
+                    templates_path=str(root / "config" / "outreach_templates.json")
+                ),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+                stage_instructions={"pre_resume": "request cv and track status"},
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python and AWS",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+
+            profile = {
+                "linkedin_id": "ln-poll-attachment-1",
+                "unipile_profile_id": "ln-poll-attachment-1",
+                "attendee_provider_id": "ln-poll-attachment-1",
+                "full_name": "Attachment Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python"],
+                "years_experience": 5,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.6, "status": "needs_resume", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+            outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            self.assertEqual(outreach["sent"], 1)
+
+            provider.messages_by_chat["chat-poll-1"] = [
+                {
+                    "provider_message_id": "msg-attachment-1",
+                    "sender_provider_id": "ln-poll-attachment-1",
+                    "direction": "inbound",
+                    "text": "",
+                    "created_at": "2026-02-24T15:56:00Z",
+                    "raw": {
+                        "attachments": [
+                            {
+                                "name": "cv_latest.pdf",
+                                "url": "https://files.example.com/download/abc123",
+                            }
+                        ]
+                    },
+                }
+            ]
+
+            first = workflow.poll_provider_inbound_messages(job_id=job_id, limit=20, per_chat_limit=10)
+            self.assertEqual(first["processed"], 1)
+
+            row = db.list_candidates_for_job(job_id)[0]
+            self.assertEqual(str(row.get("status")), "resume_received")
+
 
 if __name__ == "__main__":
     unittest.main()

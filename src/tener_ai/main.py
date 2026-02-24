@@ -8,7 +8,7 @@ import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 from urllib import error as urlerror, request as urlrequest
 from urllib.parse import parse_qs, urlparse
 
@@ -556,6 +556,26 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "data.message.content",
                 "data.message.body",
             )
+            attachment_text = self._pick_attachment_text(
+                body,
+                "attachments",
+                "files",
+                "documents",
+                "media",
+                "message.attachments",
+                "message.files",
+                "message.documents",
+                "message.media",
+                "data.attachments",
+                "data.files",
+                "data.documents",
+                "data.media",
+                "data.message.attachments",
+                "data.message.files",
+                "data.message.documents",
+                "data.message.media",
+            )
+            inbound_text = self._merge_inbound_text(text=text, attachment_text=attachment_text)
             direction = self._pick_str(body, "direction", "message.direction", "data.direction", "data.message.direction").lower()
             sender_provider_id = self._pick_str(
                 body,
@@ -573,7 +593,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             occurred_at = self._pick_str(body, "created_at", "timestamp", "occurred_at", "message.created_at")
 
             event_key = event_id or hashlib.sha256(
-                f"{event_type}|{external_chat_id}|{sender_provider_id}|{text}|{occurred_at}".encode("utf-8")
+                f"{event_type}|{external_chat_id}|{sender_provider_id}|{inbound_text}|{occurred_at}".encode("utf-8")
             ).hexdigest()
 
             if direction in {"outbound", "sent", "from_me", "self"}:
@@ -589,7 +609,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             connection_event = ("connect" in event_type or "invitation" in event_type) and (
                 "accept" in event_type or "connected" in event_type
             )
-            if not text and not connection_event:
+            if not inbound_text and not connection_event:
                 SERVICES["db"].log_operation(
                     operation="webhook.unipile.ignored",
                     status="ignored",
@@ -652,7 +672,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             try:
                 result = SERVICES["workflow"].process_provider_inbound_message(
                     external_chat_id=external_chat_id,
-                    text=text,
+                    text=inbound_text,
                     sender_provider_id=sender_provider_id or None,
                 )
             except Exception as exc:
@@ -1475,6 +1495,81 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if text:
                 return text
         return ""
+
+    @staticmethod
+    def _pick_attachment_text(payload: Dict[str, Any], *paths: str) -> str:
+        fragments: List[str] = []
+        seen: set[str] = set()
+        for path in paths:
+            value = TenerRequestHandler._get_nested(payload, path)
+            TenerRequestHandler._collect_attachment_fragments(value, fragments, seen, limit=12)
+            if len(fragments) >= 12:
+                break
+        return "\n".join(fragments[:12]).strip()
+
+    @staticmethod
+    def _collect_attachment_fragments(value: Any, fragments: List[str], seen: set[str], limit: int = 12) -> None:
+        if len(fragments) >= limit:
+            return
+        if isinstance(value, dict):
+            name_keys = ("name", "filename", "file_name", "title")
+            url_keys = (
+                "url",
+                "link",
+                "href",
+                "download_url",
+                "downloadUrl",
+                "signed_url",
+                "signedUrl",
+                "public_url",
+                "publicUrl",
+                "file_url",
+                "fileUrl",
+            )
+            names: List[str] = []
+            urls: List[str] = []
+            for key in name_keys:
+                raw = value.get(key)
+                if isinstance(raw, str):
+                    cleaned = raw.strip()
+                    if cleaned:
+                        names.append(cleaned)
+            for key in url_keys:
+                raw = value.get(key)
+                if isinstance(raw, str):
+                    cleaned = raw.strip()
+                    if cleaned.startswith("http://") or cleaned.startswith("https://"):
+                        urls.append(cleaned)
+
+            for url in urls:
+                if len(fragments) >= limit:
+                    return
+                text = f"attached file {names[0]} {url}".strip() if names else f"attached file {url}"
+                token = text.lower()
+                if token in seen:
+                    continue
+                seen.add(token)
+                fragments.append(text)
+
+            for nested in value.values():
+                TenerRequestHandler._collect_attachment_fragments(nested, fragments, seen, limit=limit)
+                if len(fragments) >= limit:
+                    return
+            return
+
+        if isinstance(value, list):
+            for item in value:
+                TenerRequestHandler._collect_attachment_fragments(item, fragments, seen, limit=limit)
+                if len(fragments) >= limit:
+                    return
+
+    @staticmethod
+    def _merge_inbound_text(text: str, attachment_text: str) -> str:
+        head = str(text or "").strip()
+        tail = str(attachment_text or "").strip()
+        if head and tail:
+            return f"{head}\n{tail}".strip()
+        return head or tail
 
     @staticmethod
     def _coerce_text(value: Any) -> str:

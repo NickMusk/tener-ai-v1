@@ -137,16 +137,9 @@ class InterviewInviteFlowTests(unittest.TestCase):
                 text="Sounds interesting, what is next",
             )
             self.assertEqual(first["mode"], "pre_resume")
-            self.assertIn("quick async pre vetting", str(first.get("reply", "")).lower())
-
-            result = workflow.process_inbound_message(
-                conversation_id=conversation_id,
-                text="Yes, sounds good",
-            )
-            self.assertEqual(result["mode"], "pre_resume")
-            self.assertEqual(result["intent"], "pre_vetting_opt_in")
-            self.assertTrue((result.get("interview") or {}).get("started"))
-            self.assertIn("interview.local", str(result.get("reply") or ""))
+            self.assertEqual(first["intent"], "pre_vetting_opt_in")
+            self.assertTrue((first.get("interview") or {}).get("started"))
+            self.assertIn("interview.local", str(first.get("reply") or ""))
 
             row = db.list_candidates_for_job(job_id)[0]
             notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}

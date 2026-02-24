@@ -110,15 +110,46 @@ def iso(value: datetime) -> str:
 
 
 def parse_resume_links(text: str) -> List[str]:
-    links = re.findall(r"https?://[^\s)>\"]+", text or "", flags=re.IGNORECASE)
+    raw_text = str(text or "")
+    links = re.findall(r"https?://[^\s)>\"]+", raw_text, flags=re.IGNORECASE)
     selected: List[str] = []
+    seen: set[str] = set()
     for link in links:
         lowered = link.lower()
         if any(
             marker in lowered
             for marker in ("resume", "cv", "curriculum", "currículum", ".pdf", ".doc", ".docx", "drive.", "dropbox", "notion.")
         ):
-            selected.append(link)
+            if link not in seen:
+                selected.append(link)
+                seen.add(link)
+    if selected:
+        return selected
+
+    lowered_text = raw_text.lower()
+    attachment_markers = (
+        "attach",
+        "attachment",
+        "attached file",
+        "attached doc",
+        "file",
+        "document",
+        "cv",
+        "resume",
+        "résumé",
+        "резюме",
+        "файл",
+        "вложение",
+        "adjunto",
+        "archivo",
+        "curriculum",
+        "currículum",
+    )
+    if links and any(marker in lowered_text for marker in attachment_markers):
+        for link in links:
+            if link not in seen:
+                selected.append(link)
+                seen.add(link)
     return selected
 
 
@@ -380,11 +411,17 @@ class PreResumeCommunicationService:
                 "my resume",
                 "attached cv",
                 "attached resume",
+                "attached file",
+                "attached document",
                 "here is resume",
                 "here's my resume",
                 "вот резюме",
+                "прикрепил файл",
+                "прикрепила файл",
                 "прикрепил резюме",
                 "отправил резюме",
+                "adjunto archivo",
+                "adjunto documento",
                 "adjunto cv",
                 "adjunto mi cv",
                 "te envío mi cv",
@@ -434,6 +471,7 @@ class PreResumeCommunicationService:
             return "will_send_later", links
 
         explicit_opt_in_markers = (
+            "sounds interesting",
             "send interview link",
             "share interview link",
             "ready for interview",

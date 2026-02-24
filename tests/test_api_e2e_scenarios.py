@@ -618,6 +618,59 @@ class ApiE2EScenariosTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(duplicate.get("status"), "duplicate")
 
+    def test_unipile_webhook_processes_attachment_only_message(self) -> None:
+        status, created = self._request(
+            "POST",
+            "/api/jobs",
+            {"title": "Webhook attachment test", "jd_text": "Senior Backend Engineer Python AWS"},
+        )
+        self.assertEqual(status, 201)
+        job_id = int(created["job_id"])
+
+        status, manual = self._request(
+            "POST",
+            "/api/agent/accounts/manual",
+            {
+                "job_id": job_id,
+                "full_name": "Webhook Attachment Candidate",
+                "language": "en",
+                "linkedin_id": "webhook-attachment-1",
+                "external_chat_id": "webhook-attachment-chat-1",
+            },
+        )
+        self.assertEqual(status, 201)
+        conversation_id = int(manual["conversation_id"])
+
+        payload = {
+            "event_id": "webhook-attachment-evt-1",
+            "event": {"type": "message.received"},
+            "data": {
+                "chat": {"id": "webhook-attachment-chat-1"},
+                "direction": "inbound",
+                "message": {
+                    "attachments": [
+                        {
+                            "name": "candidate_cv.pdf",
+                            "url": "https://files.example.com/download/resume-1",
+                        }
+                    ]
+                },
+                "sender": {"id": "webhook-attachment-1"},
+            },
+            "timestamp": "2026-02-24T12:10:00Z",
+        }
+        status, inbound = self._request("POST", "/api/webhooks/unipile", payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(inbound.get("status"), "ok")
+        self.assertTrue((inbound.get("result") or {}).get("processed"))
+        self.assertEqual(int((inbound.get("result") or {}).get("conversation_id")), conversation_id)
+
+        status, candidates = self._request("GET", f"/api/jobs/{job_id}/candidates")
+        self.assertEqual(status, 200)
+        items = candidates.get("items") if isinstance(candidates.get("items"), list) else []
+        self.assertTrue(items)
+        self.assertEqual(str(items[0].get("status")), "resume_received")
+
     def test_pre_resume_followups_run_endpoint_sends_due_followup(self) -> None:
         status, created = self._request(
             "POST",

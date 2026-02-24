@@ -40,6 +40,15 @@ class PreResumeServiceTests(unittest.TestCase):
         self.assertTrue(out["resume_links"])
         self.assertIn("received", out["outbound"].lower())
 
+    def test_attachment_link_without_resume_keyword_is_detected(self) -> None:
+        service = PreResumeCommunicationService()
+        self._start_default_session(service)
+
+        out = service.handle_inbound("s1", "attached file https://files.example.com/download/abc123")
+        self.assertEqual(out["intent"], "resume_shared")
+        self.assertEqual(out["state"]["status"], "resume_received")
+        self.assertTrue(out["resume_links"])
+
     def test_will_send_later_and_not_interested_transitions(self) -> None:
         service = PreResumeCommunicationService()
         self._start_default_session(service)
@@ -112,6 +121,14 @@ class PreResumeServiceTests(unittest.TestCase):
         self.assertEqual(out["intent"], "pre_vetting_opt_in")
         self.assertEqual(out["state"]["status"], "interview_opt_in")
         self.assertFalse(bool(out["state"].get("awaiting_pre_vetting_opt_in")))
+
+    def test_sounds_interesting_triggers_pre_vetting_opt_in(self) -> None:
+        service = PreResumeCommunicationService()
+        self._start_default_session(service)
+
+        out = service.handle_inbound("s1", "Sounds interesting")
+        self.assertEqual(out["intent"], "pre_vetting_opt_in")
+        self.assertEqual(out["state"]["status"], "interview_opt_in")
 
     def test_language_template_fallback(self) -> None:
         with TemporaryDirectory() as td:

@@ -444,6 +444,9 @@ class UnipileLinkedInProvider(LinkedInProvider):
 
     def _normalize_chat_message(self, item: Dict[str, Any], chat_id: str) -> Dict[str, Any]:
         text = self._extract_message_text(item)
+        attachment_text = self._extract_attachment_text(item)
+        if attachment_text:
+            text = f"{text}\n{attachment_text}".strip() if text else attachment_text
         provider_message_id = (
             item.get("id")
             or item.get("message_id")
@@ -517,6 +520,68 @@ class UnipileLinkedInProvider(LinkedInProvider):
                 if text:
                     return text
         return ""
+
+    @staticmethod
+    def _extract_attachment_text(payload: Any, limit: int = 8) -> str:
+        fragments: List[str] = []
+        seen: set[str] = set()
+        UnipileLinkedInProvider._collect_attachment_fragments(payload, fragments=fragments, seen=seen, limit=limit)
+        return "\n".join(fragments[:limit]).strip()
+
+    @staticmethod
+    def _collect_attachment_fragments(payload: Any, fragments: List[str], seen: set[str], limit: int) -> None:
+        if len(fragments) >= limit:
+            return
+        if isinstance(payload, dict):
+            name_keys = ("name", "filename", "file_name", "title")
+            url_keys = (
+                "url",
+                "link",
+                "href",
+                "download_url",
+                "downloadUrl",
+                "signed_url",
+                "signedUrl",
+                "public_url",
+                "publicUrl",
+                "file_url",
+                "fileUrl",
+            )
+            names: List[str] = []
+            urls: List[str] = []
+            for key in name_keys:
+                raw = payload.get(key)
+                if isinstance(raw, str):
+                    cleaned = raw.strip()
+                    if cleaned:
+                        names.append(cleaned)
+            for key in url_keys:
+                raw = payload.get(key)
+                if isinstance(raw, str):
+                    cleaned = raw.strip()
+                    if cleaned.startswith("http://") or cleaned.startswith("https://"):
+                        urls.append(cleaned)
+            for url in urls:
+                if len(fragments) >= limit:
+                    return
+                text = f"attached file {names[0]} {url}".strip() if names else f"attached file {url}"
+                token = text.lower()
+                if token in seen:
+                    continue
+                seen.add(token)
+                fragments.append(text)
+
+            for nested in payload.values():
+                UnipileLinkedInProvider._collect_attachment_fragments(nested, fragments=fragments, seen=seen, limit=limit)
+                if len(fragments) >= limit:
+                    return
+            return
+
+        if isinstance(payload, list):
+            for item in payload:
+                UnipileLinkedInProvider._collect_attachment_fragments(item, fragments=fragments, seen=seen, limit=limit)
+                if len(fragments) >= limit:
+                    return
 
     def _candidate_search_paths(self) -> List[str]:
         candidates = [
