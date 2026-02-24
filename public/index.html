@@ -3,44 +3,129 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tener LS v0.1</title>
+    <title>Tener LS Dashboard</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <main class="container">
-      <section class="panel">
-        <h1>Tener Life Sciences</h1>
-        <p class="subtitle">Manual JD flow: LinkedIn -> Import -> Verification</p>
-        <div id="linkedin-status" class="badge">LinkedIn: loading...</div>
-      </section>
+    <aside class="sidebar">
+      <div class="logo">tener<span>.ai</span></div>
 
-      <section class="panel">
-        <h2>Quick Run Default Test JD</h2>
-        <p class="subtitle">Preloaded job: Senior QA/QC Scientist (Test Job)</p>
-        <div class="row">
-          <button data-quick-action="linkedin-search">1) Run LinkedIn Search</button>
-          <button class="secondary" data-quick-action="import">2) Import Candidates</button>
-          <button class="warn" data-quick-action="verify">3) Run Verification</button>
+      <ul class="nav-menu">
+        <li class="nav-item"><a class="nav-link active" href="#">Dashboard</a></li>
+        <li class="nav-item"><a class="nav-link" href="#">Candidates</a></li>
+        <li class="nav-item"><a class="nav-link" href="#">Compliance</a></li>
+        <li class="nav-item"><a class="nav-link" href="#">Settings</a></li>
+      </ul>
+
+      <div class="user-section">
+        <div class="user-info">
+          <div class="user-avatar">LS</div>
+          <span>Life Sciences Team</span>
         </div>
-      </section>
+      </div>
+    </aside>
 
-      <section class="panel">
-        <h2>Add JD</h2>
-        <form id="jd-form" class="grid">
-          <input name="title" placeholder="JD Title" required />
-          <input name="company" placeholder="Company" required />
-          <input name="location" placeholder="Location (optional)" />
-          <input name="keywords" placeholder="Keywords (optional)" />
-          <button type="submit">Add JD</button>
-        </form>
-      </section>
+    <main class="main-content">
+      <div class="container">
+        <header class="header">
+          <div class="header-title">
+            <h1>Life Sciences Dashboard</h1>
+            <p id="header-subtitle" class="header-subtitle">Loading pipeline metrics...</p>
+          </div>
+          <button id="refresh-btn" class="btn btn-primary">Refresh</button>
+        </header>
 
-      <section class="panel">
-        <h2>Job Descriptions</h2>
-        <div id="jd-list" class="stack"></div>
-      </section>
+        <section class="company-profile">
+          <div class="company-header">
+            <div>
+              <h2 class="company-name">LinkedIn Hiring Control Center</h2>
+              <p class="culture-summary">
+                Manual workflow per JD: run LinkedIn search, import candidates, then trigger automated verification.
+              </p>
+            </div>
+            <div id="linkedin-status" class="company-badge">LinkedIn: loading...</div>
+          </div>
+          <a href="/api/v1/jds/default" target="_blank" class="view-profile-link">Open default test JD JSON →</a>
+        </section>
+
+        <section class="stats-grid">
+          <article class="stat-card">
+            <p class="stat-label">Total JDs</p>
+            <p id="stat-total-jd" class="stat-value">0</p>
+            <p class="stat-change">All active and draft jobs</p>
+          </article>
+          <article class="stat-card">
+            <p class="stat-label">Imported Candidates</p>
+            <p id="stat-imported" class="stat-value">0</p>
+            <p class="stat-change">From LinkedIn workflow</p>
+          </article>
+          <article class="stat-card">
+            <p class="stat-label">Verification Jobs</p>
+            <p id="stat-verification" class="stat-value">0</p>
+            <p class="stat-change">Queued and completed checks</p>
+          </article>
+          <article class="stat-card">
+            <p class="stat-label">Red Flags</p>
+            <p id="stat-red" class="stat-value">0</p>
+            <p class="stat-change">Candidates needing review</p>
+          </article>
+        </section>
+
+        <section class="active-searches-section">
+          <div class="section-header">
+            <h2 class="section-title">Quick Run: Default Test JD</h2>
+          </div>
+          <article class="search-card">
+            <div class="search-header">
+              <div class="search-info">
+                <h3 class="search-title">Senior QA/QC Scientist (Test Job)</h3>
+                <div id="default-jd-status" class="status-inline">Steps: loading...</div>
+              </div>
+            </div>
+
+            <div class="action-row">
+              <button class="btn btn-secondary btn-small" data-quick-action="linkedin-search">
+                1) Run LinkedIn Search
+              </button>
+              <button class="btn btn-secondary btn-small" data-quick-action="import">
+                2) Import Candidates
+              </button>
+              <button class="btn btn-primary btn-small" data-quick-action="verify">
+                3) Run Verification
+              </button>
+            </div>
+          </article>
+        </section>
+
+        <section class="active-searches-section">
+          <div class="section-header">
+            <h2 class="section-title">Add Job Description</h2>
+          </div>
+          <article class="search-card">
+            <form id="jd-form" class="jd-form-grid">
+              <input class="form-input" name="title" placeholder="JD Title" required />
+              <input class="form-input" name="company" placeholder="Company" required />
+              <input class="form-input" name="location" placeholder="Location (optional)" />
+              <input class="form-input" name="keywords" placeholder="Keywords (optional)" />
+              <button type="submit" class="btn btn-primary">Add JD</button>
+            </form>
+          </article>
+        </section>
+
+        <section class="finalists-section">
+          <div class="section-header">
+            <h2 class="section-title">Job Descriptions</h2>
+          </div>
+          <div id="jd-list" class="searches-grid"></div>
+        </section>
+      </div>
     </main>
 
+    <div id="toast" class="toast hidden"></div>
     <script src="/app.js"></script>
   </body>
 </html>
