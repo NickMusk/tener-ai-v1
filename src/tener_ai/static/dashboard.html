@@ -305,6 +305,20 @@
       font-size: 14px;
     }
 
+    .panel-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .overall-status-filter {
+      min-width: 160px;
+      max-width: 220px;
+      font-size: 12px;
+      padding: 8px 9px;
+    }
+
     .mono { font-family: 'Space Mono', monospace; }
 
     .log-box {
@@ -384,6 +398,10 @@
     .pill.verified { color: var(--ok); border-color: var(--ok); }
     .pill.needs_resume { color: var(--warn); border-color: var(--warn); }
     .pill.rejected { color: var(--err); border-color: var(--err); }
+    .pill.overall-shortlist { color: var(--ok); border-color: var(--ok); background: rgba(16, 185, 129, 0.12); }
+    .pill.overall-pipeline { color: var(--accent-blue); border-color: var(--accent-blue); background: rgba(0, 212, 255, 0.12); }
+    .pill.overall-review { color: var(--warn); border-color: var(--warn); background: rgba(245, 158, 11, 0.12); }
+    .pill.overall-blocked { color: var(--err); border-color: var(--err); background: rgba(239, 68, 68, 0.12); }
 
     .modal {
       position: fixed;
@@ -595,7 +613,19 @@
     </section>
 
     <section class="card">
-      <div class="panel-title"><span>Candidates for Selected Job</span><button id="cands-refresh-btn">Reload</button></div>
+      <div class="panel-title">
+        <span>Candidates for Selected Job</span>
+        <div class="panel-actions">
+          <select id="cands-overall-filter" class="overall-status-filter">
+            <option value="all">Overall: all</option>
+            <option value="shortlist">Overall: shortlist</option>
+            <option value="pipeline">Overall: pipeline</option>
+            <option value="review">Overall: review</option>
+            <option value="blocked">Overall: blocked</option>
+          </select>
+          <button id="cands-refresh-btn">Reload</button>
+        </div>
+      </div>
       <div style="overflow:auto;">
         <table id="candidates-table">
           <thead>
@@ -761,11 +791,13 @@
 
     const SELECTED_JOB_STORAGE_KEY = "tener.selectedJobId";
     const TEST_MODE_STORAGE_KEY = "tener.testMode";
+    const CANDS_OVERALL_FILTER_STORAGE_KEY = "tener.candidatesOverallFilter";
     const PIPELINE_STEPS = ["source", "enrich", "verify", "add", "outreach"];
 
     const state = {
       jobId: null,
       testMode: true,
+      candidatesOverallFilter: "all",
       activeView: "pipeline",
       agentSystem: {
         sourcing_vetting: { name: "Talent Scout Agent" },
@@ -951,20 +983,32 @@
       `;
     }
 
+    function normalizeOverallStatus(item) {
+      const overall = (item && item.overall_scoring) || {};
+      const raw = String(overall.overall_status || item.overall_status || "").trim().toLowerCase();
+      if (["shortlist", "pipeline", "review", "blocked"].includes(raw)) return raw;
+      return "review";
+    }
+
+    function overallStatusPillClass(status) {
+      if (status === "shortlist") return "overall-shortlist";
+      if (status === "pipeline") return "overall-pipeline";
+      if (status === "blocked") return "overall-blocked";
+      return "overall-review";
+    }
+
     function formatOverallCell(item) {
       const overall = (item && item.overall_scoring) || {};
       const score = overall.overall_score;
-      const status = String(overall.overall_status || item.overall_status || "-");
+      const status = normalizeOverallStatus(item);
       const blockReason = String(overall.block_reason || item.overall_block_reason || "");
       const scoreLabel = (typeof score === 'number' && Number.isFinite(score))
         ? score.toFixed(1)
         : '-';
-      const tail = blockReason
-        ? `${status} • ${blockReason}`
-        : status;
       return `
         <div class="mono">${escapeHtml(scoreLabel)}</div>
-        <div class="muted mono" style="font-size:11px;">${escapeHtml(tail)}</div>
+        <div><span class="pill ${overallStatusPillClass(status)}">${escapeHtml(status)}</span></div>
+        <div class="muted mono" style="font-size:11px;">${escapeHtml(blockReason || "ok")}</div>
       `;
     }
 
@@ -989,6 +1033,15 @@
       state.testMode = Boolean(enabled);
       const toggle = $("test-mode-toggle");
       if (toggle) toggle.checked = state.testMode;
+    }
+
+    function setCandidatesOverallFilter(value) {
+      const allowed = ["all", "shortlist", "pipeline", "review", "blocked"];
+      const normalized = allowed.includes(String(value || "").toLowerCase())
+        ? String(value).toLowerCase()
+        : "all";
+      state.candidatesOverallFilter = normalized;
+      if ($("cands-overall-filter")) $("cands-overall-filter").value = normalized;
     }
 
     function resetPipelineVisuals() {
@@ -1734,8 +1787,16 @@
           body.innerHTML = '<tr><td colspan="9" class="muted">No candidates yet</td></tr>';
           return;
         }
+        const filterStatus = state.candidatesOverallFilter || "all";
+        const filteredItems = filterStatus === "all"
+          ? items
+          : items.filter((item) => normalizeOverallStatus(item) === filterStatus);
+        if (!filteredItems.length) {
+          body.innerHTML = `<tr><td colspan="9" class="muted">No candidates with overall status: ${escapeHtml(filterStatus)}</td></tr>`;
+          return;
+        }
 
-        body.innerHTML = items.map((x) => {
+        body.innerHTML = filteredItems.map((x) => {
           const skills = (x.skills || []).slice(0, 6).join(', ');
           const currentStatus = escapeHtml(x.current_status_label || x.status || '-');
           const rawStatus = escapeHtml(x.status || '-');
@@ -1786,6 +1847,12 @@
       $("refresh-btn").addEventListener('click', () => fullRefresh());
       $("logs-refresh-btn").addEventListener('click', () => refreshLogs());
       $("cands-refresh-btn").addEventListener('click', () => refreshCandidates());
+      $("cands-overall-filter").addEventListener('change', () => {
+        const value = String($("cands-overall-filter").value || "all").toLowerCase();
+        setCandidatesOverallFilter(value);
+        localStorage.setItem(CANDS_OVERALL_FILTER_STORAGE_KEY, state.candidatesOverallFilter);
+        refreshCandidates();
+      });
       $("agent-save-jd-btn").addEventListener('click', () => saveAgentJd().catch(e => alert(e.message)));
       $("agent-refresh-accounts-btn").addEventListener('click', () => refreshAgentAccounts().catch(e => alert(e.message)));
       $("agent-add-manual-btn").addEventListener('click', () => addManualAgentAccount().catch(e => alert(e.message)));
@@ -1823,6 +1890,7 @@
     bindEvents();
     resetCreateJobForm();
     setTestMode((localStorage.getItem(TEST_MODE_STORAGE_KEY) || "1") !== "0");
+    setCandidatesOverallFilter(localStorage.getItem(CANDS_OVERALL_FILTER_STORAGE_KEY) || "all");
     renderSnapshotTabs();
     renderSelectedSnapshot();
     fullRefresh();
