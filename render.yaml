@@ -1,0 +1,37 @@
+services:
+  - type: web
+    name: tener-ls-api
+    runtime: node
+    plan: starter
+    autoDeploy: true
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: tener-ls-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: tener-ls-redis
+          property: connectionString
+      - key: SAM_GOV_API_KEY
+        sync: false
+      - key: SAM_GOV_BASE_URL
+        value: https://api.sam.gov/entity-information/v4/exclusions
+
+  - type: redis
+    name: tener-ls-redis
+    plan: starter
+    maxmemoryPolicy: allkeys-lru
+    ipAllowList: []
+
+databases:
+  - name: tener-ls-db
+    plan: starter
+    ipAllowList: []
