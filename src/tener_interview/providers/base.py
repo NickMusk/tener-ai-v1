@@ -6,6 +6,9 @@ from typing import Any, Dict, Optional, Protocol
 class InterviewProviderAdapter(Protocol):
     name: str
 
+    def create_assessment(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        ...
+
     def create_invitation(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         ...
 

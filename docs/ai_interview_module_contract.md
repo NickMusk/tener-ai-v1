@@ -484,7 +484,7 @@ sequenceDiagram
 
 Required env for real adapter:
 - `TENER_HIREFLIX_API_KEY`
-- `TENER_HIREFLIX_POSITION_ID`
+- `TENER_HIREFLIX_POSITION_ID` (optional if module creates per-job positions dynamically)
 
 Optional env:
 - `TENER_HIREFLIX_BASE_URL` (default `https://api.hireflix.com/me`)
@@ -495,5 +495,8 @@ Optional env:
 - `TENER_INTERVIEW_SOURCE_API_TIMEOUT_SECONDS` (default `20`)
 - `TENER_INTERVIEW_TRANSCRIPTION_SCORING_CRITERIA_PATH` (default `./config/interview_transcription_scoring_criteria.json`)
 - `TENER_INTERVIEW_TOTAL_SCORE_FORMULA_PATH` (default `./config/interview_total_score_formula.json`)
+- `TENER_INTERVIEW_QUESTION_GUIDELINES_PATH` (default `./config/interview_question_generation_guidelines.json`)
+- `TENER_INTERVIEW_COMPANY_PROFILE_PATH` (default `./config/company_profile.json`)
+- `TENER_INTERVIEW_COMPANY_NAME` (default `Tener`)
 - `TENER_INTERVIEW_ALLOW_SYNTHETIC_EMAIL` (default `true`)
 - `TENER_INTERVIEW_SYNTHETIC_EMAIL_DOMAIN` (default `interview.local`)

@@ -40,6 +40,23 @@ class SourceReadDatabase:
             self._last_error = str(exc)
             return []
 
+    def get_job(self, job_id: int) -> Dict[str, Any]:
+        try:
+            row = self._conn.execute(
+                """
+                SELECT id, title, jd_text, location, preferred_languages, seniority, created_at
+                FROM jobs
+                WHERE id = ?
+                LIMIT 1
+                """,
+                (int(job_id),),
+            ).fetchone()
+            self._last_error = ""
+            return self._row_to_dict(row) if row else {}
+        except sqlite3.Error as exc:
+            self._last_error = str(exc)
+            return {}
+
     def list_candidates_for_job(self, job_id: int, limit: int = 500) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 500), 2000))
         try:
@@ -74,4 +91,3 @@ class SourceReadDatabase:
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
         return dict(row)
-

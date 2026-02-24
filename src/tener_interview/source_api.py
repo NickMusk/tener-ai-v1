@@ -27,6 +27,18 @@ class SourceAPIClient:
         items = payload.get("items") if isinstance(payload.get("items"), list) else []
         return [x for x in items if isinstance(x, dict)]
 
+    def get_job(self, job_id: int) -> Dict[str, Any]:
+        payload = self._get_json(f"/api/jobs/{int(job_id)}")
+        if not isinstance(payload, dict):
+            return {}
+        item = payload.get("item")
+        if isinstance(item, dict):
+            return item
+        job = payload.get("job")
+        if isinstance(job, dict):
+            return job
+        return payload
+
     def list_candidates_for_job(self, job_id: int, limit: int = 500) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 500), 2000))
         payload = self._get_json(f"/api/jobs/{int(job_id)}/candidates?limit={safe_limit}")
@@ -90,4 +102,3 @@ class SourceAPIClient:
 
         self._last_error = ""
         return parsed
-

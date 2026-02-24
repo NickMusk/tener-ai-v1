@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from .config import InterviewModuleConfig
 from .db import InterviewDatabase
 from .providers import HireflixConfig, HireflixHTTPAdapter, HireflixMockAdapter
+from .question_generation import InterviewQuestionGenerator
 from .scoring import InterviewScoringEngine
 from .service import InterviewService
 from .source_api import SourceAPIClient
@@ -67,12 +68,19 @@ def build_services() -> Dict[str, Any]:
     transcription_scoring_engine = TranscriptionScoringEngine(
         criteria_path=config.transcription_scoring_criteria_path,
     )
+    question_generator = InterviewQuestionGenerator(
+        guidelines_path=config.question_guidelines_path,
+        company_profile_path=config.company_profile_path,
+        company_name=config.company_name,
+    )
     service = InterviewService(
         db=db,
         provider=provider,
         token_service=token_service,
         scoring_engine=scoring_engine,
         transcription_scoring_engine=transcription_scoring_engine,
+        source_catalog=source_db,
+        question_generator=question_generator,
         default_ttl_hours=config.token_ttl_hours,
         public_base_url=config.public_base_url,
     )
@@ -126,6 +134,7 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
                         "interview_step": "POST /api/steps/interview",
                         "admin_jobs": "GET /api/admin/jobs",
                         "admin_job_candidates": "GET /api/admin/jobs/{job_id}/candidates",
+                        "admin_job_assessment": "GET /api/admin/jobs/{job_id}/assessment",
                         "admin_job_refresh": "POST /api/admin/jobs/{job_id}/sessions/refresh",
                     },
                     "provider": SERVICES.get("provider_name"),
@@ -133,6 +142,8 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
                     "source_db": SERVICES["source_db"].status(),
                     "transcription_scoring_criteria_path": SERVICES["config"].transcription_scoring_criteria_path,
                     "total_score_formula_path": SERVICES["config"].total_score_formula_path,
+                    "question_guidelines_path": SERVICES["config"].question_guidelines_path,
+                    "company_profile_path": SERVICES["config"].company_profile_path,
                 },
             )
             return
@@ -164,6 +175,21 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
                     "job_id": job_id,
                     "items": items,
                     "source_db": SERVICES["source_db"].status(),
+                },
+            )
+            return
+
+        if parsed.path.startswith("/api/admin/jobs/") and parsed.path.endswith("/assessment"):
+            job_id = self._extract_id(parsed.path, r"^/api/admin/jobs/(\d+)/assessment$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, self._error("JOB_ID_INVALID", "invalid job id"))
+                return
+            item = SERVICES["db"].get_job_assessment(job_id)
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "job_id": job_id,
+                    "item": item or None,
                 },
             )
             return

@@ -21,6 +21,25 @@ class HireflixMockAdapter:
 
     def __init__(self) -> None:
         self._sessions: Dict[str, _MockInterviewState] = {}
+        self._positions: Dict[str, Dict[str, Any]] = {}
+
+    def create_assessment(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        position_id = f"hflx_pos_{uuid4().hex[:12]}"
+        assessment_name = str(payload.get("assessment_name") or "Mock Interview Assessment").strip()
+        questions = payload.get("questions") if isinstance(payload.get("questions"), list) else []
+        self._positions[position_id] = {
+            "id": position_id,
+            "name": assessment_name,
+            "questions": questions,
+        }
+        return {
+            "assessment_id": position_id,
+            "assessment_name": assessment_name,
+            "raw": {
+                "provider": "hireflix_mock",
+                "questions_count": len(questions),
+            },
+        }
 
     def create_invitation(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         interview_id = f"hflx_iv_{uuid4().hex[:12]}"

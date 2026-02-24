@@ -124,6 +124,18 @@ class InterviewDatabase:
             updated_at TEXT NOT NULL,
             PRIMARY KEY(job_id, step)
         );
+
+        CREATE TABLE IF NOT EXISTS job_interview_assessments (
+            job_id INTEGER PRIMARY KEY,
+            provider TEXT NOT NULL,
+            provider_assessment_id TEXT NOT NULL,
+            assessment_name TEXT,
+            generation_hash TEXT,
+            generated_questions_json TEXT,
+            meta_json TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
         """
         with self.transaction() as conn:
             conn.executescript(schema)
@@ -438,10 +450,72 @@ class InterviewDatabase:
                 (job_id, status, json.dumps(output or {}), utc_now_iso()),
             )
 
+    def get_job_assessment(self, job_id: int) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            """
+            SELECT *
+            FROM job_interview_assessments
+            WHERE job_id = ?
+            LIMIT 1
+            """,
+            (int(job_id),),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def upsert_job_assessment(
+        self,
+        *,
+        job_id: int,
+        provider: str,
+        provider_assessment_id: str,
+        assessment_name: Optional[str],
+        generation_hash: Optional[str],
+        generated_questions: Optional[List[Dict[str, Any]]],
+        meta: Optional[Dict[str, Any]],
+    ) -> None:
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO job_interview_assessments (
+                    job_id, provider, provider_assessment_id, assessment_name,
+                    generation_hash, generated_questions_json, meta_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id)
+                DO UPDATE SET
+                    provider = excluded.provider,
+                    provider_assessment_id = excluded.provider_assessment_id,
+                    assessment_name = excluded.assessment_name,
+                    generation_hash = excluded.generation_hash,
+                    generated_questions_json = excluded.generated_questions_json,
+                    meta_json = excluded.meta_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    int(job_id),
+                    str(provider),
+                    str(provider_assessment_id),
+                    assessment_name,
+                    generation_hash,
+                    json.dumps(generated_questions or []),
+                    json.dumps(meta or {}),
+                    now,
+                    now,
+                ),
+            )
+
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
         item = dict(row)
-        for field in ("payload", "normalized_json", "raw_payload", "response_json", "output_json"):
+        for field in (
+            "payload",
+            "normalized_json",
+            "raw_payload",
+            "response_json",
+            "output_json",
+            "generated_questions_json",
+            "meta_json",
+        ):
             if field in item and item[field]:
                 try:
                     item[field] = json.loads(item[field])

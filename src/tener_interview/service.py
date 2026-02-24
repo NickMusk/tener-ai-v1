@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from .db import InterviewDatabase, utc_now_iso
 from .providers.base import InterviewProviderAdapter
+from .question_generation import InterviewQuestionGenerator
 from .scoring import InterviewScoringEngine
 from .transcription_scoring import TranscriptionScoringEngine
 from .token_service import InterviewTokenService, InvalidTokenError
@@ -21,6 +22,8 @@ class InterviewService:
         token_service: InterviewTokenService,
         scoring_engine: InterviewScoringEngine,
         transcription_scoring_engine: Optional[TranscriptionScoringEngine] = None,
+        source_catalog: Optional[Any] = None,
+        question_generator: Optional[InterviewQuestionGenerator] = None,
         default_ttl_hours: int = 72,
         public_base_url: str = "",
     ) -> None:
@@ -29,6 +32,8 @@ class InterviewService:
         self.token_service = token_service
         self.scoring_engine = scoring_engine
         self.transcription_scoring_engine = transcription_scoring_engine
+        self.source_catalog = source_catalog
+        self.question_generator = question_generator
         self.default_ttl_hours = max(1, int(default_ttl_hours))
         self.public_base_url = public_base_url.rstrip("/")
 
@@ -46,16 +51,39 @@ class InterviewService:
         now = datetime.now(UTC)
         expires_at = now + timedelta(hours=max(1, int(ttl_hours or self.default_ttl_hours)))
         session_id = f"iv_{uuid4().hex}"
+        assessment_ctx: Dict[str, Any] = {}
+        assessment_error: Optional[str] = None
+        try:
+            assessment_ctx = self._resolve_assessment_for_job(job_id=job_id, language=language)
+        except Exception as exc:
+            assessment_error = str(exc)
+            assessment_ctx = {}
 
-        invitation = self.provider.create_invitation(
-            {
-                "job_id": job_id,
-                "candidate_id": candidate_id,
-                "candidate_name": candidate_name,
-                "candidate_email": candidate_email,
-                "language": language,
-            }
-        )
+        invite_payload = {
+            "job_id": job_id,
+            "candidate_id": candidate_id,
+            "candidate_name": candidate_name,
+            "candidate_email": candidate_email,
+            "language": language,
+        }
+        if assessment_ctx.get("provider_assessment_id"):
+            invite_payload["position_id"] = assessment_ctx["provider_assessment_id"]
+
+        invitation = self.provider.create_invitation(invite_payload)
+        provider_assessment_id = str(
+            invitation.get("assessment_id") or assessment_ctx.get("provider_assessment_id") or ""
+        ).strip() or None
+
+        if provider_assessment_id and assessment_ctx.get("generation_hash"):
+            self.db.upsert_job_assessment(
+                job_id=int(job_id),
+                provider=self.provider.name,
+                provider_assessment_id=provider_assessment_id,
+                assessment_name=assessment_ctx.get("assessment_name"),
+                generation_hash=assessment_ctx.get("generation_hash"),
+                generated_questions=assessment_ctx.get("questions"),
+                meta=assessment_ctx.get("meta"),
+            )
 
         payload = {
             "sid": session_id,
@@ -74,7 +102,7 @@ class InterviewService:
                 "candidate_name": candidate_name,
                 "conversation_id": int(conversation_id) if conversation_id is not None else None,
                 "provider": self.provider.name,
-                "provider_assessment_id": invitation.get("assessment_id"),
+                "provider_assessment_id": provider_assessment_id,
                 "provider_invitation_id": invitation.get("invitation_id"),
                 "provider_candidate_id": invitation.get("candidate_id"),
                 "status": "invited",
@@ -93,6 +121,13 @@ class InterviewService:
             }
         )
         self.db.insert_event(session_id=session_id, event_type="invited", source="system", payload={"provider": self.provider.name})
+        if assessment_error:
+            self.db.insert_event(
+                session_id=session_id,
+                event_type="assessment_generation_failed",
+                source="system",
+                payload={"error": assessment_error},
+            )
         self.db.upsert_candidate_summary(
             job_id=int(job_id),
             candidate_id=int(candidate_id),
@@ -115,6 +150,8 @@ class InterviewService:
             "provider": {
                 "name": self.provider.name,
                 "invitation_id": invitation.get("invitation_id"),
+                "assessment_id": provider_assessment_id,
+                "assessment_generation_error": assessment_error,
             },
         }
 
@@ -583,6 +620,74 @@ class InterviewService:
         status = "error" if failed > 0 and started == 0 and in_progress == 0 and scored == 0 else "success"
         self.db.upsert_job_step_progress(job_id=job_id, status=status, output=output)
         return output
+
+    def _resolve_assessment_for_job(self, *, job_id: int, language: Optional[str]) -> Dict[str, Any]:
+        if self.question_generator is None or self.source_catalog is None:
+            return {}
+        get_job = getattr(self.source_catalog, "get_job", None)
+        if not callable(get_job):
+            return {}
+
+        job = get_job(int(job_id))
+        if not isinstance(job, dict) or not job:
+            return {}
+        if "id" not in job:
+            job = dict(job)
+            job["id"] = int(job_id)
+
+        generated = self.question_generator.generate_for_job(job)
+        generation_hash = str(generated.get("generation_hash") or "").strip()
+        if not generation_hash:
+            return {}
+
+        cached = self.db.get_job_assessment(int(job_id))
+        if (
+            isinstance(cached, dict)
+            and str(cached.get("provider") or "") == self.provider.name
+            and str(cached.get("generation_hash") or "") == generation_hash
+            and str(cached.get("provider_assessment_id") or "").strip()
+        ):
+            return {
+                "provider_assessment_id": str(cached["provider_assessment_id"]),
+                "assessment_name": cached.get("assessment_name"),
+                "generation_hash": generation_hash,
+                "questions": generated.get("questions"),
+                "meta": generated.get("meta"),
+            }
+
+        create_assessment = getattr(self.provider, "create_assessment", None)
+        if not callable(create_assessment):
+            return {}
+
+        created = create_assessment(
+            {
+                "assessment_name": generated.get("assessment_name"),
+                "questions": generated.get("questions"),
+                "language": language,
+                "job_id": int(job_id),
+            }
+        )
+        provider_assessment_id = str(created.get("assessment_id") or "").strip()
+        if not provider_assessment_id:
+            return {}
+
+        self.db.upsert_job_assessment(
+            job_id=int(job_id),
+            provider=self.provider.name,
+            provider_assessment_id=provider_assessment_id,
+            assessment_name=str(created.get("assessment_name") or generated.get("assessment_name") or "").strip()
+            or None,
+            generation_hash=generation_hash,
+            generated_questions=generated.get("questions"),
+            meta=generated.get("meta"),
+        )
+        return {
+            "provider_assessment_id": provider_assessment_id,
+            "assessment_name": str(created.get("assessment_name") or generated.get("assessment_name") or "").strip() or None,
+            "generation_hash": generation_hash,
+            "questions": generated.get("questions"),
+            "meta": generated.get("meta"),
+        }
 
     def _build_entry_url(self, token: str, request_base_url: Optional[str]) -> str:
         base = (self.public_base_url or request_base_url or "").rstrip("/")

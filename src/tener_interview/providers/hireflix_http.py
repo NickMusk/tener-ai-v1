@@ -23,9 +23,72 @@ class HireflixHTTPAdapter:
     def __init__(self, config: HireflixConfig) -> None:
         if not config.api_key.strip():
             raise ValueError("TENER_HIREFLIX_API_KEY is required for Hireflix adapter")
-        if not config.position_id.strip():
-            raise ValueError("TENER_HIREFLIX_POSITION_ID is required")
         self.config = config
+
+    def create_assessment(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        assessment_name = str(payload.get("assessment_name") or "").strip() or "Tener Interview"
+        language = str(payload.get("language") or "").strip() or None
+        questions_raw = payload.get("questions") if isinstance(payload.get("questions"), list) else []
+        questions = [self._question_input(item, language=language) for item in questions_raw if isinstance(item, dict)]
+        if not questions:
+            raise ValueError("questions are required to create Hireflix assessment")
+
+        create_queries: List[Tuple[str, Dict[str, Any]]] = [
+            (
+                """
+                mutation SavePosition($position: PositionInputType!) {
+                  Position {
+                    save(position: $position) {
+                      id
+                      name
+                    }
+                  }
+                }
+                """,
+                {"position": {"name": assessment_name, "questions": questions}},
+            ),
+            (
+                """
+                mutation CreatePosition($position: PositionInputType!) {
+                  createPosition(input: $position) {
+                    id
+                    name
+                  }
+                }
+                """,
+                {"position": {"name": assessment_name, "questions": questions}},
+            ),
+            (
+                """
+                mutation SavePosition($input: PositionInputType!) {
+                  savePosition(position: $input) {
+                    id
+                    name
+                  }
+                }
+                """,
+                {"input": {"name": assessment_name, "questions": questions}},
+            ),
+        ]
+
+        last_error = ""
+        for query, variables in create_queries:
+            try:
+                response = self._graphql(query=query, variables=variables)
+            except Exception as exc:
+                last_error = str(exc)
+                continue
+            created = self._extract_position_from_create_response(response)
+            if created:
+                position_id = str(created.get("id") or "").strip()
+                if position_id:
+                    return {
+                        "assessment_id": position_id,
+                        "assessment_name": str(created.get("name") or assessment_name).strip() or assessment_name,
+                        "raw": created,
+                    }
+
+        raise ValueError(f"Failed to create Hireflix assessment. {last_error}".strip())
 
     def create_invitation(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         position_id = str(payload.get("position_id") or self.config.position_id).strip()
@@ -447,6 +510,51 @@ class HireflixHTTPAdapter:
         safe_local = "".join(ch if ch.isalnum() else "-" for ch in candidate_id).strip("-") or "candidate"
         domain = self.config.synthetic_email_domain.strip().lower() or "interview.local"
         return f"hireflix-{safe_local}@{domain}"
+
+    @staticmethod
+    def _extract_position_from_create_response(resp: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        data = resp.get("data") if isinstance(resp.get("data"), dict) else {}
+
+        position_root = data.get("Position") if isinstance(data.get("Position"), dict) else {}
+        if isinstance(position_root.get("save"), dict):
+            return position_root["save"]
+
+        if isinstance(data.get("createPosition"), dict):
+            return data["createPosition"]
+
+        if isinstance(data.get("savePosition"), dict):
+            return data["savePosition"]
+
+        return None
+
+    @staticmethod
+    def _question_input(question: Dict[str, Any], *, language: Optional[str] = None) -> Dict[str, Any]:
+        title = str(question.get("title") or "").strip()
+        if not title:
+            title = "Interview question"
+        description = str(question.get("description") or "").strip()
+
+        time_to_answer = HireflixHTTPAdapter._safe_int(question.get("timeToAnswer"), 120)
+        time_to_think = HireflixHTTPAdapter._safe_int(question.get("timeToThink"), 12)
+        retakes = HireflixHTTPAdapter._safe_int(question.get("retakes"), 1)
+
+        out: Dict[str, Any] = {
+            "title": title,
+            "description": description,
+            "timeToAnswer": max(30, time_to_answer),
+            "timeToThink": max(5, time_to_think),
+            "retakes": max(0, retakes),
+        }
+        if language:
+            out["transcriptionLanguage"] = language
+        return out
+
+    @staticmethod
+    def _safe_int(value: Any, fallback: int) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return int(fallback)
 
     @staticmethod
     def _normalize_score(raw: Any) -> Optional[float]:

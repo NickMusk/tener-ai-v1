@@ -9,7 +9,7 @@ Expected URL after deploy:
 
 Required Render envs for this service:
 - `TENER_HIREFLIX_API_KEY`
-- `TENER_HIREFLIX_POSITION_ID` (for your account: `699d9212c1700764a4fff102`)
+- `TENER_HIREFLIX_POSITION_ID` (optional when dynamic per-job assessment generation is enabled)
 - `TENER_INTERVIEW_TOKEN_SECRET`
 
 Service reads JD/candidates from main API via:
@@ -55,8 +55,11 @@ For your current account, validated working `position_id`:
 cd "/Users/Nick/Documents/Tener prototype"
 export TENER_INTERVIEW_PROVIDER="hireflix"
 export TENER_HIREFLIX_API_KEY="<YOUR_HIREFLIX_API_KEY>"
-export TENER_HIREFLIX_POSITION_ID="<YOUR_POSITION_ID>" # e.g. 699d9212c1700764a4fff102
+export TENER_HIREFLIX_POSITION_ID="<YOUR_POSITION_ID>" # optional fallback, e.g. 699d9212c1700764a4fff102
 export TENER_INTERVIEW_SOURCE_DB_PATH="./runtime/tener_v1.sqlite3" # where JD/candidates live
+export TENER_INTERVIEW_QUESTION_GUIDELINES_PATH="./config/interview_question_generation_guidelines.json"
+export TENER_INTERVIEW_COMPANY_PROFILE_PATH="./config/company_profile.json"
+export TENER_INTERVIEW_COMPANY_NAME="Tener"
 
 # Optional
 export TENER_HIREFLIX_BASE_URL="https://api.hireflix.com/me"

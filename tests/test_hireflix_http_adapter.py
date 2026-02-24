@@ -21,6 +21,43 @@ class _FakeAdapter(HireflixHTTPAdapter):
 
 
 class HireflixHttpAdapterTests(unittest.TestCase):
+    def test_create_assessment_with_position_save_mutation(self) -> None:
+        adapter = _FakeAdapter(
+            HireflixConfig(api_key="k", position_id=""),
+            scripted_responses=[
+                {
+                    "data": {
+                        "Position": {
+                            "save": {
+                                "id": "pos_new_1",
+                                "name": "Acme Interview",
+                            }
+                        }
+                    }
+                }
+            ],
+        )
+
+        out = adapter.create_assessment(
+            {
+                "assessment_name": "Acme Interview",
+                "questions": [
+                    {
+                        "title": "At Acme, describe your project",
+                        "description": "Context and measurable outcome",
+                        "timeToAnswer": 120,
+                        "timeToThink": 10,
+                        "retakes": 1,
+                    }
+                ],
+                "language": "en",
+            }
+        )
+
+        self.assertEqual(out["assessment_id"], "pos_new_1")
+        self.assertEqual(out["assessment_name"], "Acme Interview")
+        self.assertIn("save(position", adapter.calls[0]["query"])
+
     def test_create_invitation_with_new_mutation(self) -> None:
         adapter = _FakeAdapter(
             HireflixConfig(api_key="k", position_id="pos_1"),

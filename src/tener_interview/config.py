@@ -11,6 +11,9 @@ class InterviewModuleConfig:
     source_db_path: str
     source_api_base: str
     source_api_timeout_seconds: int
+    question_guidelines_path: str
+    company_profile_path: str
+    company_name: str
     transcription_scoring_criteria_path: str
     total_score_formula_path: str
     host: str
@@ -38,6 +41,15 @@ class InterviewModuleConfig:
             "TENER_INTERVIEW_SOURCE_DB_PATH",
             str(root / "runtime" / "tener_v1.sqlite3"),
         )
+        question_guidelines_path = os.environ.get(
+            "TENER_INTERVIEW_QUESTION_GUIDELINES_PATH",
+            str(root / "config" / "interview_question_generation_guidelines.json"),
+        )
+        company_profile_path = os.environ.get(
+            "TENER_INTERVIEW_COMPANY_PROFILE_PATH",
+            str(root / "config" / "company_profile.json"),
+        )
+        company_name = os.environ.get("TENER_INTERVIEW_COMPANY_NAME", "Tener").strip()
         transcription_scoring_criteria_path = os.environ.get(
             "TENER_INTERVIEW_TRANSCRIPTION_SCORING_CRITERIA_PATH",
             str(root / "config" / "interview_transcription_scoring_criteria.json"),
@@ -91,6 +103,9 @@ class InterviewModuleConfig:
             source_db_path=source_db_path,
             source_api_base=source_api_base,
             source_api_timeout_seconds=max(3, source_timeout_seconds),
+            question_guidelines_path=question_guidelines_path,
+            company_profile_path=company_profile_path,
+            company_name=company_name or "Tener",
             transcription_scoring_criteria_path=transcription_scoring_criteria_path,
             total_score_formula_path=total_score_formula_path,
             host=host,

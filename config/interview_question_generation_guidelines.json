@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "defaults": {
+    "question_count": 3,
+    "time_to_answer": 120,
+    "time_to_think": 12,
+    "retakes": 1
+  },
+  "company_values": [
+    "clear communication",
+    "ownership",
+    "collaboration"
+  ],
+  "skill_dictionary": [
+    "python",
+    "java",
+    "javascript",
+    "typescript",
+    "go",
+    "rust",
+    "sql",
+    "aws",
+    "gcp",
+    "azure",
+    "docker",
+    "kubernetes",
+    "ml",
+    "machine learning",
+    "llm",
+    "nlp"
+  ],
+  "rules": {
+    "must_mention_company_name_in_each_question": true,
+    "must_include_behavioral_and_technical_balance": true,
+    "must_include_example_and_outcome_prompt": true
+  }
+}

@@ -234,6 +234,11 @@
         </section>
       </div>
 
+      <section class="panel" style="margin-top: 16px">
+        <h2>Interview Template (Per JD)</h2>
+        <div id="assessment-view" class="muted mono">Assessment is not generated yet for selected JD.</div>
+      </section>
+
       <div class="grid" style="margin-top: 16px">
         <section class="panel">
           <h2>Candidates For JD</h2>
@@ -361,6 +366,7 @@
           select.appendChild(option);
           state.jobId = null;
           $("job-meta").textContent = "No JD rows available in source DB.";
+          renderAssessment(null);
           renderCandidates([]);
           renderSessions([]);
           renderLeaderboard([]);
@@ -379,8 +385,41 @@
         }
         select.value = String(state.jobId);
         updateJobMeta();
+        await loadAssessment();
         await loadCandidates();
         await loadResults();
+      }
+
+      function renderAssessment(item) {
+        const root = $("assessment-view");
+        if (!item) {
+          root.textContent = "Assessment is not generated yet for selected JD. Create the first interview link to generate it.";
+          return;
+        }
+        const questions = Array.isArray(item.generated_questions_json) ? item.generated_questions_json : [];
+        const lines = [];
+        lines.push(`Assessment ID: ${safeText(item.provider_assessment_id)}`);
+        lines.push(`Assessment Name: ${safeText(item.assessment_name)}`);
+        lines.push(`Generation Hash: ${safeText(item.generation_hash)}`);
+        lines.push(`Updated At: ${safeText(item.updated_at)}`);
+        lines.push("Questions:");
+        if (questions.length === 0) {
+          lines.push("- no generated questions saved");
+        } else {
+          questions.forEach((q, idx) => {
+            lines.push(`${idx + 1}. ${safeText(q && q.title)}`);
+          });
+        }
+        root.textContent = lines.join("\n");
+      }
+
+      async function loadAssessment() {
+        if (!state.jobId) {
+          renderAssessment(null);
+          return;
+        }
+        const out = await api(`/api/admin/jobs/${state.jobId}/assessment`);
+        renderAssessment(out.item || null);
       }
 
       function updateJobMeta() {
@@ -462,6 +501,7 @@
           providerInvitationId: out.provider && out.provider.invitation_id ? out.provider.invitation_id : "",
         });
         renderGeneratedLinks();
+        await loadAssessment();
         await loadResults();
       }
 
@@ -617,6 +657,7 @@
         updateJobMeta();
         $("error").textContent = "";
         try {
+          await loadAssessment();
           await loadCandidates();
           await loadResults();
           renderGeneratedLinks();
