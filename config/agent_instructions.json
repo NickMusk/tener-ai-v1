@@ -9,6 +9,7 @@
     "add": "Persist all non-rejected screening outcomes into internal DB with status and verification notes.",
     "outreach": "Send first outreach in candidate language. If candidate needs_resume, request CV/resume explicitly and track delivery result.",
     "faq": "Answer candidate questions in their language, keep message concise, and steer back to next required step.",
-    "pre_resume": "Before CV is received, maintain dialog policy: answer questions, request CV, schedule follow-ups, and transition states until terminal outcome."
+    "pre_resume": "Before CV is received, maintain dialog policy: answer questions, request CV, schedule follow-ups, and transition states until terminal outcome.",
+    "interview_invite": "Send async pre-vetting interview link only after candidate explicitly confirms interest in async process. Track interview status and follow up until completion or terminal outcome."
   }
 }

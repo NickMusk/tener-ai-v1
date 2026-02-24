@@ -169,7 +169,7 @@ def build_services() -> Dict[str, Any]:
         followup_delays_hours=followup_delays or None,
         instruction=instructions.get("pre_resume"),
     )
-    interview_api_base = os.environ.get("TENER_INTERVIEW_API_BASE", "").strip()
+    interview_api_base = default_interview_api_base()
     try:
         interview_api_timeout = int(os.environ.get("TENER_INTERVIEW_API_TIMEOUT_SECONDS", "20"))
     except ValueError:
@@ -284,6 +284,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "pre_resume_followup": "POST /api/pre-resume/sessions/{session_id}/followup",
                         "pre_resume_followups_run": "POST /api/pre-resume/followups/run",
                         "pre_resume_unreachable": "POST /api/pre-resume/sessions/{session_id}/unreachable",
+                        "interview_sync": "POST /api/interviews/sync",
+                        "interview_followups_run": "POST /api/interviews/followups/run",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "chats_overview": "GET /api/chats/overview?limit=200",
                         "add_manual_account": "POST /api/agent/accounts/manual",
@@ -326,7 +328,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         },
                         "communication": {
                             "name": SERVICES["workflow"]._agent_name("communication"),
-                            "stages": ["outreach", "faq", "pre_resume", "dialogue"],
+                            "stages": ["outreach", "faq", "pre_resume", "interview_invite", "dialogue"],
                             "active": True,
                         },
                         "interview_evaluation": {
@@ -1136,6 +1138,47 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, result)
             return
 
+        if parsed.path == "/api/interviews/sync":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            limit = self._safe_int(body.get("limit"), 100) or 100
+            job_id = self._safe_int(body.get("job_id"), None)
+            force_refresh = bool(body.get("force_refresh"))
+            try:
+                result = SERVICES["workflow"].sync_interview_progress(
+                    job_id=job_id,
+                    limit=limit,
+                    force_refresh=force_refresh,
+                )
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "interview sync failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
+        if parsed.path == "/api/interviews/followups/run":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            limit = self._safe_int(body.get("limit"), 100) or 100
+            job_id = self._safe_int(body.get("job_id"), None)
+            try:
+                result = SERVICES["workflow"].run_due_interview_followups(job_id=job_id, limit=limit)
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "interview followup run failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
         if parsed.path.startswith("/api/pre-resume/sessions/") and parsed.path.endswith("/followup"):
             match = re.match(r"^/api/pre-resume/sessions/([^/]+)/followup$", parsed.path)
             if not match:
@@ -1537,6 +1580,60 @@ def run() -> None:
 
         threading.Thread(target=_inbound_poll_loop, daemon=True, name="unipile-inbound-poller").start()
         print(f"Unipile inbound poll scheduler enabled: every {poll_interval_seconds}s")
+
+    if env_bool("TENER_INTERVIEW_SCHEDULER_ENABLED", True):
+        interview_interval_seconds = max(30, int(os.environ.get("TENER_INTERVIEW_SCHEDULER_INTERVAL_SECONDS", "180")))
+        interview_sync_limit = max(1, int(os.environ.get("TENER_INTERVIEW_SYNC_LIMIT", "100")))
+        interview_followup_limit = max(1, int(os.environ.get("TENER_INTERVIEW_FOLLOWUP_LIMIT", "100")))
+        if scheduler_stop is None:
+            scheduler_stop = threading.Event()
+
+        def _interview_loop() -> None:
+            while not scheduler_stop.is_set():
+                try:
+                    sync_result = SERVICES["workflow"].sync_interview_progress(
+                        limit=interview_sync_limit,
+                        force_refresh=False,
+                    )
+                    if int(sync_result.get("processed") or 0) > 0:
+                        SERVICES["db"].log_operation(
+                            operation="scheduler.interview.sync",
+                            status="ok",
+                            entity_type="scheduler",
+                            entity_id="interview_sync",
+                            details={
+                                "processed": int(sync_result.get("processed") or 0),
+                                "updated": int(sync_result.get("updated") or 0),
+                                "errors": int(sync_result.get("errors") or 0),
+                            },
+                        )
+
+                    followup_result = SERVICES["workflow"].run_due_interview_followups(limit=interview_followup_limit)
+                    if int(followup_result.get("processed") or 0) > 0:
+                        SERVICES["db"].log_operation(
+                            operation="scheduler.interview.followups",
+                            status="ok",
+                            entity_type="scheduler",
+                            entity_id="interview_followups",
+                            details={
+                                "processed": int(followup_result.get("processed") or 0),
+                                "sent": int(followup_result.get("sent") or 0),
+                                "skipped": int(followup_result.get("skipped") or 0),
+                                "errors": int(followup_result.get("errors") or 0),
+                            },
+                        )
+                except Exception as exc:
+                    SERVICES["db"].log_operation(
+                        operation="scheduler.interview",
+                        status="error",
+                        entity_type="scheduler",
+                        entity_id="interview",
+                        details={"error": str(exc)},
+                    )
+                scheduler_stop.wait(interview_interval_seconds)
+
+        threading.Thread(target=_interview_loop, daemon=True, name="interview-scheduler").start()
+        print(f"Interview scheduler enabled: every {interview_interval_seconds}s")
 
     server = ThreadingHTTPServer((host, port), TenerRequestHandler)
     print(f"Tener AI V1 API listening on http://{host}:{port}")

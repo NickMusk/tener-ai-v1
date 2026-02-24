@@ -62,6 +62,16 @@ class FakeUnipileProvider:
         return {"provider": "fake", "sent": False}
 
 
+class FakeUnipileProviderWithDelivery(FakeUnipileProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sent_ids: List[str] = []
+
+    def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+        self.sent_ids.append(str(candidate_profile.get("linkedin_id") or ""))
+        return {"provider": "fake", "sent": True, "chat_id": "chat-1"}
+
+
 class ForcedTestCandidateTests(unittest.TestCase):
     def test_forced_profile_is_injected_and_gets_high_score(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -134,6 +144,46 @@ class ForcedTestCandidateTests(unittest.TestCase):
             self.assertTrue(out.get("test_mode_active"))
             self.assertEqual(out.get("total"), 1)
             self.assertEqual((out["profiles"][0].get("raw") or {}).get("public_identifier"), FORCED_TEST_ID)
+
+    def test_forced_candidate_survives_enrich_and_passes_outreach_filter(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "forced_test_candidate_outreach.sqlite3"))
+            db.init_schema()
+            ids_file = Path(td) / "forced_ids.txt"
+            ids_file.write_text(f"{FORCED_TEST_ID}\n", encoding="utf-8")
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = FakeUnipileProviderWithDelivery()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                forced_test_ids_path=str(ids_file),
+            )
+
+            job_id = db.insert_job(
+                title="Prod smoke job",
+                jd_text="Need Python AWS distributed systems",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+
+            source = workflow.source_candidates(job_id=job_id, limit=10, test_mode=True)
+            verify = workflow.verify_profiles(job_id=job_id, profiles=source["profiles"])
+            added = workflow.add_verified_candidates(job_id=job_id, verified_items=verify["items"])
+            out = workflow.outreach_candidates(
+                job_id=job_id,
+                candidate_ids=[int(x["candidate_id"]) for x in added["added"]],
+                test_mode=True,
+            )
+
+            self.assertEqual(out.get("test_filter_skipped"), 0)
+            self.assertEqual(out.get("sent"), 1)
+            self.assertEqual(len(provider.sent_ids), 1)
 
 
 if __name__ == "__main__":

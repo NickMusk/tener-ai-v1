@@ -1133,6 +1133,23 @@ class Database:
         conversation_status = str(item.get("conversation_status") or "").strip().lower()
         pre_resume_status = str(item.get("pre_resume_status") or "").strip().lower()
         last_message_direction = str(item.get("last_message_direction") or "").strip().lower()
+        verification_notes = item.get("verification_notes") if isinstance(item.get("verification_notes"), dict) else {}
+        interview_status = str((verification_notes or {}).get("interview_status") or "").strip().lower()
+
+        interview_map = {
+            "created": ("interview_invited", "Interview Invited"),
+            "invited": ("interview_invited", "Interview Invited"),
+            "in_progress": ("interview_in_progress", "Interview In Progress"),
+            "completed": ("interview_completed", "Interview Completed"),
+            "scored": ("interview_scored", "Interview Scored"),
+            "failed": ("interview_failed", "Interview Failed"),
+            "expired": ("interview_failed", "Interview Failed"),
+            "canceled": ("interview_failed", "Interview Failed"),
+        }
+        if interview_status in interview_map:
+            return interview_map[interview_status]
+        if match_status in {"interview_invited", "interview_in_progress", "interview_completed", "interview_scored", "interview_failed"}:
+            return match_status, match_status.replace("_", " ").title()
 
         if pre_resume_status == "resume_received" or match_status == "resume_received":
             return "cv_received", "CV Received"

@@ -44,6 +44,14 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
         "en": "Thanks, noted. I will wait for your CV and send one reminder if needed.",
         "es": "Gracias, anotado. Espero tu CV y enviaremos un recordatorio si hace falta.",
     },
+    "interview_opt_in_ack": {
+        "en": (
+            "Great, thanks for confirming. I will send the async pre-vetting interview link in a separate message."
+        ),
+        "es": (
+            "Perfecto, gracias por confirmar. Te envio en un mensaje separado el enlace del pre-vetting asincrono."
+        ),
+    },
     "followups": {
         "1": {
             "en": "Quick follow-up on \"{job_title}\": could you share your CV/resume to continue?",
@@ -177,12 +185,12 @@ class PreResumeCommunicationService:
         self,
         templates_path: Optional[str] = None,
         max_followups: int = 3,
-        followup_delays_hours: Optional[List[int]] = None,
+        followup_delays_hours: Optional[List[float]] = None,
         instruction: str = "",
     ) -> None:
         self.templates = self._load_templates(templates_path)
         self.max_followups = max(1, int(max_followups))
-        self.followup_delays_hours = followup_delays_hours or [48, 72, 72]
+        self.followup_delays_hours = [float(x) for x in (followup_delays_hours or [48, 72, 72])]
         self.instruction = instruction
         self.sessions: Dict[str, PreResumeSession] = {}
 
@@ -263,6 +271,12 @@ class PreResumeCommunicationService:
             session.status = "resume_promised"
             session.next_followup_at = self._next_followup_at(session=session, now=current)
             outbound = self._render("resume_promised_ack", session.language, session)
+        elif intent == "pre_vetting_opt_in":
+            session.status = "interview_opt_in"
+            session.next_followup_at = self._next_followup_at(session=session, now=current)
+            ack = self._render("interview_opt_in_ack", session.language, session)
+            cta = self._render("resume_cta", session.language, session)
+            outbound = f"{ack} {cta}".strip()
         else:
             session.status = "engaged_no_resume"
             session.next_followup_at = self._next_followup_at(session=session, now=current)
@@ -403,6 +417,69 @@ class PreResumeCommunicationService:
         ):
             return "will_send_later", links
 
+        explicit_opt_in_markers = (
+            "send interview link",
+            "share interview link",
+            "ready for interview",
+            "ready for async interview",
+            "ready for pre-vetting",
+            "ready for pre vetting",
+            "ready for pre screening",
+            "i agree to async pre-vetting",
+            "i agree to async pre vetting",
+            "i can do async pre-vetting",
+            "i can do async pre vetting",
+            "yes pre-vetting",
+            "yes pre vetting",
+            "готов пройти интервью",
+            "готова пройти интервью",
+            "готов пройти прескрининг",
+            "готова пройти прескрининг",
+            "готов на асинхрон",
+            "готова на асинхрон",
+            "enviame el enlace de entrevista",
+            "envíame el enlace de entrevista",
+            "listo para entrevista",
+            "lista para entrevista",
+            "acepto pre-vetting",
+            "acepto pre vetting",
+        )
+        if any(marker in lowered for marker in explicit_opt_in_markers):
+            return "pre_vetting_opt_in", links
+
+        interest_markers = (
+            "interested",
+            "sounds good",
+            "let's proceed",
+            "lets proceed",
+            "yes",
+            "sure",
+            "ok",
+            "да",
+            "интересно",
+            "хочу продолжить",
+            "si",
+            "sí",
+            "interesa",
+            "me interesa",
+        )
+        process_markers = (
+            "interview",
+            "pre-vetting",
+            "pre vetting",
+            "pre-screening",
+            "pre screening",
+            "assessment",
+            "async",
+            "asincrono",
+            "asincrónico",
+            "интервью",
+            "прескрининг",
+            "предветтинг",
+        )
+        if any(marker in lowered for marker in process_markers) and any(marker in lowered for marker in interest_markers):
+            return "pre_vetting_opt_in", links
+
         salary_markers = ("salary", "compensation", "pay", "range", "зарплат", "вилка", "salario", "compensación", "compensacion")
         stack_markers = ("stack", "technology", "tech", "tools", "requirements", "стек", "технолог", "tecnolog", "stack técnico")
         timeline_markers = (
@@ -495,8 +572,12 @@ class PreResumeCommunicationService:
         if session.followups_sent >= self.max_followups:
             return None
         index = min(session.followups_sent, len(self.followup_delays_hours) - 1)
-        delay = max(1, int(self.followup_delays_hours[index]))
-        return iso(now + timedelta(hours=delay))
+        try:
+            delay_hours = float(self.followup_delays_hours[index])
+        except (TypeError, ValueError):
+            delay_hours = 48.0
+        delay_hours = max(delay_hours, 1.0 / 60.0)  # minimum 1 minute to prevent immediate loops
+        return iso(now + timedelta(hours=delay_hours))
 
     def _require_session(self, session_id: str) -> PreResumeSession:
         session = self.sessions.get(session_id)

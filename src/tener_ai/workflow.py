@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import hashlib
 import os
 from pathlib import Path
@@ -16,6 +16,8 @@ from .pre_resume_service import PreResumeCommunicationService
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
 TERMINAL_PRE_RESUME_STATUSES = {"resume_received", "not_interested", "unreachable", "stalled"}
+ACTIVE_INTERVIEW_STATUSES = {"invited", "in_progress"}
+TERMINAL_INTERVIEW_STATUSES = {"completed", "scored", "failed", "expired", "canceled"}
 AGENT_ROLES = {
     "sourcing_vetting": "Reed AI (Talent Scout)",
     "communication": "Casey AI (Hiring Coordinator)",
@@ -49,12 +51,16 @@ class WorkflowService:
         faq_agent: FAQAgent,
         pre_resume_service: PreResumeCommunicationService | None = None,
         llm_responder: Any | None = None,
+        interview_client: Any | None = None,
         agent_evaluation_playbook: AgentEvaluationPlaybook | None = None,
         contact_all_mode: bool = False,
         require_resume_before_final_verify: bool = False,
         stage_instructions: Dict[str, str] | None = None,
         forced_test_ids_path: str | None = None,
         forced_test_score: float = DEFAULT_FORCED_TEST_SCORE,
+        interview_invite_ttl_hours: int = 72,
+        interview_max_followups: int = 2,
+        interview_followup_delays_hours: List[float] | None = None,
     ) -> None:
         self.db = db
         self.sourcing_agent = sourcing_agent
@@ -63,6 +69,7 @@ class WorkflowService:
         self.faq_agent = faq_agent
         self.pre_resume_service = pre_resume_service
         self.llm_responder = llm_responder
+        self.interview_client = interview_client
         self.agent_evaluation_playbook = agent_evaluation_playbook
         self.contact_all_mode = contact_all_mode
         self.require_resume_before_final_verify = require_resume_before_final_verify
@@ -72,6 +79,22 @@ class WorkflowService:
             self.forced_test_score = float(forced_test_score)
         except (TypeError, ValueError):
             self.forced_test_score = DEFAULT_FORCED_TEST_SCORE
+        try:
+            self.interview_invite_ttl_hours = max(1, int(interview_invite_ttl_hours))
+        except (TypeError, ValueError):
+            self.interview_invite_ttl_hours = 72
+        try:
+            self.interview_max_followups = max(0, int(interview_max_followups))
+        except (TypeError, ValueError):
+            self.interview_max_followups = 2
+        delays_raw = interview_followup_delays_hours or [24.0, 48.0]
+        parsed_delays: List[float] = []
+        for raw in delays_raw:
+            try:
+                parsed_delays.append(max(1.0 / 60.0, float(raw)))
+            except (TypeError, ValueError):
+                continue
+        self.interview_followup_delays_hours = parsed_delays or [24.0, 48.0]
         self.test_jobs_forced_only = str(os.environ.get("TENER_TEST_JOBS_FORCED_ONLY", "true")).strip().lower() in {
             "1",
             "true",
@@ -210,12 +233,30 @@ class WorkflowService:
     def enrich_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
         self._get_job_or_raise(job_id)
         enriched_profiles, failed = self.sourcing_agent.enrich_candidates(profiles)
+        forced_ids = self._load_forced_test_identifiers()
+        forced_preserved = 0
+        if forced_ids and enriched_profiles:
+            stabilized: List[Dict[str, Any]] = []
+            for idx, enriched in enumerate(enriched_profiles):
+                profile = dict(enriched) if isinstance(enriched, dict) else {}
+                source_profile = profiles[idx] if idx < len(profiles) and isinstance(profiles[idx], dict) else {}
+                forced_identifier = self._forced_test_identifier_for_profile(source_profile, forced_ids)
+                if forced_identifier and not self._forced_test_identifier_for_profile(profile, [forced_identifier]):
+                    profile = self._mark_forced_test_candidate(profile=profile, identifier=forced_identifier)
+                    forced_preserved += 1
+                stabilized.append(profile)
+            enriched_profiles = stabilized
         self.db.log_operation(
             operation="agent.sourcing.enrich",
             status="ok" if failed == 0 else "partial",
             entity_type="job",
             entity_id=str(job_id),
-            details={"input_profiles": len(profiles), "enriched": len(enriched_profiles), "failed": failed},
+            details={
+                "input_profiles": len(profiles),
+                "enriched": len(enriched_profiles),
+                "failed": failed,
+                "forced_markers_preserved": forced_preserved,
+            },
         )
         return {
             "job_id": job_id,
@@ -843,6 +884,10 @@ class WorkflowService:
         candidate = self.db.get_candidate(int(conversation["candidate_id"]))
         if not candidate:
             raise ValueError("Conversation is linked to missing candidate")
+        match = self.db.get_candidate_match(
+            job_id=int(conversation["job_id"]),
+            candidate_id=int(conversation["candidate_id"]),
+        )
 
         messages = self.db.list_messages(conversation_id)
         previous_lang = None
@@ -898,6 +943,12 @@ class WorkflowService:
                     fallback_reply=outbound,
                     language=language,
                     state=state_out if isinstance(state_out, dict) else None,
+                )
+                outbound = self._append_interview_opt_in_prompt(
+                    outbound=outbound,
+                    language=language,
+                    state=state_out if isinstance(state_out, dict) else None,
+                    match=match,
                 )
                 self.db.insert_pre_resume_event(
                     session_id=session_id,
@@ -963,13 +1014,26 @@ class WorkflowService:
                     inbound_text=text,
                 )
 
-                return {
+                interview_result: Dict[str, Any] | None = None
+                if intent == "pre_vetting_opt_in":
+                    interview_result = self._send_interview_invite_after_opt_in(
+                        job=job,
+                        candidate=candidate,
+                        conversation=conversation,
+                        language=language,
+                        match=match,
+                    )
+
+                response = {
                     "language": language,
                     "intent": intent,
                     "reply": outbound,
                     "mode": "pre_resume",
                     "state": state_out,
                 }
+                if interview_result:
+                    response["interview"] = interview_result
+                return response
 
         lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=previous_lang)
         reply = self._maybe_llm_reply(
@@ -1407,6 +1471,633 @@ class WorkflowService:
             "items": items,
         }
 
+    def sync_interview_progress(
+        self,
+        job_id: int | None = None,
+        limit: int = 100,
+        force_refresh: bool = False,
+    ) -> Dict[str, Any]:
+        if self.interview_client is None:
+            return {
+                "processed": 0,
+                "updated": 0,
+                "errors": 0,
+                "items": [],
+                "reason": "interview_client_not_configured",
+            }
+
+        safe_limit = max(1, min(int(limit or 100), 500))
+        rows = self._list_candidates_with_interview_sessions(job_id=job_id, limit=max(safe_limit * 3, 300))
+        processed = 0
+        updated = 0
+        errors = 0
+        items: List[Dict[str, Any]] = []
+
+        for row in rows:
+            if processed >= safe_limit:
+                break
+            notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
+            session_id = str((notes or {}).get("interview_session_id") or "").strip()
+            if not session_id:
+                continue
+            processed += 1
+            try:
+                payload = self.interview_client.refresh_session(session_id=session_id, force=force_refresh)
+            except Exception:
+                try:
+                    payload = self.interview_client.get_session(session_id=session_id)
+                except Exception as exc:
+                    errors += 1
+                    items.append(
+                        {
+                            "job_id": int(row["job_id"]),
+                            "candidate_id": int(row["candidate_id"]),
+                            "session_id": session_id,
+                            "status": "error",
+                            "error": str(exc),
+                        }
+                    )
+                    self.db.log_operation(
+                        operation="agent.interview.sync",
+                        status="error",
+                        entity_type="candidate",
+                        entity_id=str(row["candidate_id"]),
+                        details={"job_id": int(row["job_id"]), "session_id": session_id, "error": str(exc)},
+                    )
+                    continue
+
+            interview_status = str(payload.get("status") or "").strip().lower()
+            summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+            total_score = summary.get("total_score")
+            try:
+                total_score = float(total_score) if total_score is not None else None
+            except (TypeError, ValueError):
+                total_score = None
+
+            changed = self._apply_interview_progress_update(
+                job_id=int(row["job_id"]),
+                candidate_id=int(row["candidate_id"]),
+                notes=notes or {},
+                interview_status=interview_status,
+                session_id=session_id,
+                entry_url=str((notes or {}).get("interview_entry_url") or payload.get("entry_url") or "").strip() or None,
+                total_score=total_score,
+                current_match_status=str(row.get("status") or "needs_resume"),
+            )
+            if changed:
+                updated += 1
+            items.append(
+                {
+                    "job_id": int(row["job_id"]),
+                    "candidate_id": int(row["candidate_id"]),
+                    "session_id": session_id,
+                    "interview_status": interview_status or None,
+                    "updated": changed,
+                    "total_score": total_score,
+                }
+            )
+            self.db.log_operation(
+                operation="agent.interview.sync",
+                status="ok",
+                entity_type="candidate",
+                entity_id=str(row["candidate_id"]),
+                details={
+                    "job_id": int(row["job_id"]),
+                    "session_id": session_id,
+                    "interview_status": interview_status or None,
+                    "updated": changed,
+                    "total_score": total_score,
+                },
+            )
+
+        return {
+            "processed": processed,
+            "updated": updated,
+            "errors": errors,
+            "items": items,
+        }
+
+    def run_due_interview_followups(self, job_id: int | None = None, limit: int = 100) -> Dict[str, Any]:
+        if self.interview_client is None:
+            return {
+                "processed": 0,
+                "sent": 0,
+                "skipped": 0,
+                "errors": 0,
+                "items": [],
+                "reason": "interview_client_not_configured",
+            }
+
+        self.sync_interview_progress(job_id=job_id, limit=max(limit * 2, 100), force_refresh=False)
+
+        safe_limit = max(1, min(int(limit or 100), 500))
+        now = datetime.now(timezone.utc)
+        rows = self._list_candidates_with_interview_sessions(job_id=job_id, limit=max(safe_limit * 5, 500))
+        due_rows: List[Dict[str, Any]] = []
+        for row in rows:
+            notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
+            if not isinstance(notes, dict):
+                continue
+            session_id = str(notes.get("interview_session_id") or "").strip()
+            entry_url = str(notes.get("interview_entry_url") or "").strip()
+            interview_status = str(notes.get("interview_status") or "").strip().lower()
+            if not session_id or not entry_url:
+                continue
+            if interview_status not in ACTIVE_INTERVIEW_STATUSES:
+                continue
+            followups_sent = self._safe_int(notes.get("interview_followups_sent"), 0)
+            if followups_sent >= self.interview_max_followups:
+                continue
+            due_at = self._parse_iso_datetime(str(notes.get("interview_next_followup_at") or "").strip())
+            if due_at is None or due_at > now:
+                continue
+            due_rows.append(row)
+            if len(due_rows) >= safe_limit:
+                break
+
+        sent = 0
+        skipped = 0
+        errors = 0
+        items: List[Dict[str, Any]] = []
+        for row in due_rows:
+            job_ref = int(row["job_id"])
+            candidate_id = int(row["candidate_id"])
+            notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
+            session_id = str((notes or {}).get("interview_session_id") or "").strip()
+            entry_url = str((notes or {}).get("interview_entry_url") or "").strip()
+            interview_status = str((notes or {}).get("interview_status") or "").strip().lower() or "invited"
+            followups_sent = self._safe_int((notes or {}).get("interview_followups_sent"), 0)
+            followup_number = followups_sent + 1
+
+            candidate = self.db.get_candidate(candidate_id)
+            conversation = self.db.get_latest_conversation_for_candidate(candidate_id)
+            job = self.db.get_job(job_ref)
+            if not candidate or not conversation or not job:
+                errors += 1
+                items.append(
+                    {
+                        "job_id": job_ref,
+                        "candidate_id": candidate_id,
+                        "session_id": session_id,
+                        "status": "error",
+                        "reason": "missing_candidate_or_conversation_or_job",
+                    }
+                )
+                continue
+
+            language = self._candidate_primary_language(candidate)
+            message = self._compose_interview_followup_message(
+                job=job,
+                candidate=candidate,
+                entry_url=entry_url,
+                language=language,
+                followup_number=followup_number,
+            )
+            delivery = self._send_auto_reply(candidate=candidate, message=message, conversation=conversation)
+            outbound_id = self.db.add_message(
+                conversation_id=int(conversation["id"]),
+                direction="outbound",
+                content=message,
+                candidate_language=language,
+                meta={
+                    "type": "interview_followup",
+                    "auto": True,
+                    "session_id": session_id,
+                    "followup_number": followup_number,
+                    "delivery": delivery,
+                },
+            )
+            status = "sent" if delivery.get("sent") else "delivery_error"
+            if delivery.get("sent"):
+                sent += 1
+            else:
+                errors += 1
+
+            next_followup_at = self._next_interview_followup_at(
+                followups_sent=followup_number,
+                now=datetime.now(timezone.utc),
+            )
+            updates = {
+                "interview_status": interview_status,
+                "interview_followups_sent": followup_number,
+                "interview_last_followup_at": datetime.now(timezone.utc).isoformat(),
+                "interview_next_followup_at": next_followup_at,
+            }
+            mapped_status = self._match_status_for_interview(interview_status=interview_status)
+            if mapped_status:
+                self.db.update_candidate_match_status(
+                    job_id=job_ref,
+                    candidate_id=candidate_id,
+                    status=mapped_status,
+                    extra_notes=updates,
+                )
+            else:
+                self.db.update_candidate_match_status(
+                    job_id=job_ref,
+                    candidate_id=candidate_id,
+                    status=str(row.get("status") or "needs_resume"),
+                    extra_notes=updates,
+                )
+
+            self.db.log_operation(
+                operation="agent.interview.followup",
+                status="ok" if delivery.get("sent") else "error",
+                entity_type="message",
+                entity_id=str(outbound_id),
+                details={
+                    "job_id": job_ref,
+                    "candidate_id": candidate_id,
+                    "session_id": session_id,
+                    "followup_number": followup_number,
+                    "delivery": delivery,
+                },
+            )
+            items.append(
+                {
+                    "job_id": job_ref,
+                    "candidate_id": candidate_id,
+                    "session_id": session_id,
+                    "status": status,
+                    "followup_number": followup_number,
+                    "delivery": delivery,
+                }
+            )
+
+        skipped = max(0, len(due_rows) - sent - errors)
+        return {
+            "processed": len(due_rows),
+            "sent": sent,
+            "skipped": skipped,
+            "errors": errors,
+            "items": items,
+        }
+
+    def _send_interview_invite_after_opt_in(
+        self,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        conversation: Dict[str, Any],
+        language: str,
+        match: Dict[str, Any] | None,
+    ) -> Dict[str, Any] | None:
+        if self.interview_client is None:
+            return None
+        start_fn = getattr(self.interview_client, "start_session", None)
+        if not callable(start_fn):
+            return None
+
+        notes = (match or {}).get("verification_notes") if isinstance((match or {}).get("verification_notes"), dict) else {}
+        session_id_existing = str((notes or {}).get("interview_session_id") or "").strip()
+        if session_id_existing:
+            return {
+                "started": False,
+                "reason": "session_already_exists",
+                "session_id": session_id_existing,
+                "entry_url": (notes or {}).get("interview_entry_url"),
+                "status": (notes or {}).get("interview_status"),
+            }
+
+        job_id = self._safe_int(job.get("id"), self._safe_int(conversation.get("job_id"), 0))
+        candidate_id = self._safe_int(candidate.get("id"), self._safe_int(conversation.get("candidate_id"), 0))
+        conversation_id = self._safe_int(conversation.get("id"), 0)
+        if job_id <= 0 or candidate_id <= 0 or conversation_id <= 0:
+            return {"started": False, "reason": "missing_ids"}
+
+        try:
+            started = start_fn(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                candidate_name=str(candidate.get("full_name") or "").strip(),
+                conversation_id=conversation_id,
+                language=str(language or "en").strip().lower() or "en",
+                ttl_hours=self.interview_invite_ttl_hours,
+            )
+        except Exception as exc:
+            self.db.log_operation(
+                operation="agent.interview.invite",
+                status="error",
+                entity_type="candidate",
+                entity_id=str(candidate_id),
+                details={"job_id": job_id, "error": str(exc)},
+            )
+            return {"started": False, "reason": "start_session_failed", "error": str(exc)}
+
+        session_id = str(started.get("session_id") or "").strip()
+        entry_url = str(started.get("entry_url") or "").strip()
+        interview_status = str(started.get("status") or "invited").strip().lower() or "invited"
+        if not session_id or not entry_url:
+            self.db.log_operation(
+                operation="agent.interview.invite",
+                status="error",
+                entity_type="candidate",
+                entity_id=str(candidate_id),
+                details={"job_id": job_id, "reason": "missing_session_or_entry_url", "payload": started},
+            )
+            return {"started": False, "reason": "missing_session_or_entry_url", "payload": started}
+
+        message = self._compose_interview_invite_message(
+            job=job,
+            candidate=candidate,
+            entry_url=entry_url,
+            language=language,
+        )
+        delivery = self._send_auto_reply(candidate=candidate, message=message, conversation=conversation)
+        outbound_id = self.db.add_message(
+            conversation_id=conversation_id,
+            direction="outbound",
+            content=message,
+            candidate_language=str(language or "en").strip().lower() or "en",
+            meta={
+                "type": "interview_invite",
+                "auto": True,
+                "session_id": session_id,
+                "interview_status": interview_status,
+                "entry_url": entry_url,
+                "delivery": delivery,
+            },
+        )
+
+        now = datetime.now(timezone.utc)
+        updates = {
+            "interview_session_id": session_id,
+            "interview_entry_url": entry_url,
+            "interview_status": interview_status,
+            "interview_invited_at": now.isoformat(),
+            "interview_followups_sent": 0,
+            "interview_next_followup_at": self._next_interview_followup_at(followups_sent=0, now=now),
+            "interview_provider": ((started.get("provider") or {}).get("name") if isinstance(started.get("provider"), dict) else None),
+        }
+        mapped_status = self._match_status_for_interview(interview_status=interview_status)
+        self.db.update_candidate_match_status(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            status=mapped_status or str((match or {}).get("status") or "needs_resume"),
+            extra_notes=updates,
+        )
+        self._upsert_agent_assessment(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            agent_key="interview_evaluation",
+            stage_key="interview_results",
+            score=None,
+            status=interview_status if interview_status in {"invited", "in_progress"} else "not_started",
+            reason="Interview invite created; waiting for candidate completion.",
+            details={"session_id": session_id, "entry_url": entry_url},
+        )
+        self.db.log_operation(
+            operation="agent.interview.invite",
+            status="ok" if delivery.get("sent") else "error",
+            entity_type="message",
+            entity_id=str(outbound_id),
+            details={
+                "job_id": job_id,
+                "candidate_id": candidate_id,
+                "conversation_id": conversation_id,
+                "session_id": session_id,
+                "entry_url": entry_url,
+                "delivery": delivery,
+            },
+        )
+        return {
+            "started": True,
+            "session_id": session_id,
+            "entry_url": entry_url,
+            "status": interview_status,
+            "delivery": delivery,
+        }
+
+    def _append_interview_opt_in_prompt(
+        self,
+        outbound: str,
+        language: str,
+        state: Dict[str, Any] | None,
+        match: Dict[str, Any] | None,
+    ) -> str:
+        text = str(outbound or "").strip()
+        if not text or self.interview_client is None:
+            return text
+        notes = (match or {}).get("verification_notes") if isinstance((match or {}).get("verification_notes"), dict) else {}
+        if str((notes or {}).get("interview_session_id") or "").strip():
+            return text
+
+        state_status = str((state or {}).get("status") or "").strip().lower()
+        if state_status in TERMINAL_PRE_RESUME_STATUSES or state_status == "interview_opt_in":
+            return text
+        lowered = text.lower()
+        if "interview link" in lowered or "pre-vetting" in lowered or "pre vetting" in lowered:
+            return text
+
+        prompts = {
+            "en": 'If you want to continue, reply "I agree to async pre-vetting" and I will send the interview link.',
+            "ru": 'Если хотите продолжить, ответьте "согласен(а) на асинхронный pre-vetting", и я отправлю ссылку на интервью.',
+            "es": 'Si quieres continuar, responde "acepto pre-vetting asincrono" y te envio el enlace de entrevista.',
+        }
+        lang = str(language or "en").strip().lower()
+        prompt = prompts.get(lang, prompts["en"])
+        return f"{text} {prompt}".strip()
+
+    def _compose_interview_invite_message(
+        self,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        entry_url: str,
+        language: str,
+    ) -> str:
+        name = str(candidate.get("full_name") or "there")
+        title = str(job.get("title") or "this role")
+        templates = {
+            "en": (
+                "Great, {name}. Here is your async pre-vetting interview link for \"{title}\": {url}. "
+                "Please complete it and reply here once done."
+            ),
+            "ru": (
+                "Отлично, {name}. Вот ссылка на асинхронное pre-vetting интервью по роли \"{title}\": {url}. "
+                "Пройдите его и напишите здесь, когда завершите."
+            ),
+            "es": (
+                "Perfecto, {name}. Aqui tienes el enlace del interview async pre-vetting para \"{title}\": {url}. "
+                "Completalo y responde aqui cuando termines."
+            ),
+        }
+        lang = str(language or "en").strip().lower()
+        template = templates.get(lang, templates["en"])
+        return template.format(name=name, title=title, url=entry_url)
+
+    def _compose_interview_followup_message(
+        self,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        entry_url: str,
+        language: str,
+        followup_number: int,
+    ) -> str:
+        name = str(candidate.get("full_name") or "there")
+        title = str(job.get("title") or "this role")
+        first = {
+            "en": 'Quick follow-up on your async pre-vetting for "{title}": {url}. Let me know if you need help.',
+            "ru": 'Короткий follow-up по вашему async pre-vetting для "{title}": {url}. Если нужна помощь, напишите.',
+            "es": 'Seguimiento rapido sobre tu async pre-vetting para "{title}": {url}. Avisa si necesitas ayuda.',
+        }
+        second = {
+            "en": 'Final reminder for "{title}": please complete the async pre-vetting here: {url}.',
+            "ru": 'Финальное напоминание по "{title}": пожалуйста, пройдите async pre-vetting по ссылке: {url}.',
+            "es": 'Recordatorio final para "{title}": completa el async pre-vetting aqui: {url}.',
+        }
+        lang = str(language or "en").strip().lower()
+        pool = first if int(followup_number) <= 1 else second
+        template = pool.get(lang, pool["en"])
+        return template.format(name=name, title=title, url=entry_url)
+
+    def _apply_interview_progress_update(
+        self,
+        job_id: int,
+        candidate_id: int,
+        notes: Dict[str, Any],
+        interview_status: str,
+        session_id: str,
+        entry_url: str | None,
+        total_score: float | None,
+        current_match_status: str,
+    ) -> bool:
+        status = str(interview_status or "").strip().lower()
+        if not status:
+            return False
+        existing_status = str(notes.get("interview_status") or "").strip().lower()
+        existing_score = notes.get("interview_total_score")
+        changed = existing_status != status
+        if total_score is not None:
+            try:
+                changed = changed or float(existing_score) != float(total_score)
+            except (TypeError, ValueError):
+                changed = True
+
+        update_notes: Dict[str, Any] = {
+            "interview_session_id": session_id,
+            "interview_status": status,
+        }
+        if entry_url:
+            update_notes["interview_entry_url"] = entry_url
+        if total_score is not None:
+            update_notes["interview_total_score"] = float(total_score)
+            update_notes["interview_score"] = float(total_score)
+            update_notes["final_interview_score"] = float(total_score)
+            update_notes["interview_scored_at"] = datetime.now(timezone.utc).isoformat()
+        if status in TERMINAL_INTERVIEW_STATUSES:
+            update_notes["interview_next_followup_at"] = None
+
+        mapped_status = self._match_status_for_interview(interview_status=status)
+        self.db.update_candidate_match_status(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            status=mapped_status or str(current_match_status or "needs_resume"),
+            extra_notes=update_notes,
+        )
+
+        if status == "scored" and total_score is not None:
+            self._upsert_agent_assessment(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                agent_key="interview_evaluation",
+                stage_key="interview_results",
+                score=float(total_score),
+                status="scored",
+                reason="Interview scored and synced from interview module.",
+                details={"session_id": session_id, "source": "interview_sync"},
+            )
+        elif status in {"invited", "in_progress"}:
+            self._upsert_agent_assessment(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                agent_key="interview_evaluation",
+                stage_key="interview_results",
+                score=None,
+                status=status,
+                reason="Interview is active and awaiting completion.",
+                details={"session_id": session_id, "source": "interview_sync"},
+            )
+        elif status in {"failed", "expired", "canceled"}:
+            self._upsert_agent_assessment(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                agent_key="interview_evaluation",
+                stage_key="interview_results",
+                score=None,
+                status="failed",
+                reason=f"Interview ended with status {status}.",
+                details={"session_id": session_id, "source": "interview_sync"},
+            )
+
+        return changed
+
+    def _list_candidates_with_interview_sessions(self, job_id: int | None, limit: int = 500) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 500), 2000))
+        job_ids: List[int] = []
+        if job_id is not None:
+            job_ids = [int(job_id)]
+        else:
+            for job in self.db.list_jobs(limit=300):
+                try:
+                    job_ids.append(int(job.get("id")))
+                except (TypeError, ValueError):
+                    continue
+
+        out: List[Dict[str, Any]] = []
+        for job_ref in job_ids:
+            rows = self.db.list_candidates_for_job(job_ref)
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
+                if not str((notes or {}).get("interview_session_id") or "").strip():
+                    continue
+                enriched = dict(row)
+                enriched["job_id"] = job_ref
+                out.append(enriched)
+                if len(out) >= safe_limit:
+                    return out
+        return out
+
+    def _next_interview_followup_at(self, followups_sent: int, now: datetime) -> str | None:
+        if self.interview_max_followups <= 0:
+            return None
+        if int(followups_sent) >= int(self.interview_max_followups):
+            return None
+        idx = min(max(int(followups_sent), 0), len(self.interview_followup_delays_hours) - 1)
+        delay = float(self.interview_followup_delays_hours[idx])
+        return (now + timedelta(hours=delay)).astimezone(timezone.utc).isoformat()
+
+    @staticmethod
+    def _match_status_for_interview(interview_status: str) -> str | None:
+        status = str(interview_status or "").strip().lower()
+        mapping = {
+            "created": "interview_invited",
+            "invited": "interview_invited",
+            "in_progress": "interview_in_progress",
+            "completed": "interview_completed",
+            "scored": "interview_scored",
+            "failed": "interview_failed",
+            "expired": "interview_failed",
+            "canceled": "interview_failed",
+        }
+        return mapping.get(status)
+
+    @staticmethod
+    def _candidate_primary_language(candidate: Dict[str, Any]) -> str:
+        langs = candidate.get("languages")
+        if isinstance(langs, list):
+            for item in langs:
+                lang = str(item or "").strip().lower()
+                if lang:
+                    return lang
+        return "en"
+
+    @staticmethod
+    def _safe_int(value: Any, fallback: int = 0) -> int:
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return int(fallback)
+
     def _record_sourcing_vetting_assessment(
         self,
         job_id: int,
@@ -1502,6 +2193,7 @@ class WorkflowService:
         if normalized_mode == "pre_resume":
             mapping = {
                 "resume_received": (96.0, "cv_received", "Candidate shared CV/resume."),
+                "interview_opt_in": (86.0, "interview_opt_in", "Candidate confirmed async pre-vetting interview."),
                 "resume_promised": (83.0, "resume_promised", "Candidate promised to share CV later."),
                 "engaged_no_resume": (78.0, "in_dialogue", "Candidate is engaged in dialogue before CV."),
                 "awaiting_reply": (70.0, "awaiting_reply", "Awaiting candidate response after follow-up."),

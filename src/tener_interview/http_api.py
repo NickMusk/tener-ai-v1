@@ -360,6 +360,11 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
                 request_base_url=self._request_base_url(),
             )
         except Exception as exc:
+            if self._is_subscription_required_error(str(exc)):
+                return (
+                    HTTPStatus.PAYMENT_REQUIRED,
+                    self._error("INTERVIEW_PROVIDER_SUBSCRIPTION_REQUIRED", str(exc)),
+                )
             return (
                 HTTPStatus.BAD_GATEWAY,
                 self._error("INTERVIEW_PROVIDER_REQUEST_FAILED", str(exc)),
@@ -473,8 +478,12 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
         try:
             out = SERVICES["interview"].prepare_job_assessment(job_id=job_id, language=language)
         except ValueError as exc:
+            if self._is_subscription_required_error(str(exc)):
+                return HTTPStatus.PAYMENT_REQUIRED, self._error("INTERVIEW_PROVIDER_SUBSCRIPTION_REQUIRED", str(exc))
             return HTTPStatus.UNPROCESSABLE_ENTITY, self._error("INTERVIEW_ASSESSMENT_PREPARE_REJECTED", str(exc))
         except Exception as exc:
+            if self._is_subscription_required_error(str(exc)):
+                return HTTPStatus.PAYMENT_REQUIRED, self._error("INTERVIEW_PROVIDER_SUBSCRIPTION_REQUIRED", str(exc))
             return HTTPStatus.BAD_GATEWAY, self._error("INTERVIEW_ASSESSMENT_PREPARE_FAILED", str(exc))
         return HTTPStatus.OK, out
 
@@ -575,6 +584,10 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
             "code": code,
             "details": details or {},
         }
+
+    @staticmethod
+    def _is_subscription_required_error(message: str) -> bool:
+        return "requires an active subscription" in str(message or "").lower()
 
     def _json_response(self, status: int, payload: Dict[str, Any]) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
