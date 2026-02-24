@@ -330,16 +330,22 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
         if candidate_id is None:
             return HTTPStatus.BAD_REQUEST, self._error("CANDIDATE_ID_REQUIRED", "candidate_id is required")
 
-        result = SERVICES["interview"].start_session(
-            job_id=job_id,
-            candidate_id=candidate_id,
-            candidate_name=str(body.get("candidate_name") or "").strip() or None,
-            candidate_email=str(body.get("candidate_email") or "").strip().lower() or None,
-            conversation_id=self._safe_int(body.get("conversation_id"), None),
-            language=str(body.get("language") or "").strip() or None,
-            ttl_hours=self._safe_int(body.get("ttl_hours"), None),
-            request_base_url=self._request_base_url(),
-        )
+        try:
+            result = SERVICES["interview"].start_session(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                candidate_name=str(body.get("candidate_name") or "").strip() or None,
+                candidate_email=str(body.get("candidate_email") or "").strip().lower() or None,
+                conversation_id=self._safe_int(body.get("conversation_id"), None),
+                language=str(body.get("language") or "").strip() or None,
+                ttl_hours=self._safe_int(body.get("ttl_hours"), None),
+                request_base_url=self._request_base_url(),
+            )
+        except Exception as exc:
+            return (
+                HTTPStatus.BAD_GATEWAY,
+                self._error("INTERVIEW_PROVIDER_REQUEST_FAILED", str(exc)),
+            )
         return HTTPStatus.CREATED, result
 
     def _post_refresh_session(self, session_id: str, payload: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:

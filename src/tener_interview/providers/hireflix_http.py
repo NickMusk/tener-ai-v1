@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib import error, request
+from uuid import uuid4
 
 
 @dataclass(frozen=True)
@@ -508,8 +509,9 @@ class HireflixHTTPAdapter:
     def _synthetic_email(self, payload: Dict[str, Any]) -> str:
         candidate_id = str(payload.get("candidate_id") or "candidate").strip().lower()
         safe_local = "".join(ch if ch.isalnum() else "-" for ch in candidate_id).strip("-") or "candidate"
+        nonce = uuid4().hex[:8]
         domain = self.config.synthetic_email_domain.strip().lower() or "interview.local"
-        return f"hireflix-{safe_local}@{domain}"
+        return f"hireflix-{safe_local}-{nonce}@{domain}"
 
     @staticmethod
     def _extract_position_from_create_response(resp: Dict[str, Any]) -> Optional[Dict[str, Any]]:

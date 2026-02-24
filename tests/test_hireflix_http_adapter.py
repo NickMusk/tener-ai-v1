@@ -21,6 +21,17 @@ class _FakeAdapter(HireflixHTTPAdapter):
 
 
 class HireflixHttpAdapterTests(unittest.TestCase):
+    def test_synthetic_email_is_unique_per_invite(self) -> None:
+        adapter = _FakeAdapter(
+            HireflixConfig(api_key="k", position_id="pos_1"),
+            scripted_responses=[],
+        )
+        one = adapter._synthetic_email({"candidate_id": 42})
+        two = adapter._synthetic_email({"candidate_id": 42})
+        self.assertNotEqual(one, two)
+        self.assertIn("hireflix-42-", one)
+        self.assertTrue(one.endswith("@interview.local"))
+
     def test_create_assessment_with_position_save_mutation(self) -> None:
         adapter = _FakeAdapter(
             HireflixConfig(api_key="k", position_id=""),
