@@ -665,6 +665,14 @@ class HireflixHTTPAdapter:
 
     @staticmethod
     def _category_for_question(question: Dict[str, Any]) -> str:
+        explicit = str(question.get("category") or "").strip().lower()
+        if explicit in {"culture_fit", "cultural_fit", "culture"}:
+            return "culture_fit"
+        if explicit in {"soft_skills", "soft skills", "soft"}:
+            return "soft_skills"
+        if explicit in {"hard_skills", "hard skills", "technical", "tech"}:
+            return "technical"
+
         text = " ".join(
             [
                 str(question.get("title") or ""),
@@ -697,6 +705,7 @@ class HireflixHTTPAdapter:
             "sql",
             "devops",
             "cloud",
+            "hard skills",
         }
 
         if any(marker in text for marker in culture_markers):

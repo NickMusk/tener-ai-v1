@@ -1,10 +1,15 @@
 {
   "version": "1.0",
   "defaults": {
-    "question_count": 3,
+    "question_count": 10,
     "time_to_answer": 120,
     "time_to_think": 12,
-    "retakes": 1
+    "retakes": 1,
+    "category_targets": {
+      "hard_skills": 0.4,
+      "soft_skills": 0.3,
+      "cultural_fit": 0.3
+    }
   },
   "company_values": [
     "clear communication",

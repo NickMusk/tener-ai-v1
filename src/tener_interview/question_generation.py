@@ -10,10 +10,15 @@ from typing import Any, Dict, List
 DEFAULT_GUIDELINES: Dict[str, Any] = {
     "version": "1.0",
     "defaults": {
-        "question_count": 3,
+        "question_count": 10,
         "time_to_answer": 120,
         "time_to_think": 12,
         "retakes": 1,
+        "category_targets": {
+            "hard_skills": 0.4,
+            "soft_skills": 0.3,
+            "cultural_fit": 0.3,
+        },
     },
     "company_values": [
         "clear communication",
@@ -70,41 +75,38 @@ class InterviewQuestionGenerator:
         value_primary = values[0] if values else "clear communication"
         value_secondary = values[1] if len(values) > 1 else "ownership"
 
-        questions = [
-            {
-                "title": f"At {self.company_name}, we value {value_primary}. Tell us about your most relevant project for the {title} role.",
-                "description": (
-                    f"Please include context, your role, concrete actions, and measurable outcomes. "
-                    f"Connect your story to {self.company_name}'s mission: {mission_short}"
-                ),
-                "timeToAnswer": time_to_answer,
-                "timeToThink": time_to_think,
-                "retakes": retakes,
-            },
-            {
-                "title": f"For {self.company_name}, describe a technically challenging problem involving {skills_text}.",
-                "description": (
-                    "Explain the trade-offs you considered, why you chose your solution, "
-                    "and the business or user impact of the final result."
-                ),
-                "timeToAnswer": time_to_answer,
-                "timeToThink": time_to_think,
-                "retakes": retakes,
-            },
-            {
-                "title": f"In {self.company_name}, we value {value_secondary}. How do you collaborate across teams under pressure?",
-                "description": (
-                    "Give a real example of communication with stakeholders, conflict handling, "
-                    "and how you kept delivery quality high."
-                ),
-                "timeToAnswer": time_to_answer,
-                "timeToThink": time_to_think,
-                "retakes": retakes,
-            },
-        ]
-
-        desired_count = max(1, min(int(self._to_int(defaults.get("question_count"), 3)), 8))
-        questions = questions[:desired_count]
+        desired_count = max(3, min(int(self._to_int(defaults.get("question_count"), 10)), 20))
+        category_plan = self._build_category_plan(defaults=defaults, total_questions=desired_count)
+        category_index: Dict[str, int] = {"hard_skills": 0, "soft_skills": 0, "cultural_fit": 0}
+        questions: List[Dict[str, Any]] = []
+        for category in category_plan:
+            category_index[category] = category_index.get(category, 0) + 1
+            idx = category_index[category]
+            if category == "hard_skills":
+                item = self._hard_skills_question(
+                    index=idx,
+                    company_name=self.company_name,
+                    job_title=title,
+                    skills_text=skills_text,
+                )
+            elif category == "cultural_fit":
+                item = self._cultural_fit_question(
+                    index=idx,
+                    company_name=self.company_name,
+                    mission_short=mission_short,
+                    value_primary=value_primary,
+                )
+            else:
+                item = self._soft_skills_question(
+                    index=idx,
+                    company_name=self.company_name,
+                    value_secondary=value_secondary,
+                )
+            item["category"] = category
+            item["timeToAnswer"] = time_to_answer
+            item["timeToThink"] = time_to_think
+            item["retakes"] = retakes
+            questions.append(item)
 
         payload = {
             "version": str(self.guidelines.get("version") or "1.0"),
@@ -126,8 +128,117 @@ class InterviewQuestionGenerator:
                 "guidelines_version": str(self.guidelines.get("version") or "1.0"),
                 "skills_detected": top_skills,
                 "company_values": values,
+                "categories": self._count_categories(questions),
             },
         }
+
+    @staticmethod
+    def _build_category_plan(*, defaults: Dict[str, Any], total_questions: int) -> List[str]:
+        targets = defaults.get("category_targets") if isinstance(defaults.get("category_targets"), dict) else {}
+        keys = ["hard_skills", "soft_skills", "cultural_fit"]
+        weights: Dict[str, float] = {}
+        for key in keys:
+            raw = targets.get(key)
+            try:
+                value = float(raw)
+            except (TypeError, ValueError):
+                value = 0.0
+            weights[key] = max(0.0, value)
+        if sum(weights.values()) <= 0.0:
+            weights = {"hard_skills": 0.4, "soft_skills": 0.3, "cultural_fit": 0.3}
+
+        allocated = {k: 0 for k in keys}
+        for key in keys:
+            allocated[key] = int(total_questions * (weights[key] / sum(weights.values())))
+
+        remaining = total_questions - sum(allocated.values())
+        order = sorted(keys, key=lambda k: weights[k], reverse=True)
+        cursor = 0
+        while remaining > 0:
+            pick = order[cursor % len(order)]
+            allocated[pick] += 1
+            remaining -= 1
+            cursor += 1
+
+        plan: List[str] = []
+        while len(plan) < total_questions:
+            for key in keys:
+                if allocated[key] > 0:
+                    plan.append(key)
+                    allocated[key] -= 1
+                    if len(plan) >= total_questions:
+                        break
+        return plan
+
+    @staticmethod
+    def _hard_skills_question(*, index: int, company_name: str, job_title: str, skills_text: str) -> Dict[str, Any]:
+        prompts = [
+            (
+                f"[Hard Skills] At {company_name}, describe the most complex technical problem you solved relevant to {job_title}.",
+                "Include constraints, architecture choices, and measurable impact."
+            ),
+            (
+                f"[Hard Skills] For {company_name}, explain how you would design and scale a solution using {skills_text}.",
+                "Walk through trade-offs, reliability, performance, and security decisions."
+            ),
+            (
+                f"[Hard Skills] In {company_name}, how do you debug and stabilize production issues in your technical stack?",
+                "Share a concrete incident, root cause analysis, and prevention actions."
+            ),
+            (
+                f"[Hard Skills] For {company_name}, tell us about a code quality or architecture improvement you led.",
+                "Explain baseline metrics, actions you took, and resulting improvements."
+            ),
+        ]
+        title, description = prompts[(index - 1) % len(prompts)]
+        return {"title": title, "description": description}
+
+    @staticmethod
+    def _soft_skills_question(*, index: int, company_name: str, value_secondary: str) -> Dict[str, Any]:
+        prompts = [
+            (
+                f"[Soft Skills] At {company_name}, we value {value_secondary}. Tell us about a high-stakes cross-functional collaboration.",
+                "Describe your communication strategy, stakeholder alignment, and outcome."
+            ),
+            (
+                f"[Soft Skills] In {company_name}, how do you handle disagreement with product or engineering stakeholders?",
+                "Use a real example and explain how you moved the team to a decision."
+            ),
+            (
+                f"[Soft Skills] For {company_name}, describe a time you gave or received difficult feedback.",
+                "Focus on your approach, behavior change, and impact on team performance."
+            ),
+        ]
+        title, description = prompts[(index - 1) % len(prompts)]
+        return {"title": title, "description": description}
+
+    @staticmethod
+    def _cultural_fit_question(*, index: int, company_name: str, mission_short: str, value_primary: str) -> Dict[str, Any]:
+        prompts = [
+            (
+                f"[Cultural Fit] At {company_name}, why does our mission resonate with you?",
+                f"Reference this mission in your answer: {mission_short}"
+            ),
+            (
+                f"[Cultural Fit] In {company_name}, we value {value_primary}. Share a situation where you embodied this value.",
+                "Explain decisions you made and how they aligned with company culture."
+            ),
+            (
+                f"[Cultural Fit] For {company_name}, what type of team culture helps you deliver your best work?",
+                "Be specific about behaviors, accountability, and collaboration norms."
+            ),
+        ]
+        title, description = prompts[(index - 1) % len(prompts)]
+        return {"title": title, "description": description}
+
+    @staticmethod
+    def _count_categories(questions: List[Dict[str, Any]]) -> Dict[str, int]:
+        out: Dict[str, int] = {"hard_skills": 0, "soft_skills": 0, "cultural_fit": 0}
+        for question in questions:
+            category = str(question.get("category") or "").strip().lower()
+            if category in out:
+                out[category] += 1
+        return out
 
     def _company_values(self) -> List[str]:
         profile_values = self.company_profile.get("values")

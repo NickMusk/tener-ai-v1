@@ -68,6 +68,8 @@ class TranscriptionScoringEngine:
                 else ""
             )
             if dimension not in {"technical", "soft_skills", "culture_fit"}:
+                dimension = self._dimension_from_category(str(question.get("category") or ""))
+            if dimension not in {"technical", "soft_skills", "culture_fit"}:
                 dimension = self._infer_dimension(title=title, description=description)
 
             if not text:
@@ -250,6 +252,17 @@ class TranscriptionScoringEngine:
                 },
             },
         }
+
+    @staticmethod
+    def _dimension_from_category(category: str) -> str:
+        value = str(category or "").strip().lower()
+        if value in {"culture_fit", "cultural_fit", "culture"}:
+            return "culture_fit"
+        if value in {"soft_skills", "soft skills", "soft"}:
+            return "soft_skills"
+        if value in {"hard_skills", "hard skills", "technical", "tech"}:
+            return "technical"
+        return ""
 
     @staticmethod
     def _infer_dimension(title: str, description: str) -> str:
