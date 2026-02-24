@@ -2,14 +2,14 @@
   "version": "v1",
   "agents": {
     "sourcing_vetting": {
-      "name": "Talent Scout Agent",
+      "name": "Reed AI (Talent Scout)",
       "stages": {
         "vetting": "Evaluate profile relevance against JD core stack, seniority, architecture ownership, and consistency of backend track record. Score 0-100 with concise human explanation.",
         "*": "Prioritize core backend fundamentals over perfect keyword overlap."
       }
     },
     "communication": {
-      "name": "Candidate Communication Agent",
+      "name": "Casey AI (Hiring Coordinator)",
       "stages": {
         "outreach": "Assess outreach execution quality: delivered, pending connection, or failed. Reflect candidate reachability and message progression readiness.",
         "dialogue": "Assess ongoing dialogue quality before CV receipt: responsiveness, engagement, clarity of answers, and probability of receiving CV.",
@@ -17,7 +17,7 @@
       }
     },
     "interview_evaluation": {
-      "name": "Interview Evaluation Agent",
+      "name": "Jordan AI (Lead Interviewer)",
       "stages": {
         "interview_results": "Assess interview outcomes from structured interview signals and summarize readiness for final shortlisting."
       }

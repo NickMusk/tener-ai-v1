@@ -10,9 +10,11 @@ from typing import Any, Dict, Iterable, List, Optional
 
 UTC = timezone.utc
 AGENT_DEFAULT_NAMES = {
-    "sourcing_vetting": "Talent Scout Agent",
-    "communication": "Candidate Communication Agent",
-    "interview_evaluation": "Interview Evaluation Agent",
+    "sourcing_vetting": "Reed AI (Talent Scout)",
+    "communication": "Casey AI (Hiring Coordinator)",
+    "interview_evaluation": "Jordan AI (Lead Interviewer)",
+    "culture_analyst": "Harper AI (Culture Analyst)",
+    "job_architect": "Spencer AI (Job Architect)",
 }
 
 

@@ -17,9 +17,11 @@ from .pre_resume_service import PreResumeCommunicationService
 DEFAULT_FORCED_TEST_SCORE = 0.99
 TERMINAL_PRE_RESUME_STATUSES = {"resume_received", "not_interested", "unreachable", "stalled"}
 AGENT_ROLES = {
-    "sourcing_vetting": "Talent Scout Agent",
-    "communication": "Candidate Communication Agent",
-    "interview_evaluation": "Interview Evaluation Agent",
+    "sourcing_vetting": "Reed AI (Talent Scout)",
+    "communication": "Casey AI (Hiring Coordinator)",
+    "interview_evaluation": "Jordan AI (Lead Interviewer)",
+    "culture_analyst": "Harper AI (Culture Analyst)",
+    "job_architect": "Spencer AI (Job Architect)",
 }
 
 

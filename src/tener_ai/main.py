@@ -267,17 +267,30 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 HTTPStatus.OK,
                 {
                     "agents": {
+                        "culture_analyst": {
+                            "name": SERVICES["workflow"]._agent_name("culture_analyst"),
+                            "stages": ["target_profile", "culture_fit_brief"],
+                            "active": False,
+                        },
+                        "job_architect": {
+                            "name": SERVICES["workflow"]._agent_name("job_architect"),
+                            "stages": ["jd_structuring", "core_profile_definition"],
+                            "active": False,
+                        },
                         "sourcing_vetting": {
                             "name": SERVICES["workflow"]._agent_name("sourcing_vetting"),
                             "stages": ["source", "enrich", "verify", "add", "vetting"],
+                            "active": True,
                         },
                         "communication": {
                             "name": SERVICES["workflow"]._agent_name("communication"),
                             "stages": ["outreach", "faq", "pre_resume", "dialogue"],
+                            "active": True,
                         },
                         "interview_evaluation": {
                             "name": SERVICES["workflow"]._agent_name("interview_evaluation"),
                             "stages": ["interview_results"],
+                            "active": True,
                         },
                     },
                     "evaluation_playbook": SERVICES["evaluation_playbook"].to_dict(),

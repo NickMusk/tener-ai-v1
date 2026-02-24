@@ -536,7 +536,7 @@
 
     <section class="steps">
       <article class="step-card">
-        <div class="step-title"><span>1. Source <span class="muted mono" id="agent-name-sourcing-inline">Talent Scout Agent</span></span><span id="status-source" class="status">idle</span></div>
+        <div class="step-title"><span>1. Source <span class="muted mono" id="agent-name-sourcing-inline">Reed AI (Talent Scout)</span></span><span id="status-source" class="status">idle</span></div>
         <div id="step-source-meta" class="step-metrics">Profiles: 0</div>
         <div class="step-actions">
           <button id="run-source-btn">Run</button>
@@ -544,7 +544,7 @@
       </article>
 
       <article class="step-card">
-        <div class="step-title"><span>2. Enrich <span class="muted mono" id="agent-name-sourcing-inline-2">Talent Scout Agent</span></span><span id="status-enrich" class="status">idle</span></div>
+        <div class="step-title"><span>2. Enrich <span class="muted mono" id="agent-name-sourcing-inline-2">Reed AI (Talent Scout)</span></span><span id="status-enrich" class="status">idle</span></div>
         <div id="step-enrich-meta" class="step-metrics">Profiles: 0, Failed: 0</div>
         <div class="step-actions">
           <button id="run-enrich-btn">Run</button>
@@ -552,7 +552,7 @@
       </article>
 
       <article class="step-card">
-        <div class="step-title"><span>3. Vetting <span class="muted mono" id="agent-name-sourcing-inline-3">Talent Scout Agent</span></span><span id="status-verify" class="status">idle</span></div>
+        <div class="step-title"><span>3. Vetting <span class="muted mono" id="agent-name-sourcing-inline-3">Reed AI (Talent Scout)</span></span><span id="status-verify" class="status">idle</span></div>
         <div id="step-verify-meta" class="step-metrics">Verified: 0, Needs resume: 0, Rejected: 0</div>
         <div class="step-actions">
           <button id="run-verify-btn">Run</button>
@@ -568,7 +568,7 @@
       </article>
 
       <article class="step-card">
-        <div class="step-title"><span>5. Outreach <span class="muted mono" id="agent-name-communication-inline">Candidate Communication Agent</span></span><span id="status-outreach" class="status">idle</span></div>
+        <div class="step-title"><span>5. Outreach <span class="muted mono" id="agent-name-communication-inline">Casey AI (Hiring Coordinator)</span></span><span id="status-outreach" class="status">idle</span></div>
         <div id="step-outreach-meta" class="step-metrics">Total: 0, Sent: 0, Pending: 0, Failed: 0</div>
         <div class="step-actions">
           <button id="run-outreach-btn">Run</button>
@@ -577,7 +577,7 @@
       </article>
 
       <article class="step-card">
-        <div class="step-title"><span>6. Dialogue <span class="muted mono" id="agent-name-communication-inline-2">Candidate Communication Agent</span></span><span id="status-faq" class="status">manual</span></div>
+        <div class="step-title"><span>6. Dialogue <span class="muted mono" id="agent-name-communication-inline-2">Casey AI (Hiring Coordinator)</span></span><span id="status-faq" class="status">manual</span></div>
         <div class="step-metrics">Inbound auto-replies are triggered via conversation endpoint.</div>
         <div class="step-actions">
           <button disabled>Use API</button>
@@ -650,7 +650,7 @@
     <section id="view-agent" class="view-section">
       <section class="card">
         <div class="panel-title">
-          <span id="agent-comm-panel-title">Candidate Communication Agent: <span class="mono">pre_resume</span></span>
+          <span id="agent-comm-panel-title">Casey AI (Hiring Coordinator): <span class="mono">pre_resume</span></span>
           <span class="mono" id="agent-job-title">no job selected</span>
         </div>
         <div class="form-grid">
@@ -800,9 +800,9 @@
       candidatesOverallFilter: "all",
       activeView: "pipeline",
       agentSystem: {
-        sourcing_vetting: { name: "Talent Scout Agent" },
-        communication: { name: "Candidate Communication Agent" },
-        interview_evaluation: { name: "Interview Evaluation Agent" }
+        sourcing_vetting: { name: "Reed AI (Talent Scout)" },
+        communication: { name: "Casey AI (Hiring Coordinator)" },
+        interview_evaluation: { name: "Jordan AI (Lead Interviewer)" }
       },
       sourceProfiles: [],
       enrichedProfiles: [],
@@ -870,9 +870,9 @@
     }
 
     function applyAgentSystemNames() {
-      const sourcingName = (state.agentSystem.sourcing_vetting || {}).name || "Talent Scout Agent";
-      const communicationName = (state.agentSystem.communication || {}).name || "Candidate Communication Agent";
-      const interviewName = (state.agentSystem.interview_evaluation || {}).name || "Interview Evaluation Agent";
+      const sourcingName = (state.agentSystem.sourcing_vetting || {}).name || "Reed AI (Talent Scout)";
+      const communicationName = (state.agentSystem.communication || {}).name || "Casey AI (Hiring Coordinator)";
+      const interviewName = (state.agentSystem.interview_evaluation || {}).name || "Jordan AI (Lead Interviewer)";
       if ($("agent-name-sourcing-inline")) $("agent-name-sourcing-inline").textContent = sourcingName;
       if ($("agent-name-sourcing-inline-2")) $("agent-name-sourcing-inline-2").textContent = sourcingName;
       if ($("agent-name-sourcing-inline-3")) $("agent-name-sourcing-inline-3").textContent = sourcingName;
@@ -893,15 +893,19 @@
         const out = await api('/api/agent-system');
         const agents = out.agents || {};
         state.agentSystem = {
-          sourcing_vetting: { name: ((agents.sourcing_vetting || {}).name || "Talent Scout Agent") },
-          communication: { name: ((agents.communication || {}).name || "Candidate Communication Agent") },
-          interview_evaluation: { name: ((agents.interview_evaluation || {}).name || "Interview Evaluation Agent") }
+          culture_analyst: { name: ((agents.culture_analyst || {}).name || "Harper AI (Culture Analyst)") },
+          job_architect: { name: ((agents.job_architect || {}).name || "Spencer AI (Job Architect)") },
+          sourcing_vetting: { name: ((agents.sourcing_vetting || {}).name || "Reed AI (Talent Scout)") },
+          communication: { name: ((agents.communication || {}).name || "Casey AI (Hiring Coordinator)") },
+          interview_evaluation: { name: ((agents.interview_evaluation || {}).name || "Jordan AI (Lead Interviewer)") }
         };
       } catch {
         state.agentSystem = {
-          sourcing_vetting: { name: "Talent Scout Agent" },
-          communication: { name: "Candidate Communication Agent" },
-          interview_evaluation: { name: "Interview Evaluation Agent" }
+          culture_analyst: { name: "Harper AI (Culture Analyst)" },
+          job_architect: { name: "Spencer AI (Job Architect)" },
+          sourcing_vetting: { name: "Reed AI (Talent Scout)" },
+          communication: { name: "Casey AI (Hiring Coordinator)" },
+          interview_evaluation: { name: "Jordan AI (Lead Interviewer)" }
         };
       }
       applyAgentSystemNames();
