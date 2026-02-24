@@ -4,6 +4,7 @@ import json
 import hashlib
 import os
 import re
+import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -207,6 +208,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "pre_resume_events": "GET /api/pre-resume/events?limit=200",
                         "pre_resume_inbound": "POST /api/pre-resume/sessions/{session_id}/inbound",
                         "pre_resume_followup": "POST /api/pre-resume/sessions/{session_id}/followup",
+                        "pre_resume_followups_run": "POST /api/pre-resume/followups/run",
                         "pre_resume_unreachable": "POST /api/pre-resume/sessions/{session_id}/unreachable",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "chats_overview": "GET /api/chats/overview?limit=200",
@@ -413,29 +415,91 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     self._json_response(HTTPStatus.UNAUTHORIZED, {"error": "invalid webhook secret"})
                     return
 
-            event_id = self._pick_str(body, "event_id", "id", "message_id", "event.id", "message.id", "data.id")
-            event_type = self._pick_str(body, "type", "event", "event.type", "data.type").lower()
-            external_chat_id = self._pick_str(body, "chat_id", "chat.id", "conversation_id", "data.chat_id", "data.chat.id")
-            text = self._pick_str(body, "text", "message", "content", "message.text", "data.text")
-            direction = self._pick_str(body, "direction", "message.direction", "data.direction").lower()
-            sender_provider_id = self._pick_str(body, "sender.provider_id", "sender_id", "from.provider_id", "from.id", "attendee_provider_id")
+            event_id = self._pick_str(body, "event_id", "id", "message_id", "event.id", "message.id", "data.id", "data.event_id")
+            event_type = self._pick_str(body, "type", "event", "event.type", "data.type", "data.event").lower()
+            external_chat_id = self._pick_str(
+                body,
+                "chat_id",
+                "chat.id",
+                "conversation_id",
+                "data.chat_id",
+                "data.chat.id",
+                "data.conversation_id",
+                "message.chat_id",
+                "message.chat.id",
+            )
+            text = self._pick_text(
+                body,
+                "text",
+                "message",
+                "content",
+                "message.text",
+                "message.content",
+                "message.body",
+                "data.text",
+                "data.message",
+                "data.message.text",
+                "data.message.content",
+                "data.message.body",
+            )
+            direction = self._pick_str(body, "direction", "message.direction", "data.direction", "data.message.direction").lower()
+            sender_provider_id = self._pick_str(
+                body,
+                "sender.provider_id",
+                "sender_id",
+                "from.provider_id",
+                "from.id",
+                "attendee_provider_id",
+                "sender.id",
+                "data.sender.provider_id",
+                "data.sender.id",
+                "data.from.provider_id",
+                "data.from.id",
+            )
             occurred_at = self._pick_str(body, "created_at", "timestamp", "occurred_at", "message.created_at")
 
+            event_key = event_id or hashlib.sha256(
+                f"{event_type}|{external_chat_id}|{sender_provider_id}|{text}|{occurred_at}".encode("utf-8")
+            ).hexdigest()
+
             if direction in {"outbound", "sent", "from_me", "self"}:
+                SERVICES["db"].log_operation(
+                    operation="webhook.unipile.ignored",
+                    status="ignored",
+                    entity_type="webhook",
+                    entity_id=event_key,
+                    details={"reason": "outbound_event", "event_type": event_type},
+                )
                 self._json_response(HTTPStatus.OK, {"status": "ignored", "reason": "outbound_event"})
                 return
             connection_event = ("connect" in event_type or "invitation" in event_type) and (
                 "accept" in event_type or "connected" in event_type
             )
             if not text and not connection_event:
+                SERVICES["db"].log_operation(
+                    operation="webhook.unipile.ignored",
+                    status="ignored",
+                    entity_type="webhook",
+                    entity_id=event_key,
+                    details={
+                        "reason": "empty_text",
+                        "event_type": event_type,
+                        "external_chat_id": external_chat_id,
+                        "sender_provider_id": sender_provider_id,
+                    },
+                )
                 self._json_response(HTTPStatus.OK, {"status": "ignored", "reason": "empty_text"})
                 return
 
-            event_key = event_id or hashlib.sha256(
-                f"{event_type}|{external_chat_id}|{sender_provider_id}|{text}|{occurred_at}".encode("utf-8")
-            ).hexdigest()
             is_new = SERVICES["db"].record_webhook_event(event_key=event_key, source="unipile", payload=body)
             if not is_new:
+                SERVICES["db"].log_operation(
+                    operation="webhook.unipile.duplicate",
+                    status="ignored",
+                    entity_type="webhook",
+                    entity_id=event_key,
+                    details={"event_type": event_type},
+                )
                 self._json_response(HTTPStatus.OK, {"status": "duplicate", "event_key": event_key})
                 return
 
@@ -897,6 +961,24 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, result)
             return
 
+        if parsed.path == "/api/pre-resume/followups/run":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            limit = self._safe_int(body.get("limit"), 100) or 100
+            job_id = self._safe_int(body.get("job_id"), None)
+            try:
+                result = SERVICES["workflow"].run_due_pre_resume_followups(job_id=job_id, limit=limit)
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "pre-resume followup run failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
         if parsed.path.startswith("/api/pre-resume/sessions/") and parsed.path.endswith("/followup"):
             match = re.match(r"^/api/pre-resume/sessions/([^/]+)/followup$", parsed.path)
             if not match:
@@ -1101,6 +1183,32 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         return ""
 
     @staticmethod
+    def _pick_text(payload: Dict[str, Any], *paths: str) -> str:
+        for path in paths:
+            value = TenerRequestHandler._get_nested(payload, path)
+            text = TenerRequestHandler._coerce_text(value)
+            if text:
+                return text
+        return ""
+
+    @staticmethod
+    def _coerce_text(value: Any) -> str:
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, dict):
+            for key in ("text", "content", "body", "message"):
+                nested = value.get(key)
+                text = TenerRequestHandler._coerce_text(nested)
+                if text:
+                    return text
+        if isinstance(value, list):
+            for item in value:
+                text = TenerRequestHandler._coerce_text(item)
+                if text:
+                    return text
+        return ""
+
+    @staticmethod
     def _get_nested(payload: Dict[str, Any], dotted_path: str) -> Any:
         current: Any = payload
         for part in dotted_path.split("."):
@@ -1114,9 +1222,50 @@ def run() -> None:
     # Cloud runtimes usually inject PORT; prefer it when TENER_PORT is not set.
     host = os.environ.get("TENER_HOST", "0.0.0.0")
     port = int(os.environ.get("TENER_PORT", os.environ.get("PORT", "8080")))
+    scheduler_stop: threading.Event | None = None
+
+    if env_bool("TENER_FOLLOWUP_SCHEDULER_ENABLED", True):
+        interval_seconds = max(30, int(os.environ.get("TENER_FOLLOWUP_INTERVAL_SECONDS", "120")))
+        scheduler_limit = max(1, int(os.environ.get("TENER_FOLLOWUP_BATCH_LIMIT", "100")))
+        scheduler_stop = threading.Event()
+
+        def _scheduler_loop() -> None:
+            while not scheduler_stop.is_set():
+                try:
+                    result = SERVICES["workflow"].run_due_pre_resume_followups(limit=scheduler_limit)
+                    if int(result.get("processed") or 0) > 0:
+                        SERVICES["db"].log_operation(
+                            operation="scheduler.pre_resume.followups",
+                            status="ok",
+                            entity_type="scheduler",
+                            entity_id="pre_resume",
+                            details={
+                                "processed": int(result.get("processed") or 0),
+                                "sent": int(result.get("sent") or 0),
+                                "skipped": int(result.get("skipped") or 0),
+                                "errors": int(result.get("errors") or 0),
+                            },
+                        )
+                except Exception as exc:
+                    SERVICES["db"].log_operation(
+                        operation="scheduler.pre_resume.followups",
+                        status="error",
+                        entity_type="scheduler",
+                        entity_id="pre_resume",
+                        details={"error": str(exc)},
+                    )
+                scheduler_stop.wait(interval_seconds)
+
+        threading.Thread(target=_scheduler_loop, daemon=True, name="pre-resume-followup-scheduler").start()
+        print(f"Pre-resume followup scheduler enabled: every {interval_seconds}s")
+
     server = ThreadingHTTPServer((host, port), TenerRequestHandler)
     print(f"Tener AI V1 API listening on http://{host}:{port}")
-    server.serve_forever()
+    try:
+        server.serve_forever()
+    finally:
+        if scheduler_stop is not None:
+            scheduler_stop.set()
 
 
 if __name__ == "__main__":

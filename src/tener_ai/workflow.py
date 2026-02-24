@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 import re
 from uuid import uuid4
@@ -11,6 +12,7 @@ from .db import Database
 from .pre_resume_service import PreResumeCommunicationService
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
+TERMINAL_PRE_RESUME_STATUSES = {"resume_received", "not_interested", "unreachable", "stalled"}
 
 
 @dataclass
@@ -938,6 +940,188 @@ class WorkflowService:
             "delivery": delivery,
         }
 
+    def run_due_pre_resume_followups(self, job_id: int | None = None, limit: int = 100) -> Dict[str, Any]:
+        if self.pre_resume_service is None:
+            return {
+                "processed": 0,
+                "sent": 0,
+                "skipped": 0,
+                "errors": 0,
+                "total_due": 0,
+                "items": [],
+                "reason": "pre_resume_service_not_configured",
+            }
+
+        safe_limit = max(1, min(int(limit or 100), 500))
+        rows = self.db.list_pre_resume_sessions(limit=max(safe_limit * 5, 200), job_id=job_id)
+        now = datetime.now(timezone.utc)
+
+        due_rows: List[Dict[str, Any]] = []
+        for row in rows:
+            status = str(row.get("status") or "").strip().lower()
+            if status in TERMINAL_PRE_RESUME_STATUSES:
+                continue
+            next_followup_at = str(row.get("next_followup_at") or "").strip()
+            if not next_followup_at:
+                continue
+            due_at = self._parse_iso_datetime(next_followup_at)
+            if due_at is None:
+                continue
+            if due_at <= now:
+                due_rows.append(row)
+                if len(due_rows) >= safe_limit:
+                    break
+
+        sent = 0
+        skipped = 0
+        errors = 0
+        items: List[Dict[str, Any]] = []
+
+        for row in due_rows:
+            session_id = str(row.get("session_id") or "")
+            if not session_id:
+                errors += 1
+                continue
+            conversation_id = int(row["conversation_id"])
+            job_ref = int(row["job_id"])
+            candidate_id = int(row["candidate_id"])
+            state_json = row.get("state_json") if isinstance(row.get("state_json"), dict) else {}
+            if self.pre_resume_service.get_session(session_id) is None and state_json:
+                self.pre_resume_service.seed_session(state_json)
+
+            try:
+                result = self.pre_resume_service.build_followup(session_id=session_id)
+            except Exception as exc:
+                errors += 1
+                items.append(
+                    {
+                        "session_id": session_id,
+                        "conversation_id": conversation_id,
+                        "status": "error",
+                        "error": str(exc),
+                    }
+                )
+                self.db.log_operation(
+                    operation="agent.pre_resume.followup.error",
+                    status="error",
+                    entity_type="conversation",
+                    entity_id=str(conversation_id),
+                    details={"session_id": session_id, "error": str(exc)},
+                )
+                continue
+
+            state = result.get("state") if isinstance(result.get("state"), dict) else {}
+            self.db.upsert_pre_resume_session(
+                session_id=session_id,
+                conversation_id=conversation_id,
+                job_id=job_ref,
+                candidate_id=candidate_id,
+                state=state,
+                instruction=self.stage_instructions.get("pre_resume", ""),
+            )
+            event_type = "followup_sent" if result.get("sent") else "followup_skipped"
+            self.db.insert_pre_resume_event(
+                session_id=session_id,
+                conversation_id=conversation_id,
+                event_type=event_type,
+                intent=None,
+                inbound_text=None,
+                outbound_text=result.get("outbound"),
+                state_status=state.get("status") if isinstance(state, dict) else None,
+                details={"reason": result.get("reason"), "source": "scheduler"},
+            )
+
+            if not result.get("sent"):
+                skipped += 1
+                items.append(
+                    {
+                        "session_id": session_id,
+                        "conversation_id": conversation_id,
+                        "status": "skipped",
+                        "reason": result.get("reason"),
+                    }
+                )
+                continue
+
+            outbound = str(result.get("outbound") or "").strip()
+            if not outbound:
+                skipped += 1
+                items.append(
+                    {
+                        "session_id": session_id,
+                        "conversation_id": conversation_id,
+                        "status": "skipped",
+                        "reason": "empty_outbound",
+                    }
+                )
+                continue
+
+            candidate = self.db.get_candidate(candidate_id)
+            conversation = self.db.get_conversation(conversation_id)
+            if not candidate or not conversation:
+                errors += 1
+                items.append(
+                    {
+                        "session_id": session_id,
+                        "conversation_id": conversation_id,
+                        "status": "error",
+                        "reason": "missing_candidate_or_conversation",
+                    }
+                )
+                continue
+
+            language = str((state or {}).get("language") or (candidate.get("languages") or ["en"])[0]).lower()
+            delivery = self._send_auto_reply(candidate=candidate, message=outbound, conversation=conversation)
+            outbound_id = self.db.add_message(
+                conversation_id=conversation_id,
+                direction="outbound",
+                content=outbound,
+                candidate_language=language,
+                meta={
+                    "type": "pre_resume_followup",
+                    "auto": True,
+                    "session_id": session_id,
+                    "delivery": delivery,
+                },
+            )
+            self.db.log_operation(
+                operation="agent.pre_resume.followup",
+                status="ok" if delivery.get("sent") else "error",
+                entity_type="message",
+                entity_id=str(outbound_id),
+                details={
+                    "session_id": session_id,
+                    "conversation_id": conversation_id,
+                    "job_id": job_ref,
+                    "candidate_id": candidate_id,
+                    "delivery": delivery,
+                },
+            )
+            if delivery.get("sent"):
+                sent += 1
+                status = "sent"
+            else:
+                errors += 1
+                status = "delivery_error"
+
+            items.append(
+                {
+                    "session_id": session_id,
+                    "conversation_id": conversation_id,
+                    "status": status,
+                    "delivery": delivery,
+                }
+            )
+
+        return {
+            "processed": len(due_rows),
+            "sent": sent,
+            "skipped": skipped,
+            "errors": errors,
+            "total_due": len(due_rows),
+            "items": items,
+        }
+
     def _send_auto_reply(
         self,
         candidate: Dict[str, Any],
@@ -1105,6 +1289,19 @@ class WorkflowService:
         if latest_inbound.strip():
             history.append({"role": "candidate", "content": latest_inbound.strip()})
         return history
+
+    @staticmethod
+    def _parse_iso_datetime(value: str) -> datetime | None:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
 
     @staticmethod
     def _is_connection_required_error(delivery: Dict[str, Any]) -> bool:

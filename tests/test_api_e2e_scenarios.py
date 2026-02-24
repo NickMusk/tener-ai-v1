@@ -574,6 +574,100 @@ class ApiE2EScenariosTests(unittest.TestCase):
         self.assertIn("session_started", event_types)
         self.assertIn("inbound_processed", event_types)
 
+    def test_unipile_webhook_supports_nested_payload_and_is_idempotent(self) -> None:
+        status, created = self._request(
+            "POST",
+            "/api/jobs",
+            {"title": "Webhook parser test", "jd_text": "Senior Backend Engineer Python AWS"},
+        )
+        self.assertEqual(status, 201)
+        job_id = int(created["job_id"])
+
+        status, manual = self._request(
+            "POST",
+            "/api/agent/accounts/manual",
+            {
+                "job_id": job_id,
+                "full_name": "Webhook Parser Candidate",
+                "language": "en",
+                "linkedin_id": "webhook-parser-1",
+                "external_chat_id": "webhook-nested-chat-1",
+            },
+        )
+        self.assertEqual(status, 201)
+        conversation_id = int(manual["conversation_id"])
+
+        payload = {
+            "event_id": "webhook-nested-evt-1",
+            "event": {"type": "message.received"},
+            "data": {
+                "chat": {"id": "webhook-nested-chat-1"},
+                "direction": "inbound",
+                "message": {"text": "Tell me more about the role"},
+                "sender": {"id": "webhook-parser-1"},
+            },
+            "timestamp": "2026-02-24T12:00:00Z",
+        }
+        status, inbound = self._request("POST", "/api/webhooks/unipile", payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(inbound.get("status"), "ok")
+        self.assertTrue((inbound.get("result") or {}).get("processed"))
+        self.assertEqual(int((inbound.get("result") or {}).get("conversation_id")), conversation_id)
+
+        status, duplicate = self._request("POST", "/api/webhooks/unipile", payload)
+        self.assertEqual(status, 200)
+        self.assertEqual(duplicate.get("status"), "duplicate")
+
+    def test_pre_resume_followups_run_endpoint_sends_due_followup(self) -> None:
+        status, created = self._request(
+            "POST",
+            "/api/jobs",
+            {"title": "Followup runner test", "jd_text": "Senior Backend Engineer Python AWS"},
+        )
+        self.assertEqual(status, 201)
+        job_id = int(created["job_id"])
+
+        status, manual = self._request(
+            "POST",
+            "/api/agent/accounts/manual",
+            {
+                "job_id": job_id,
+                "full_name": "Followup Candidate",
+                "language": "en",
+                "linkedin_id": "followup-candidate-1",
+                "external_chat_id": "followup-chat-1",
+            },
+        )
+        self.assertEqual(status, 201)
+        conversation_id = int(manual["conversation_id"])
+        session_id = str(manual["session_id"])
+        candidate_id = int(manual["candidate_id"])
+
+        db: Database = api_main.SERVICES["db"]
+        session_row = db.get_pre_resume_session(session_id)
+        self.assertIsNotNone(session_row)
+        state = dict(session_row.get("state_json") or {})
+        state["status"] = "awaiting_reply"
+        state["next_followup_at"] = "2000-01-01T00:00:00+00:00"
+        db.upsert_pre_resume_session(
+            session_id=session_id,
+            conversation_id=conversation_id,
+            job_id=job_id,
+            candidate_id=candidate_id,
+            state=state,
+            instruction=api_main.SERVICES["instructions"].get("pre_resume"),
+        )
+        api_main.SERVICES["pre_resume"].seed_session(state)
+
+        status, run_out = self._request(
+            "POST",
+            "/api/pre-resume/followups/run",
+            {"job_id": job_id, "limit": 20},
+        )
+        self.assertEqual(status, 200)
+        self.assertGreaterEqual(int(run_out.get("processed") or 0), 1)
+        self.assertGreaterEqual(int(run_out.get("sent") or 0), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
