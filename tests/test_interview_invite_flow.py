@@ -139,6 +139,7 @@ class InterviewInviteFlowTests(unittest.TestCase):
             self.assertEqual(first["mode"], "pre_resume")
             self.assertEqual(first["intent"], "pre_vetting_opt_in")
             self.assertTrue((first.get("interview") or {}).get("started"))
+            self.assertTrue(str(first.get("reply") or "").startswith("Hey Candidate Interview,"))
             self.assertIn("interview.local", str(first.get("reply") or ""))
 
             row = db.list_candidates_for_job(job_id)[0]

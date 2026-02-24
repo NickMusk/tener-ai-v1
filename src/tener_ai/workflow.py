@@ -1973,21 +1973,21 @@ class WorkflowService:
         entry_url: str,
         language: str,
     ) -> str:
-        name = str(candidate.get("full_name") or "there").strip() or "there"
+        name = self._candidate_greeting_name(candidate)
         title = str(job.get("title") or "this role").strip() or "this role"
         fallback_by_lang = {
             "en": (
-                '{name}, nice.\n'
+                'Hey {name},\n'
                 'here is your quick async pre vetting link for "{title}": {url}\n'
                 "when you finish it, drop me a short reply here and I will move you forward"
             ),
             "ru": (
-                '{name}, отлично.\n'
+                'Hey {name},\n'
                 'вот короткий async pre vetting по роли "{title}": {url}\n'
                 "как закончите, просто дайте короткий ответ здесь и я двину вас дальше"
             ),
             "es": (
-                '{name}, perfecto.\n'
+                'Hey {name},\n'
                 'aqui esta tu enlace de async pre vetting para "{title}": {url}\n'
                 "cuando termines, dejame una respuesta corta aqui y te muevo al siguiente paso"
             ),
@@ -2011,7 +2011,8 @@ class WorkflowService:
             language=lang,
             state=None,
         )
-        return self._ensure_interview_url(text=generated, fallback=fallback, entry_url=entry_url)
+        with_greeting = self._ensure_candidate_greeting(text=generated, fallback=fallback, candidate_name=name)
+        return self._ensure_interview_url(text=with_greeting, fallback=fallback, entry_url=entry_url)
 
     def _compose_interview_followup_message(
         self,
@@ -2681,9 +2682,10 @@ class WorkflowService:
                 f"Write in language: {language}.\n"
                 "Goal: candidate already agreed to quick pre vetting, now send interview link in one natural message.\n"
                 "Required structure:\n"
-                "1) Friendly short acknowledgement\n"
-                "2) Share the interview link exactly as provided in context\n"
-                "3) Ask for a short reply once finished\n"
+                "1) First line must be exactly: Hey {candidate name from LinkedIn},\n"
+                "2) Friendly short acknowledgement\n"
+                "3) Share the interview link exactly as provided in context\n"
+                "4) Ask for a short reply once finished\n"
                 "Do not ask the candidate to repeat consent phrase.\n"
                 "Do not force corporate tone.\n"
                 "Style rules:\n"
@@ -2981,6 +2983,52 @@ class WorkflowService:
         if message:
             return f"{message}\n{link}".strip()
         return link
+
+    @staticmethod
+    def _ensure_candidate_greeting(text: str, fallback: str, candidate_name: str) -> str:
+        message = str(text or "").strip()
+        fallback_text = str(fallback or "").strip()
+        name = str(candidate_name or "").strip() or "there"
+        greeting = f"Hey {name},"
+        base = message or fallback_text
+        if not base:
+            return greeting
+        lines = [line.strip() for line in str(base).splitlines() if line.strip()]
+        if not lines:
+            return greeting
+        lines[0] = greeting
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _candidate_greeting_name(candidate: Dict[str, Any]) -> str:
+        raw = candidate.get("raw") if isinstance(candidate.get("raw"), dict) else {}
+        detail = raw.get("detail") if isinstance(raw.get("detail"), dict) else {}
+        search = raw.get("search") if isinstance(raw.get("search"), dict) else {}
+        first = str(
+            candidate.get("first_name")
+            or detail.get("first_name")
+            or search.get("first_name")
+            or ""
+        ).strip()
+        last = str(
+            candidate.get("last_name")
+            or detail.get("last_name")
+            or search.get("last_name")
+            or ""
+        ).strip()
+        full = f"{first} {last}".strip()
+        if not full:
+            full = str(
+                candidate.get("full_name")
+                or detail.get("full_name")
+                or search.get("full_name")
+                or detail.get("name")
+                or search.get("name")
+                or ""
+            ).strip()
+        # LinkedIn testing profiles may append technical ids in parentheses.
+        full = re.sub(r"\s*\([^)]*\)\s*$", "", full).strip()
+        return full or "there"
 
     @classmethod
     def _extract_resume_cta(cls, text: str, language: str = "en") -> str:
