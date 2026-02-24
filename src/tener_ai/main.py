@@ -58,6 +58,15 @@ def build_services() -> Dict[str, Any]:
     templates_path = os.environ.get("TENER_TEMPLATES_PATH", str(root / "config" / "outreach_templates.json"))
     instructions_path = os.environ.get("TENER_AGENT_INSTRUCTIONS_PATH", str(root / "config" / "agent_instructions.json"))
     mock_profiles_path = os.environ.get("TENER_MOCK_LINKEDIN_DATA_PATH", str(root / "data" / "mock_linkedin_profiles.json"))
+    forced_test_ids_path = os.environ.get(
+        "TENER_FORCED_TEST_IDS_PATH",
+        str(root / "config" / "forced_test_linkedin_ids.txt"),
+    )
+    forced_test_score_raw = os.environ.get("TENER_FORCED_TEST_SCORE", "0.99")
+    try:
+        forced_test_score = float(forced_test_score_raw)
+    except ValueError:
+        forced_test_score = 0.99
 
     db = Database(db_path=db_path)
     db.init_schema()
@@ -114,6 +123,8 @@ def build_services() -> Dict[str, Any]:
         llm_responder=llm_responder,
         contact_all_mode=env_bool("TENER_CONTACT_ALL_MODE", True),
         require_resume_before_final_verify=env_bool("TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY", True),
+        forced_test_ids_path=forced_test_ids_path,
+        forced_test_score=forced_test_score,
         stage_instructions={
             "sourcing": instructions.get("sourcing"),
             "enrich": instructions.get("enrich"),

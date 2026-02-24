@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from uuid import uuid4
 from typing import Any, Dict, List
 
@@ -8,8 +9,7 @@ from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .db import Database
 from .pre_resume_service import PreResumeCommunicationService
 
-FORCED_TEST_PUBLIC_IDENTIFIER = "olena-bachek-b8523121a"
-FORCED_TEST_SCORE = 0.99
+DEFAULT_FORCED_TEST_SCORE = 0.99
 
 
 @dataclass
@@ -39,6 +39,8 @@ class WorkflowService:
         contact_all_mode: bool = False,
         require_resume_before_final_verify: bool = False,
         stage_instructions: Dict[str, str] | None = None,
+        forced_test_ids_path: str | None = None,
+        forced_test_score: float = DEFAULT_FORCED_TEST_SCORE,
     ) -> None:
         self.db = db
         self.sourcing_agent = sourcing_agent
@@ -50,14 +52,30 @@ class WorkflowService:
         self.contact_all_mode = contact_all_mode
         self.require_resume_before_final_verify = require_resume_before_final_verify
         self.stage_instructions = dict(stage_instructions or {})
-        self.forced_test_public_identifier = FORCED_TEST_PUBLIC_IDENTIFIER
-        self.forced_test_score = FORCED_TEST_SCORE
+        self.forced_test_ids_path = (forced_test_ids_path or "").strip() or None
+        try:
+            self.forced_test_score = float(forced_test_score)
+        except (TypeError, ValueError):
+            self.forced_test_score = DEFAULT_FORCED_TEST_SCORE
 
     def source_candidates(self, job_id: int, limit: int = 30) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
+        forced_test_ids = self._load_forced_test_identifiers()
         profiles = self.sourcing_agent.find_candidates(job=job, limit=limit)
-        profiles = self._inject_forced_test_candidate(job=job, profiles=profiles, limit=limit)
-        forced_included = any(self._is_forced_test_candidate(p) for p in profiles)
+        profiles = self._inject_forced_test_candidates(
+            job=job,
+            profiles=profiles,
+            limit=limit,
+            forced_identifiers=forced_test_ids,
+        )
+        included = sorted(
+            {
+                matched
+                for profile in profiles
+                for matched in [self._forced_test_identifier_for_profile(profile, forced_test_ids)]
+                if matched
+            }
+        )
 
         self.db.log_operation(
             operation="agent.sourcing.search",
@@ -67,8 +85,9 @@ class WorkflowService:
             details={
                 "profiles_found": len(profiles),
                 "limit": limit,
-                "forced_test_public_identifier": self.forced_test_public_identifier,
-                "forced_test_included": forced_included,
+                "forced_test_ids_file": self.forced_test_ids_path,
+                "forced_test_ids_configured": forced_test_ids,
+                "forced_test_ids_included": included,
             },
         )
         return {
@@ -80,6 +99,7 @@ class WorkflowService:
 
     def verify_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
+        forced_test_ids = self._load_forced_test_identifiers()
         enrich_result = self.enrich_profiles(job_id=job_id, profiles=profiles)
         enriched_profiles = enrich_result["profiles"]
 
@@ -90,12 +110,13 @@ class WorkflowService:
 
         for profile in enriched_profiles:
             score, status, notes = self.verification_agent.verify_candidate(job=job, profile=profile)
-            if self._is_forced_test_candidate(profile):
+            forced_identifier = self._forced_test_identifier_for_profile(profile, forced_test_ids)
+            if forced_identifier:
                 score = max(float(score), self.forced_test_score)
                 status = "verified"
                 notes = dict(notes or {})
                 notes["forced_test_candidate"] = True
-                notes["forced_test_public_identifier"] = self.forced_test_public_identifier
+                notes["forced_test_identifier"] = forced_identifier
                 notes["forced_score"] = self.forced_test_score
                 notes["human_explanation"] = (
                     "Тестовый кандидат принудительно приоритизирован: "
@@ -1068,68 +1089,87 @@ class WorkflowService:
         )
         return delivery
 
-    def _inject_forced_test_candidate(
+    def _inject_forced_test_candidates(
         self,
         job: Dict[str, Any],
         profiles: List[Dict[str, Any]],
         limit: int,
+        forced_identifiers: List[str],
     ) -> List[Dict[str, Any]]:
-        forced = self._resolve_forced_test_candidate(job=job)
-        if not forced:
+        if not forced_identifiers:
             return profiles
 
         target_limit = max(1, min(int(limit or 1), 100))
-        forced = self._mark_forced_test_candidate(forced)
+        forced_profiles: List[Dict[str, Any]] = []
+        seen_forced: set[str] = set()
 
-        merged: List[Dict[str, Any]] = [forced]
-        seen = {self._profile_identity_key(forced)}
+        for identifier in forced_identifiers:
+            forced = self._resolve_forced_test_candidate(identifier=identifier, job=job)
+            if not forced:
+                continue
+            marked = self._mark_forced_test_candidate(forced, identifier=identifier)
+            key = self._profile_identity_key(marked)
+            if key in seen_forced:
+                continue
+            seen_forced.add(key)
+            forced_profiles.append(marked)
+
+        merged: List[Dict[str, Any]] = []
+        seen = set()
+
+        for forced in forced_profiles:
+            key = self._profile_identity_key(forced)
+            if key in seen:
+                continue
+            seen.add(key)
+            merged.append(forced)
+            if len(merged) >= target_limit:
+                return merged[:target_limit]
 
         for profile in profiles:
             key = self._profile_identity_key(profile)
             if key in seen:
                 continue
-            if self._is_forced_test_candidate(profile):
-                profile = self._mark_forced_test_candidate(profile)
+            matched_identifier = self._forced_test_identifier_for_profile(profile, forced_identifiers)
+            if matched_identifier:
+                profile = self._mark_forced_test_candidate(profile, identifier=matched_identifier)
                 key = self._profile_identity_key(profile)
-            merged.append(profile)
+                if key in seen:
+                    continue
             seen.add(key)
+            merged.append(profile)
             if len(merged) >= target_limit:
                 break
 
         return merged[:target_limit]
 
-    def _resolve_forced_test_candidate(self, job: Dict[str, Any]) -> Dict[str, Any] | None:
+    def _resolve_forced_test_candidate(self, identifier: str, job: Dict[str, Any]) -> Dict[str, Any] | None:
         provider = getattr(self.sourcing_agent, "linkedin_provider", None)
-        if provider is None:
-            return None
-        provider_name = provider.__class__.__name__.lower()
-        # Keep this hardcoded override for real Unipile runs and avoid perturbing mock/offline tests.
-        if "unipile" not in provider_name:
-            return None
-
-        search_fn = getattr(provider, "search_profiles", None)
-        if not callable(search_fn):
-            return None
+        search_fn = getattr(provider, "search_profiles", None) if provider is not None else None
 
         fallback = {
-            "linkedin_id": self.forced_test_public_identifier,
-            "unipile_profile_id": self.forced_test_public_identifier,
-            "attendee_provider_id": self.forced_test_public_identifier,
-            "full_name": "Olena Bachek (Test)",
-            "headline": "Senior Backend Engineer",
+            "linkedin_id": identifier,
+            "unipile_profile_id": identifier,
+            "attendee_provider_id": identifier,
+            "full_name": f"Forced Test Candidate ({identifier})",
+            "headline": "Test candidate",
             "location": str(job.get("location") or "Remote"),
             "languages": ["en"],
             "skills": [],
             "years_experience": 8,
             "raw": {
-                "public_identifier": self.forced_test_public_identifier,
+                "public_identifier": identifier,
                 "forced_test_candidate": True,
+                "forced_test_identifier": identifier,
                 "source": "workflow_fallback",
             },
         }
 
+        if not callable(search_fn):
+            return fallback
+
         try:
-            found = search_fn(query=self.forced_test_public_identifier, limit=20) or []
+            found = search_fn(query=identifier, limit=20) or []
         except Exception:
             return fallback
 
@@ -1137,7 +1177,10 @@ class WorkflowService:
             return fallback
 
         for profile in found:
-            if isinstance(profile, dict) and self._is_forced_test_candidate(profile):
+            if not isinstance(profile, dict):
+                continue
+            matched = self._forced_test_identifier_for_profile(profile, [identifier])
+            if matched == identifier:
                 return profile
 
         for profile in found:
@@ -1145,48 +1188,63 @@ class WorkflowService:
                 continue
             raw = profile.get("raw") if isinstance(profile.get("raw"), dict) else {}
             public_identifier = str(raw.get("public_identifier") or "").strip().lower()
-            if public_identifier == self.forced_test_public_identifier:
+            if public_identifier == identifier:
                 return profile
 
         return fallback
 
-    def _mark_forced_test_candidate(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+    @staticmethod
+    def _mark_forced_test_candidate(profile: Dict[str, Any], identifier: str) -> Dict[str, Any]:
         out = dict(profile)
         raw = out.get("raw") if isinstance(out.get("raw"), dict) else {}
         raw = dict(raw)
         raw["forced_test_candidate"] = True
-        raw["forced_test_public_identifier"] = self.forced_test_public_identifier
-        raw.setdefault("public_identifier", self.forced_test_public_identifier)
+        raw["forced_test_identifier"] = identifier
+        raw.setdefault("public_identifier", identifier)
         out["raw"] = raw
 
         if not str(out.get("linkedin_id") or "").strip():
-            out["linkedin_id"] = self.forced_test_public_identifier
+            out["linkedin_id"] = identifier
         if not str(out.get("attendee_provider_id") or "").strip():
-            out["attendee_provider_id"] = str(out.get("linkedin_id") or self.forced_test_public_identifier)
+            out["attendee_provider_id"] = str(out.get("linkedin_id") or identifier)
         if not str(out.get("unipile_profile_id") or "").strip():
-            out["unipile_profile_id"] = str(out.get("linkedin_id") or self.forced_test_public_identifier)
+            out["unipile_profile_id"] = str(out.get("linkedin_id") or identifier)
         if not str(out.get("full_name") or "").strip():
-            out["full_name"] = "Olena Bachek (Test)"
+            out["full_name"] = f"Forced Test Candidate ({identifier})"
         if not isinstance(out.get("languages"), list) or not out.get("languages"):
             out["languages"] = ["en"]
         if not str(out.get("location") or "").strip():
             out["location"] = "Remote"
         return out
 
-    def _is_forced_test_candidate(self, profile: Dict[str, Any]) -> bool:
-        target = self.forced_test_public_identifier
+    def _forced_test_identifier_for_profile(self, profile: Dict[str, Any], forced_identifiers: List[str]) -> str | None:
+        if not forced_identifiers:
+            return None
+        targets = {x.strip().lower() for x in forced_identifiers if x and x.strip()}
+        if not targets:
+            return None
+
         for field in ("linkedin_id", "attendee_provider_id", "unipile_profile_id", "provider_id"):
             value = str(profile.get(field) or "").strip().lower()
-            if value == target or target in value:
-                return True
+            if not value:
+                continue
+            if value in targets:
+                return value
+            for identifier in targets:
+                if identifier and identifier in value:
+                    return identifier
 
         raw = profile.get("raw")
         if not isinstance(raw, dict):
-            full_name = str(profile.get("full_name") or "").strip().lower()
-            return "olena bachek" in full_name
+            return None
 
+        direct_identifier = str(raw.get("forced_test_identifier") or "").strip().lower()
+        if direct_identifier and direct_identifier in targets:
+            return direct_identifier
         if bool(raw.get("forced_test_candidate")):
-            return True
+            direct_public = str(raw.get("public_identifier") or "").strip().lower()
+            if direct_public and direct_public in targets:
+                return direct_public
 
         buckets = [raw]
         if isinstance(raw.get("detail"), dict):
@@ -1195,19 +1253,34 @@ class WorkflowService:
             buckets.append(raw["search"])
 
         for bucket in buckets:
-            if bool(bucket.get("forced_test_candidate")):
-                return True
+            forced_identifier = str(bucket.get("forced_test_identifier") or "").strip().lower()
+            if forced_identifier and forced_identifier in targets:
+                return forced_identifier
             public_identifier = str(bucket.get("public_identifier") or "").strip().lower()
-            if public_identifier == target or target in public_identifier:
-                return True
-            first_name = str(bucket.get("first_name") or "").strip().lower()
-            last_name = str(bucket.get("last_name") or "").strip().lower()
-            if first_name == "olena" and last_name == "bachek":
-                return True
-        full_name = str(profile.get("full_name") or "").strip().lower()
-        if "olena bachek" in full_name:
-            return True
-        return False
+            if public_identifier and public_identifier in targets:
+                return public_identifier
+        return None
+
+    def _load_forced_test_identifiers(self) -> List[str]:
+        path_raw = self.forced_test_ids_path or ""
+        if not path_raw:
+            return []
+        path = Path(path_raw)
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            return []
+        out: List[str] = []
+        seen: set[str] = set()
+        for raw_line in text.splitlines():
+            line = raw_line.split("#", 1)[0].strip().lower()
+            if not line:
+                continue
+            if line in seen:
+                continue
+            seen.add(line)
+            out.append(line)
+        return out
 
     @staticmethod
     def _profile_identity_key(profile: Dict[str, Any]) -> str:

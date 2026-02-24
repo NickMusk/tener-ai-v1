@@ -144,6 +144,8 @@ Recommended env vars:
 - `TENER_LLM_MODEL`: optional model name (default `gpt-4o-mini`).
 - `OPENAI_BASE_URL`: optional API base URL (default `https://api.openai.com/v1`).
 - `TENER_LLM_TIMEOUT_SECONDS`: optional timeout for LLM calls (default `30`).
+- `TENER_FORCED_TEST_IDS_PATH`: optional path to newline-separated LinkedIn IDs to force-inject into every source run (default `config/forced_test_linkedin_ids.txt`).
+- `TENER_FORCED_TEST_SCORE`: optional forced verification score for IDs from that file (default `0.99`).
 
 Flow with Unipile enabled:
 
@@ -167,6 +169,12 @@ Workflow mode env vars:
 
 - `TENER_CONTACT_ALL_MODE`: default `true`; converts pre-CV rejects to `needs_resume`.
 - `TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY`: default `true`; first outreach asks for CV/resume.
+
+Forced test candidate file:
+
+- Default file: `config/forced_test_linkedin_ids.txt`
+- Format: one LinkedIn identifier per line (`public_identifier` or provider id), `#` comments are allowed.
+- The file is read on each source/verify execution, so updates apply immediately without redeploy.
 
 ## Agent Instructions File
 

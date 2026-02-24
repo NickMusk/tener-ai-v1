@@ -6,7 +6,9 @@ from typing import Any, Dict, List
 from tener_ai.agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from tener_ai.db import Database
 from tener_ai.matching import MatchingEngine
-from tener_ai.workflow import FORCED_TEST_PUBLIC_IDENTIFIER, FORCED_TEST_SCORE, WorkflowService
+from tener_ai.workflow import DEFAULT_FORCED_TEST_SCORE, WorkflowService
+
+FORCED_TEST_ID = "olena-bachek-b8523121a"
 
 
 class FakeUnipileProvider:
@@ -15,7 +17,7 @@ class FakeUnipileProvider:
 
     def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         self.queries.append(query)
-        if query == FORCED_TEST_PUBLIC_IDENTIFIER:
+        if query == FORCED_TEST_ID:
             return [
                 {
                     "linkedin_id": "ACoAATestProvider123",
@@ -28,7 +30,7 @@ class FakeUnipileProvider:
                     "skills": [],
                     "years_experience": 1,
                     "raw": {
-                        "public_identifier": FORCED_TEST_PUBLIC_IDENTIFIER,
+                        "public_identifier": FORCED_TEST_ID,
                     },
                 }
             ]
@@ -51,7 +53,7 @@ class FakeUnipileProvider:
         enriched["attendee_provider_id"] = "ACoAADc0-FUBAMKDmKggoixvfVaLiocMh19_JDU"
         enriched["unipile_profile_id"] = "ACoAADc0-FUBAMKDmKggoixvfVaLiocMh19_JDU"
         enriched["raw"] = {
-            "search": {"forced_test_candidate": True},
+            "search": {"forced_test_candidate": True, "public_identifier": FORCED_TEST_ID},
             "detail": {"first_name": "Olena", "last_name": "Bachek"},
         }
         return enriched
@@ -66,6 +68,8 @@ class ForcedTestCandidateTests(unittest.TestCase):
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "forced_test_candidate.sqlite3"))
             db.init_schema()
+            ids_file = Path(td) / "forced_ids.txt"
+            ids_file.write_text(f"{FORCED_TEST_ID}\n", encoding="utf-8")
 
             matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
             provider = FakeUnipileProvider()
@@ -75,6 +79,7 @@ class ForcedTestCandidateTests(unittest.TestCase):
                 verification_agent=VerificationAgent(matching),
                 outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
                 faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                forced_test_ids_path=str(ids_file),
             )
 
             job_id = db.insert_job(
@@ -87,15 +92,15 @@ class ForcedTestCandidateTests(unittest.TestCase):
 
             source = workflow.source_candidates(job_id=job_id, limit=1)
             self.assertEqual(source["total"], 1)
-            self.assertEqual(provider.queries[-1], FORCED_TEST_PUBLIC_IDENTIFIER)
+            self.assertEqual(provider.queries[-1], FORCED_TEST_ID)
             forced_profile = source["profiles"][0]
-            self.assertEqual((forced_profile.get("raw") or {}).get("public_identifier"), FORCED_TEST_PUBLIC_IDENTIFIER)
+            self.assertEqual((forced_profile.get("raw") or {}).get("public_identifier"), FORCED_TEST_ID)
 
             verify = workflow.verify_profiles(job_id=job_id, profiles=source["profiles"])
             self.assertEqual(verify["total"], 1)
             item = verify["items"][0]
             self.assertEqual(item["status"], "verified")
-            self.assertGreaterEqual(item["score"], FORCED_TEST_SCORE)
+            self.assertGreaterEqual(item["score"], DEFAULT_FORCED_TEST_SCORE)
             self.assertTrue((item.get("notes") or {}).get("forced_test_candidate"))
 
 
