@@ -788,6 +788,10 @@
           <input id="job-title" placeholder="Senior Backend Engineer">
         </div>
         <div>
+          <label class="muted">Company</label>
+          <input id="job-company" placeholder="Tener">
+        </div>
+        <div>
           <label class="muted">Location</label>
           <input id="job-location" placeholder="Germany / Remote">
         </div>
@@ -857,6 +861,7 @@
     const $ = (id) => document.getElementById(id);
     const DEFAULT_JOB_TEMPLATE = {
       title: "Senior Backend Engineer",
+      company: "Tener",
       location: "Germany",
       seniority: "senior",
       preferred_languages: "en",
@@ -1238,7 +1243,10 @@
         $("agent-jd-text").value = "";
         return;
       }
-      $("agent-job-title").textContent = `#${job.id} ${job.title}`;
+      const company = String(job.company || "").trim();
+      $("agent-job-title").textContent = company
+        ? `#${job.id} ${job.title} (${company})`
+        : `#${job.id} ${job.title}`;
       $("agent-jd-text").value = job.jd_text || "";
     }
 
@@ -1291,6 +1299,7 @@
 
     function resetCreateJobForm() {
       $("job-title").value = DEFAULT_JOB_TEMPLATE.title;
+      $("job-company").value = DEFAULT_JOB_TEMPLATE.company;
       $("job-location").value = DEFAULT_JOB_TEMPLATE.location;
       $("job-seniority").value = DEFAULT_JOB_TEMPLATE.seniority;
       $("job-languages").value = DEFAULT_JOB_TEMPLATE.preferred_languages;
@@ -1328,7 +1337,8 @@
       data.items.forEach((job) => {
         const opt = document.createElement('option');
         opt.value = job.id;
-        opt.textContent = `#${job.id} ${job.title}`;
+        const company = String(job.company || "").trim();
+        opt.textContent = company ? `#${job.id} ${job.title} • ${company}` : `#${job.id} ${job.title}`;
         if (pipelineSelect) {
           const clone = opt.cloneNode(true);
           if (Number(job.id) === preferredJobId) clone.selected = true;
@@ -1353,8 +1363,13 @@
         $("job-meta").textContent = 'Create or select a job to begin.';
         return;
       }
+      const company = String(job.company || "").trim();
       $("job-label").textContent = `#${job.id}`;
-      $("job-meta").textContent = `${job.title} • ${job.seniority || 'auto'} • ${job.location || 'anywhere'}`;
+      const parts = [job.title];
+      if (company) parts.push(company);
+      parts.push(job.seniority || 'auto');
+      parts.push(job.location || 'anywhere');
+      $("job-meta").textContent = parts.join(' • ');
     }
 
     async function createJob() {
@@ -1368,6 +1383,7 @@
       const payload = {
         title,
         jd_text: jdText,
+        company: $("job-company").value.trim() || null,
         location: $("job-location").value.trim() || null,
         seniority: $("job-seniority").value || null,
         preferred_languages: $("job-languages").value

@@ -25,9 +25,10 @@ class SourceReadDatabase:
     def list_jobs(self, limit: int = 200) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 200), 1000))
         try:
+            select_columns = self._job_select_columns()
             rows = self._conn.execute(
-                """
-                SELECT id, title, jd_text, location, preferred_languages, seniority, created_at
+                f"""
+                SELECT {select_columns}
                 FROM jobs
                 ORDER BY id DESC
                 LIMIT ?
@@ -42,9 +43,10 @@ class SourceReadDatabase:
 
     def get_job(self, job_id: int) -> Dict[str, Any]:
         try:
+            select_columns = self._job_select_columns()
             row = self._conn.execute(
-                """
-                SELECT id, title, jd_text, location, preferred_languages, seniority, created_at
+                f"""
+                SELECT {select_columns}
                 FROM jobs
                 WHERE id = ?
                 LIMIT 1
@@ -91,3 +93,16 @@ class SourceReadDatabase:
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
         return dict(row)
+
+    def _job_select_columns(self) -> str:
+        columns = set(self._table_columns("jobs"))
+        if "company" in columns:
+            return "id, title, company, jd_text, location, preferred_languages, seniority, created_at"
+        return "id, title, NULL AS company, jd_text, location, preferred_languages, seniority, created_at"
+
+    def _table_columns(self, table_name: str) -> List[str]:
+        try:
+            rows = self._conn.execute(f"PRAGMA table_info({table_name})").fetchall()
+        except sqlite3.Error:
+            return []
+        return [str(row["name"]) for row in rows]

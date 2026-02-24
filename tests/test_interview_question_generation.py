@@ -9,7 +9,7 @@ from tener_interview.question_generation import InterviewQuestionGenerator
 
 
 class InterviewQuestionGenerationTests(unittest.TestCase):
-    def test_generation_mentions_company_and_extracts_skills(self) -> None:
+    def test_generation_mentions_company_selectively_and_extracts_skills(self) -> None:
         with TemporaryDirectory() as tmpdir:
             guidelines_path = Path(tmpdir) / "guidelines.json"
             profile_path = Path(tmpdir) / "company_profile.json"
@@ -49,17 +49,22 @@ class InterviewQuestionGenerationTests(unittest.TestCase):
             out = generator.generate_for_job(
                 {
                     "id": 101,
+                    "company": "Orbit AI",
                     "title": "Senior Backend Engineer",
                     "jd_text": "Strong Python and AWS experience. SQL optimization is important.",
                 }
             )
 
             self.assertIn("assessment_name", out)
-            self.assertIn("Acme Labs", out["assessment_name"])
+            self.assertIn("Orbit AI", out["assessment_name"])
             self.assertEqual(len(out["questions"]), 3)
+            mention_count = 0
             for question in out["questions"]:
-                self.assertIn("Acme Labs", question["title"])
+                if "Orbit AI" in str(question.get("title") or ""):
+                    mention_count += 1
                 self.assertIn("category", question)
+            self.assertGreaterEqual(mention_count, 1)
+            self.assertLess(mention_count, len(out["questions"]))
 
             meta = out.get("meta") if isinstance(out.get("meta"), dict) else {}
             detected = meta.get("skills_detected") if isinstance(meta.get("skills_detected"), list) else []

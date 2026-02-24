@@ -43,6 +43,7 @@ class Database:
         CREATE TABLE IF NOT EXISTS jobs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
+            company TEXT,
             jd_text TEXT NOT NULL,
             location TEXT,
             preferred_languages TEXT,
@@ -189,15 +190,17 @@ class Database:
         location: Optional[str],
         preferred_languages: List[str],
         seniority: Optional[str],
+        company: Optional[str] = None,
     ) -> int:
         with self.transaction() as conn:
             cur = conn.execute(
                 """
-                INSERT INTO jobs (title, jd_text, location, preferred_languages, seniority, created_at)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO jobs (title, company, jd_text, location, preferred_languages, seniority, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     title,
+                    company,
                     jd_text,
                     location,
                     json.dumps(preferred_languages),
@@ -1096,6 +1099,11 @@ class Database:
         return scorecard
 
     def _migrate_schema(self) -> None:
+        job_columns = self._table_columns("jobs")
+        if "company" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN company TEXT")
+
         columns = self._table_columns("conversations")
         if "external_chat_id" not in columns:
             with self.transaction() as conn:

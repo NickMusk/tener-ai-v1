@@ -89,6 +89,8 @@ class SourceReadDatabaseTests(unittest.TestCase):
         self.assertEqual(len(jobs), 1)
         self.assertEqual(jobs[0]["id"], 1)
         self.assertEqual(jobs[0]["title"], "ML Engineer")
+        self.assertIn("company", jobs[0])
+        self.assertIsNone(jobs[0]["company"])
 
         candidates = source.list_candidates_for_job(job_id=1, limit=20)
         self.assertEqual(len(candidates), 1)

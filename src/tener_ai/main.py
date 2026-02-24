@@ -683,8 +683,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/jobs":
             body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
             title = str(body.get("title") or "").strip()
             jd_text = str(body.get("jd_text") or "").strip()
+            company = str(body.get("company") or "").strip() or None
             if not title or not jd_text:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "title and jd_text are required"})
                 return
@@ -700,13 +704,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 location=body.get("location"),
                 preferred_languages=[str(x).lower() for x in preferred_languages if str(x).strip()],
                 seniority=(str(body.get("seniority")).lower() if body.get("seniority") else None),
+                company=company,
             )
             SERVICES["db"].log_operation(
                 operation="job.created",
                 status="ok",
                 entity_type="job",
                 entity_id=str(job_id),
-                details={"title": title},
+                details={"title": title, "company": company},
             )
             interview_assessment = self._prepare_job_interview_assessment(job_id=job_id)
             SERVICES["db"].log_operation(

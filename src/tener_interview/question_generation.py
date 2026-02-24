@@ -58,6 +58,8 @@ class InterviewQuestionGenerator:
     def generate_for_job(self, job: Dict[str, Any]) -> Dict[str, Any]:
         title = str(job.get("title") or "Open Role").strip()
         jd_text = str(job.get("jd_text") or "").strip()
+        job_company_name = str(job.get("company") or "").strip()
+        company_name = job_company_name or self.company_name
         values = self._company_values()
         top_skills = self._extract_skills(jd_text)
 
@@ -68,7 +70,7 @@ class InterviewQuestionGenerator:
 
         mission = str(self.company_profile.get("mission") or "").strip()
         if not mission:
-            mission = f"At {self.company_name}, we build teams that deliver measurable impact."
+            mission = f"At {company_name}, we build teams that deliver measurable impact."
         mission_short = mission[:180].rstrip()
 
         skills_text = ", ".join(top_skills) if top_skills else "your core technical domain"
@@ -85,21 +87,21 @@ class InterviewQuestionGenerator:
             if category == "hard_skills":
                 item = self._hard_skills_question(
                     index=idx,
-                    company_name=self.company_name,
+                    company_name=company_name,
                     job_title=title,
                     skills_text=skills_text,
                 )
             elif category == "cultural_fit":
                 item = self._cultural_fit_question(
                     index=idx,
-                    company_name=self.company_name,
+                    company_name=company_name,
                     mission_short=mission_short,
                     value_primary=value_primary,
                 )
             else:
                 item = self._soft_skills_question(
                     index=idx,
-                    company_name=self.company_name,
+                    company_name=company_name,
                     value_secondary=value_secondary,
                 )
             item["category"] = category
@@ -110,7 +112,7 @@ class InterviewQuestionGenerator:
 
         payload = {
             "version": str(self.guidelines.get("version") or "1.0"),
-            "company_name": self.company_name,
+            "company_name": company_name,
             "job_id": job.get("id"),
             "job_title": title,
             "questions": questions,
@@ -121,11 +123,12 @@ class InterviewQuestionGenerator:
         ).hexdigest()
 
         return {
-            "assessment_name": f"{self.company_name} - {title} Interview",
+            "assessment_name": f"{company_name} - {title} Interview",
             "questions": questions,
             "generation_hash": generation_hash,
             "meta": {
                 "guidelines_version": str(self.guidelines.get("version") or "1.0"),
+                "company_name": company_name,
                 "skills_detected": top_skills,
                 "company_values": values,
                 "categories": self._count_categories(questions),
@@ -174,7 +177,7 @@ class InterviewQuestionGenerator:
     def _hard_skills_question(*, index: int, company_name: str, job_title: str, skills_text: str) -> Dict[str, Any]:
         prompts = [
             (
-                f"[Hard Skills] At {company_name}, describe the most complex technical problem you solved relevant to {job_title}.",
+                f"[Hard Skills] Describe the most complex technical problem you solved relevant to {job_title}.",
                 "Include constraints, architecture choices, and measurable impact."
             ),
             (
@@ -182,11 +185,11 @@ class InterviewQuestionGenerator:
                 "Walk through trade-offs, reliability, performance, and security decisions."
             ),
             (
-                f"[Hard Skills] In {company_name}, how do you debug and stabilize production issues in your technical stack?",
+                "[Hard Skills] How do you debug and stabilize production issues in your technical stack?",
                 "Share a concrete incident, root cause analysis, and prevention actions."
             ),
             (
-                f"[Hard Skills] For {company_name}, tell us about a code quality or architecture improvement you led.",
+                "[Hard Skills] Tell us about a code quality or architecture improvement you led.",
                 "Explain baseline metrics, actions you took, and resulting improvements."
             ),
         ]
@@ -197,7 +200,7 @@ class InterviewQuestionGenerator:
     def _soft_skills_question(*, index: int, company_name: str, value_secondary: str) -> Dict[str, Any]:
         prompts = [
             (
-                f"[Soft Skills] At {company_name}, we value {value_secondary}. Tell us about a high-stakes cross-functional collaboration.",
+                f"[Soft Skills] We value {value_secondary}. Tell us about a high-stakes cross-functional collaboration.",
                 "Describe your communication strategy, stakeholder alignment, and outcome."
             ),
             (
@@ -205,7 +208,7 @@ class InterviewQuestionGenerator:
                 "Use a real example and explain how you moved the team to a decision."
             ),
             (
-                f"[Soft Skills] For {company_name}, describe a time you gave or received difficult feedback.",
+                "[Soft Skills] Describe a time you gave or received difficult feedback.",
                 "Focus on your approach, behavior change, and impact on team performance."
             ),
         ]

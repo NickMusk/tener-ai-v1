@@ -2287,14 +2287,19 @@ class WorkflowService:
         normalized_mode = str(mode or "").strip().lower()
         normalized_intent = str(intent or "").strip().lower()
         state_status = str((state or {}).get("status") or "").strip().lower()
+        quality_adjustment, quality_signals = self._communication_quality_adjustment(
+            intent=normalized_intent,
+            state=state if isinstance(state, dict) else None,
+            inbound_text=inbound_text,
+        )
 
         if normalized_mode == "pre_resume":
             mapping = {
-                "resume_received": (96.0, "cv_received", "Candidate shared CV/resume."),
-                "interview_opt_in": (86.0, "interview_opt_in", "Candidate confirmed async pre-vetting interview."),
-                "resume_promised": (83.0, "resume_promised", "Candidate promised to share CV later."),
-                "engaged_no_resume": (78.0, "in_dialogue", "Candidate is engaged in dialogue before CV."),
-                "awaiting_reply": (70.0, "awaiting_reply", "Awaiting candidate response after follow-up."),
+                "resume_received": (94.0, "cv_received", "Candidate shared CV/resume."),
+                "interview_opt_in": (84.0, "interview_opt_in", "Candidate confirmed async pre-vetting interview."),
+                "resume_promised": (80.0, "resume_promised", "Candidate promised to share CV later."),
+                "engaged_no_resume": (72.0, "in_dialogue", "Candidate is engaged in dialogue before CV."),
+                "awaiting_reply": (66.0, "awaiting_reply", "Awaiting candidate response after follow-up."),
                 "not_interested": (35.0, "not_interested", "Candidate is not interested."),
                 "stalled": (25.0, "stalled", "Dialogue stalled without response."),
                 "unreachable": (15.0, "unreachable", "Candidate unreachable through current channel."),
@@ -2303,10 +2308,17 @@ class WorkflowService:
                 state_status,
                 (66.0, "in_dialogue", f"Dialogue update captured (status: {state_status or 'unknown'})."),
             )
+            if state_status in {"resume_received", "interview_opt_in", "resume_promised", "engaged_no_resume", "awaiting_reply"}:
+                score = self._normalize_percentage(score + quality_adjustment)
         else:
             score = 68.0
             status = "in_dialogue"
             reason = f"FAQ dialogue handled (intent: {normalized_intent or 'default'})."
+            score = self._normalize_percentage(score + quality_adjustment)
+
+        if abs(quality_adjustment) >= 0.1:
+            signed = f"+{quality_adjustment:.1f}" if quality_adjustment > 0 else f"{quality_adjustment:.1f}"
+            reason = f"{reason} Communication quality adjustment: {signed}."
 
         self._upsert_agent_assessment(
             job_id=job_id,
@@ -2321,8 +2333,83 @@ class WorkflowService:
                 "intent": normalized_intent or "default",
                 "state_status": state_status or None,
                 "inbound_preview": (str(inbound_text or "").strip()[:200] or None),
+                "quality_adjustment": round(float(quality_adjustment), 2),
+                "quality_signals": quality_signals,
             },
         )
+
+    def _communication_quality_adjustment(
+        self,
+        *,
+        intent: str,
+        state: Dict[str, Any] | None,
+        inbound_text: str | None,
+    ) -> tuple[float, Dict[str, Any]]:
+        state_payload = state if isinstance(state, dict) else {}
+        text = str(inbound_text or "").strip()
+        lowered = text.lower()
+        words = [x.lower() for x in re.findall(r"[0-9A-Za-zА-Яа-яЁё]+", text)]
+        word_count = len(words)
+        unique_ratio = (len(set(words)) / float(word_count)) if word_count > 0 else 0.0
+        followups_sent = self._safe_int(state_payload.get("followups_sent"), 0)
+        turns = self._safe_int(state_payload.get("turns"), 0)
+        resume_links = state_payload.get("resume_links") if isinstance(state_payload.get("resume_links"), list) else []
+
+        adjustment = 0.0
+        if word_count >= 20:
+            adjustment += 8.0
+        elif word_count >= 12:
+            adjustment += 5.0
+        elif word_count >= 6:
+            adjustment += 3.0
+        elif word_count >= 3:
+            adjustment += 1.0
+        elif text:
+            adjustment -= 4.0
+        else:
+            adjustment -= 1.0
+
+        if unique_ratio >= 0.72 and word_count >= 8:
+            adjustment += 1.5
+        if "?" in text:
+            adjustment += 1.0
+        if any(marker in lowered for marker in ("please", "thanks", "thank you", "gracias", "спасибо")):
+            adjustment += 1.5
+
+        filler_count = len(re.findall(r"\b(um+|uh+|hmm+|like|ну|ээ+)\b", lowered))
+        if filler_count >= 3:
+            adjustment -= 3.0
+
+        if turns >= 4:
+            adjustment += 2.0
+        if followups_sent > 0:
+            adjustment -= min(6.0, float(followups_sent) * 1.5)
+        if resume_links:
+            adjustment += 2.5
+
+        intent_adjustments = {
+            "pre_vetting_opt_in": 4.0,
+            "resume_shared": 5.0,
+            "will_send_later": 1.5,
+            "not_interested": -7.0,
+            "salary": 1.0,
+            "stack": 1.0,
+            "timeline": 1.0,
+            "send_jd_first": 1.0,
+        }
+        adjustment += float(intent_adjustments.get(intent, 0.0))
+        adjustment = max(-12.0, min(12.0, adjustment))
+
+        signals = {
+            "word_count": word_count,
+            "unique_word_ratio": round(unique_ratio, 3),
+            "followups_sent": followups_sent,
+            "turns": turns,
+            "resume_links_count": len(resume_links),
+            "filler_count": filler_count,
+            "intent": intent or "default",
+        }
+        return round(adjustment, 2), signals
 
     def _upsert_agent_assessment(
         self,

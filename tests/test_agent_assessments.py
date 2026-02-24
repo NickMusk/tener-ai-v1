@@ -93,6 +93,106 @@ class AgentAssessmentsTests(unittest.TestCase):
             self.assertEqual(scorecard["communication"].get("latest_stage"), "dialogue")
             self.assertEqual(scorecard["interview_evaluation"].get("latest_status"), "not_started")
 
+    def test_communication_score_varies_with_candidate_message_quality(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "agent_assessments_quality.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(_Provider()),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=PreResumeCommunicationService(
+                    templates_path=str(root / "config" / "outreach_templates.json")
+                ),
+                agent_evaluation_playbook=AgentEvaluationPlaybook(
+                    str(root / "config" / "agent_evaluation_instructions.json")
+                ),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+                stage_instructions={"pre_resume": "request cv and track status"},
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python and AWS",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile_short = {
+                "linkedin_id": "ln-agent-score-short",
+                "unipile_profile_id": "ln-agent-score-short",
+                "attendee_provider_id": "ln-agent-score-short",
+                "full_name": "Short Reply Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python", "aws"],
+                "years_experience": 4,
+                "raw": {},
+            }
+            profile_rich = {
+                "linkedin_id": "ln-agent-score-rich",
+                "unipile_profile_id": "ln-agent-score-rich",
+                "attendee_provider_id": "ln-agent-score-rich",
+                "full_name": "Rich Reply Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python", "aws"],
+                "years_experience": 6,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[
+                    {"profile": profile_short, "score": 0.82, "status": "verified", "notes": {}},
+                    {"profile": profile_rich, "score": 0.82, "status": "verified", "notes": {}},
+                ],
+            )
+            candidate_ids = [int(item["candidate_id"]) for item in added["added"]]
+
+            outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=candidate_ids)
+            by_candidate_id = {int(item["candidate_id"]): int(item["conversation_id"]) for item in outreach["items"]}
+            short_candidate_id = int(
+                next(
+                    item["candidate_id"]
+                    for item in added["added"]
+                    if str((item.get("profile") or {}).get("linkedin_id")) == "ln-agent-score-short"
+                )
+            )
+            rich_candidate_id = int(
+                next(
+                    item["candidate_id"]
+                    for item in added["added"]
+                    if str((item.get("profile") or {}).get("linkedin_id")) == "ln-agent-score-rich"
+                )
+            )
+            workflow.process_inbound_message(conversation_id=by_candidate_id[short_candidate_id], text="ok")
+            workflow.process_inbound_message(
+                conversation_id=by_candidate_id[rich_candidate_id],
+                text=(
+                    "Thanks for reaching out. I am interested and can share examples of scaling Python services. "
+                    "Could you share next steps and timeline?"
+                ),
+            )
+
+            rows = db.list_candidates_for_job(job_id)
+            by_linkedin = {str(row.get("linkedin_id")): row for row in rows}
+            short_entry = (by_linkedin["ln-agent-score-short"].get("agent_scorecard") or {}).get("communication") or {}
+            rich_entry = (by_linkedin["ln-agent-score-rich"].get("agent_scorecard") or {}).get("communication") or {}
+            short_score = short_entry.get("latest_score")
+            rich_score = rich_entry.get("latest_score")
+
+            self.assertIsInstance(short_score, (int, float))
+            self.assertIsInstance(rich_score, (int, float))
+            self.assertGreater(float(rich_score), float(short_score))
+
 
 if __name__ == "__main__":
     unittest.main()
