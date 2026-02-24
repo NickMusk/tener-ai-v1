@@ -43,20 +43,22 @@ class CandidateScoringPolicyTests(unittest.TestCase):
         self.assertEqual(out["overall_status"], "blocked")
         self.assertEqual(float(out["overall_score"]), 0.0)
 
-    def test_cap_without_cv_when_not_all_stages_scored(self) -> None:
+    def test_overall_is_na_without_all_three_scores(self) -> None:
         out = self.policy.compute_overall(
             scorecard=self._scorecard(source=95.0, communication=95.0, interview=None),
             current_status_key="in_dialogue",
         )
-        self.assertLessEqual(float(out["overall_score"]), 70.0)
+        self.assertIsNone(out["overall_score"])
+        self.assertEqual(out["overall_status"], "review")
         self.assertIn("cap_without_cv", out["gates_applied"])
 
-    def test_cap_without_interview_score(self) -> None:
+    def test_overall_is_na_without_interview_score_even_with_cv_status(self) -> None:
         out = self.policy.compute_overall(
             scorecard=self._scorecard(source=100.0, communication=100.0, interview=None),
             current_status_key="cv_received",
         )
-        self.assertLessEqual(float(out["overall_score"]), 80.0)
+        self.assertIsNone(out["overall_score"])
+        self.assertEqual(out["overall_status"], "review")
         self.assertIn("cap_without_interview_score", out["gates_applied"])
 
     def test_all_three_scores_use_weighted_average_even_without_cv_status(self) -> None:
@@ -80,6 +82,7 @@ class CandidateScoringPolicyTests(unittest.TestCase):
         )
         inputs = out.get("inputs") if isinstance(out.get("inputs"), dict) else {}
         self.assertIsNone(inputs.get("communication"))
+        self.assertIsNone(out["overall_score"])
 
 
 if __name__ == "__main__":

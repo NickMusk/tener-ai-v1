@@ -139,13 +139,21 @@ class InterviewInviteFlowTests(unittest.TestCase):
             self.assertEqual(first["mode"], "pre_resume")
             self.assertEqual(first["intent"], "pre_vetting_opt_in")
             self.assertTrue((first.get("interview") or {}).get("started"))
-            self.assertTrue(str(first.get("reply") or "").startswith("Hey Candidate Interview,"))
+            self.assertTrue(str(first.get("reply") or "").startswith("Hey,"))
             self.assertIn("interview.local", str(first.get("reply") or ""))
 
             row = db.list_candidates_for_job(job_id)[0]
             notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
             self.assertEqual(row["status"], "interview_invited")
             self.assertTrue(str((notes or {}).get("interview_session_id") or "").startswith("iv-"))
+            messages = db.list_messages(conversation_id)
+            resume_auto_replies = [
+                m
+                for m in messages
+                if (m.get("meta") or {}).get("type") == "pre_resume_auto_reply"
+                and (m.get("meta") or {}).get("intent") == "resume_shared"
+            ]
+            self.assertEqual(len(resume_auto_replies), 0)
             self.assertTrue(str((notes or {}).get("interview_entry_url") or "").startswith("https://interview.local/"))
 
             due_at = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
@@ -180,6 +188,68 @@ class InterviewInviteFlowTests(unittest.TestCase):
             notes_after = row_after.get("verification_notes") if isinstance(row_after.get("verification_notes"), dict) else {}
             self.assertEqual(row_after["status"], "interview_scored")
             self.assertAlmostEqual(float(notes_after.get("interview_total_score")), 82.5, places=2)
+
+    def test_resume_shared_triggers_interview_link(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "interview_invite_resume.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = _LinkedInProvider()
+            interview = _InterviewClient()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=PreResumeCommunicationService(templates_path=str(root / "config" / "outreach_templates.json")),
+                interview_client=interview,
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+                interview_followup_delays_hours=[0.01, 0.01],
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile = {
+                "linkedin_id": "ln-interview-2",
+                "full_name": "Candidate Resume",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": [],
+                "years_experience": 5,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.72, "status": "needs_resume", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+            outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            conversation_id = int(outreach["conversation_ids"][0])
+
+            reply = workflow.process_inbound_message(
+                conversation_id=conversation_id,
+                text="Here is my CV https://example.com/candidate-resume.pdf",
+            )
+            self.assertEqual(reply["mode"], "pre_resume")
+            self.assertEqual(reply["intent"], "resume_shared")
+            self.assertTrue((reply.get("interview") or {}).get("started"))
+            self.assertTrue(str(reply.get("reply") or "").startswith("Hey,"))
+            self.assertIn("interview.local", str(reply.get("reply") or ""))
+
+            row = db.list_candidates_for_job(job_id)[0]
+            notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
+            self.assertEqual(row["status"], "interview_invited")
+            self.assertTrue(str((notes or {}).get("interview_session_id") or "").startswith("iv-"))
 
 
 if __name__ == "__main__":

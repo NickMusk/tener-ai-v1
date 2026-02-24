@@ -976,7 +976,9 @@ class WorkflowService:
                     self.pre_resume_service.seed_session(state_out)
                 interview_result: Dict[str, Any] | None = None
                 outbound_sent_via_invite = False
-                if intent == "pre_vetting_opt_in":
+                state_status = str((state_out or {}).get("status") or "").strip().lower()
+                should_send_interview_invite = intent == "pre_vetting_opt_in" or state_status == "resume_received"
+                if should_send_interview_invite:
                     interview_result = self._send_interview_invite_after_opt_in(
                         job=job,
                         candidate=candidate,
@@ -1035,13 +1037,15 @@ class WorkflowService:
                         },
                     )
 
-                if (state_out or {}).get("status") == "resume_received":
-                    self.db.update_candidate_match_status(
-                        job_id=int(conversation["job_id"]),
-                        candidate_id=int(conversation["candidate_id"]),
-                        status="resume_received",
-                        extra_notes={"resume_received_at": (state_out or {}).get("updated_at")},
-                    )
+                if state_status == "resume_received":
+                    has_interview_session = bool(str((interview_result or {}).get("session_id") or "").strip())
+                    if not has_interview_session:
+                        self.db.update_candidate_match_status(
+                            job_id=int(conversation["job_id"]),
+                            candidate_id=int(conversation["candidate_id"]),
+                            status="resume_received",
+                            extra_notes={"resume_received_at": (state_out or {}).get("updated_at")},
+                        )
                     self.db.log_operation(
                         operation="candidate.resume.received",
                         status="ok",
@@ -1973,28 +1977,27 @@ class WorkflowService:
         entry_url: str,
         language: str,
     ) -> str:
-        name = self._candidate_greeting_name(candidate)
         title = str(job.get("title") or "this role").strip() or "this role"
         fallback_by_lang = {
             "en": (
-                'Hey {name},\n'
+                'Hey,\n'
                 'here is your quick async pre vetting link for "{title}": {url}\n'
                 "when you finish it, drop me a short reply here and I will move you forward"
             ),
             "ru": (
-                'Hey {name},\n'
+                'Hey,\n'
                 'вот короткий async pre vetting по роли "{title}": {url}\n'
                 "как закончите, просто дайте короткий ответ здесь и я двину вас дальше"
             ),
             "es": (
-                'Hey {name},\n'
+                'Hey,\n'
                 'aqui esta tu enlace de async pre vetting para "{title}": {url}\n'
                 "cuando termines, dejame una respuesta corta aqui y te muevo al siguiente paso"
             ),
         }
         lang = str(language or "en").strip().lower()
         fallback_template = fallback_by_lang.get(lang, fallback_by_lang["en"])
-        fallback = fallback_template.format(name=name, title=title, url=entry_url).strip()
+        fallback = fallback_template.format(title=title, url=entry_url).strip()
         instruction = self._linkedin_generation_instruction(
             kind="interview_invite",
             recruiter_name=self._linkedin_recruiter_name(),
@@ -2011,7 +2014,7 @@ class WorkflowService:
             language=lang,
             state=None,
         )
-        with_greeting = self._ensure_candidate_greeting(text=generated, fallback=fallback, candidate_name=name)
+        with_greeting = self._ensure_candidate_greeting(text=generated, fallback=fallback)
         return self._ensure_interview_url(text=with_greeting, fallback=fallback, entry_url=entry_url)
 
     def _compose_interview_followup_message(
@@ -2682,7 +2685,7 @@ class WorkflowService:
                 f"Write in language: {language}.\n"
                 "Goal: candidate already agreed to quick pre vetting, now send interview link in one natural message.\n"
                 "Required structure:\n"
-                "1) First line must be exactly: Hey {candidate name from LinkedIn},\n"
+                "1) First line must be exactly: Hey,\n"
                 "2) Friendly short acknowledgement\n"
                 "3) Share the interview link exactly as provided in context\n"
                 "4) Ask for a short reply once finished\n"
@@ -2985,11 +2988,10 @@ class WorkflowService:
         return link
 
     @staticmethod
-    def _ensure_candidate_greeting(text: str, fallback: str, candidate_name: str) -> str:
+    def _ensure_candidate_greeting(text: str, fallback: str) -> str:
         message = str(text or "").strip()
         fallback_text = str(fallback or "").strip()
-        name = str(candidate_name or "").strip() or "there"
-        greeting = f"Hey {name},"
+        greeting = "Hey,"
         base = message or fallback_text
         if not base:
             return greeting

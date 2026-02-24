@@ -100,6 +100,8 @@ class CandidateScoringPolicy:
 
         if blocked:
             overall_status = "blocked"
+        elif not has_all_scores:
+            overall_status = "review"
         elif final_score >= decisions["shortlist_min"]:
             overall_status = "shortlist"
         elif final_score >= decisions["pipeline_min"]:
@@ -107,9 +109,11 @@ class CandidateScoringPolicy:
         else:
             overall_status = "review"
 
+        overall_score: float | None = round(max(0.0, min(100.0, float(final_score))), 2) if has_all_scores else None
+
         return {
             "version": self.payload.get("version", "unknown"),
-            "overall_score": round(max(0.0, min(100.0, float(final_score))), 2),
+            "overall_score": overall_score,
             "overall_status": overall_status,
             "block_reason": block_reason,
             "raw_score": round(max(0.0, min(100.0, float(raw_score))), 2),
