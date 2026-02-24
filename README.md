@@ -6,6 +6,13 @@ Prototype backend implementation aligned with the architecture in:
 Implemented in this version:
 - Candidate intake API.
 - Tier 1 verification orchestrator with provider abstraction.
+- JD-centered manual workflow API + UI:
+  - LinkedIn is connected by default.
+  - Add JD.
+  - Run each step manually for selected JD:
+    1) LinkedIn search
+    2) Import candidates
+    3) Run verification
 - Async verification jobs through queue abstraction:
   - in-memory queue by default,
   - BullMQ if `REDIS_URL` is configured.
@@ -39,6 +46,14 @@ npm run dev
 ## API
 
 - `GET /health`
+- `GET /api/v1/linkedin/status`
+- `GET /api/v1/jds`
+- `POST /api/v1/jds`
+- `GET /api/v1/jds/:jobDescriptionId`
+- `POST /api/v1/jds/:jobDescriptionId/steps/linkedin-search`
+- `POST /api/v1/jds/:jobDescriptionId/steps/import-candidates`
+- `POST /api/v1/jds/:jobDescriptionId/steps/run-verification`
+- `GET /api/v1/jds/:jobDescriptionId/candidates`
 - `POST /api/v1/candidates`
 - `GET /api/v1/candidates`
 - `GET /api/v1/candidates/:candidateId`
@@ -48,6 +63,11 @@ npm run dev
 - `GET /api/v1/candidates/compliance-jobs/:jobId`
 
 ## Example
+
+Open UI:
+```bash
+open http://localhost:3000
+```
 
 Create candidate:
 ```bash
@@ -70,7 +90,10 @@ curl -sS http://localhost:3000/api/v1/candidates/compliance-jobs/<job-id>
 
 - `src/verification/orchestrator.ts` is the central orchestration layer.
 - `src/verification/providers/provider.ts` is the abstraction seam for self-hosted and partner providers.
+- `src/services/jobDescriptionService.ts` owns manual JD workflow execution.
+- `src/linkedin/defaultLinkedInProvider.ts` keeps LinkedIn connected by default in current version.
 - `src/repositories/postgresCandidateRepository.ts` enables persistence via `DATABASE_URL`.
+- `src/repositories/postgresJobDescriptionRepository.ts` persists JD workflows via `DATABASE_URL`.
 - `src/queue/bullMqVerificationJobQueue.ts` enables queue-first execution via `REDIS_URL`.
 
 ## Render Deployment

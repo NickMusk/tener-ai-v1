@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tener LS v0.1</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="container">
+      <section class="panel">
+        <h1>Tener Life Sciences</h1>
+        <p class="subtitle">Manual JD flow: LinkedIn -> Import -> Verification</p>
+        <div id="linkedin-status" class="badge">LinkedIn: loading...</div>
+      </section>
+
+      <section class="panel">
+        <h2>Add JD</h2>
+        <form id="jd-form" class="grid">
+          <input name="title" placeholder="JD Title" required />
+          <input name="company" placeholder="Company" required />
+          <input name="location" placeholder="Location (optional)" />
+          <input name="keywords" placeholder="Keywords (optional)" />
+          <button type="submit">Add JD</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <h2>Job Descriptions</h2>
+        <div id="jd-list" class="stack"></div>
+      </section>
+    </main>
+
+    <script src="/app.js"></script>
+  </body>
+</html>

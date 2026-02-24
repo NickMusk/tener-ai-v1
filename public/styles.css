@@ -1,0 +1,126 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "IBM Plex Sans", "Segoe UI", sans-serif;
+  color: #111827;
+  background: linear-gradient(135deg, #f7f7f2 0%, #ddebf3 100%);
+}
+
+.container {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  gap: 16px;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #d4d4d8;
+  border-radius: 14px;
+  padding: 16px;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0 0 12px;
+}
+
+.subtitle {
+  margin: 0 0 10px;
+  color: #374151;
+}
+
+.badge {
+  display: inline-block;
+  font-size: 13px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid #c7d2fe;
+  background: #eef2ff;
+}
+
+.grid {
+  display: grid;
+  gap: 10px;
+}
+
+input,
+button {
+  font: inherit;
+  padding: 10px 12px;
+  border-radius: 8px;
+}
+
+input {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+}
+
+button {
+  border: 1px solid #1d4ed8;
+  background: #1d4ed8;
+  color: #ffffff;
+  cursor: pointer;
+}
+
+button.secondary {
+  border-color: #334155;
+  background: #334155;
+}
+
+button.warn {
+  border-color: #b91c1c;
+  background: #b91c1c;
+}
+
+.stack {
+  display: grid;
+  gap: 14px;
+}
+
+.jd-card {
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.muted {
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.pill {
+  padding: 4px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid #d1d5db;
+  background: #f3f4f6;
+}
+
+.list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+
+.candidate {
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px;
+  font-size: 13px;
+}

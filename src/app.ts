@@ -1,11 +1,15 @@
 import express from "express";
+import path from "path";
 import { buildCandidateRoutes } from "./http/candidateRoutes";
+import { buildJobDescriptionRoutes } from "./http/jobDescriptionRoutes";
 import { HttpError } from "./http/httpError";
 import { CandidateService } from "./services/candidateService";
+import { JobDescriptionService } from "./services/jobDescriptionService";
 
-export const createApp = (candidateService: CandidateService) => {
+export const createApp = (candidateService: CandidateService, jobDescriptionService: JobDescriptionService) => {
   const app = express();
   app.use(express.json());
+  app.use(express.static(path.join(process.cwd(), "public")));
 
   app.get("/health", (_req, res) => {
     res.json({
@@ -16,6 +20,7 @@ export const createApp = (candidateService: CandidateService) => {
   });
 
   app.use("/api/v1/candidates", buildCandidateRoutes(candidateService));
+  app.use("/api/v1", buildJobDescriptionRoutes(jobDescriptionService));
 
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     if (error instanceof HttpError) {

@@ -9,6 +9,10 @@ export interface CandidateProfile {
   state?: string;
   licenseNumber?: string;
   deaNumber?: string;
+  jobDescriptionId?: string;
+  source?: "LINKEDIN" | "MANUAL";
+  headline?: string;
+  linkedinProfileUrl?: string;
 }
 
 export interface VerificationCheckResult {

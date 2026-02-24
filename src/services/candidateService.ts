@@ -24,6 +24,11 @@ export class CandidateService {
     return this.repository.list();
   }
 
+  async listCandidatesByIds(candidateIds: string[]): Promise<Candidate[]> {
+    const resolved = await Promise.all(candidateIds.map(async (candidateId) => this.repository.findById(candidateId)));
+    return resolved.filter((candidate): candidate is Candidate => Boolean(candidate));
+  }
+
   async getCandidate(candidateId: string): Promise<Candidate> {
     const candidate = await this.repository.findById(candidateId);
 

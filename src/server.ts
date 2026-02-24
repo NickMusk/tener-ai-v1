@@ -1,12 +1,17 @@
 import { createApp } from "./app";
 import { checkSources } from "./domain/checks";
 import { createPostgresPool } from "./infra/postgres";
+import { DefaultLinkedInProvider } from "./linkedin/defaultLinkedInProvider";
 import { BullMqVerificationJobQueue } from "./queue/bullMqVerificationJobQueue";
 import { InMemoryVerificationJobQueue } from "./queue/inMemoryVerificationJobQueue";
 import { CandidateRepository } from "./repositories/candidateRepository";
 import { InMemoryCandidateRepository } from "./repositories/inMemoryCandidateRepository";
+import { InMemoryJobDescriptionRepository } from "./repositories/inMemoryJobDescriptionRepository";
+import { JobDescriptionRepository } from "./repositories/jobDescriptionRepository";
 import { PostgresCandidateRepository } from "./repositories/postgresCandidateRepository";
+import { PostgresJobDescriptionRepository } from "./repositories/postgresJobDescriptionRepository";
 import { CandidateService } from "./services/candidateService";
+import { JobDescriptionService } from "./services/jobDescriptionService";
 import { config } from "./config";
 import { VerificationOrchestrator } from "./verification/orchestrator";
 import { LocalDatasetProvider } from "./verification/providers/localDatasetProvider";
@@ -14,12 +19,22 @@ import { fdaDebarmentDataset, leieDataset, ofacDataset } from "./verification/pr
 import { SamGovProvider } from "./verification/providers/samGovProvider";
 
 const bootstrap = async (): Promise<void> => {
-  const repository: CandidateRepository = config.databaseUrl
-    ? new PostgresCandidateRepository(createPostgresPool(config.databaseUrl))
+  const pool = config.databaseUrl ? createPostgresPool(config.databaseUrl) : undefined;
+
+  const candidateRepository: CandidateRepository = pool
+    ? new PostgresCandidateRepository(pool)
     : new InMemoryCandidateRepository();
 
-  if (repository.init) {
-    await repository.init();
+  const jobDescriptionRepository: JobDescriptionRepository = pool
+    ? new PostgresJobDescriptionRepository(pool)
+    : new InMemoryJobDescriptionRepository();
+
+  if (candidateRepository.init) {
+    await candidateRepository.init();
+  }
+
+  if (jobDescriptionRepository.init) {
+    await jobDescriptionRepository.init();
   }
 
   const orchestrator = new VerificationOrchestrator([
@@ -44,7 +59,12 @@ const bootstrap = async (): Promise<void> => {
     })
   ]);
 
-  const candidateService = new CandidateService(repository, orchestrator);
+  const candidateService = new CandidateService(candidateRepository, orchestrator);
+  const jobDescriptionService = new JobDescriptionService(
+    jobDescriptionRepository,
+    candidateService,
+    new DefaultLinkedInProvider()
+  );
 
   const queue = config.redisUrl
     ? new BullMqVerificationJobQueue({
@@ -59,7 +79,7 @@ const bootstrap = async (): Promise<void> => {
 
   candidateService.setJobQueue(queue);
 
-  const app = createApp(candidateService);
+  const app = createApp(candidateService, jobDescriptionService);
 
   app.listen(config.port, () => {
     process.stdout.write(`tener-ls-v01 running on port ${config.port}\n`);
