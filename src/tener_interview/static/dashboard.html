@@ -310,6 +310,7 @@
         jobs: [],
         jobId: null,
         generatedLinks: [],
+        sessionLinks: [],
       };
 
       function $(id) {
@@ -370,6 +371,8 @@
           renderCandidates([]);
           renderSessions([]);
           renderLeaderboard([]);
+          state.sessionLinks = [];
+          renderGeneratedLinks();
           return;
         }
 
@@ -508,21 +511,67 @@
       function renderGeneratedLinks() {
         const root = $("links");
         root.innerHTML = "";
-        const items = state.generatedLinks.filter((x) => Number(x.jobId) === Number(state.jobId));
-        $("links-empty").style.display = items.length ? "none" : "block";
+        const localItems = state.generatedLinks.filter((x) => Number(x.jobId) === Number(state.jobId));
+        const sessionItems = state.sessionLinks.filter((x) => Number(x.jobId) === Number(state.jobId));
+        const bySession = new Map();
+        for (const item of sessionItems) {
+          const key = item.sessionId || `${safeText(item.candidateId)}:${safeText(item.providerUrl, "")}`;
+          bySession.set(key, item);
+        }
+        for (const item of localItems) {
+          const key = item.sessionId || `${safeText(item.candidateId)}:${safeText(item.entryUrl, "")}`;
+          bySession.set(key, item);
+        }
+        const items = Array.from(bySession.values()).sort((a, b) => {
+          const aTs = Date.parse(String(a.createdAt || "")) || 0;
+          const bTs = Date.parse(String(b.createdAt || "")) || 0;
+          return bTs - aTs;
+        });
+        let rendered = 0;
         for (const item of items) {
+          const interviewUrl = safeText(item.entryUrl || item.providerUrl, "");
+          if (!interviewUrl) continue;
+          rendered += 1;
+          const linkType = item.entryUrl ? "entry" : "provider";
+          const source = item.source || "dashboard";
           const div = document.createElement("div");
           div.className = "link-item";
           div.innerHTML = `
             <div><strong>${safeText(item.candidateName)}</strong> <span class="mono">#${safeText(item.candidateId)}</span></div>
             <div class="mono">session: ${safeText(item.sessionId)}</div>
-            <div class="mono" style="overflow-wrap:anywhere">${safeText(item.entryUrl)}</div>
-            <div style="margin-top:8px"><button class="secondary" data-copy="${encodeURIComponent(
-              item.entryUrl
-            )}">Copy Link</button></div>
+            <div class="mono">source: ${safeText(source)} | link: ${safeText(linkType)}</div>
+            <div class="mono" style="overflow-wrap:anywhere">${safeText(interviewUrl)}</div>
+            <div style="margin-top:8px" class="row">
+              <button class="secondary" data-copy="${encodeURIComponent(
+                interviewUrl
+              )}">Copy Link</button>
+              <a class="mono" href="${safeText(interviewUrl)}" target="_blank" rel="noopener">Open</a>
+            </div>
           `;
           root.appendChild(div);
         }
+        $("links-empty").style.display = rendered ? "none" : "block";
+      }
+
+      function mapSessionLinks(items) {
+        const out = [];
+        for (const item of items) {
+          if (!item || typeof item !== "object") continue;
+          const providerUrl = String(item.provider_interview_url || "").trim();
+          if (!providerUrl) continue;
+          out.push({
+            createdAt: item.created_at || "",
+            jobId: Number(item.job_id),
+            candidateId: item.candidate_id,
+            candidateName: item.candidate_name || `Candidate #${safeText(item.candidate_id)}`,
+            sessionId: item.session_id,
+            providerUrl,
+            entryUrl: "",
+            providerInvitationId: item.provider_invitation_id || "",
+            source: "backend",
+          });
+        }
+        return out;
       }
 
       async function loadResults() {
@@ -535,8 +584,11 @@
           api(`/api/interviews/sessions?job_id=${state.jobId}&limit=300`),
           api(`/api/jobs/${state.jobId}/interview-leaderboard?limit=300`),
         ]);
-        renderSessions(Array.isArray(sessions.items) ? sessions.items : []);
+        const sessionItems = Array.isArray(sessions.items) ? sessions.items : [];
+        state.sessionLinks = mapSessionLinks(sessionItems);
+        renderSessions(sessionItems);
         renderLeaderboard(Array.isArray(leaderboard.items) ? leaderboard.items : []);
+        renderGeneratedLinks();
       }
 
       function renderSessions(items) {
