@@ -1,0 +1,633 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tener Interview Admin</title>
+    <style>
+      :root {
+        --bg-0: #0d1321;
+        --bg-1: #1d2d44;
+        --bg-2: #3e5c76;
+        --paper: #f6f8fb;
+        --ink: #0b132b;
+        --muted: #5a6679;
+        --ok: #1f7a3d;
+        --warn: #a46700;
+        --err: #b12a2a;
+        --accent: #0ea5e9;
+        --accent-2: #06b6d4;
+        --card: rgba(255, 255, 255, 0.88);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 12% 10%, rgba(14, 165, 233, 0.35), transparent 40%),
+          radial-gradient(circle at 80% 0%, rgba(34, 197, 94, 0.2), transparent 35%),
+          linear-gradient(140deg, var(--bg-0), var(--bg-1) 40%, var(--bg-2));
+        min-height: 100vh;
+      }
+
+      .wrap {
+        width: min(1240px, 92vw);
+        margin: 28px auto 36px;
+      }
+
+      .hero {
+        color: #e9f3ff;
+        margin-bottom: 20px;
+      }
+
+      .hero h1 {
+        margin: 0 0 8px;
+        font-size: clamp(1.7rem, 2.8vw, 2.5rem);
+        letter-spacing: 0.01em;
+      }
+
+      .hero p {
+        margin: 0;
+        color: #b6d4f0;
+      }
+
+      .grid {
+        display: grid;
+        grid-template-columns: 1.1fr 1fr;
+        gap: 16px;
+      }
+
+      .panel {
+        background: var(--card);
+        border: 1px solid rgba(255, 255, 255, 0.65);
+        border-radius: 16px;
+        padding: 16px;
+        box-shadow: 0 12px 40px rgba(8, 15, 35, 0.25);
+        backdrop-filter: blur(6px);
+      }
+
+      .panel h2 {
+        margin: 0 0 10px;
+        font-size: 1.05rem;
+      }
+
+      .muted {
+        color: var(--muted);
+      }
+
+      .mono {
+        font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+        font-size: 0.86rem;
+      }
+
+      .row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: center;
+      }
+
+      select,
+      input,
+      button {
+        font: inherit;
+      }
+
+      select,
+      input {
+        border: 1px solid #d7e1f1;
+        border-radius: 10px;
+        padding: 9px 10px;
+        background: #fff;
+      }
+
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 9px 12px;
+        cursor: pointer;
+        background: linear-gradient(120deg, var(--accent), var(--accent-2));
+        color: #fff;
+        font-weight: 600;
+      }
+
+      button.secondary {
+        background: #eff4fb;
+        color: #253047;
+      }
+
+      button:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+      }
+
+      .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        border-radius: 999px;
+        padding: 4px 9px;
+        font-size: 0.8rem;
+        font-weight: 600;
+      }
+
+      .status-ok {
+        background: #dcfce7;
+        color: #166534;
+      }
+
+      .status-warn {
+        background: #fef3c7;
+        color: #92400e;
+      }
+
+      .status-err {
+        background: #fee2e2;
+        color: #991b1b;
+      }
+
+      .table-wrap {
+        max-height: 390px;
+        overflow: auto;
+        border: 1px solid #d7e1f1;
+        border-radius: 12px;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        background: #fff;
+      }
+
+      th,
+      td {
+        padding: 10px;
+        font-size: 0.9rem;
+        border-bottom: 1px solid #edf1f7;
+        vertical-align: top;
+        text-align: left;
+      }
+
+      th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f8fbff;
+        color: #2f3c56;
+      }
+
+      .links {
+        display: grid;
+        gap: 8px;
+        margin-top: 10px;
+      }
+
+      .link-item {
+        background: #f8fbff;
+        border: 1px solid #dce8f9;
+        border-radius: 10px;
+        padding: 9px;
+      }
+
+      .err-text {
+        color: var(--err);
+        margin-top: 8px;
+      }
+
+      @media (max-width: 980px) {
+        .grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <h1>Interview Admin Dashboard</h1>
+        <p>Pick JD from DB, create candidate interview links, then track scored results.</p>
+      </div>
+
+      <div class="grid">
+        <section class="panel">
+          <h2>Job Selection</h2>
+          <div id="source-status" class="muted mono">Loading source DB status...</div>
+          <div class="row" style="margin-top: 10px">
+            <select id="job-select" style="min-width: 320px"></select>
+            <button class="secondary" id="reload-jobs">Reload Jobs</button>
+          </div>
+          <div id="job-meta" class="muted" style="margin-top: 8px"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Refresh Results</h2>
+          <div class="row">
+            <button id="refresh-job">Refresh All Sessions For Job</button>
+            <button class="secondary" id="reload-results">Reload Tables</button>
+          </div>
+          <div id="refresh-meta" class="muted" style="margin-top: 8px"></div>
+        </section>
+      </div>
+
+      <div class="grid" style="margin-top: 16px">
+        <section class="panel">
+          <h2>Candidates For JD</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Candidate</th>
+                  <th>Match</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="candidate-rows"></tbody>
+            </table>
+          </div>
+          <div id="candidate-empty" class="muted" style="margin-top: 8px"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Generated Links</h2>
+          <div id="links" class="links"></div>
+          <div id="links-empty" class="muted">No links generated in this session.</div>
+        </section>
+      </div>
+
+      <div class="grid" style="margin-top: 16px">
+        <section class="panel">
+          <h2>Interview Sessions</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Session</th>
+                  <th>Candidate</th>
+                  <th>Status</th>
+                  <th>Refresh</th>
+                </tr>
+              </thead>
+              <tbody id="session-rows"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Leaderboard</h2>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Candidate</th>
+                  <th>Status</th>
+                  <th>Total</th>
+                  <th>Updated</th>
+                </tr>
+              </thead>
+              <tbody id="leaderboard-rows"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+      <div id="error" class="err-text"></div>
+    </div>
+
+    <script>
+      const state = {
+        jobs: [],
+        jobId: null,
+        generatedLinks: [],
+      };
+
+      function $(id) {
+        return document.getElementById(id);
+      }
+
+      async function api(path, init = {}) {
+        const response = await fetch(path, init);
+        const text = await response.text();
+        let data = {};
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch (err) {
+          throw new Error("Invalid JSON response");
+        }
+        if (!response.ok) {
+          const code = data.code ? `[${data.code}] ` : "";
+          throw new Error(`${code}${data.error || `HTTP ${response.status}`}`);
+        }
+        return data;
+      }
+
+      function safeText(value, fallback = "-") {
+        if (value === null || value === undefined) return fallback;
+        const text = String(value).trim();
+        return text || fallback;
+      }
+
+      function statusClass(status) {
+        const value = (status || "").toLowerCase();
+        if (["scored", "completed", "ok"].includes(value)) return "status-badge status-ok";
+        if (["failed", "expired", "canceled"].includes(value)) return "status-badge status-err";
+        return "status-badge status-warn";
+      }
+
+      async function loadJobs() {
+        $("error").textContent = "";
+        const out = await api("/api/admin/jobs?limit=300");
+        state.jobs = Array.isArray(out.items) ? out.items : [];
+        const src = out.source_db || {};
+        const sourceLabel = src.base_url || src.path || "not configured";
+        const sourceType = src.type || "sqlite";
+        $("source-status").innerHTML =
+          `Source (${safeText(sourceType)}): <span class="mono">${safeText(sourceLabel)}</span> ` +
+          `<span class="${src.available ? "status-badge status-ok" : "status-badge status-err"}">` +
+          `${src.available ? "available" : "unavailable"}</span>`;
+
+        const select = $("job-select");
+        select.innerHTML = "";
+        if (state.jobs.length === 0) {
+          const option = document.createElement("option");
+          option.value = "";
+          option.textContent = "No jobs found";
+          select.appendChild(option);
+          state.jobId = null;
+          $("job-meta").textContent = "No JD rows available in source DB.";
+          renderCandidates([]);
+          renderSessions([]);
+          renderLeaderboard([]);
+          return;
+        }
+
+        for (const job of state.jobs) {
+          const option = document.createElement("option");
+          option.value = String(job.id);
+          option.textContent = `#${job.id} ${safeText(job.title)}`;
+          select.appendChild(option);
+        }
+
+        if (!state.jobId || !state.jobs.some((j) => Number(j.id) === Number(state.jobId))) {
+          state.jobId = Number(state.jobs[0].id);
+        }
+        select.value = String(state.jobId);
+        updateJobMeta();
+        await loadCandidates();
+        await loadResults();
+      }
+
+      function updateJobMeta() {
+        const job = state.jobs.find((item) => Number(item.id) === Number(state.jobId));
+        if (!job) {
+          $("job-meta").textContent = "";
+          return;
+        }
+        $("job-meta").textContent =
+          `Title: ${safeText(job.title)} | Location: ${safeText(job.location)} | Seniority: ${safeText(job.seniority)}`;
+      }
+
+      async function loadCandidates() {
+        if (!state.jobId) {
+          renderCandidates([]);
+          return;
+        }
+        const out = await api(`/api/admin/jobs/${state.jobId}/candidates?limit=800`);
+        renderCandidates(Array.isArray(out.items) ? out.items : []);
+      }
+
+      function renderCandidates(items) {
+        const tbody = $("candidate-rows");
+        tbody.innerHTML = "";
+        if (!Array.isArray(items) || items.length === 0) {
+          $("candidate-empty").textContent = "No candidates mapped to selected JD.";
+          return;
+        }
+        $("candidate-empty").textContent = "";
+        for (const item of items) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>
+              <strong>${safeText(item.candidate_name)}</strong><br />
+              <span class="muted">${safeText(item.headline)}</span><br />
+              <span class="mono">${safeText(item.linkedin_id)}</span>
+            </td>
+            <td>
+              <div>${safeText(item.match_status)}</div>
+              <div class="mono">score: ${safeText(item.match_score)}</div>
+            </td>
+            <td>
+              <button data-candidate-id="${item.candidate_id}" data-candidate-name="${encodeURIComponent(
+                safeText(item.candidate_name, "")
+              )}">
+                Create Interview Link
+              </button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        }
+      }
+
+      async function createInterviewLink(candidateId, candidateName) {
+        const payload = {
+          job_id: Number(state.jobId),
+          candidate_id: Number(candidateId),
+          candidate_name: candidateName || null,
+          language: "en",
+          ttl_hours: 72,
+        };
+        const idem = `dash-${state.jobId}-${candidateId}-${Date.now()}`;
+        const out = await api("/api/interviews/sessions/start", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": idem,
+          },
+          body: JSON.stringify(payload),
+        });
+
+        state.generatedLinks.unshift({
+          createdAt: new Date().toISOString(),
+          jobId: state.jobId,
+          candidateId,
+          candidateName,
+          sessionId: out.session_id,
+          entryUrl: out.entry_url,
+          providerInvitationId: out.provider && out.provider.invitation_id ? out.provider.invitation_id : "",
+        });
+        renderGeneratedLinks();
+        await loadResults();
+      }
+
+      function renderGeneratedLinks() {
+        const root = $("links");
+        root.innerHTML = "";
+        const items = state.generatedLinks.filter((x) => Number(x.jobId) === Number(state.jobId));
+        $("links-empty").style.display = items.length ? "none" : "block";
+        for (const item of items) {
+          const div = document.createElement("div");
+          div.className = "link-item";
+          div.innerHTML = `
+            <div><strong>${safeText(item.candidateName)}</strong> <span class="mono">#${safeText(item.candidateId)}</span></div>
+            <div class="mono">session: ${safeText(item.sessionId)}</div>
+            <div class="mono" style="overflow-wrap:anywhere">${safeText(item.entryUrl)}</div>
+            <div style="margin-top:8px"><button class="secondary" data-copy="${encodeURIComponent(
+              item.entryUrl
+            )}">Copy Link</button></div>
+          `;
+          root.appendChild(div);
+        }
+      }
+
+      async function loadResults() {
+        if (!state.jobId) {
+          renderSessions([]);
+          renderLeaderboard([]);
+          return;
+        }
+        const [sessions, leaderboard] = await Promise.all([
+          api(`/api/interviews/sessions?job_id=${state.jobId}&limit=300`),
+          api(`/api/jobs/${state.jobId}/interview-leaderboard?limit=300`),
+        ]);
+        renderSessions(Array.isArray(sessions.items) ? sessions.items : []);
+        renderLeaderboard(Array.isArray(leaderboard.items) ? leaderboard.items : []);
+      }
+
+      function renderSessions(items) {
+        const tbody = $("session-rows");
+        tbody.innerHTML = "";
+        for (const item of items) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="mono">${safeText(item.session_id)}</td>
+            <td>${safeText(item.candidate_name)} <span class="mono">#${safeText(item.candidate_id)}</span></td>
+            <td><span class="${statusClass(item.status)}">${safeText(item.status)}</span></td>
+            <td><button class="secondary" data-refresh-session="${item.session_id}">Refresh</button></td>
+          `;
+          tbody.appendChild(tr);
+        }
+      }
+
+      function renderLeaderboard(items) {
+        const tbody = $("leaderboard-rows");
+        tbody.innerHTML = "";
+        for (const item of items) {
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${safeText(item.candidate_name)} <span class="mono">#${safeText(item.candidate_id)}</span></td>
+            <td><span class="${statusClass(item.interview_status)}">${safeText(item.interview_status)}</span></td>
+            <td>${safeText(item.total_score)}</td>
+            <td class="mono">${safeText(item.updated_at)}</td>
+          `;
+          tbody.appendChild(tr);
+        }
+      }
+
+      async function refreshOneSession(sessionId) {
+        await api(`/api/interviews/sessions/${sessionId}/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ force: true }),
+        });
+        await loadResults();
+      }
+
+      async function refreshAllForJob() {
+        if (!state.jobId) return;
+        const out = await api(`/api/admin/jobs/${state.jobId}/sessions/refresh`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ force: true, limit: 300 }),
+        });
+        $("refresh-meta").textContent =
+          `Sessions: ${safeText(out.total_sessions)} | refreshed: ${safeText(out.refreshed)} | scored: ${safeText(out.scored)} | failed: ${safeText(out.failed)}`;
+        await loadResults();
+      }
+
+      document.addEventListener("click", async (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) return;
+        try {
+          if (target.hasAttribute("data-copy")) {
+            const value = decodeURIComponent(target.getAttribute("data-copy") || "");
+            await navigator.clipboard.writeText(value);
+            target.textContent = "Copied";
+            setTimeout(() => {
+              target.textContent = "Copy Link";
+            }, 1000);
+            return;
+          }
+          if (target.hasAttribute("data-candidate-id")) {
+            const candidateId = Number(target.getAttribute("data-candidate-id"));
+            const candidateName = decodeURIComponent(target.getAttribute("data-candidate-name") || "");
+            target.setAttribute("disabled", "disabled");
+            await createInterviewLink(candidateId, candidateName);
+            target.removeAttribute("disabled");
+            return;
+          }
+          if (target.hasAttribute("data-refresh-session")) {
+            const sessionId = target.getAttribute("data-refresh-session");
+            if (!sessionId) return;
+            target.setAttribute("disabled", "disabled");
+            await refreshOneSession(sessionId);
+            target.removeAttribute("disabled");
+            return;
+          }
+        } catch (err) {
+          $("error").textContent = err.message || "Unexpected error";
+          target.removeAttribute("disabled");
+        }
+      });
+
+      $("job-select").addEventListener("change", async (event) => {
+        const value = Number(event.target.value);
+        state.jobId = Number.isFinite(value) ? value : null;
+        updateJobMeta();
+        $("error").textContent = "";
+        try {
+          await loadCandidates();
+          await loadResults();
+          renderGeneratedLinks();
+        } catch (err) {
+          $("error").textContent = err.message || "Unable to load job data";
+        }
+      });
+
+      $("reload-jobs").addEventListener("click", async () => {
+        try {
+          await loadJobs();
+        } catch (err) {
+          $("error").textContent = err.message || "Unable to reload jobs";
+        }
+      });
+
+      $("reload-results").addEventListener("click", async () => {
+        try {
+          await loadResults();
+        } catch (err) {
+          $("error").textContent = err.message || "Unable to reload results";
+        }
+      });
+
+      $("refresh-job").addEventListener("click", async () => {
+        try {
+          await refreshAllForJob();
+        } catch (err) {
+          $("error").textContent = err.message || "Unable to refresh sessions";
+        }
+      });
+
+      (async () => {
+        try {
+          await loadJobs();
+        } catch (err) {
+          $("error").textContent = err.message || "Unable to initialize dashboard";
+        }
+      })();
+    </script>
+  </body>
+</html>

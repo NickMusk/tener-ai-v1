@@ -14,3 +14,29 @@ services:
       name: tener-data
       mountPath: /var/data
       sizeGB: 1
+
+  - type: web
+    name: tener-interview-dashboard
+    runtime: python
+    plan: starter
+    autoDeploy: true
+    buildCommand: pip install .
+    startCommand: TENER_INTERVIEW_HOST=0.0.0.0 TENER_INTERVIEW_PORT=$PORT PYTHONPATH=src python -m tener_interview
+    healthCheckPath: /health
+    envVars:
+      - key: TENER_INTERVIEW_PROVIDER
+        value: hireflix
+      - key: TENER_INTERVIEW_DB_PATH
+        value: /var/data/tener_interview.sqlite3
+      - key: TENER_INTERVIEW_SOURCE_API_BASE
+        value: https://tener-ai-v1.onrender.com
+      - key: TENER_HIREFLIX_API_KEY
+        sync: false
+      - key: TENER_HIREFLIX_POSITION_ID
+        sync: false
+      - key: TENER_INTERVIEW_TOKEN_SECRET
+        sync: false
+    disk:
+      name: tener-interview-data
+      mountPath: /var/data
+      sizeGB: 1
