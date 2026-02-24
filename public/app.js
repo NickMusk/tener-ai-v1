@@ -37,9 +37,10 @@ const showToast = (message) => {
 };
 
 const normalizeStatus = (status) => String(status || "NOT_STARTED").toUpperCase();
+const normalizeLifecycle = (lifecycle) => String(lifecycle || "").toUpperCase();
 
 const lifecycleLabel = (lifecycle) => {
-  const value = String(lifecycle || "");
+  const value = normalizeLifecycle(lifecycle);
   if (value === "READY_NOW") return "ГОТОВО СЕЙЧАС";
   if (value === "RUNNING") return "ЗАПУЩЕНО";
   if (value === "COMPLETED") return "ЗАВЕРШЕНО";
@@ -51,7 +52,7 @@ const lifecycleLabel = (lifecycle) => {
 };
 
 const lifecycleClass = (lifecycle) => {
-  const value = String(lifecycle || "");
+  const value = normalizeLifecycle(lifecycle);
   if (value === "READY_NOW") return "life-ready";
   if (value === "RUNNING") return "life-running";
   if (value === "COMPLETED") return "life-completed";
@@ -79,6 +80,18 @@ const statusClass = (status) => {
   return "";
 };
 
+const lifecycleSortOrder = (lifecycle) => {
+  const value = normalizeLifecycle(lifecycle);
+  if (value === "RUNNING") return 1;
+  if (value === "READY_NOW") return 2;
+  if (value === "COMPLETED") return 3;
+  if (value === "WAITING_INTEGRATION") return 4;
+  if (value === "WAITING_PARTNERSHIP") return 5;
+  if (value === "WAITING_MANUAL_RESPONSE") return 6;
+  if (value === "BLOCKED") return 7;
+  return 8;
+};
+
 const trafficClass = (trafficLight) => {
   const value = String(trafficLight || "").toUpperCase();
   if (value === "RED") {
@@ -101,17 +114,24 @@ const renderCandidate = (candidate) => {
   const compliance = candidate.compliance || {};
   const full = candidate.fullCompliance;
   const light = compliance.trafficLight || "N/A";
+  const tier1Progress = compliance.progress || "0/0";
   const linkedinLink = profile.linkedinProfileUrl
     ? `<a class="linkedin-link" href="${profile.linkedinProfileUrl}" target="_blank" rel="noopener noreferrer">LinkedIn profile →</a>`
     : `<span class="candidate-meta">LinkedIn profile: not available</span>`;
+
+  const sortedChecks = full?.checks ? [...full.checks].sort((a, b) => lifecycleSortOrder(a.lifecycle) - lifecycleSortOrder(b.lifecycle)) : [];
+  const runningCount = sortedChecks.filter((check) => normalizeLifecycle(check.lifecycle) === "RUNNING").length;
+  const waitingCount = sortedChecks.filter((check) => normalizeLifecycle(check.lifecycle).startsWith("WAITING")).length;
 
   const fullSummary = full
     ? `
       <div class="full-summary">
         <span>PASS: ${full.summary.pass}</span>
         <span>FLAG: ${full.summary.flagged}</span>
-        <span>СЕЙЧАС: ${full.summary.canRunNow}/${full.summary.total}</span>
-        <span>ЖДЕМ: ${full.summary.pending}</span>
+        <span>RUNNING: ${runningCount}</span>
+        <span>READY NOW: ${full.summary.canRunNow}</span>
+        <span>WAITING: ${waitingCount}</span>
+        <span>BLOCKED: ${full.summary.blocked}</span>
       </div>
     `
     : `<div class="candidate-meta">Full checks are unavailable.</div>`;
@@ -119,7 +139,7 @@ const renderCandidate = (candidate) => {
   const fullChecks = full
     ? `
       <ul class="full-check-list">
-        ${full.checks
+        ${sortedChecks
           .map(
             (check) => `
           <li class="full-check-item">
@@ -129,6 +149,7 @@ const renderCandidate = (candidate) => {
             </div>
             <div class="full-check-meta">
               <span class="lifecycle-pill ${lifecycleClass(check.lifecycle)}">${lifecycleLabel(check.lifecycle)}</span>
+              <span class="run-now-pill ${check.canRunNow ? "run-now-yes" : "run-now-no"}">${check.canRunNow ? "МОЖНО СЕЙЧАС" : "ПОЗЖЕ"}</span>
               <span>ETA: ${check.eta}</span>
               <span>${check.tier}</span>
             </div>
@@ -148,10 +169,11 @@ const renderCandidate = (candidate) => {
         <span class="candidate-light ${trafficClass(light)}">${light}</span>
       </div>
       <div class="candidate-meta">${profile.headline || "No headline"} • ${profile.source || "MANUAL"}</div>
-      <div class="candidate-meta">Progress: ${compliance.progress || "0/0"}</div>
+      <div class="candidate-meta">Tier-1 auto checks: ${tier1Progress} (это быстрые онлайн-проверки)</div>
+      <div class="candidate-meta">Full verification plan: ${full ? `${full.summary.total} checks` : "unavailable"}</div>
       <div class="candidate-links">${linkedinLink}</div>
-      <details class="full-checks">
-        <summary>Все проверки (15): что уже прошло, что запущено и что ждём</summary>
+      <details class="full-checks" open>
+        <summary>Все проверки (15): статусы, что запущено и что ждём по срокам</summary>
         ${fullSummary}
         ${fullChecks}
       </details>
