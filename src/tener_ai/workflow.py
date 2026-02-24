@@ -32,6 +32,7 @@ class WorkflowService:
         outreach_agent: OutreachAgent,
         faq_agent: FAQAgent,
         pre_resume_service: PreResumeCommunicationService | None = None,
+        llm_responder: Any | None = None,
         contact_all_mode: bool = False,
         require_resume_before_final_verify: bool = False,
         stage_instructions: Dict[str, str] | None = None,
@@ -42,6 +43,7 @@ class WorkflowService:
         self.outreach_agent = outreach_agent
         self.faq_agent = faq_agent
         self.pre_resume_service = pre_resume_service
+        self.llm_responder = llm_responder
         self.contact_all_mode = contact_all_mode
         self.require_resume_before_final_verify = require_resume_before_final_verify
         self.stage_instructions = dict(stage_instructions or {})
@@ -687,6 +689,7 @@ class WorkflowService:
             if item.get("candidate_language"):
                 previous_lang = item["candidate_language"]
                 break
+        llm_history = self._build_llm_history(messages=messages, latest_inbound=text)
 
         inbound_id = self.db.add_message(
             conversation_id=conversation_id,
@@ -724,6 +727,17 @@ class WorkflowService:
                 outbound = str(result.get("outbound") or "").strip()
                 intent = str(result.get("intent") or "default")
                 language = str((state_out or {}).get("language") or previous_lang or "en")
+                outbound = self._maybe_llm_reply(
+                    mode="pre_resume",
+                    instruction=self.stage_instructions.get("pre_resume", ""),
+                    job=job,
+                    candidate=candidate,
+                    inbound_text=text,
+                    history=llm_history,
+                    fallback_reply=outbound,
+                    language=language,
+                    state=state_out if isinstance(state_out, dict) else None,
+                )
                 self.db.insert_pre_resume_event(
                     session_id=session_id,
                     conversation_id=conversation_id,
@@ -789,6 +803,17 @@ class WorkflowService:
                 }
 
         lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=previous_lang)
+        reply = self._maybe_llm_reply(
+            mode="faq",
+            instruction=self.stage_instructions.get("faq", ""),
+            job=job,
+            candidate=candidate,
+            inbound_text=text,
+            history=llm_history,
+            fallback_reply=reply,
+            language=lang,
+            state=None,
+        )
         delivery = self._send_auto_reply(candidate=candidate, message=reply, conversation=conversation)
         outbound_id = self.db.add_message(
             conversation_id=conversation_id,
@@ -869,6 +894,63 @@ class WorkflowService:
             return self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
         except Exception as exc:
             return {"sent": False, "provider": "linkedin", "error": str(exc)}
+
+    def _maybe_llm_reply(
+        self,
+        mode: str,
+        instruction: str,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        inbound_text: str,
+        history: List[Dict[str, str]],
+        fallback_reply: str,
+        language: str,
+        state: Dict[str, Any] | None,
+    ) -> str:
+        fallback = (fallback_reply or "").strip()
+        if not fallback:
+            return fallback
+        if self.llm_responder is None:
+            return fallback
+        try:
+            generated = self.llm_responder.generate_candidate_reply(
+                mode=mode,
+                instruction=instruction,
+                job=job,
+                candidate=candidate,
+                inbound_text=inbound_text,
+                history=history,
+                fallback_reply=fallback,
+                language=language,
+                state=state,
+            )
+        except Exception as exc:
+            self.db.log_operation(
+                operation="agent.llm.reply.error",
+                status="error",
+                entity_type="candidate",
+                entity_id=str(candidate.get("id") or candidate.get("linkedin_id") or "unknown"),
+                details={"mode": mode, "error": str(exc)},
+            )
+            return fallback
+        generated_text = str(generated or "").strip()
+        if not generated_text:
+            return fallback
+        return generated_text
+
+    @staticmethod
+    def _build_llm_history(messages: List[Dict[str, Any]], latest_inbound: str) -> List[Dict[str, str]]:
+        history: List[Dict[str, str]] = []
+        for msg in messages[-14:]:
+            direction = str(msg.get("direction") or "outbound")
+            role = "candidate" if direction == "inbound" else "agent"
+            content = str(msg.get("content") or "").strip()
+            if not content:
+                continue
+            history.append({"role": role, "content": content})
+        if latest_inbound.strip():
+            history.append({"role": "candidate", "content": latest_inbound.strip()})
+        return history
 
     @staticmethod
     def _is_connection_required_error(delivery: Dict[str, Any]) -> bool:

@@ -13,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .db import Database
 from .instructions import AgentInstructions
+from .llm_responder import CandidateLLMResponder
 from .linkedin_provider import build_linkedin_provider
 from .matching import MatchingEngine
 from .pre_resume_service import PreResumeCommunicationService
@@ -87,6 +88,21 @@ def build_services() -> Dict[str, Any]:
         templates_path=templates_path,
         instruction=instructions.get("pre_resume"),
     )
+    llm_responder = None
+    llm_enabled = env_bool("TENER_LLM_ENABLED", True)
+    llm_api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    llm_timeout_raw = os.environ.get("TENER_LLM_TIMEOUT_SECONDS", "30")
+    try:
+        llm_timeout = int(llm_timeout_raw)
+    except ValueError:
+        llm_timeout = 30
+    if llm_enabled and llm_api_key:
+        llm_responder = CandidateLLMResponder(
+            api_key=llm_api_key,
+            model=os.environ.get("TENER_LLM_MODEL", os.environ.get("OPENAI_MODEL", "gpt-4o-mini")),
+            base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            timeout_seconds=llm_timeout,
+        )
 
     workflow = WorkflowService(
         db=db,
@@ -95,6 +111,7 @@ def build_services() -> Dict[str, Any]:
         outreach_agent=outreach_agent,
         faq_agent=faq_agent,
         pre_resume_service=pre_resume_service,
+        llm_responder=llm_responder,
         contact_all_mode=env_bool("TENER_CONTACT_ALL_MODE", True),
         require_resume_before_final_verify=env_bool("TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY", True),
         stage_instructions={
