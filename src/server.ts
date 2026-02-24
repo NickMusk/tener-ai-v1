@@ -3,6 +3,7 @@ import { checkSources } from "./domain/checks";
 import { createPostgresPool } from "./infra/postgres";
 import { BullMqVerificationJobQueue } from "./queue/bullMqVerificationJobQueue";
 import { InMemoryVerificationJobQueue } from "./queue/inMemoryVerificationJobQueue";
+import { CandidateRepository } from "./repositories/candidateRepository";
 import { InMemoryCandidateRepository } from "./repositories/inMemoryCandidateRepository";
 import { PostgresCandidateRepository } from "./repositories/postgresCandidateRepository";
 import { CandidateService } from "./services/candidateService";
@@ -13,7 +14,7 @@ import { fdaDebarmentDataset, leieDataset, ofacDataset } from "./verification/pr
 import { SamGovProvider } from "./verification/providers/samGovProvider";
 
 const bootstrap = async (): Promise<void> => {
-  const repository = config.databaseUrl
+  const repository: CandidateRepository = config.databaseUrl
     ? new PostgresCandidateRepository(createPostgresPool(config.databaseUrl))
     : new InMemoryCandidateRepository();
 
