@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib import error, request
@@ -310,6 +311,40 @@ class HireflixHTTPAdapter:
               score { value }
               url { public short private }
             }
+            ... on ExceededInvitesThisPeriodError {
+              code
+              name
+              m1: message
+            }
+            ... on InterviewAlreadyExistsInPositionError {
+              code
+              name
+              m2: message
+            }
+            ... on InterviewExternalIdAlreadyExistsInPositionError {
+              code
+              name
+              m3: message
+            }
+            ... on PositionNotFoundError {
+              code
+              name
+              m4: message
+            }
+            ... on PositionNotReadyToAcceptInvitesError {
+              code
+              name
+              m5: message
+            }
+            ... on ValidationError {
+              code
+              name
+              m6: message
+              fieldErrors {
+                flattenedPath
+                message
+              }
+            }
           }
         }
         """
@@ -346,8 +381,35 @@ class HireflixHTTPAdapter:
     @staticmethod
     def _invite_union_error_message(*, out: Dict[str, Any], typename: str) -> str:
         code = str(out.get("code") or "").strip()
-        message = str(out.get("message") or out.get("vmsg") or "").strip()
+        message = str(
+            out.get("message")
+            or out.get("vmsg")
+            or out.get("m1")
+            or out.get("m2")
+            or out.get("m3")
+            or out.get("m4")
+            or out.get("m5")
+            or out.get("m6")
+            or ""
+        ).strip()
         name = str(out.get("name") or "").strip()
+        field_errors = out.get("fieldErrors") if isinstance(out.get("fieldErrors"), list) else []
+        field_summaries: List[str] = []
+        for item in field_errors:
+            if not isinstance(item, dict):
+                continue
+            path = str(item.get("flattenedPath") or "").strip()
+            msg = str(item.get("message") or "").strip()
+            if path and msg:
+                field_summaries.append(f"{path}: {msg}")
+            elif msg:
+                field_summaries.append(msg)
+        if field_summaries:
+            joined = "; ".join(field_summaries)
+            if message:
+                message = f"{message} ({joined})"
+            else:
+                message = joined
         parts: List[str] = []
         if typename:
             parts.append(typename)
@@ -663,10 +725,23 @@ class HireflixHTTPAdapter:
 
     @staticmethod
     def _split_name(full_name: str) -> Tuple[str, str]:
-        cleaned = full_name.strip()
+        cleaned = re.sub(r"\s+", " ", str(full_name or "")).strip()
         if not cleaned:
-            return "Candidate", ""
-        parts = [p for p in cleaned.split() if p]
-        if len(parts) == 1:
-            return parts[0], ""
-        return parts[0], " ".join(parts[1:])
+            return "Candidate", "Candidate"
+        parts = [p for p in cleaned.split(" ") if p]
+        first = HireflixHTTPAdapter._sanitize_name_part(parts[0])
+        last_raw = " ".join(parts[1:]) if len(parts) > 1 else ""
+        last = HireflixHTTPAdapter._sanitize_name_part(last_raw)
+        if not first:
+            first = "Candidate"
+        if not last:
+            last = "Candidate"
+        return first[:64], last[:64]
+
+    @staticmethod
+    def _sanitize_name_part(value: str) -> str:
+        if not value:
+            return ""
+        cleaned = re.sub(r"[^A-Za-z0-9 .,'-]+", " ", value)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip(" ,.-")
+        return cleaned.strip()

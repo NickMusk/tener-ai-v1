@@ -32,6 +32,11 @@ class HireflixHttpAdapterTests(unittest.TestCase):
         self.assertIn("hireflix-42-", one)
         self.assertTrue(one.endswith("@interview.local"))
 
+    def test_split_name_ensures_non_empty_last_name(self) -> None:
+        first, last = HireflixHTTPAdapter._split_name("Candidate")
+        self.assertEqual(first, "Candidate")
+        self.assertEqual(last, "Candidate")
+
     def test_create_assessment_with_position_save_mutation(self) -> None:
         adapter = _FakeAdapter(
             HireflixConfig(api_key="k", position_id=""),
@@ -111,6 +116,46 @@ class HireflixHttpAdapterTests(unittest.TestCase):
         self.assertEqual(out["interview_url"], "https://app.hireflix.com/hash_1")
         invite_input = adapter.calls[0]["variables"]["input"]
         self.assertNotIn("externalId", invite_input)
+
+    def test_create_invitation_defaults_last_name_for_single_token_name(self) -> None:
+        adapter = _FakeAdapter(
+            HireflixConfig(api_key="k", position_id="pos_1"),
+            scripted_responses=[
+                {
+                    "data": {
+                        "inviteCandidateToInterview": {
+                            "__typename": "InterviewType",
+                            "id": "int_name_fix",
+                            "hash": "hash_name_fix",
+                            "url": {"public": "https://app.hireflix.com/hash_name_fix"},
+                        }
+                    }
+                },
+                {
+                    "data": {
+                        "interview": {
+                            "id": "int_name_fix",
+                            "status": "pending",
+                            "hash": "hash_name_fix",
+                            "url": {"public": "https://app.hireflix.com/hash_name_fix"},
+                            "candidate": {"email": "candidate@example.com"},
+                        }
+                    }
+                },
+            ],
+        )
+
+        out = adapter.create_invitation(
+            {
+                "candidate_name": "Candidate",
+                "candidate_email": "candidate@example.com",
+            }
+        )
+
+        self.assertEqual(out["invitation_id"], "int_name_fix")
+        candidate_input = adapter.calls[0]["variables"]["input"]["candidate"]
+        self.assertEqual(candidate_input.get("firstName"), "Candidate")
+        self.assertEqual(candidate_input.get("lastName"), "Candidate")
 
     def test_create_invitation_with_explicit_external_id(self) -> None:
         adapter = _FakeAdapter(
