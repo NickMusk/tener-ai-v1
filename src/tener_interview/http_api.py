@@ -51,6 +51,7 @@ def build_services() -> Dict[str, Any]:
                     public_app_base=config.hireflix_public_app_base,
                     allow_synthetic_email=config.allow_synthetic_email,
                     synthetic_email_domain=config.synthetic_email_domain,
+                    allow_legacy_invite_fallback=config.hireflix_allow_legacy_invite_fallback,
                 )
             )
         except Exception as exc:

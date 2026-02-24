@@ -29,6 +29,7 @@ class InterviewModuleConfig:
     hireflix_public_app_base: str
     allow_synthetic_email: bool
     synthetic_email_domain: str
+    hireflix_allow_legacy_invite_fallback: bool
 
     @classmethod
     def from_env(cls) -> "InterviewModuleConfig":
@@ -97,6 +98,10 @@ class InterviewModuleConfig:
             in {"1", "true", "yes", "on"}
         )
         synthetic_email_domain = os.environ.get("TENER_INTERVIEW_SYNTHETIC_EMAIL_DOMAIN", "interview.local").strip()
+        hireflix_allow_legacy_invite_fallback = (
+            str(os.environ.get("TENER_HIREFLIX_LEGACY_INVITE_FALLBACK", "false")).strip().lower()
+            in {"1", "true", "yes", "on"}
+        )
 
         return cls(
             db_path=db_path,
@@ -121,4 +126,5 @@ class InterviewModuleConfig:
             hireflix_public_app_base=hireflix_public_app_base or "https://app.hireflix.com",
             allow_synthetic_email=allow_synthetic_email,
             synthetic_email_domain=synthetic_email_domain or "interview.local",
+            hireflix_allow_legacy_invite_fallback=hireflix_allow_legacy_invite_fallback,
         )

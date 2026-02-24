@@ -16,6 +16,7 @@ class HireflixConfig:
     public_app_base: str = "https://app.hireflix.com"
     allow_synthetic_email: bool = True
     synthetic_email_domain: str = "interview.local"
+    allow_legacy_invite_fallback: bool = False
 
 
 class HireflixHTTPAdapter:
@@ -120,11 +121,16 @@ class HireflixHTTPAdapter:
             new_mutation_error = str(exc)
 
         if not interview or not str(interview.get("id") or "").strip():
-            interview = self._invite_with_legacy_mutation(
-                position_id=position_id,
-                candidate_name=f"{first_name} {last_name}".strip(),
-                candidate_email=candidate_email,
-            )
+            if self.config.allow_legacy_invite_fallback:
+                interview = self._invite_with_legacy_mutation(
+                    position_id=position_id,
+                    candidate_name=f"{first_name} {last_name}".strip(),
+                    candidate_email=candidate_email,
+                )
+            else:
+                raise ValueError(
+                    f"Hireflix inviteCandidateToInterview failed. {new_mutation_error or 'invite was rejected'}".strip()
+                )
 
         interview_id = str(interview.get("id") or "").strip()
         if not interview_id:

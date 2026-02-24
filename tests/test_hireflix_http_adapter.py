@@ -112,7 +112,7 @@ class HireflixHttpAdapterTests(unittest.TestCase):
 
     def test_create_invitation_falls_back_to_legacy_mutation(self) -> None:
         adapter = _FakeAdapter(
-            HireflixConfig(api_key="k", position_id="pos_1"),
+            HireflixConfig(api_key="k", position_id="pos_1", allow_legacy_invite_fallback=True),
             scripted_responses=[
                 {"data": {"inviteCandidateToInterview": {"__typename": "ExceededInvitesThisPeriodError"}}},
                 {
@@ -148,6 +148,23 @@ class HireflixHttpAdapterTests(unittest.TestCase):
 
         self.assertEqual(out["invitation_id"], "int_legacy")
         self.assertIn("hash_l", out["interview_url"])
+
+    def test_create_invitation_without_legacy_fallback_raises_new_error(self) -> None:
+        adapter = _FakeAdapter(
+            HireflixConfig(api_key="k", position_id="pos_1", allow_legacy_invite_fallback=False),
+            scripted_responses=[
+                {"data": {"inviteCandidateToInterview": {"__typename": "ExceededInvitesThisPeriodError"}}},
+            ],
+        )
+
+        with self.assertRaises(ValueError) as ctx:
+            adapter.create_invitation(
+                {
+                    "candidate_name": "Fallback",
+                    "candidate_email": "fallback@example.com",
+                }
+            )
+        self.assertIn("inviteCandidateToInterview failed", str(ctx.exception))
 
     def test_status_mapping(self) -> None:
         adapter = _FakeAdapter(

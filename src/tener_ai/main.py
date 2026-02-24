@@ -16,6 +16,7 @@ from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .candidate_scoring import CandidateScoringPolicy
 from .db import Database
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
+from .interview_client import InterviewAPIClient
 from .llm_responder import CandidateLLMResponder
 from .linkedin_provider import build_linkedin_provider
 from .matching import MatchingEngine
@@ -59,6 +60,7 @@ def apply_agent_instructions(services: Dict[str, Any]) -> None:
         "outreach": instructions.get("outreach"),
         "faq": instructions.get("faq"),
         "pre_resume": instructions.get("pre_resume"),
+        "interview_invite": instructions.get("interview_invite"),
     }
     services["pre_resume"].instruction = instructions.get("pre_resume")
 
@@ -143,12 +145,36 @@ def build_services() -> Dict[str, Any]:
         max_followups = int(os.environ.get("TENER_MAX_FOLLOWUPS", "3"))
     except ValueError:
         max_followups = 3
+    interview_followup_delays_raw = os.environ.get("TENER_INTERVIEW_FOLLOWUP_DELAYS_HOURS", "24,48")
+    interview_followup_delays: list[float] = []
+    for token in interview_followup_delays_raw.split(","):
+        part = token.strip()
+        if not part:
+            continue
+        try:
+            interview_followup_delays.append(float(part))
+        except ValueError:
+            continue
+    try:
+        interview_max_followups = int(os.environ.get("TENER_INTERVIEW_MAX_FOLLOWUPS", "2"))
+    except ValueError:
+        interview_max_followups = 2
+    try:
+        interview_invite_ttl_hours = int(os.environ.get("TENER_INTERVIEW_INVITE_TTL_HOURS", "72"))
+    except ValueError:
+        interview_invite_ttl_hours = 72
     pre_resume_service = PreResumeCommunicationService(
         templates_path=templates_path,
         max_followups=max_followups,
         followup_delays_hours=followup_delays or None,
         instruction=instructions.get("pre_resume"),
     )
+    interview_api_base = os.environ.get("TENER_INTERVIEW_API_BASE", "").strip()
+    try:
+        interview_api_timeout = int(os.environ.get("TENER_INTERVIEW_API_TIMEOUT_SECONDS", "20"))
+    except ValueError:
+        interview_api_timeout = 20
+    interview_client = InterviewAPIClient(interview_api_base, timeout_seconds=interview_api_timeout) if interview_api_base else None
     llm_responder = None
     llm_enabled = env_bool("TENER_LLM_ENABLED", True)
     llm_api_key = os.environ.get("OPENAI_API_KEY", "").strip()
@@ -173,11 +199,15 @@ def build_services() -> Dict[str, Any]:
         faq_agent=faq_agent,
         pre_resume_service=pre_resume_service,
         llm_responder=llm_responder,
+        interview_client=interview_client,
         agent_evaluation_playbook=evaluation_playbook,
         contact_all_mode=env_bool("TENER_CONTACT_ALL_MODE", True),
         require_resume_before_final_verify=env_bool("TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY", True),
         forced_test_ids_path=forced_test_ids_path,
         forced_test_score=forced_test_score,
+        interview_invite_ttl_hours=interview_invite_ttl_hours,
+        interview_max_followups=interview_max_followups,
+        interview_followup_delays_hours=interview_followup_delays or None,
         stage_instructions={
             "sourcing": instructions.get("sourcing"),
             "enrich": instructions.get("enrich"),
@@ -186,6 +216,7 @@ def build_services() -> Dict[str, Any]:
             "outreach": instructions.get("outreach"),
             "faq": instructions.get("faq"),
             "pre_resume": instructions.get("pre_resume"),
+            "interview_invite": instructions.get("interview_invite"),
         },
     )
 
