@@ -11,10 +11,16 @@ from typing import Any, Dict, List
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .db import Database
+from .instructions import AgentEvaluationPlaybook
 from .pre_resume_service import PreResumeCommunicationService
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
 TERMINAL_PRE_RESUME_STATUSES = {"resume_received", "not_interested", "unreachable", "stalled"}
+AGENT_ROLES = {
+    "sourcing_vetting": "Talent Scout Agent",
+    "communication": "Candidate Communication Agent",
+    "interview_evaluation": "Interview Evaluation Agent",
+}
 
 
 @dataclass
@@ -41,6 +47,7 @@ class WorkflowService:
         faq_agent: FAQAgent,
         pre_resume_service: PreResumeCommunicationService | None = None,
         llm_responder: Any | None = None,
+        agent_evaluation_playbook: AgentEvaluationPlaybook | None = None,
         contact_all_mode: bool = False,
         require_resume_before_final_verify: bool = False,
         stage_instructions: Dict[str, str] | None = None,
@@ -54,6 +61,7 @@ class WorkflowService:
         self.faq_agent = faq_agent
         self.pre_resume_service = pre_resume_service
         self.llm_responder = llm_responder
+        self.agent_evaluation_playbook = agent_evaluation_playbook
         self.contact_all_mode = contact_all_mode
         self.require_resume_before_final_verify = require_resume_before_final_verify
         self.stage_instructions = dict(stage_instructions or {})
@@ -237,6 +245,23 @@ class WorkflowService:
                 score=score,
                 status=screening_status,
                 verification_notes=notes,
+            )
+            self._record_sourcing_vetting_assessment(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                screening_status=screening_status,
+                match_score=score,
+                notes=notes,
+            )
+            self._upsert_agent_assessment(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                agent_key="interview_evaluation",
+                stage_key="interview_results",
+                score=None,
+                status="not_started",
+                reason="Interview step has not started yet.",
+                details={"source": "workflow.add"},
             )
             self.db.log_operation(
                 operation="agent.add.persist",
@@ -478,6 +503,14 @@ class WorkflowService:
                     "chat_binding": chat_binding,
                 },
             )
+            self._record_communication_outreach_assessment(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                delivery_status=delivery_status,
+                delivery=delivery,
+                connect_request=connect_request,
+                request_resume=request_resume,
+            )
 
             out_items.append(
                 {
@@ -714,6 +747,14 @@ class WorkflowService:
                 "delivery": {"sent": True, "provider": "manual", "chat_id": chat_id, "mock": True},
             },
         )
+        self._record_communication_outreach_assessment(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            delivery_status="sent",
+            delivery={"sent": True, "provider": "manual", "chat_id": chat_id, "mock": True},
+            connect_request=None,
+            request_resume=True,
+        )
 
         return {
             "job_id": job_id,
@@ -911,6 +952,14 @@ class WorkflowService:
                         entity_id=str(conversation["candidate_id"]),
                         details={"conversation_id": conversation_id, "session_id": session_id},
                     )
+                self._record_communication_dialogue_assessment(
+                    job_id=int(conversation["job_id"]),
+                    candidate_id=int(conversation["candidate_id"]),
+                    mode="pre_resume",
+                    intent=intent,
+                    state=state_out if isinstance(state_out, dict) else None,
+                    inbound_text=text,
+                )
 
                 return {
                     "language": language,
@@ -946,6 +995,14 @@ class WorkflowService:
             entity_type="message",
             entity_id=str(outbound_id),
             details={"conversation_id": conversation_id, "intent": intent, "language": lang, "delivery": delivery},
+        )
+        self._record_communication_dialogue_assessment(
+            job_id=int(conversation["job_id"]),
+            candidate_id=int(conversation["candidate_id"]),
+            mode="faq",
+            intent=intent,
+            state=None,
+            inbound_text=text,
         )
 
         return {"language": lang, "intent": intent, "reply": reply}
@@ -1237,6 +1294,14 @@ class WorkflowService:
                 state=state,
                 instruction=self.stage_instructions.get("pre_resume", ""),
             )
+            self._record_communication_dialogue_assessment(
+                job_id=job_ref,
+                candidate_id=candidate_id,
+                mode="pre_resume",
+                intent="followup",
+                state=state if isinstance(state, dict) else None,
+                inbound_text=None,
+            )
             event_type = "followup_sent" if result.get("sent") else "followup_skipped"
             self.db.insert_pre_resume_event(
                 session_id=session_id,
@@ -1339,6 +1404,181 @@ class WorkflowService:
             "total_due": len(due_rows),
             "items": items,
         }
+
+    def _record_sourcing_vetting_assessment(
+        self,
+        job_id: int,
+        candidate_id: int,
+        screening_status: str,
+        match_score: float,
+        notes: Dict[str, Any] | None,
+    ) -> None:
+        normalized_status = str(screening_status or "").strip().lower()
+        raw_score = self._normalize_percentage(match_score * 100.0)
+        status_map = {
+            "verified": ("qualified", max(raw_score, 75.0)),
+            "needs_resume": ("conditional", max(min(raw_score, 74.0), 50.0)),
+            "rejected": ("not_matched", min(raw_score, 45.0)),
+        }
+        assessment_status, score = status_map.get(normalized_status, ("review", raw_score))
+        explanation = ""
+        if isinstance(notes, dict):
+            explanation = str(notes.get("human_explanation") or "").strip()
+        if not explanation:
+            explanation = f"Screening status: {normalized_status or 'unknown'}."
+
+        self._upsert_agent_assessment(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            agent_key="sourcing_vetting",
+            stage_key="vetting",
+            score=score,
+            status=assessment_status,
+            reason=explanation,
+            details={
+                "screening_status": normalized_status,
+                "match_score": round(raw_score, 2),
+            },
+        )
+
+    def _record_communication_outreach_assessment(
+        self,
+        job_id: int,
+        candidate_id: int,
+        delivery_status: str,
+        delivery: Dict[str, Any] | None,
+        connect_request: Dict[str, Any] | None,
+        request_resume: bool,
+    ) -> None:
+        normalized = str(delivery_status or "").strip().lower()
+        if normalized == "sent":
+            score = 74.0 if request_resume else 70.0
+            status = "contacted"
+            reason = "Initial outreach delivered."
+        elif normalized == "pending_connection":
+            score = 45.0
+            status = "pending_connection"
+            reason = "Message blocked until candidate accepts connection request."
+        else:
+            score = 20.0
+            status = "delivery_failed"
+            reason = "Outreach delivery failed."
+
+        delivery_error = str((delivery or {}).get("error") or "").strip()
+        if delivery_error:
+            reason = f"{reason} Provider error: {delivery_error}"
+
+        self._upsert_agent_assessment(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            agent_key="communication",
+            stage_key="outreach",
+            score=score,
+            status=status,
+            reason=reason,
+            details={
+                "delivery_status": normalized or "unknown",
+                "delivery": delivery or {},
+                "connect_request": connect_request or {},
+                "request_resume": bool(request_resume),
+            },
+        )
+
+    def _record_communication_dialogue_assessment(
+        self,
+        job_id: int,
+        candidate_id: int,
+        mode: str,
+        intent: str | None,
+        state: Dict[str, Any] | None,
+        inbound_text: str | None,
+    ) -> None:
+        normalized_mode = str(mode or "").strip().lower()
+        normalized_intent = str(intent or "").strip().lower()
+        state_status = str((state or {}).get("status") or "").strip().lower()
+
+        if normalized_mode == "pre_resume":
+            mapping = {
+                "resume_received": (96.0, "cv_received", "Candidate shared CV/resume."),
+                "resume_promised": (83.0, "resume_promised", "Candidate promised to share CV later."),
+                "engaged_no_resume": (78.0, "in_dialogue", "Candidate is engaged in dialogue before CV."),
+                "awaiting_reply": (70.0, "awaiting_reply", "Awaiting candidate response after follow-up."),
+                "not_interested": (35.0, "not_interested", "Candidate is not interested."),
+                "stalled": (25.0, "stalled", "Dialogue stalled without response."),
+                "unreachable": (15.0, "unreachable", "Candidate unreachable through current channel."),
+            }
+            score, status, reason = mapping.get(
+                state_status,
+                (66.0, "in_dialogue", f"Dialogue update captured (status: {state_status or 'unknown'})."),
+            )
+        else:
+            score = 68.0
+            status = "in_dialogue"
+            reason = f"FAQ dialogue handled (intent: {normalized_intent or 'default'})."
+
+        self._upsert_agent_assessment(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            agent_key="communication",
+            stage_key="dialogue",
+            score=score,
+            status=status,
+            reason=reason,
+            details={
+                "mode": normalized_mode or "faq",
+                "intent": normalized_intent or "default",
+                "state_status": state_status or None,
+                "inbound_preview": (str(inbound_text or "").strip()[:200] or None),
+            },
+        )
+
+    def _upsert_agent_assessment(
+        self,
+        job_id: int,
+        candidate_id: int,
+        agent_key: str,
+        stage_key: str,
+        score: float | None,
+        status: str,
+        reason: str,
+        details: Dict[str, Any] | None = None,
+    ) -> None:
+        self.db.upsert_candidate_agent_assessment(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            agent_key=agent_key,
+            agent_name=self._agent_name(agent_key),
+            stage_key=stage_key,
+            score=self._normalize_percentage(score) if score is not None else None,
+            status=str(status or "unknown"),
+            reason=reason,
+            instruction=self._agent_evaluation_instruction(agent_key=agent_key, stage_key=stage_key),
+            details=details or {},
+        )
+
+    def _agent_name(self, agent_key: str) -> str:
+        fallback = AGENT_ROLES.get(agent_key, agent_key.replace("_", " ").title())
+        if self.agent_evaluation_playbook is None:
+            return fallback
+        from_book = self.agent_evaluation_playbook.get_agent_name(agent_key, fallback="")
+        return from_book or fallback
+
+    def _agent_evaluation_instruction(self, agent_key: str, stage_key: str) -> str:
+        if self.agent_evaluation_playbook is None:
+            return ""
+        return self.agent_evaluation_playbook.get_instruction(agent_key=agent_key, stage_key=stage_key, fallback="")
+
+    @staticmethod
+    def _normalize_percentage(value: float | None) -> float:
+        try:
+            numeric = float(value)
+        except (TypeError, ValueError):
+            return 0.0
+        if numeric < 0.0:
+            return 0.0
+        if numeric > 100.0:
+            return 100.0
+        return round(numeric, 2)
 
     def _send_auto_reply(
         self,
@@ -1592,6 +1832,14 @@ class WorkflowService:
                     status="outreach_sent",
                     extra_notes={"outreach_state": "sent_after_connection"},
                 )
+                self._record_communication_outreach_assessment(
+                    job_id=int(conversation["job_id"]),
+                    candidate_id=int(conversation["candidate_id"]),
+                    delivery_status="sent",
+                    delivery=delivery,
+                    connect_request=None,
+                    request_resume=True,
+                )
             self.db.add_message(
                 conversation_id=conversation_id,
                 direction="outbound",
@@ -1618,6 +1866,16 @@ class WorkflowService:
             self.db.update_conversation_status(conversation_id=conversation_id, status="waiting_connection")
         else:
             self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+        conversation = self.db.get_conversation(conversation_id)
+        if conversation:
+            self._record_communication_outreach_assessment(
+                job_id=int(conversation["job_id"]),
+                candidate_id=int(conversation["candidate_id"]),
+                delivery_status="failed",
+                delivery=delivery,
+                connect_request=None,
+                request_resume=True,
+            )
 
         self.db.log_operation(
             operation="agent.outreach.send_after_connection",

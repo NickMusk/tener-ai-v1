@@ -9,6 +9,11 @@ from typing import Any, Dict, Iterable, List, Optional
 
 
 UTC = timezone.utc
+AGENT_DEFAULT_NAMES = {
+    "sourcing_vetting": "Talent Scout Agent",
+    "communication": "Candidate Communication Agent",
+    "interview_evaluation": "Interview Evaluation Agent",
+}
 
 
 def utc_now_iso() -> str:
@@ -151,6 +156,24 @@ class Database:
             updated_at TEXT NOT NULL,
             PRIMARY KEY(job_id, step),
             FOREIGN KEY(job_id) REFERENCES jobs(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS candidate_agent_assessments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL,
+            candidate_id INTEGER NOT NULL,
+            agent_key TEXT NOT NULL,
+            agent_name TEXT NOT NULL,
+            stage_key TEXT NOT NULL,
+            score REAL,
+            status TEXT NOT NULL,
+            reason TEXT,
+            instruction TEXT,
+            details TEXT,
+            updated_at TEXT NOT NULL,
+            UNIQUE(job_id, candidate_id, agent_key, stage_key),
+            FOREIGN KEY(job_id) REFERENCES jobs(id),
+            FOREIGN KEY(candidate_id) REFERENCES candidates(id)
         );
         """
         with self.transaction() as conn:
@@ -338,10 +361,18 @@ class Database:
         """
         rows = self._conn.execute(query, (job_id,)).fetchall()
         items = [self._row_to_dict(r) for r in rows]
+        assessments_by_candidate = self._list_candidate_assessments_grouped(job_id=job_id)
         for item in items:
             key, label = self._derive_candidate_current_status(item)
             item["current_status_key"] = key
             item["current_status_label"] = label
+            candidate_id = int(item.get("candidate_id") or 0)
+            candidate_assessments = list(assessments_by_candidate.get(candidate_id, []))
+            item["agent_assessments"] = candidate_assessments
+            item["agent_scorecard"] = self._build_agent_scorecard(
+                assessments=candidate_assessments,
+                candidate_row=item,
+            )
         return items
 
     def get_candidate_match(self, job_id: int, candidate_id: int) -> Optional[Dict[str, Any]]:
@@ -892,6 +923,175 @@ class Database:
                 """,
                 (status, json.dumps(merged_notes), job_id, candidate_id),
             )
+
+    def upsert_candidate_agent_assessment(
+        self,
+        job_id: int,
+        candidate_id: int,
+        agent_key: str,
+        agent_name: str,
+        stage_key: str,
+        score: Optional[float],
+        status: str,
+        reason: Optional[str] = None,
+        instruction: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        normalized_score = None if score is None else float(score)
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO candidate_agent_assessments (
+                    job_id, candidate_id, agent_key, agent_name, stage_key, score, status,
+                    reason, instruction, details, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id, candidate_id, agent_key, stage_key)
+                DO UPDATE SET
+                    agent_name = excluded.agent_name,
+                    score = excluded.score,
+                    status = excluded.status,
+                    reason = excluded.reason,
+                    instruction = excluded.instruction,
+                    details = excluded.details,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    job_id,
+                    candidate_id,
+                    agent_key,
+                    agent_name,
+                    stage_key,
+                    normalized_score,
+                    status,
+                    reason,
+                    instruction,
+                    json.dumps(details or {}),
+                    utc_now_iso(),
+                ),
+            )
+
+    def _list_candidate_assessments_grouped(self, job_id: int) -> Dict[int, List[Dict[str, Any]]]:
+        rows = self._conn.execute(
+            """
+            SELECT
+                id,
+                job_id,
+                candidate_id,
+                agent_key,
+                agent_name,
+                stage_key,
+                score,
+                status,
+                reason,
+                instruction,
+                details,
+                updated_at
+            FROM candidate_agent_assessments
+            WHERE job_id = ?
+            ORDER BY updated_at DESC, id DESC
+            """,
+            (job_id,),
+        ).fetchall()
+        grouped: Dict[int, List[Dict[str, Any]]] = {}
+        for row in rows:
+            item = self._row_to_dict(row)
+            candidate_id = int(item.get("candidate_id") or 0)
+            grouped.setdefault(candidate_id, []).append(item)
+        return grouped
+
+    @staticmethod
+    def _build_agent_scorecard(
+        assessments: List[Dict[str, Any]],
+        candidate_row: Dict[str, Any],
+    ) -> Dict[str, Dict[str, Any]]:
+        scorecard: Dict[str, Dict[str, Any]] = {
+            "sourcing_vetting": {
+                "agent_key": "sourcing_vetting",
+                "agent_name": AGENT_DEFAULT_NAMES["sourcing_vetting"],
+                "latest_stage": None,
+                "latest_score": None,
+                "latest_status": "not_started",
+                "stages": [],
+            },
+            "communication": {
+                "agent_key": "communication",
+                "agent_name": AGENT_DEFAULT_NAMES["communication"],
+                "latest_stage": None,
+                "latest_score": None,
+                "latest_status": "not_started",
+                "stages": [],
+            },
+            "interview_evaluation": {
+                "agent_key": "interview_evaluation",
+                "agent_name": AGENT_DEFAULT_NAMES["interview_evaluation"],
+                "latest_stage": None,
+                "latest_score": None,
+                "latest_status": "not_started",
+                "stages": [],
+            },
+        }
+
+        for item in assessments:
+            agent_key = str(item.get("agent_key") or "").strip().lower()
+            if not agent_key:
+                continue
+            bucket = scorecard.setdefault(
+                agent_key,
+                {
+                    "agent_key": agent_key,
+                    "agent_name": AGENT_DEFAULT_NAMES.get(agent_key, agent_key.replace("_", " ").title()),
+                    "latest_stage": None,
+                    "latest_score": None,
+                    "latest_status": "not_started",
+                    "stages": [],
+                },
+            )
+            agent_name = str(item.get("agent_name") or "").strip()
+            if agent_name:
+                bucket["agent_name"] = agent_name
+            stage = {
+                "stage_key": item.get("stage_key"),
+                "score": item.get("score"),
+                "status": item.get("status"),
+                "reason": item.get("reason"),
+                "updated_at": item.get("updated_at"),
+            }
+            bucket["stages"].append(stage)
+            if bucket.get("latest_stage") is None:
+                bucket["latest_stage"] = item.get("stage_key")
+                bucket["latest_score"] = item.get("score")
+                bucket["latest_status"] = item.get("status") or "unknown"
+
+        interview = scorecard.get("interview_evaluation")
+        if interview and interview.get("latest_stage") is None:
+            notes = candidate_row.get("verification_notes") if isinstance(candidate_row.get("verification_notes"), dict) else {}
+            interview_score = None
+            for key in ("interview_total_score", "interview_score", "final_interview_score"):
+                raw = notes.get(key) if isinstance(notes, dict) else None
+                if raw is None:
+                    continue
+                try:
+                    interview_score = float(raw)
+                except (TypeError, ValueError):
+                    interview_score = None
+                if interview_score is not None:
+                    break
+            if interview_score is not None:
+                interview["latest_stage"] = "interview_results"
+                interview["latest_score"] = interview_score
+                interview["latest_status"] = "scored"
+                interview["stages"] = [
+                    {
+                        "stage_key": "interview_results",
+                        "score": interview_score,
+                        "status": "scored",
+                        "reason": "Loaded from candidate verification notes.",
+                        "updated_at": candidate_row.get("last_message_created_at") or candidate_row.get("created_at"),
+                    }
+                ]
+
+        return scorecard
 
     def _migrate_schema(self) -> None:
         columns = self._table_columns("conversations")

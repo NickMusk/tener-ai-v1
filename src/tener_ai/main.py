@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .db import Database
-from .instructions import AgentInstructions
+from .instructions import AgentEvaluationPlaybook, AgentInstructions
 from .llm_responder import CandidateLLMResponder
 from .linkedin_provider import build_linkedin_provider
 from .matching import MatchingEngine
@@ -66,6 +66,10 @@ def build_services() -> Dict[str, Any]:
     rules_path = os.environ.get("TENER_MATCHING_RULES_PATH", str(root / "config" / "matching_rules.json"))
     templates_path = os.environ.get("TENER_TEMPLATES_PATH", str(root / "config" / "outreach_templates.json"))
     instructions_path = os.environ.get("TENER_AGENT_INSTRUCTIONS_PATH", str(root / "config" / "agent_instructions.json"))
+    evaluation_playbook_path = os.environ.get(
+        "TENER_AGENT_EVAL_INSTRUCTIONS_PATH",
+        str(root / "config" / "agent_evaluation_instructions.json"),
+    )
     mock_profiles_path = os.environ.get("TENER_MOCK_LINKEDIN_DATA_PATH", str(root / "data" / "mock_linkedin_profiles.json"))
     forced_test_ids_path = os.environ.get(
         "TENER_FORCED_TEST_IDS_PATH",
@@ -87,6 +91,7 @@ def build_services() -> Dict[str, Any]:
     db.init_schema()
 
     instructions = AgentInstructions(path=instructions_path)
+    evaluation_playbook = AgentEvaluationPlaybook(path=evaluation_playbook_path)
     matching_engine = MatchingEngine(rules_path=rules_path)
     linkedin_provider = build_linkedin_provider(mock_dataset_path=mock_profiles_path)
 
@@ -152,6 +157,7 @@ def build_services() -> Dict[str, Any]:
         faq_agent=faq_agent,
         pre_resume_service=pre_resume_service,
         llm_responder=llm_responder,
+        agent_evaluation_playbook=evaluation_playbook,
         contact_all_mode=env_bool("TENER_CONTACT_ALL_MODE", True),
         require_resume_before_final_verify=env_bool("TENER_REQUIRE_RESUME_BEFORE_FINAL_VERIFY", True),
         forced_test_ids_path=forced_test_ids_path,
@@ -170,6 +176,7 @@ def build_services() -> Dict[str, Any]:
     services = {
         "db": db,
         "instructions": instructions,
+        "evaluation_playbook": evaluation_playbook,
         "matching_engine": matching_engine,
         "pre_resume": pre_resume_service,
         "workflow": workflow,
@@ -218,6 +225,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "outreach_poll_connections": "POST /api/outreach/poll-connections",
                         "inbound_poll": "POST /api/inbound/poll",
                         "instructions": "GET /api/instructions",
+                        "agent_system": "GET /api/agent-system",
                         "reload_instructions": "POST /api/instructions/reload",
                         "pre_resume_start": "POST /api/pre-resume/sessions/start",
                         "pre_resume_list": "GET /api/pre-resume/sessions?limit=100&status=awaiting_reply",
@@ -245,6 +253,29 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/instructions":
             self._json_response(HTTPStatus.OK, SERVICES["instructions"].to_dict())
+            return
+
+        if parsed.path == "/api/agent-system":
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "agents": {
+                        "sourcing_vetting": {
+                            "name": SERVICES["workflow"]._agent_name("sourcing_vetting"),
+                            "stages": ["source", "enrich", "verify", "add", "vetting"],
+                        },
+                        "communication": {
+                            "name": SERVICES["workflow"]._agent_name("communication"),
+                            "stages": ["outreach", "faq", "pre_resume", "dialogue"],
+                        },
+                        "interview_evaluation": {
+                            "name": SERVICES["workflow"]._agent_name("interview_evaluation"),
+                            "stages": ["interview_results"],
+                        },
+                    },
+                    "evaluation_playbook": SERVICES["evaluation_playbook"].to_dict(),
+                },
+            )
             return
 
         if parsed.path == "/api/pre-resume/sessions":
@@ -1157,8 +1188,15 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/instructions/reload":
             SERVICES["instructions"].reload()
+            SERVICES["evaluation_playbook"].reload()
             apply_agent_instructions(SERVICES)
-            self._json_response(HTTPStatus.OK, SERVICES["instructions"].to_dict())
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "instructions": SERVICES["instructions"].to_dict(),
+                    "evaluation_playbook": SERVICES["evaluation_playbook"].to_dict(),
+                },
+            )
             return
 
         self._json_response(HTTPStatus.NOT_FOUND, {"error": "route not found"})

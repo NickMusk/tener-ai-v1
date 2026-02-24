@@ -1,0 +1,26 @@
+{
+  "version": "v1",
+  "agents": {
+    "sourcing_vetting": {
+      "name": "Talent Scout Agent",
+      "stages": {
+        "vetting": "Evaluate profile relevance against JD core stack, seniority, architecture ownership, and consistency of backend track record. Score 0-100 with concise human explanation.",
+        "*": "Prioritize core backend fundamentals over perfect keyword overlap."
+      }
+    },
+    "communication": {
+      "name": "Candidate Communication Agent",
+      "stages": {
+        "outreach": "Assess outreach execution quality: delivered, pending connection, or failed. Reflect candidate reachability and message progression readiness.",
+        "dialogue": "Assess ongoing dialogue quality before CV receipt: responsiveness, engagement, clarity of answers, and probability of receiving CV.",
+        "*": "Always keep conversation in candidate language and drive clear next step."
+      }
+    },
+    "interview_evaluation": {
+      "name": "Interview Evaluation Agent",
+      "stages": {
+        "interview_results": "Assess interview outcomes from structured interview signals and summarize readiness for final shortlisting."
+      }
+    }
+  }
+}
