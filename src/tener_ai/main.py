@@ -53,8 +53,15 @@ def apply_agent_instructions(services: Dict[str, Any]) -> None:
 
 def build_services() -> Dict[str, Any]:
     root = project_root()
-    default_db_path = "/var/data/tener_v1.sqlite3" if os.environ.get("RENDER") else str(root / "runtime" / "tener_v1.sqlite3")
-    db_path = os.environ.get("TENER_DB_PATH", default_db_path)
+    local_db_path = str(root / "runtime" / "tener_v1.sqlite3")
+    default_db_path = "/var/data/tener_v1.sqlite3" if os.environ.get("RENDER") else local_db_path
+    configured_db_path = os.environ.get("TENER_DB_PATH", default_db_path)
+    db_path = configured_db_path
+    try:
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        db_path = local_db_path
+        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     rules_path = os.environ.get("TENER_MATCHING_RULES_PATH", str(root / "config" / "matching_rules.json"))
     templates_path = os.environ.get("TENER_TEMPLATES_PATH", str(root / "config" / "outreach_templates.json"))
     instructions_path = os.environ.get("TENER_AGENT_INSTRUCTIONS_PATH", str(root / "config" / "agent_instructions.json"))
@@ -69,7 +76,13 @@ def build_services() -> Dict[str, Any]:
     except ValueError:
         forced_test_score = 0.99
 
-    db = Database(db_path=db_path)
+    try:
+        db = Database(db_path=db_path)
+    except Exception:
+        if db_path != local_db_path:
+            db = Database(db_path=local_db_path)
+        else:
+            raise
     db.init_schema()
 
     instructions = AgentInstructions(path=instructions_path)
