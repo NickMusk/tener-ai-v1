@@ -64,6 +64,9 @@ class CandidateLLMResponder:
         language: str,
         state: Dict[str, Any],
     ) -> Dict[str, Any]:
+        normalized_mode = str(mode or "").strip().lower()
+        outreach_mode = normalized_mode in {"linkedin_outreach", "linkedin_followup"}
+
         system_rules = [
             "You are Tener AI recruiter communication agent.",
             f"Communication mode: {mode}.",
@@ -71,7 +74,11 @@ class CandidateLLMResponder:
             "Output plain text only (no markdown, no JSON, no code blocks).",
             "Use only role-relevant facts from instruction, JD, and conversation context.",
             "Do not invent compensation numbers, interview steps, or policy details that are not provided.",
-            "Keep reply concise, natural, and human (2-5 short sentences).",
+            (
+                "Keep reply concise, natural, and human using short paragraphs with preserved line breaks."
+                if outreach_mode
+                else "Keep reply concise, natural, and human (2-5 short sentences)."
+            ),
             "If mode is pre_resume and resume was not received, include clear CTA to share CV/resume.",
         ]
         if instruction.strip():
@@ -98,10 +105,11 @@ class CandidateLLMResponder:
             "task": "Generate one outbound message for candidate now.",
         }
 
+        max_tokens = 420 if outreach_mode else 220
         return {
             "model": self.model,
             "temperature": 0.3,
-            "max_tokens": 220,
+            "max_tokens": max_tokens,
             "messages": [
                 {"role": "system", "content": "\n".join(system_rules)},
                 {"role": "user", "content": json.dumps(user_context, ensure_ascii=False)},

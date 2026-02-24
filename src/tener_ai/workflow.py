@@ -371,6 +371,8 @@ class WorkflowService:
             conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
             language = str((candidate.get("languages") or ["en"])[0]).lower()
             message = ""
+            session_state: Dict[str, Any] | None = None
+            started_pre_resume_session = False
             pre_resume_session_id = None
             if request_resume and self.pre_resume_service is not None:
                 pre_resume_session_id = f"pre-{conversation_id}"
@@ -395,16 +397,7 @@ class WorkflowService:
                     session_state = started["state"]
                     language = str(session_state.get("language") or "en")
                     message = str(started.get("outbound") or "")
-                    self.db.insert_pre_resume_event(
-                        session_id=pre_resume_session_id,
-                        conversation_id=conversation_id,
-                        event_type="session_started",
-                        intent="started",
-                        inbound_text=None,
-                        outbound_text=message,
-                        state_status=session_state.get("status"),
-                        details={"job_id": job_id, "candidate_id": candidate_id},
-                    )
+                    started_pre_resume_session = True
                 self.db.upsert_pre_resume_session(
                     session_id=pre_resume_session_id,
                     conversation_id=conversation_id,
@@ -424,6 +417,26 @@ class WorkflowService:
                     job=job,
                     candidate=candidate,
                     request_resume=request_resume,
+                )
+
+            message = self._compose_linkedin_outreach_message(
+                job=job,
+                candidate=candidate,
+                language=language,
+                fallback_message=message,
+                request_resume=request_resume,
+                state=session_state,
+            )
+            if started_pre_resume_session and pre_resume_session_id and isinstance(session_state, dict):
+                self.db.insert_pre_resume_event(
+                    session_id=pre_resume_session_id,
+                    conversation_id=conversation_id,
+                    event_type="session_started",
+                    intent="started",
+                    inbound_text=None,
+                    outbound_text=message,
+                    state_status=session_state.get("status"),
+                    details={"job_id": job_id, "candidate_id": candidate_id, "source": "outreach"},
                 )
 
             connect_request = None
@@ -709,6 +722,7 @@ class WorkflowService:
         session_id = f"pre-{conversation_id}"
         initial_outbound = ""
         state: Dict[str, Any] | None = None
+        started_pre_resume_session = False
 
         if self.pre_resume_service is not None:
             session = self.db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
@@ -730,17 +744,7 @@ class WorkflowService:
                 )
                 state = started.get("state") if isinstance(started.get("state"), dict) else None
                 initial_outbound = str(started.get("outbound") or "").strip()
-                if state:
-                    self.db.insert_pre_resume_event(
-                        session_id=session_id,
-                        conversation_id=conversation_id,
-                        event_type="session_started",
-                        intent="started",
-                        inbound_text=None,
-                        outbound_text=initial_outbound or None,
-                        state_status=state.get("status"),
-                        details={"job_id": job_id, "candidate_id": candidate_id, "source": "manual"},
-                    )
+                started_pre_resume_session = bool(state)
             if state:
                 self.db.upsert_pre_resume_session(
                     session_id=session_id,
@@ -756,6 +760,25 @@ class WorkflowService:
                 job=job,
                 candidate=profile,
                 request_resume=True,
+            )
+        initial_outbound = self._compose_linkedin_outreach_message(
+            job=job,
+            candidate=profile,
+            language=normalized_lang,
+            fallback_message=initial_outbound,
+            request_resume=True,
+            state=state,
+        )
+        if started_pre_resume_session and state:
+            self.db.insert_pre_resume_event(
+                session_id=session_id,
+                conversation_id=conversation_id,
+                event_type="session_started",
+                intent="started",
+                inbound_text=None,
+                outbound_text=initial_outbound or None,
+                state_status=state.get("status"),
+                details={"job_id": job_id, "candidate_id": candidate_id, "source": "manual"},
             )
 
         outbound_id = self.db.add_message(
@@ -1368,6 +1391,22 @@ class WorkflowService:
                 state=state if isinstance(state, dict) else None,
                 inbound_text=None,
             )
+            outbound = str(result.get("outbound") or "").strip()
+            candidate = self.db.get_candidate(candidate_id)
+            conversation = self.db.get_conversation(conversation_id)
+            if result.get("sent") and outbound and candidate and conversation:
+                job_ctx = self.db.get_job(job_ref) or {"id": job_ref}
+                language = str((state or {}).get("language") or (candidate.get("languages") or ["en"])[0]).lower()
+                history = self._build_llm_history(self.db.list_messages(conversation_id=conversation_id), latest_inbound="")
+                outbound = self._compose_linkedin_followup_message(
+                    job=job_ctx,
+                    candidate=candidate,
+                    language=language,
+                    history=history,
+                    state=state,
+                    fallback_message=outbound,
+                )
+                result["outbound"] = outbound
             event_type = "followup_sent" if result.get("sent") else "followup_skipped"
             self.db.insert_pre_resume_event(
                 session_id=session_id,
@@ -1375,7 +1414,7 @@ class WorkflowService:
                 event_type=event_type,
                 intent=None,
                 inbound_text=None,
-                outbound_text=result.get("outbound"),
+                outbound_text=outbound or None,
                 state_status=state.get("status") if isinstance(state, dict) else None,
                 details={"reason": result.get("reason"), "source": "scheduler"},
             )
@@ -1392,7 +1431,6 @@ class WorkflowService:
                 )
                 continue
 
-            outbound = str(result.get("outbound") or "").strip()
             if not outbound:
                 skipped += 1
                 items.append(
@@ -1405,8 +1443,6 @@ class WorkflowService:
                 )
                 continue
 
-            candidate = self.db.get_candidate(candidate_id)
-            conversation = self.db.get_conversation(conversation_id)
             if not candidate or not conversation:
                 errors += 1
                 items.append(
@@ -2477,6 +2513,186 @@ class WorkflowService:
         except Exception as exc:
             return {"sent": False, "provider": "linkedin", "error": str(exc)}
 
+    def _compose_linkedin_outreach_message(
+        self,
+        *,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        language: str,
+        fallback_message: str,
+        request_resume: bool,
+        state: Dict[str, Any] | None,
+    ) -> str:
+        recruiter_name = self._linkedin_recruiter_name()
+        fallback = self._linkedin_initial_fallback_message(
+            job=job,
+            recruiter_name=recruiter_name,
+            request_resume=request_resume,
+        ) or str(fallback_message or "").strip()
+        if not fallback:
+            return ""
+        instruction = self._linkedin_generation_instruction(kind="initial", recruiter_name=recruiter_name, language=language)
+        generated = self._maybe_llm_reply(
+            mode="linkedin_outreach",
+            instruction=instruction,
+            job=job,
+            candidate=candidate,
+            inbound_text="",
+            history=[],
+            fallback_reply=fallback,
+            language=language,
+            state=state,
+        )
+        return self._ensure_outreach_requirements(text=generated, fallback=fallback)
+
+    def _compose_linkedin_followup_message(
+        self,
+        *,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        language: str,
+        history: List[Dict[str, str]],
+        state: Dict[str, Any] | None,
+        fallback_message: str,
+    ) -> str:
+        recruiter_name = self._linkedin_recruiter_name()
+        fallback = self._linkedin_followup_fallback_message(
+            job=job,
+            recruiter_name=recruiter_name,
+        ) or str(fallback_message or "").strip()
+        if not fallback:
+            return ""
+        instruction = self._linkedin_generation_instruction(kind="followup", recruiter_name=recruiter_name, language=language)
+        return self._maybe_llm_reply(
+            mode="linkedin_followup",
+            instruction=instruction,
+            job=job,
+            candidate=candidate,
+            inbound_text="",
+            history=history,
+            fallback_reply=fallback,
+            language=language,
+            state=state,
+        )
+
+    def _linkedin_initial_fallback_message(self, *, job: Dict[str, Any], recruiter_name: str, request_resume: bool) -> str:
+        position = str(job.get("title") or "AI Engineer").strip() or "AI Engineer"
+        company = str(job.get("company") or "").strip()
+        role_owner = (
+            f"for a long term project with {company}, a fast moving US AI startup"
+            if company
+            else "for a long term project with a fast moving US AI startup"
+        )
+        core_profile = self.outreach_agent.matching_engine.build_core_profile(job)
+        skills = core_profile.get("core_skills") if isinstance(core_profile.get("core_skills"), list) else []
+        skills_text = ", ".join(str(x) for x in skills[:7] if str(x).strip())
+        skills_line = f"\nMain stack in focus is {skills_text}" if skills_text else ""
+        ask_line = (
+            "If you have relevant experience with AI and ML and Python, and especially any hands on work with AI agents, "
+            "please send your CV and salary expectations"
+            if request_resume
+            else "If this sounds relevant, send a short reply and your salary expectations"
+        )
+        return (
+            "Greetings,\n"
+            f"We're Tener, and we're now looking for a {position} {role_owner}\n"
+            "You'll work directly with the Founder and CTO on an autonomous coding agent, designing real agentic workflows, "
+            f"RAG pipelines, LLM orchestration, and scalable ML infrastructure{skills_line}\n\n"
+            f"{ask_line}\n\n"
+            "Best,\n"
+            f"{recruiter_name}\n"
+            "Senior Talent Acquisition Manager at Tener"
+        )
+
+    @staticmethod
+    def _linkedin_followup_fallback_message(*, job: Dict[str, Any], recruiter_name: str) -> str:
+        position = str(job.get("title") or "the role").strip() or "the role"
+        return (
+            "Hey,\n"
+            f"If {position} isn't quite what you're looking for right now, maybe someone from your network could be a good fit\n"
+            "Either way, I'd really appreciate a short reply, just to know where things stand\n\n"
+            "Warm regards,\n"
+            f"{recruiter_name}\n"
+            "Senior Talent Acquisition Manager at Digis (a Fiverr company)"
+        )
+
+    @staticmethod
+    def _linkedin_generation_instruction(*, kind: str, recruiter_name: str, language: str) -> str:
+        normalized_kind = str(kind or "").strip().lower()
+        style_rules = WorkflowService._linkedin_style_rules()
+        if normalized_kind == "followup":
+            return (
+                "Generate one LinkedIn follow up message as plain text with paragraph breaks.\n"
+                f"Write in language: {language}.\n"
+                "Required structure:\n"
+                "1) Start with a short greeting line like Hey,\n"
+                "2) Mention the role may not be a fit and ask for referral from the network\n"
+                "3) Ask for a short reply on current status\n"
+                "4) Signature exactly as:\n"
+                "Warm regards,\n"
+                f"{recruiter_name}\n"
+                "Senior Talent Acquisition Manager at Digis (a Fiverr company)\n"
+                "Style rules:\n"
+                f"{style_rules}\n"
+                "Adapt wording to job and candidate context while preserving this structure and intent."
+            )
+        return (
+            "Generate one first LinkedIn outreach message as plain text with paragraph breaks.\n"
+            f"Write in language: {language}.\n"
+            "Required structure:\n"
+            "1) Start with Greetings,\n"
+            "2) Mention Tener and that we are hiring for the specific position for a long term project with a fast moving US AI startup\n"
+            "3) Mention direct collaboration with Founder and CTO on autonomous coding agent, agentic workflows, RAG pipelines, LLM orchestration, and scalable ML infrastructure\n"
+            "4) Ask for CV and salary expectations\n"
+            "5) Signature exactly as:\n"
+            "Best,\n"
+            f"{recruiter_name}\n"
+            "Senior Talent Acquisition Manager at Tener\n"
+            "Style rules:\n"
+            f"{style_rules}\n"
+            "Adapt vocabulary and concrete details to the job and candidate context while preserving this structure and intent."
+        )
+
+    @staticmethod
+    def _linkedin_recruiter_name() -> str:
+        configured = str(os.environ.get("TENER_LINKEDIN_RECRUITER_NAME", "")).strip()
+        return configured or "Casey"
+
+    @staticmethod
+    def _linkedin_style_rules() -> str:
+        return (
+            "Use an informal human tone.\n"
+            "Do not end paragraphs with a period.\n"
+            "Sometimes allow minor typos.\n"
+            "Use a little slang, not too much.\n"
+            "Sometimes keep it very short.\n"
+            "Do not make the message perfectly structured.\n"
+            "Avoid perfect logical transitions.\n"
+            "Do not use template phrases like As an AI or Let me clarify.\n"
+            "Vary rhythm from longer text to one sentence.\n"
+            "Sometimes include reactions like hm, mmm, hard, lol, interesting.\n"
+            "Sometimes ask casually for clarification like what exactly do you mean.\n"
+            "Allow slight incompleteness sometimes.\n"
+            "Do not provide exhaustive lists unless asked.\n"
+            "Do not sound like Wikipedia.\n"
+            "Sometimes acknowledge uncertainty, for example not sure or I may be wrong.\n"
+            "Use conversation context, do not answer from a blank slate.\n"
+            "Do not be overly polite.\n"
+            "Do not use emoji in every message.\n"
+            "Sometimes use dry humor or light sarcasm.\n"
+            "Avoid heavy empathy in every reply.\n"
+            "Do not force perfect conclusions at the end.\n"
+            "Sometimes reply fast and direct.\n"
+            "Sometimes show delayed logic instead of instant total understanding.\n"
+            "Avoid generic universal advice.\n"
+            "Sometimes be slightly subjective.\n"
+            "Do not explain obvious things.\n"
+            "Do not summarize every message.\n"
+            "Do not try to be useful at 110 percent every time.\n"
+            "Never use hyphens.\n"
+            "Never use double dashes."
+        )
+
     def _maybe_llm_reply(
         self,
         mode: str,
@@ -2525,7 +2741,11 @@ class WorkflowService:
             generated_text = fallback
             reason = "empty_generation"
 
-        final_text = self._sanitize_reply_text(generated_text)
+        normalized_mode = str(mode or "").strip().lower()
+        if normalized_mode in {"linkedin_outreach", "linkedin_followup"}:
+            final_text = self._sanitize_multiline_reply_text(generated_text, limit=1400)
+        else:
+            final_text = self._sanitize_reply_text(generated_text)
         if not final_text:
             final_text = fallback
             source = "fallback"
@@ -2543,6 +2763,12 @@ class WorkflowService:
                     final_text = f"{final_text.rstrip()} {cta}".strip()
                 source = "llm_guarded" if source == "llm" else source
                 reason = "resume_cta_enforced"
+        if normalized_mode == "linkedin_outreach":
+            guarded = self._ensure_outreach_requirements(text=final_text, fallback=fallback)
+            if guarded != final_text:
+                final_text = guarded
+                source = "llm_guarded" if source == "llm" else source
+                reason = "outreach_requirements_enforced"
 
         self.db.log_operation(
             operation="agent.llm.reply",
@@ -2573,6 +2799,33 @@ class WorkflowService:
         return clipped.strip()
 
     @staticmethod
+    def _sanitize_multiline_reply_text(text: str, limit: int = 1400) -> str:
+        raw = str(text or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        if not raw:
+            return ""
+        normalized_lines: List[str] = []
+        previous_blank = False
+        for line in raw.split("\n"):
+            collapsed = " ".join(line.split()).strip()
+            if not collapsed:
+                if previous_blank:
+                    continue
+                normalized_lines.append("")
+                previous_blank = True
+                continue
+            normalized_lines.append(collapsed)
+            previous_blank = False
+        normalized = "\n".join(normalized_lines).strip()
+        if len(normalized) <= limit:
+            return normalized
+        clipped = normalized[:limit].rstrip()
+        if "\n" in clipped:
+            clipped = clipped.rsplit("\n", 1)[0].rstrip()
+        if " " in clipped:
+            clipped = clipped.rsplit(" ", 1)[0].rstrip()
+        return clipped
+
+    @staticmethod
     def _contains_template_placeholders(text: str) -> bool:
         return bool(re.search(r"\{[a-zA-Z_][^{}]{0,40}\}", str(text or "")))
 
@@ -2595,6 +2848,32 @@ class WorkflowService:
             "резюме",
         )
         return any(marker in lowered for marker in markers)
+
+    @staticmethod
+    def _has_salary_expectation_cta(text: str) -> bool:
+        lowered = str(text or "").lower()
+        markers = (
+            "salary expectation",
+            "salary expectations",
+            "compensation expectation",
+            "compensation expectations",
+            "salary",
+            "compensation",
+        )
+        return any(marker in lowered for marker in markers)
+
+    @classmethod
+    def _ensure_outreach_requirements(cls, text: str, fallback: str) -> str:
+        result = str(text or "").strip()
+        if not result:
+            result = str(fallback or "").strip()
+        if not cls._has_resume_cta(result):
+            cta = cls._extract_resume_cta(fallback, language="en")
+            if cta:
+                result = f"{result}\n\n{cta}".strip()
+        if not cls._has_salary_expectation_cta(result):
+            result = f"{result}\nPlease share your salary expectations as well".strip()
+        return result
 
     @classmethod
     def _extract_resume_cta(cls, text: str, language: str = "en") -> str:
