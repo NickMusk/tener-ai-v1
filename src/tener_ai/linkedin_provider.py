@@ -25,6 +25,9 @@ class LinkedInProvider:
     def check_connection_status(self, candidate_profile: Dict[str, Any]) -> Dict[str, Any]:
         raise NotImplementedError
 
+    def fetch_chat_messages(self, chat_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        raise NotImplementedError
+
 
 class MockLinkedInProvider(LinkedInProvider):
     def __init__(self, dataset_path: str) -> None:
@@ -75,6 +78,9 @@ class MockLinkedInProvider(LinkedInProvider):
             "reason": "mock_no_real_connection_state",
             "candidate": candidate_profile.get("linkedin_id"),
         }
+
+    def fetch_chat_messages(self, chat_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        return []
 
     def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
         enriched = dict(profile)
@@ -317,6 +323,49 @@ class UnipileLinkedInProvider(LinkedInProvider):
             "profile": profile,
         }
 
+    def fetch_chat_messages(self, chat_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        chat = str(chat_id or "").strip()
+        if not chat:
+            return []
+        if not self.account_id:
+            return []
+
+        safe_limit = max(1, min(int(limit or 20), 50))
+        last_error = ""
+        attempts = [
+            (f"/api/v1/chats/{chat}/messages", {"limit": safe_limit}),
+            (f"/api/v1/chats/{chat}/messages", {}),
+            ("/api/v1/messages", {"chat_id": chat, "limit": safe_limit}),
+            ("/api/v1/messages", {"chat_id": chat}),
+        ]
+        for path, query_params in attempts:
+            endpoint = self._build_url(path)
+            endpoint = self._with_account_id(endpoint, self.account_id)
+            if query_params:
+                endpoint = f"{endpoint}{'&' if '?' in endpoint else '?'}{parse.urlencode(query_params)}"
+            try:
+                response = self._request_json("GET", endpoint)
+            except RuntimeError as exc:
+                last_error = str(exc)
+                continue
+
+            items = self._extract_results(response)
+            if not items and isinstance(response, dict):
+                if any(response.get(k) for k in ("text", "message", "body", "content")):
+                    items = [response]
+                else:
+                    data = response.get("data")
+                    if isinstance(data, dict) and any(data.get(k) for k in ("text", "message", "body", "content")):
+                        items = [data]
+            normalized = [self._normalize_chat_message(item, chat_id=chat) for item in items if isinstance(item, dict)]
+            normalized = [msg for msg in normalized if isinstance(msg, dict)]
+            if normalized:
+                return normalized
+
+        if last_error:
+            raise RuntimeError(last_error)
+        return []
+
     def _extract_attendee_id(self, candidate_profile: Dict[str, Any]) -> Optional[str]:
         candidates = [
             candidate_profile.get("attendee_provider_id"),
@@ -392,6 +441,82 @@ class UnipileLinkedInProvider(LinkedInProvider):
             return [payload]
 
         return []
+
+    def _normalize_chat_message(self, item: Dict[str, Any], chat_id: str) -> Dict[str, Any]:
+        text = self._extract_message_text(item)
+        provider_message_id = (
+            item.get("id")
+            or item.get("message_id")
+            or item.get("provider_id")
+            or item.get("urn")
+            or (item.get("data") or {}).get("id")
+        )
+        sender_provider_id = (
+            (item.get("sender") or {}).get("provider_id")
+            or (item.get("sender") or {}).get("id")
+            or (item.get("from") or {}).get("provider_id")
+            or (item.get("from") or {}).get("id")
+            or item.get("sender_id")
+            or item.get("from_id")
+        )
+        direction = (
+            item.get("direction")
+            or item.get("message_direction")
+            or item.get("type")
+            or (item.get("sender") or {}).get("direction")
+            or ""
+        )
+        created_at = (
+            item.get("created_at")
+            or item.get("timestamp")
+            or item.get("sent_at")
+            or item.get("date")
+            or ""
+        )
+        is_sender = item.get("is_sender")
+        from_me = item.get("from_me")
+        if isinstance(item.get("sender"), dict):
+            sender_bucket = item.get("sender") or {}
+            if is_sender is None:
+                is_sender = sender_bucket.get("is_sender")
+            if from_me is None:
+                from_me = sender_bucket.get("from_me")
+                if from_me is None:
+                    from_me = sender_bucket.get("is_self")
+
+        return {
+            "chat_id": chat_id,
+            "provider_message_id": str(provider_message_id).strip() if provider_message_id else None,
+            "sender_provider_id": str(sender_provider_id).strip() if sender_provider_id else None,
+            "direction": str(direction).strip().lower() if direction else "",
+            "text": text,
+            "created_at": str(created_at).strip() if created_at else None,
+            "is_sender": bool(is_sender) if isinstance(is_sender, bool) else None,
+            "from_me": bool(from_me) if isinstance(from_me, bool) else None,
+            "raw": item,
+        }
+
+    @staticmethod
+    def _extract_message_text(payload: Any) -> str:
+        if isinstance(payload, str):
+            return payload.strip()
+        if isinstance(payload, dict):
+            for key in ("text", "content", "body", "message"):
+                value = payload.get(key)
+                text = UnipileLinkedInProvider._extract_message_text(value)
+                if text:
+                    return text
+            data = payload.get("data")
+            if isinstance(data, dict):
+                text = UnipileLinkedInProvider._extract_message_text(data)
+                if text:
+                    return text
+        if isinstance(payload, list):
+            for item in payload:
+                text = UnipileLinkedInProvider._extract_message_text(item)
+                if text:
+                    return text
+        return ""
 
     def _candidate_search_paths(self) -> List[str]:
         candidates = [

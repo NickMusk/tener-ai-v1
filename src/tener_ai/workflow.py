@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import hashlib
+import os
 from pathlib import Path
 import re
 from uuid import uuid4
@@ -60,6 +62,19 @@ class WorkflowService:
             self.forced_test_score = float(forced_test_score)
         except (TypeError, ValueError):
             self.forced_test_score = DEFAULT_FORCED_TEST_SCORE
+        self.test_jobs_forced_only = str(os.environ.get("TENER_TEST_JOBS_FORCED_ONLY", "true")).strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        raw_keywords = str(
+            os.environ.get(
+                "TENER_TEST_JOB_KEYWORDS",
+                "test,testing,smoke,sandbox,debug,verify,staging,qa,check,probe,demo,тест",
+            )
+        )
+        self.test_job_keywords = [x.strip().lower() for x in raw_keywords.split(",") if x.strip()]
 
     def source_candidates(self, job_id: int, limit: int = 30) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
@@ -235,12 +250,16 @@ class WorkflowService:
 
     def outreach_candidates(self, job_id: int, candidate_ids: List[int]) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
+        forced_identifiers = self._load_forced_test_identifiers()
+        forced_lookup = self._build_forced_identifier_lookup(job=job, forced_identifiers=forced_identifiers)
+        forced_only = self._is_test_job(job) and self.test_jobs_forced_only and bool(forced_identifiers)
 
         out_items: List[Dict[str, Any]] = []
         conversation_ids: List[int] = []
         sent = 0
         pending_connection = 0
         failed = 0
+        test_filter_skipped = 0
 
         for raw_id in candidate_ids:
             try:
@@ -253,8 +272,26 @@ class WorkflowService:
             if not candidate:
                 failed += 1
                 continue
-
             match = self.db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
+            if forced_only:
+                forced_identifier = self._forced_test_identifier_for_profile(candidate, forced_lookup)
+                if not forced_identifier:
+                    forced_identifier = self._forced_test_identifier_from_match(match, forced_lookup)
+                if not forced_identifier:
+                    test_filter_skipped += 1
+                    self.db.log_operation(
+                        operation="agent.outreach.test_filter_skip",
+                        status="skipped",
+                        entity_type="candidate",
+                        entity_id=str(candidate_id),
+                        details={
+                            "job_id": job_id,
+                            "reason": "test_job_forced_only",
+                            "forced_test_ids_file": self.forced_test_ids_path,
+                        },
+                    )
+                    continue
+
             screening_status = str((match or {}).get("status") or "")
             request_resume = self.require_resume_before_final_verify or screening_status == "needs_resume"
             conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
@@ -460,6 +497,8 @@ class WorkflowService:
             "sent": sent,
             "pending_connection": pending_connection,
             "failed": failed,
+            "test_filter_skipped": test_filter_skipped,
+            "test_job_forced_only_active": forced_only,
             "total": len(out_items),
             "instruction": self.stage_instructions.get("outreach", ""),
         }
@@ -938,6 +977,169 @@ class WorkflowService:
             "processed": True,
             "conversation_id": int(conversation["id"]),
             "delivery": delivery,
+        }
+
+    def poll_provider_inbound_messages(
+        self,
+        job_id: int | None = None,
+        limit: int = 100,
+        per_chat_limit: int = 20,
+    ) -> Dict[str, Any]:
+        fetch_fn = getattr(self.sourcing_agent, "fetch_chat_messages", None)
+        if not callable(fetch_fn):
+            return {
+                "job_id": job_id,
+                "conversations_checked": 0,
+                "messages_scanned": 0,
+                "processed": 0,
+                "duplicates": 0,
+                "ignored": 0,
+                "errors": 0,
+                "items": [],
+                "reason": "provider_inbound_poll_not_supported",
+            }
+
+        safe_limit = max(1, min(int(limit or 100), 500))
+        safe_per_chat = max(1, min(int(per_chat_limit or 20), 50))
+        rows = self.db.list_conversations_overview(limit=max(safe_limit * 4, 200), job_id=job_id)
+
+        rows_to_poll: List[Dict[str, Any]] = []
+        for row in rows:
+            external_chat_id = str(row.get("external_chat_id") or "").strip()
+            if not external_chat_id:
+                continue
+            if str(row.get("channel") or "").lower() != "linkedin":
+                continue
+            rows_to_poll.append(row)
+            if len(rows_to_poll) >= safe_limit:
+                break
+
+        conversations_checked = 0
+        messages_scanned = 0
+        processed = 0
+        duplicates = 0
+        ignored = 0
+        errors = 0
+        items: List[Dict[str, Any]] = []
+
+        for row in rows_to_poll:
+            conversations_checked += 1
+            conversation_id = int(row["conversation_id"])
+            external_chat_id = str(row.get("external_chat_id") or "").strip()
+            candidate = self.db.get_candidate(int(row["candidate_id"]))
+
+            try:
+                messages = fetch_fn(external_chat_id, limit=safe_per_chat) or []
+            except Exception as exc:
+                errors += 1
+                items.append(
+                    {
+                        "conversation_id": conversation_id,
+                        "external_chat_id": external_chat_id,
+                        "status": "error",
+                        "error": str(exc),
+                    }
+                )
+                self.db.log_operation(
+                    operation="poll.unipile.inbound.error",
+                    status="error",
+                    entity_type="conversation",
+                    entity_id=str(conversation_id),
+                    details={"external_chat_id": external_chat_id, "error": str(exc)},
+                )
+                continue
+
+            if not isinstance(messages, list):
+                ignored += 1
+                continue
+
+            for message in messages:
+                if not isinstance(message, dict):
+                    ignored += 1
+                    continue
+                messages_scanned += 1
+                if not self._is_inbound_provider_message(message=message, candidate=candidate):
+                    ignored += 1
+                    continue
+
+                text = str(message.get("text") or "").strip()
+                if not text:
+                    ignored += 1
+                    continue
+
+                provider_message_id = str(message.get("provider_message_id") or "").strip()
+                sender_provider_id = str(message.get("sender_provider_id") or "").strip()
+                occurred_at = str(message.get("created_at") or "").strip()
+                dedupe_tail = provider_message_id or hashlib.sha256(
+                    f"{external_chat_id}|{sender_provider_id}|{occurred_at}|{text}".encode("utf-8")
+                ).hexdigest()
+                event_key = f"poll-unipile:{external_chat_id}:{dedupe_tail}"
+                is_new = self.db.record_webhook_event(
+                    event_key=event_key,
+                    source="unipile_poll",
+                    payload=(message.get("raw") if isinstance(message.get("raw"), dict) else message),
+                )
+                if not is_new:
+                    duplicates += 1
+                    continue
+
+                try:
+                    result = self.process_inbound_message(conversation_id=conversation_id, text=text)
+                except Exception as exc:
+                    errors += 1
+                    items.append(
+                        {
+                            "conversation_id": conversation_id,
+                            "external_chat_id": external_chat_id,
+                            "provider_message_id": provider_message_id or None,
+                            "status": "error",
+                            "error": str(exc),
+                        }
+                    )
+                    self.db.log_operation(
+                        operation="poll.unipile.inbound.error",
+                        status="error",
+                        entity_type="conversation",
+                        entity_id=str(conversation_id),
+                        details={
+                            "external_chat_id": external_chat_id,
+                            "provider_message_id": provider_message_id or None,
+                            "error": str(exc),
+                        },
+                    )
+                    continue
+
+                processed += 1
+                items.append(
+                    {
+                        "conversation_id": conversation_id,
+                        "external_chat_id": external_chat_id,
+                        "provider_message_id": provider_message_id or None,
+                        "status": "processed",
+                        "result_mode": str(result.get("mode") or "faq"),
+                    }
+                )
+                self.db.log_operation(
+                    operation="poll.unipile.inbound.processed",
+                    status="ok",
+                    entity_type="conversation",
+                    entity_id=str(conversation_id),
+                    details={
+                        "external_chat_id": external_chat_id,
+                        "provider_message_id": provider_message_id or None,
+                        "result_mode": str(result.get("mode") or "faq"),
+                    },
+                )
+
+        return {
+            "job_id": job_id,
+            "conversations_checked": conversations_checked,
+            "messages_scanned": messages_scanned,
+            "processed": processed,
+            "duplicates": duplicates,
+            "ignored": ignored,
+            "errors": errors,
+            "items": items,
         }
 
     def run_due_pre_resume_followups(self, job_id: int | None = None, limit: int = 100) -> Dict[str, Any]:
@@ -1557,6 +1759,10 @@ class WorkflowService:
 
         raw = profile.get("raw")
         if not isinstance(raw, dict):
+            raw_profile = profile.get("raw_profile")
+            if isinstance(raw_profile, dict):
+                raw = raw_profile
+        if not isinstance(raw, dict):
             return None
 
         direct_identifier = str(raw.get("forced_test_identifier") or "").strip().lower()
@@ -1613,6 +1819,75 @@ class WorkflowService:
             seen.add(line)
             out.append(line)
         return out
+
+    def _build_forced_identifier_lookup(self, job: Dict[str, Any], forced_identifiers: List[str]) -> List[str]:
+        if not forced_identifiers:
+            return []
+        out: set[str] = {x.strip().lower() for x in forced_identifiers if x and x.strip()}
+        for identifier in list(out):
+            resolved = self._resolve_forced_test_candidate(identifier=identifier, job=job)
+            if not isinstance(resolved, dict):
+                continue
+            for field in ("linkedin_id", "attendee_provider_id", "unipile_profile_id", "provider_id"):
+                value = str(resolved.get(field) or "").strip().lower()
+                if value:
+                    out.add(value)
+            raw = resolved.get("raw")
+            if isinstance(raw, dict):
+                public_identifier = str(raw.get("public_identifier") or "").strip().lower()
+                if public_identifier:
+                    out.add(public_identifier)
+        return sorted(out)
+
+    @staticmethod
+    def _forced_test_identifier_from_match(match: Dict[str, Any] | None, forced_identifiers: List[str]) -> str | None:
+        if not isinstance(match, dict):
+            return None
+        targets = {x.strip().lower() for x in forced_identifiers if x and x.strip()}
+        if not targets:
+            return None
+        notes = match.get("verification_notes")
+        if not isinstance(notes, dict):
+            return None
+        forced_identifier = str(notes.get("forced_test_identifier") or "").strip().lower()
+        if forced_identifier and forced_identifier in targets:
+            return forced_identifier
+        if bool(notes.get("forced_test_candidate")) and len(targets) == 1:
+            return next(iter(targets))
+        return None
+
+    def _is_test_job(self, job: Dict[str, Any]) -> bool:
+        if not self.test_job_keywords:
+            return False
+        title = str(job.get("title") or "").strip().lower()
+        jd_text = str(job.get("jd_text") or "").strip().lower()
+        text = f"{title}\n{jd_text}"
+        return any(keyword in text for keyword in self.test_job_keywords)
+
+    @staticmethod
+    def _is_inbound_provider_message(message: Dict[str, Any], candidate: Dict[str, Any] | None) -> bool:
+        direction = str(message.get("direction") or "").strip().lower()
+        inbound_markers = {"inbound", "incoming", "received", "from_them"}
+        outbound_markers = {"outbound", "sent", "from_me", "self"}
+        if direction in inbound_markers:
+            return True
+        if direction in outbound_markers:
+            return False
+
+        for marker in ("is_sender", "is_self", "from_me", "self"):
+            value = message.get(marker)
+            if isinstance(value, bool):
+                if value:
+                    return False
+                return True
+
+        sender_provider_id = str(message.get("sender_provider_id") or "").strip().lower()
+        if sender_provider_id and isinstance(candidate, dict):
+            for field in ("linkedin_id", "attendee_provider_id", "unipile_profile_id"):
+                candidate_id = str(candidate.get(field) or "").strip().lower()
+                if candidate_id and sender_provider_id == candidate_id:
+                    return True
+        return False
 
     @staticmethod
     def _profile_identity_key(profile: Dict[str, Any]) -> str:

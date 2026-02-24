@@ -61,6 +61,12 @@ class SourcingAgent:
             "reason": "connection_status_not_supported",
         }
 
+    def fetch_chat_messages(self, chat_id: str, limit: int = 20) -> List[Dict[str, Any]]:
+        fn = getattr(self.linkedin_provider, "fetch_chat_messages", None)
+        if callable(fn):
+            return fn(chat_id=chat_id, limit=limit)
+        return []
+
     def enrich_candidates(self, profiles: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], int]:
         enriched: List[Dict[str, Any]] = []
         failed = 0

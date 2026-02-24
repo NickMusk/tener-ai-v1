@@ -108,8 +108,24 @@ def build_services() -> Dict[str, Any]:
         matching_engine=matching_engine,
         instruction=instructions.get("faq"),
     )
+    followup_delays_raw = os.environ.get("TENER_FOLLOWUP_DELAYS_HOURS", "48,72,72")
+    followup_delays: list[float] = []
+    for token in followup_delays_raw.split(","):
+        part = token.strip()
+        if not part:
+            continue
+        try:
+            followup_delays.append(float(part))
+        except ValueError:
+            continue
+    try:
+        max_followups = int(os.environ.get("TENER_MAX_FOLLOWUPS", "3"))
+    except ValueError:
+        max_followups = 3
     pre_resume_service = PreResumeCommunicationService(
         templates_path=templates_path,
+        max_followups=max_followups,
+        followup_delays_hours=followup_delays or None,
         instruction=instructions.get("pre_resume"),
     )
     llm_responder = None
@@ -200,6 +216,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "add_step": "POST /api/steps/add",
                         "outreach_step": "POST /api/steps/outreach",
                         "outreach_poll_connections": "POST /api/outreach/poll-connections",
+                        "inbound_poll": "POST /api/inbound/poll",
                         "instructions": "GET /api/instructions",
                         "reload_instructions": "POST /api/instructions/reload",
                         "pre_resume_start": "POST /api/pre-resume/sessions/start",
@@ -853,6 +870,29 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, result)
             return
 
+        if parsed.path == "/api/inbound/poll":
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            job_id = self._safe_int(body.get("job_id"), None)
+            limit = self._safe_int(body.get("limit"), 100) or 100
+            per_chat_limit = self._safe_int(body.get("per_chat_limit"), 20) or 20
+            try:
+                result = SERVICES["workflow"].poll_provider_inbound_messages(
+                    job_id=job_id,
+                    limit=limit,
+                    per_chat_limit=per_chat_limit,
+                )
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "inbound poll failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
         if parsed.path == "/api/pre-resume/sessions/start":
             body = payload or {}
             if not isinstance(body, dict):
@@ -1258,6 +1298,48 @@ def run() -> None:
 
         threading.Thread(target=_scheduler_loop, daemon=True, name="pre-resume-followup-scheduler").start()
         print(f"Pre-resume followup scheduler enabled: every {interval_seconds}s")
+
+    if env_bool("TENER_INBOUND_POLL_SCHEDULER_ENABLED", True):
+        poll_interval_seconds = max(15, int(os.environ.get("TENER_INBOUND_POLL_INTERVAL_SECONDS", "45")))
+        poll_limit = max(1, int(os.environ.get("TENER_INBOUND_POLL_LIMIT", "100")))
+        poll_per_chat_limit = max(1, int(os.environ.get("TENER_INBOUND_POLL_PER_CHAT_LIMIT", "20")))
+        if scheduler_stop is None:
+            scheduler_stop = threading.Event()
+
+        def _inbound_poll_loop() -> None:
+            while not scheduler_stop.is_set():
+                try:
+                    result = SERVICES["workflow"].poll_provider_inbound_messages(
+                        limit=poll_limit,
+                        per_chat_limit=poll_per_chat_limit,
+                    )
+                    if int(result.get("processed") or 0) > 0:
+                        SERVICES["db"].log_operation(
+                            operation="scheduler.inbound.poll",
+                            status="ok",
+                            entity_type="scheduler",
+                            entity_id="unipile_inbound",
+                            details={
+                                "conversations_checked": int(result.get("conversations_checked") or 0),
+                                "messages_scanned": int(result.get("messages_scanned") or 0),
+                                "processed": int(result.get("processed") or 0),
+                                "duplicates": int(result.get("duplicates") or 0),
+                                "ignored": int(result.get("ignored") or 0),
+                                "errors": int(result.get("errors") or 0),
+                            },
+                        )
+                except Exception as exc:
+                    SERVICES["db"].log_operation(
+                        operation="scheduler.inbound.poll",
+                        status="error",
+                        entity_type="scheduler",
+                        entity_id="unipile_inbound",
+                        details={"error": str(exc)},
+                    )
+                scheduler_stop.wait(poll_interval_seconds)
+
+        threading.Thread(target=_inbound_poll_loop, daemon=True, name="unipile-inbound-poller").start()
+        print(f"Unipile inbound poll scheduler enabled: every {poll_interval_seconds}s")
 
     server = ThreadingHTTPServer((host, port), TenerRequestHandler)
     print(f"Tener AI V1 API listening on http://{host}:{port}")
