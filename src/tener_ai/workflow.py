@@ -1487,7 +1487,8 @@ class WorkflowService:
             }
 
         safe_limit = max(1, min(int(limit or 100), 500))
-        rows = self._list_candidates_with_interview_sessions(job_id=job_id, limit=max(safe_limit * 3, 300))
+        rows = self._list_candidates_for_jobs(job_id=job_id, limit=max(safe_limit * 5, 500))
+        session_index = self._build_interview_session_index(rows=rows)
         processed = 0
         updated = 0
         errors = 0
@@ -1498,6 +1499,11 @@ class WorkflowService:
                 break
             notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
             session_id = str((notes or {}).get("interview_session_id") or "").strip()
+            fallback = None
+            if not session_id:
+                fallback = session_index.get((int(row["job_id"]), int(row["candidate_id"])))
+                if isinstance(fallback, dict):
+                    session_id = str(fallback.get("session_id") or "").strip()
             if not session_id:
                 continue
             processed += 1
@@ -1507,24 +1513,27 @@ class WorkflowService:
                 try:
                     payload = self.interview_client.get_session(session_id=session_id)
                 except Exception as exc:
-                    errors += 1
-                    items.append(
-                        {
-                            "job_id": int(row["job_id"]),
-                            "candidate_id": int(row["candidate_id"]),
-                            "session_id": session_id,
-                            "status": "error",
-                            "error": str(exc),
-                        }
-                    )
-                    self.db.log_operation(
-                        operation="agent.interview.sync",
-                        status="error",
-                        entity_type="candidate",
-                        entity_id=str(row["candidate_id"]),
-                        details={"job_id": int(row["job_id"]), "session_id": session_id, "error": str(exc)},
-                    )
-                    continue
+                    if isinstance(fallback, dict):
+                        payload = self._session_payload_from_list_item(fallback)
+                    else:
+                        errors += 1
+                        items.append(
+                            {
+                                "job_id": int(row["job_id"]),
+                                "candidate_id": int(row["candidate_id"]),
+                                "session_id": session_id,
+                                "status": "error",
+                                "error": str(exc),
+                            }
+                        )
+                        self.db.log_operation(
+                            operation="agent.interview.sync",
+                            status="error",
+                            entity_type="candidate",
+                            entity_id=str(row["candidate_id"]),
+                            details={"job_id": int(row["job_id"]), "session_id": session_id, "error": str(exc)},
+                        )
+                        continue
 
             interview_status = str(payload.get("status") or "").strip().lower()
             summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
@@ -1540,7 +1549,11 @@ class WorkflowService:
                 notes=notes or {},
                 interview_status=interview_status,
                 session_id=session_id,
-                entry_url=str((notes or {}).get("interview_entry_url") or payload.get("entry_url") or "").strip() or None,
+                entry_url=(
+                    str((notes or {}).get("interview_entry_url") or payload.get("entry_url") or (fallback or {}).get("entry_url") or "")
+                    .strip()
+                    or None
+                ),
                 total_score=total_score,
                 current_match_status=str(row.get("status") or "needs_resume"),
             )
@@ -2031,30 +2044,15 @@ class WorkflowService:
 
     def _list_candidates_with_interview_sessions(self, job_id: int | None, limit: int = 500) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 500), 2000))
-        job_ids: List[int] = []
-        if job_id is not None:
-            job_ids = [int(job_id)]
-        else:
-            for job in self.db.list_jobs(limit=300):
-                try:
-                    job_ids.append(int(job.get("id")))
-                except (TypeError, ValueError):
-                    continue
-
+        base_rows = self._list_candidates_for_jobs(job_id=job_id, limit=safe_limit)
         out: List[Dict[str, Any]] = []
-        for job_ref in job_ids:
-            rows = self.db.list_candidates_for_job(job_ref)
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
-                if not str((notes or {}).get("interview_session_id") or "").strip():
-                    continue
-                enriched = dict(row)
-                enriched["job_id"] = job_ref
-                out.append(enriched)
-                if len(out) >= safe_limit:
-                    return out
+        for row in base_rows:
+            notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
+            if not str((notes or {}).get("interview_session_id") or "").strip():
+                continue
+            out.append(row)
+            if len(out) >= safe_limit:
+                return out
         return out
 
     def _next_interview_followup_at(self, followups_sent: int, now: datetime) -> str | None:
@@ -2097,6 +2095,85 @@ class WorkflowService:
             return int(value)
         except (TypeError, ValueError):
             return int(fallback)
+
+    def _list_candidates_for_jobs(self, job_id: int | None, limit: int = 500) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 500), 2000))
+        job_ids: List[int] = []
+        if job_id is not None:
+            job_ids = [int(job_id)]
+        else:
+            for job in self.db.list_jobs(limit=300):
+                try:
+                    job_ids.append(int(job.get("id")))
+                except (TypeError, ValueError):
+                    continue
+
+        out: List[Dict[str, Any]] = []
+        for job_ref in job_ids:
+            rows = self.db.list_candidates_for_job(job_ref)
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                enriched = dict(row)
+                enriched["job_id"] = job_ref
+                out.append(enriched)
+                if len(out) >= safe_limit:
+                    return out
+        return out
+
+    def _build_interview_session_index(self, rows: List[Dict[str, Any]]) -> Dict[tuple[int, int], Dict[str, Any]]:
+        if self.interview_client is None:
+            return {}
+        list_fn = getattr(self.interview_client, "list_sessions", None)
+        if not callable(list_fn):
+            return {}
+
+        job_ids = sorted({int(r["job_id"]) for r in rows if isinstance(r, dict) and r.get("job_id") is not None})
+        out: Dict[tuple[int, int], Dict[str, Any]] = {}
+        for job_ref in job_ids:
+            try:
+                payload = list_fn(job_id=job_ref, limit=500)
+            except Exception:
+                continue
+            items = payload.get("items") if isinstance(payload, dict) else []
+            if not isinstance(items, list):
+                continue
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                try:
+                    candidate_id = int(item.get("candidate_id"))
+                except (TypeError, ValueError):
+                    continue
+                session_id = str(item.get("session_id") or "").strip()
+                if not session_id:
+                    continue
+                key = (job_ref, candidate_id)
+                existing = out.get(key)
+                if existing is None or self._session_sort_key(item) >= self._session_sort_key(existing):
+                    out[key] = item
+        return out
+
+    @staticmethod
+    def _session_sort_key(item: Dict[str, Any]) -> str:
+        return str(
+            item.get("scored_at")
+            or item.get("completed_at")
+            or item.get("updated_at")
+            or item.get("created_at")
+            or ""
+        )
+
+    @staticmethod
+    def _session_payload_from_list_item(item: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "session_id": item.get("session_id"),
+            "status": item.get("status"),
+            "entry_url": item.get("entry_url"),
+            "summary": {
+                "total_score": item.get("total_score"),
+            },
+        }
 
     def _record_sourcing_vetting_assessment(
         self,
