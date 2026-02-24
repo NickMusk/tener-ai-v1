@@ -781,9 +781,24 @@
         ...opts,
         headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }
       });
-      const data = await res.json().catch(() => ({}));
+      const rawText = await res.text();
+      let data = {};
+      if (rawText) {
+        try {
+          data = JSON.parse(rawText);
+        } catch {
+          data = { raw_text: rawText };
+        }
+      }
       if (!res.ok) {
-        throw new Error(data.error || data.details || JSON.stringify(data));
+        const detail = [
+          typeof data.error === 'string' ? data.error : '',
+          typeof data.details === 'string' ? data.details : '',
+          typeof data.message === 'string' ? data.message : '',
+          typeof data.raw_text === 'string' ? data.raw_text : ''
+        ].find((x) => String(x || '').trim());
+        const fallback = `${res.status} ${res.statusText || 'Request failed'}`.trim();
+        throw new Error(detail ? `HTTP ${res.status}: ${detail}` : fallback);
       }
       return data;
     }

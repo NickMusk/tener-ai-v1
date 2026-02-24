@@ -234,6 +234,37 @@ PYTHONPATH=src python3 -m unittest tests/test_pre_resume_service.py -v
 PYTHONPATH=src python3 -m unittest discover -s tests -p 'test_*.py'
 ```
 
+### API contract + e2e scenarios
+
+Runs API end-to-end scenarios over a real local HTTP server and validates response contracts from:
+
+- `tests/scenarios/api_response_contracts.json`
+- `tests/scenarios/api_e2e_scenarios.json`
+
+```bash
+PYTHONPATH=src python3 -m unittest tests/test_api_e2e_scenarios.py -v
+```
+
+Run part-by-part suites:
+
+```bash
+# Sourcing + enrichment profile part
+PYTHONPATH=src python3 -m unittest \
+  tests.test_api_e2e_scenarios.ApiE2EScenariosTests.test_e2e_part_sourcing_enrichment_profile -v
+
+# Candidate communication part
+PYTHONPATH=src python3 -m unittest \
+  tests.test_api_e2e_scenarios.ApiE2EScenariosTests.test_e2e_part_communication -v
+
+# Interviewing part (pre-resume state flow)
+PYTHONPATH=src python3 -m unittest \
+  tests.test_api_e2e_scenarios.ApiE2EScenariosTests.test_e2e_part_interviewing -v
+
+# Final composed full-flow e2e
+PYTHONPATH=src python3 -m unittest \
+  tests.test_api_e2e_scenarios.ApiE2EScenariosTests.test_e2e_full_flow_composed_from_parts -v
+```
+
 ### API smoke test (standalone service endpoints)
 
 1) Start server:

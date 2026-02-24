@@ -1,0 +1,171 @@
+{
+  "contracts": {
+    "GET /health": {
+      "status": 200,
+      "required": {
+        "status": "string"
+      }
+    },
+    "POST /api/jobs": {
+      "status": 201,
+      "required": {
+        "job_id": "int"
+      }
+    },
+    "GET /api/jobs/{job_id}": {
+      "status": 200,
+      "required": {
+        "id": "int",
+        "title": "string",
+        "jd_text": "string"
+      }
+    },
+    "POST /api/steps/source": {
+      "status": 200,
+      "required": {
+        "job_id": "int",
+        "profiles": "array",
+        "total": "int",
+        "instruction": "string"
+      }
+    },
+    "POST /api/steps/enrich": {
+      "status": 200,
+      "required": {
+        "job_id": "int",
+        "profiles": "array",
+        "total": "int",
+        "failed": "int",
+        "instruction": "string"
+      }
+    },
+    "POST /api/steps/verify": {
+      "status": 200,
+      "required": {
+        "job_id": "int",
+        "items": "array",
+        "total": "int",
+        "verified": "int",
+        "needs_resume": "int",
+        "rejected": "int",
+        "enriched_total": "int",
+        "enrich_failed": "int",
+        "instruction": "string"
+      }
+    },
+    "POST /api/steps/add": {
+      "status": 200,
+      "required": {
+        "job_id": "int",
+        "added": "array",
+        "total": "int",
+        "instruction": "string"
+      }
+    },
+    "POST /api/steps/outreach": {
+      "status": 200,
+      "required": {
+        "job_id": "int",
+        "items": "array",
+        "conversation_ids": "array",
+        "sent": "int",
+        "pending_connection": "int",
+        "failed": "int",
+        "total": "int",
+        "instruction": "string"
+      }
+    },
+    "GET /api/jobs/{job_id}/candidates": {
+      "status": 200,
+      "required": {
+        "job_id": "int",
+        "items": "array"
+      }
+    },
+    "GET /api/jobs/{job_id}/progress": {
+      "status": 200,
+      "required": {
+        "job_id": "int",
+        "items": "array"
+      }
+    },
+    "POST /api/conversations/{conversation_id}/inbound": {
+      "status": 200,
+      "required": {
+        "language": "string",
+        "intent": "string",
+        "reply": "string"
+      }
+    },
+    "GET /api/chats/overview": {
+      "status": 200,
+      "required": {
+        "items": "array"
+      }
+    },
+    "GET /api/logs": {
+      "status": 200,
+      "required": {
+        "items": "array"
+      }
+    },
+    "POST /api/pre-resume/sessions/start": {
+      "status": 201,
+      "required": {
+        "event": "string",
+        "outbound": "string",
+        "state": "object",
+        "state.status": "string",
+        "state.session_id": "string"
+      }
+    },
+    "POST /api/pre-resume/sessions/{session_id}/inbound": {
+      "status": 200,
+      "required": {
+        "event": "string",
+        "intent": "string",
+        "resume_links": "array",
+        "outbound": "string",
+        "state": "object",
+        "state.status": "string"
+      }
+    },
+    "POST /api/pre-resume/sessions/{session_id}/followup": {
+      "status": 200,
+      "required": {
+        "event": "string",
+        "sent": "boolean",
+        "state": "object",
+        "state.status": "string"
+      }
+    },
+    "POST /api/pre-resume/sessions/{session_id}/unreachable": {
+      "status": 200,
+      "required": {
+        "event": "string",
+        "state": "object",
+        "state.status": "string"
+      }
+    },
+    "GET /api/pre-resume/sessions/{session_id}": {
+      "status": 200,
+      "required": {
+        "session_id": "string",
+        "status": "string",
+        "language": "string"
+      }
+    },
+    "GET /api/pre-resume/sessions": {
+      "status": 200,
+      "required": {
+        "items": "array"
+      }
+    },
+    "GET /api/pre-resume/events": {
+      "status": 200,
+      "required": {
+        "items": "array"
+      }
+    }
+  }
+}

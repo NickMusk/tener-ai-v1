@@ -1,0 +1,56 @@
+{
+  "workflow_scenarios": [
+    {
+      "id": "senior_backend_germany",
+      "job": {
+        "title": "Senior Backend Engineer",
+        "jd_text": "Need Python, Django, AWS, Docker, PostgreSQL for backend microservices.",
+        "location": "Germany",
+        "preferred_languages": ["en"],
+        "seniority": "senior"
+      },
+      "source_limit": 10,
+      "inbound_message": "What is the salary range and interview timeline?",
+      "expected": {
+        "source_min": 6,
+        "source_max": 10,
+        "verified_min": 1,
+        "verified_max": 2,
+        "rejected_min": 4,
+        "rejected_max": 9,
+        "expected_verified_names": ["Alex Morgan"]
+      }
+    },
+    {
+      "id": "frontend_typescript_spain",
+      "job": {
+        "title": "Frontend Engineer",
+        "jd_text": "Need React, TypeScript, JavaScript, Node, Figma for product frontend.",
+        "location": "Spain",
+        "preferred_languages": ["es", "en"],
+        "seniority": "middle"
+      },
+      "source_limit": 10,
+      "inbound_message": "Hola, cual es el salario y el proceso?",
+      "expected": {
+        "source_min": 8,
+        "source_max": 10,
+        "verified_min": 1,
+        "verified_max": 2,
+        "rejected_min": 6,
+        "rejected_max": 9,
+        "expected_verified_names": ["Miguel Santos"]
+      }
+    }
+  ],
+  "pre_resume_api_scenario": {
+    "session_id": "api-e2e-session-001",
+    "candidate_name": "Alex API",
+    "job_title": "Senior Backend Engineer",
+    "scope_summary": "python, aws, distributed systems",
+    "core_profile_summary": "python, aws",
+    "language": "en",
+    "inbound_message": "What is the salary range?",
+    "unreachable_error": "no_connection_with_recipient"
+  }
+}

@@ -342,10 +342,74 @@ class Database:
             return int(row["id"])
         return self.create_conversation(job_id=job_id, candidate_id=candidate_id, channel=channel)
 
-    def set_conversation_external_chat_id(self, conversation_id: int, external_chat_id: str) -> None:
+    def set_conversation_external_chat_id(self, conversation_id: int, external_chat_id: str) -> Dict[str, Any]:
+        external_chat_id = str(external_chat_id or "").strip()
         if not external_chat_id:
-            return
+            return {"status": "skipped_empty"}
+
         with self.transaction() as conn:
+            target = conn.execute(
+                """
+                SELECT id, candidate_id
+                FROM conversations
+                WHERE id = ?
+                """,
+                (conversation_id,),
+            ).fetchone()
+            if not target:
+                return {
+                    "status": "conversation_not_found",
+                    "conversation_id": conversation_id,
+                    "external_chat_id": external_chat_id,
+                }
+
+            existing = conn.execute(
+                """
+                SELECT id, candidate_id
+                FROM conversations
+                WHERE external_chat_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (external_chat_id,),
+            ).fetchone()
+
+            if existing and int(existing["id"]) != int(target["id"]):
+                # The same candidate can be contacted for multiple jobs but share one real chat thread.
+                # Rebind chat id to the latest conversation, keep workflow alive.
+                if int(existing["candidate_id"]) == int(target["candidate_id"]):
+                    conn.execute(
+                        """
+                        UPDATE conversations
+                        SET external_chat_id = NULL
+                        WHERE id = ?
+                        """,
+                        (int(existing["id"]),),
+                    )
+                    conn.execute(
+                        """
+                        UPDATE conversations
+                        SET external_chat_id = ?
+                        WHERE id = ?
+                        """,
+                        (external_chat_id, conversation_id),
+                    )
+                    return {
+                        "status": "rebound_same_candidate",
+                        "external_chat_id": external_chat_id,
+                        "from_conversation_id": int(existing["id"]),
+                        "to_conversation_id": conversation_id,
+                    }
+
+                return {
+                    "status": "conflict_other_candidate",
+                    "external_chat_id": external_chat_id,
+                    "target_conversation_id": conversation_id,
+                    "target_candidate_id": int(target["candidate_id"]),
+                    "existing_conversation_id": int(existing["id"]),
+                    "existing_candidate_id": int(existing["candidate_id"]),
+                }
+
             conn.execute(
                 """
                 UPDATE conversations
@@ -354,6 +418,11 @@ class Database:
                 """,
                 (external_chat_id, conversation_id),
             )
+            return {
+                "status": "set",
+                "conversation_id": conversation_id,
+                "external_chat_id": external_chat_id,
+            }
 
     def get_conversation_by_external_chat_id(self, external_chat_id: str) -> Optional[Dict[str, Any]]:
         row = self._conn.execute(

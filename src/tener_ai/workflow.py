@@ -379,8 +379,21 @@ class WorkflowService:
                 )
 
             external_chat_id = str(delivery.get("chat_id") or "").strip()
+            chat_binding = None
             if external_chat_id:
-                self.db.set_conversation_external_chat_id(conversation_id=conversation_id, external_chat_id=external_chat_id)
+                chat_binding = self.db.set_conversation_external_chat_id(
+                    conversation_id=conversation_id,
+                    external_chat_id=external_chat_id,
+                )
+                binding_status = str((chat_binding or {}).get("status") or "")
+                if binding_status not in {"set", "rebound_same_candidate"}:
+                    self.db.log_operation(
+                        operation="agent.outreach.chat_binding",
+                        status="partial",
+                        entity_type="conversation",
+                        entity_id=str(conversation_id),
+                        details={"candidate_id": candidate_id, "chat_binding": chat_binding},
+                    )
 
             self.db.add_message(
                 conversation_id=conversation_id,
@@ -398,6 +411,7 @@ class WorkflowService:
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
                     "external_chat_id": external_chat_id or None,
+                    "chat_binding": chat_binding,
                 },
             )
             self.db.log_operation(
@@ -415,6 +429,7 @@ class WorkflowService:
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
                     "external_chat_id": external_chat_id or None,
+                    "chat_binding": chat_binding,
                 },
             )
 
@@ -430,6 +445,7 @@ class WorkflowService:
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
                     "external_chat_id": external_chat_id or None,
+                    "chat_binding": chat_binding,
                 }
             )
             conversation_ids.append(conversation_id)
@@ -1044,8 +1060,21 @@ class WorkflowService:
         if delivery.get("sent"):
             self.db.update_conversation_status(conversation_id=conversation_id, status="active")
             chat_id = str(delivery.get("chat_id") or "").strip()
+            chat_binding = None
             if chat_id:
-                self.db.set_conversation_external_chat_id(conversation_id=conversation_id, external_chat_id=chat_id)
+                chat_binding = self.db.set_conversation_external_chat_id(
+                    conversation_id=conversation_id,
+                    external_chat_id=chat_id,
+                )
+                binding_status = str((chat_binding or {}).get("status") or "")
+                if binding_status not in {"set", "rebound_same_candidate"}:
+                    self.db.log_operation(
+                        operation="agent.outreach.chat_binding",
+                        status="partial",
+                        entity_type="conversation",
+                        entity_id=str(conversation_id),
+                        details={"chat_binding": chat_binding},
+                    )
             conversation = self.db.get_conversation(conversation_id)
             if conversation:
                 self.db.update_candidate_match_status(
@@ -1064,6 +1093,7 @@ class WorkflowService:
                     "auto": True,
                     "delivery": delivery,
                     "trigger": "connection_accepted",
+                    "chat_binding": chat_binding,
                 },
             )
             self.db.log_operation(
