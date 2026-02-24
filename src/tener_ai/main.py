@@ -625,8 +625,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 return
 
             limit = self._safe_int(body.get("limit"), 30)
+            test_mode = self._safe_bool(body.get("test_mode"), None)
             try:
-                summary = SERVICES["workflow"].execute_job_workflow(job_id=job_id, limit=limit)
+                summary = SERVICES["workflow"].execute_job_workflow(job_id=job_id, limit=limit, test_mode=test_mode)
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
@@ -658,6 +659,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "outreach_pending_connection": summary.outreach_pending_connection,
                 "outreach_failed": summary.outreach_failed,
                 "conversation_ids": summary.conversation_ids,
+                "test_mode_requested": test_mode,
             }
             self._persist_job_step_progress(job_id=job_id, step="source", status="success", output={"total": summary.searched})
             self._persist_job_step_progress(
@@ -714,8 +716,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_id is required"})
                 return
             limit = self._safe_int(body.get("limit"), 30)
+            test_mode = self._safe_bool(body.get("test_mode"), None)
             try:
-                result = SERVICES["workflow"].source_candidates(job_id=job_id, limit=limit or 30)
+                result = SERVICES["workflow"].source_candidates(job_id=job_id, limit=limit or 30, test_mode=test_mode)
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
@@ -818,6 +821,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 return
             job_id = self._safe_int(body.get("job_id"), None)
             candidate_ids = body.get("candidate_ids")
+            test_mode = self._safe_bool(body.get("test_mode"), None)
             if job_id is None:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_id is required"})
                 return
@@ -825,7 +829,11 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "candidate_ids must be an array"})
                 return
             try:
-                result = SERVICES["workflow"].outreach_candidates(job_id=job_id, candidate_ids=candidate_ids)
+                result = SERVICES["workflow"].outreach_candidates(
+                    job_id=job_id,
+                    candidate_ids=candidate_ids,
+                    test_mode=test_mode,
+                )
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
@@ -1213,6 +1221,21 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             return int(value)
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _safe_bool(value: Any, default: Optional[bool]) -> Optional[bool]:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return default
+        text = str(value).strip().lower()
+        if not text:
+            return default
+        if text in {"1", "true", "yes", "on"}:
+            return True
+        if text in {"0", "false", "no", "off"}:
+            return False
+        return default
 
     @staticmethod
     def _pick_str(payload: Dict[str, Any], *paths: str) -> str:

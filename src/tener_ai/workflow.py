@@ -76,15 +76,17 @@ class WorkflowService:
         )
         self.test_job_keywords = [x.strip().lower() for x in raw_keywords.split(",") if x.strip()]
 
-    def source_candidates(self, job_id: int, limit: int = 30) -> Dict[str, Any]:
+    def source_candidates(self, job_id: int, limit: int = 30, test_mode: bool | None = None) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
         forced_test_ids = self._load_forced_test_identifiers()
+        forced_only = self._effective_test_mode(job=job, test_mode=test_mode, forced_identifiers=forced_test_ids)
         profiles = self.sourcing_agent.find_candidates(job=job, limit=limit)
         profiles = self._inject_forced_test_candidates(
             job=job,
             profiles=profiles,
             limit=limit,
             forced_identifiers=forced_test_ids,
+            forced_only=forced_only,
         )
         included = sorted(
             {
@@ -106,12 +108,16 @@ class WorkflowService:
                 "forced_test_ids_file": self.forced_test_ids_path,
                 "forced_test_ids_configured": forced_test_ids,
                 "forced_test_ids_included": included,
+                "test_mode_active": forced_only,
+                "test_mode_requested": test_mode,
             },
         )
         return {
             "job_id": job_id,
             "profiles": profiles,
             "total": len(profiles),
+            "test_mode_active": forced_only,
+            "test_mode_requested": test_mode,
             "instruction": self.stage_instructions.get("sourcing", ""),
         }
 
@@ -248,11 +254,11 @@ class WorkflowService:
             "instruction": self.stage_instructions.get("add", ""),
         }
 
-    def outreach_candidates(self, job_id: int, candidate_ids: List[int]) -> Dict[str, Any]:
+    def outreach_candidates(self, job_id: int, candidate_ids: List[int], test_mode: bool | None = None) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
         forced_identifiers = self._load_forced_test_identifiers()
         forced_lookup = self._build_forced_identifier_lookup(job=job, forced_identifiers=forced_identifiers)
-        forced_only = self._is_test_job(job) and self.test_jobs_forced_only and bool(forced_identifiers)
+        forced_only = self._effective_test_mode(job=job, test_mode=test_mode, forced_identifiers=forced_identifiers)
 
         out_items: List[Dict[str, Any]] = []
         conversation_ids: List[int] = []
@@ -499,6 +505,7 @@ class WorkflowService:
             "failed": failed,
             "test_filter_skipped": test_filter_skipped,
             "test_job_forced_only_active": forced_only,
+            "test_mode_requested": test_mode,
             "total": len(out_items),
             "instruction": self.stage_instructions.get("outreach", ""),
         }
@@ -718,18 +725,24 @@ class WorkflowService:
             "initial_outbound": initial_outbound,
         }
 
-    def execute_job_workflow(self, job_id: int, limit: int = 30) -> WorkflowSummary:
-        self._get_job_or_raise(job_id)
+    def execute_job_workflow(self, job_id: int, limit: int = 30, test_mode: bool | None = None) -> WorkflowSummary:
+        job = self._get_job_or_raise(job_id)
+        forced_test_ids = self._load_forced_test_identifiers()
+        effective_test_mode = self._effective_test_mode(
+            job=job,
+            test_mode=test_mode,
+            forced_identifiers=forced_test_ids,
+        )
 
         self.db.log_operation(
             operation="workflow.execute.start",
             status="ok",
             entity_type="job",
             entity_id=str(job_id),
-            details={"limit": limit},
+            details={"limit": limit, "test_mode_active": effective_test_mode, "test_mode_requested": test_mode},
         )
 
-        source_result = self.source_candidates(job_id=job_id, limit=limit)
+        source_result = self.source_candidates(job_id=job_id, limit=limit, test_mode=effective_test_mode)
         verify_result = self.verify_profiles(job_id=job_id, profiles=source_result["profiles"])
 
         if self.contact_all_mode:
@@ -740,6 +753,7 @@ class WorkflowService:
         outreach_result = self.outreach_candidates(
             job_id=job_id,
             candidate_ids=[x["candidate_id"] for x in add_result["added"]],
+            test_mode=effective_test_mode,
         )
 
         summary = WorkflowSummary(
@@ -769,6 +783,8 @@ class WorkflowService:
                 "outreach_sent": summary.outreach_sent,
                 "outreach_pending_connection": summary.outreach_pending_connection,
                 "outreach_failed": summary.outreach_failed,
+                "test_mode_active": effective_test_mode,
+                "test_mode_requested": test_mode,
             },
         )
         return summary
@@ -1618,6 +1634,7 @@ class WorkflowService:
         profiles: List[Dict[str, Any]],
         limit: int,
         forced_identifiers: List[str],
+        forced_only: bool = False,
     ) -> List[Dict[str, Any]]:
         if not forced_identifiers:
             return profiles
@@ -1636,6 +1653,9 @@ class WorkflowService:
                 continue
             seen_forced.add(key)
             forced_profiles.append(marked)
+
+        if forced_only:
+            return forced_profiles[:target_limit]
 
         merged: List[Dict[str, Any]] = []
         seen = set()
@@ -1665,6 +1685,13 @@ class WorkflowService:
                 break
 
         return merged[:target_limit]
+
+    def _effective_test_mode(self, job: Dict[str, Any], test_mode: bool | None, forced_identifiers: List[str]) -> bool:
+        if not forced_identifiers:
+            return False
+        if test_mode is not None:
+            return bool(test_mode)
+        return self._is_test_job(job) and self.test_jobs_forced_only
 
     def _resolve_forced_test_candidate(self, identifier: str, job: Dict[str, Any]) -> Dict[str, Any] | None:
         provider = getattr(self.sourcing_agent, "linkedin_provider", None)

@@ -103,6 +103,38 @@ class ForcedTestCandidateTests(unittest.TestCase):
             self.assertGreaterEqual(item["score"], DEFAULT_FORCED_TEST_SCORE)
             self.assertTrue((item.get("notes") or {}).get("forced_test_candidate"))
 
+    def test_source_test_mode_only_returns_forced_profiles(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "forced_test_candidate_source_mode.sqlite3"))
+            db.init_schema()
+            ids_file = Path(td) / "forced_ids.txt"
+            ids_file.write_text(f"{FORCED_TEST_ID}\n", encoding="utf-8")
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = FakeUnipileProvider()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                forced_test_ids_path=str(ids_file),
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python AWS distributed systems",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+
+            out = workflow.source_candidates(job_id=job_id, limit=5, test_mode=True)
+            self.assertTrue(out.get("test_mode_active"))
+            self.assertEqual(out.get("total"), 1)
+            self.assertEqual((out["profiles"][0].get("raw") or {}).get("public_identifier"), FORCED_TEST_ID)
+
 
 if __name__ == "__main__":
     unittest.main()
