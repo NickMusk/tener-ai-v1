@@ -9,6 +9,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, Optional
+from urllib import error as urlerror, request as urlrequest
 from urllib.parse import parse_qs, urlparse
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
@@ -31,6 +32,15 @@ def env_bool(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def default_interview_api_base() -> str:
+    configured = str(os.environ.get("TENER_INTERVIEW_API_BASE", "")).strip()
+    if configured:
+        return configured.rstrip("/")
+    if os.environ.get("RENDER"):
+        return "https://tener-interview-dashboard.onrender.com"
+    return ""
 
 
 def apply_agent_instructions(services: Dict[str, Any]) -> None:
@@ -187,6 +197,7 @@ def build_services() -> Dict[str, Any]:
         "matching_engine": matching_engine,
         "pre_resume": pre_resume_service,
         "workflow": workflow,
+        "interview_api_base": default_interview_api_base(),
     }
     apply_agent_instructions(services)
     return services
@@ -664,7 +675,21 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 entity_id=str(job_id),
                 details={"title": title},
             )
-            self._json_response(HTTPStatus.CREATED, {"job_id": job_id})
+            interview_assessment = self._prepare_job_interview_assessment(job_id=job_id)
+            SERVICES["db"].log_operation(
+                operation="job.interview_assessment.prepare",
+                status=str(interview_assessment.get("status") or "unknown"),
+                entity_type="job",
+                entity_id=str(job_id),
+                details=interview_assessment,
+            )
+            self._json_response(
+                HTTPStatus.CREATED,
+                {
+                    "job_id": job_id,
+                    "interview_assessment": interview_assessment,
+                },
+            )
             return
 
         if parsed.path == "/api/workflows/execute":
@@ -1236,6 +1261,62 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             # Progress persistence must not break primary API response path.
             return
+
+    def _prepare_job_interview_assessment(self, job_id: int) -> Dict[str, Any]:
+        base = str(SERVICES.get("interview_api_base") or "").strip().rstrip("/")
+        if not base:
+            return {"status": "skipped", "reason": "interview_api_not_configured"}
+
+        url = f"{base}/api/admin/jobs/{int(job_id)}/assessment/prepare"
+        req = urlrequest.Request(
+            url=url,
+            method="POST",
+            headers={"Content-Type": "application/json", "Accept": "application/json"},
+            data=b"{}",
+        )
+        try:
+            with urlrequest.urlopen(req, timeout=20) as resp:
+                raw = resp.read().decode("utf-8")
+                parsed = json.loads(raw) if raw else {}
+                if not isinstance(parsed, dict):
+                    return {
+                        "status": "error",
+                        "reason": "invalid_interview_response",
+                        "http_status": int(resp.status),
+                    }
+                return {
+                    "status": "ok",
+                    "http_status": int(resp.status),
+                    "details": parsed,
+                }
+        except urlerror.HTTPError as exc:
+            body_raw = exc.read().decode("utf-8") if exc.fp else ""
+            details: Dict[str, Any] = {}
+            if body_raw:
+                try:
+                    parsed = json.loads(body_raw)
+                    if isinstance(parsed, dict):
+                        details = parsed
+                except json.JSONDecodeError:
+                    details = {"raw": body_raw}
+            return {
+                "status": "error",
+                "reason": "interview_api_http_error",
+                "http_status": int(exc.code),
+                "details": details or {"message": str(exc.reason or "http error")},
+            }
+        except urlerror.URLError as exc:
+            return {
+                "status": "error",
+                "reason": "interview_api_network_error",
+                "details": {"message": str(exc.reason)},
+            }
+        except Exception as exc:
+            return {
+                "status": "error",
+                "reason": "interview_api_request_failed",
+                "details": {"message": str(exc)},
+            }
 
     def log_message(self, format: str, *args: Any) -> None:
         return

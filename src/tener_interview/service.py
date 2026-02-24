@@ -549,6 +549,25 @@ class InterviewService:
         ]
         return {"job_id": job_id, "items": items}
 
+    def prepare_job_assessment(self, job_id: int, language: Optional[str] = None) -> Dict[str, Any]:
+        job_int = int(job_id)
+        existing = self.db.get_job_assessment(job_int)
+        existing_id = str((existing or {}).get("provider_assessment_id") or "").strip()
+
+        ctx = self._resolve_assessment_for_job(job_id=job_int, language=language)
+        assessment_id = str(ctx.get("provider_assessment_id") or "").strip()
+        if not assessment_id:
+            raise ValueError("assessment generation is unavailable for this job")
+
+        return {
+            "job_id": job_int,
+            "provider": self.provider.name,
+            "assessment_id": assessment_id,
+            "assessment_name": ctx.get("assessment_name"),
+            "generation_hash": ctx.get("generation_hash"),
+            "created_now": existing_id != assessment_id,
+        }
+
     def run_interview_step(
         self,
         job_id: int,

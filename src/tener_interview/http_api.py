@@ -135,6 +135,7 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
                         "admin_jobs": "GET /api/admin/jobs",
                         "admin_job_candidates": "GET /api/admin/jobs/{job_id}/candidates",
                         "admin_job_assessment": "GET /api/admin/jobs/{job_id}/assessment",
+                        "admin_prepare_job_assessment": "POST /api/admin/jobs/{job_id}/assessment/prepare",
                         "admin_job_refresh": "POST /api/admin/jobs/{job_id}/sessions/refresh",
                     },
                     "provider": SERVICES.get("provider_name"),
@@ -320,6 +321,22 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if parsed.path.startswith("/api/admin/jobs/") and parsed.path.endswith("/assessment/prepare"):
+            m = re.match(r"^/api/admin/jobs/(\d+)/assessment/prepare$", parsed.path)
+            if not m:
+                self._json_response(HTTPStatus.BAD_REQUEST, self._error("JOB_ID_INVALID", "invalid job id"))
+                return
+            job_id = self._safe_int(m.group(1), None)
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, self._error("JOB_ID_INVALID", "invalid job id"))
+                return
+            self._run_idempotent(
+                route=parsed.path,
+                payload=(payload or {}),
+                callback=lambda: self._post_admin_prepare_assessment(job_id=job_id, body=payload or {}),
+            )
+            return
+
         self._json_response(HTTPStatus.NOT_FOUND, self._error("ROUTE_NOT_FOUND", "route not found"))
 
     def _post_start_session(self, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
@@ -449,6 +466,16 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
                 "items": items,
             },
         )
+
+    def _post_admin_prepare_assessment(self, job_id: int, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
+        language = str(body.get("language") or "").strip() or None
+        try:
+            out = SERVICES["interview"].prepare_job_assessment(job_id=job_id, language=language)
+        except ValueError as exc:
+            return HTTPStatus.UNPROCESSABLE_ENTITY, self._error("INTERVIEW_ASSESSMENT_PREPARE_REJECTED", str(exc))
+        except Exception as exc:
+            return HTTPStatus.BAD_GATEWAY, self._error("INTERVIEW_ASSESSMENT_PREPARE_FAILED", str(exc))
+        return HTTPStatus.OK, out
 
     def _run_idempotent(
         self,
