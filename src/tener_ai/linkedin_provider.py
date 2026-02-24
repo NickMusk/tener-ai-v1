@@ -245,6 +245,8 @@ class UnipileLinkedInProvider(LinkedInProvider):
             return {"provider": "unipile", "sent": False, "reason": "missing_attendee_provider_id"}
 
         last_error = "unknown_connection_request_error"
+        non_404_error: Optional[str] = None
+        attempts: List[Dict[str, str]] = []
         paths = self._candidate_connect_paths()
         payloads = self._connect_payloads(attendee_id=attendee_id, message=message)
         for path in paths:
@@ -266,14 +268,19 @@ class UnipileLinkedInProvider(LinkedInProvider):
                     }
                 except RuntimeError as exc:
                     last_error = str(exc)
+                    attempts.append({"path": path, "error": last_error})
+                    if "HTTP error 404" not in last_error and non_404_error is None:
+                        non_404_error = last_error
                     continue
 
+        effective_error = non_404_error or last_error
         return {
             "provider": "unipile",
             "sent": False,
             "attendee_provider_id": attendee_id,
             "reason": "connection_request_failed",
-            "error": last_error,
+            "error": effective_error,
+            "attempts": attempts[:10],
         }
 
     def check_connection_status(self, candidate_profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -409,10 +416,10 @@ class UnipileLinkedInProvider(LinkedInProvider):
 
     def _candidate_connect_paths(self) -> List[str]:
         candidates = [
-            self.connect_create_path,
             "/api/v1/users/invite",
             "/api/v1/invitations",
             "/api/v1/linkedin/invite",
+            self.connect_create_path,
         ]
         out: List[str] = []
         seen = set()
