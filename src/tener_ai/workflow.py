@@ -944,15 +944,6 @@ class WorkflowService:
                     self.pre_resume_service.seed_session(state)
                 result = self.pre_resume_service.handle_inbound(session_id=session_id, text=text)
                 state_out = result.get("state") if isinstance(result.get("state"), dict) else state
-                if isinstance(state_out, dict):
-                    self.db.upsert_pre_resume_session(
-                        session_id=session_id,
-                        conversation_id=conversation_id,
-                        job_id=int(conversation["job_id"]),
-                        candidate_id=int(conversation["candidate_id"]),
-                        state=state_out,
-                        instruction=self.stage_instructions.get("pre_resume", ""),
-                    )
                 outbound = str(result.get("outbound") or "").strip()
                 intent = str(result.get("intent") or "default")
                 language = str((state_out or {}).get("language") or previous_lang or "en")
@@ -973,6 +964,16 @@ class WorkflowService:
                     state=state_out if isinstance(state_out, dict) else None,
                     match=match,
                 )
+                if isinstance(state_out, dict):
+                    self.db.upsert_pre_resume_session(
+                        session_id=session_id,
+                        conversation_id=conversation_id,
+                        job_id=int(conversation["job_id"]),
+                        candidate_id=int(conversation["candidate_id"]),
+                        state=state_out,
+                        instruction=self.stage_instructions.get("pre_resume", ""),
+                    )
+                    self.pre_resume_service.seed_session(state_out)
                 self.db.insert_pre_resume_event(
                     session_id=session_id,
                     conversation_id=conversation_id,
@@ -1934,17 +1935,21 @@ class WorkflowService:
         state_status = str((state or {}).get("status") or "").strip().lower()
         if state_status in TERMINAL_PRE_RESUME_STATUSES or state_status == "interview_opt_in":
             return text
+        if bool((state or {}).get("awaiting_pre_vetting_opt_in")):
+            return text
         lowered = text.lower()
         if "interview link" in lowered or "pre-vetting" in lowered or "pre vetting" in lowered:
             return text
 
         prompts = {
-            "en": 'If you want to continue, reply "I agree to async pre-vetting" and I will send the interview link.',
-            "ru": 'Если хотите продолжить, ответьте "согласен(а) на асинхронный pre-vetting", и я отправлю ссылку на интервью.',
-            "es": 'Si quieres continuar, responde "acepto pre-vetting asincrono" y te envio el enlace de entrevista.',
+            "en": "Would you be open to a quick async pre vetting step to speed up next stage",
+            "ru": "Готовы пройти короткий асинхронный pre vetting, чтобы быстрее перейти к следующему этапу",
+            "es": "Te interesaria pasar un pre vetting asincrono corto para acelerar el siguiente paso",
         }
         lang = str(language or "en").strip().lower()
         prompt = prompts.get(lang, prompts["en"])
+        if isinstance(state, dict):
+            state["awaiting_pre_vetting_opt_in"] = True
         return f"{text} {prompt}".strip()
 
     def _compose_interview_invite_message(

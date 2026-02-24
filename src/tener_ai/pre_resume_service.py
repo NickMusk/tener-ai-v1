@@ -139,6 +139,7 @@ class PreResumeSession:
     created_at: str = field(default_factory=lambda: iso(utc_now()))
     updated_at: str = field(default_factory=lambda: iso(utc_now()))
     next_followup_at: Optional[str] = None
+    awaiting_pre_vetting_opt_in: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -157,10 +158,17 @@ class PreResumeSession:
             "created_at": self.created_at,
             "updated_at": self.updated_at,
             "next_followup_at": self.next_followup_at,
+            "awaiting_pre_vetting_opt_in": self.awaiting_pre_vetting_opt_in,
         }
 
     @staticmethod
     def from_dict(payload: Dict[str, Any]) -> "PreResumeSession":
+        raw_awaiting = payload.get("awaiting_pre_vetting_opt_in")
+        awaiting = (
+            raw_awaiting.strip().lower() in {"1", "true", "yes", "y"}
+            if isinstance(raw_awaiting, str)
+            else bool(raw_awaiting)
+        )
         return PreResumeSession(
             session_id=str(payload.get("session_id") or ""),
             candidate_name=str(payload.get("candidate_name") or "there"),
@@ -177,6 +185,7 @@ class PreResumeSession:
             created_at=str(payload.get("created_at") or iso(utc_now())),
             updated_at=str(payload.get("updated_at") or iso(utc_now())),
             next_followup_at=str(payload.get("next_followup_at")) if payload.get("next_followup_at") else None,
+            awaiting_pre_vetting_opt_in=awaiting,
         )
 
 
@@ -250,7 +259,10 @@ class PreResumeCommunicationService:
         if not session.language or session.language == "auto":
             session.language = detect_language_from_text(message, fallback=self.templates.get("default_language", "en"))
 
-        intent, links = self._classify_intent(message)
+        intent, links = self._classify_intent(
+            message,
+            awaiting_pre_vetting_opt_in=session.awaiting_pre_vetting_opt_in,
+        )
         for link in links:
             if link not in session.resume_links:
                 session.resume_links.append(link)
@@ -262,18 +274,22 @@ class PreResumeCommunicationService:
         if intent == "resume_shared":
             session.status = "resume_received"
             session.next_followup_at = None
+            session.awaiting_pre_vetting_opt_in = False
             outbound = self._render("resume_ack", session.language, session)
         elif intent == "not_interested":
             session.status = "not_interested"
             session.next_followup_at = None
+            session.awaiting_pre_vetting_opt_in = False
             outbound = self._render("not_interested_ack", session.language, session)
         elif intent == "will_send_later":
             session.status = "resume_promised"
             session.next_followup_at = self._next_followup_at(session=session, now=current)
+            session.awaiting_pre_vetting_opt_in = False
             outbound = self._render("resume_promised_ack", session.language, session)
         elif intent == "pre_vetting_opt_in":
             session.status = "interview_opt_in"
             session.next_followup_at = self._next_followup_at(session=session, now=current)
+            session.awaiting_pre_vetting_opt_in = False
             ack = self._render("interview_opt_in_ack", session.language, session)
             cta = self._render("resume_cta", session.language, session)
             outbound = f"{ack} {cta}".strip()
@@ -350,7 +366,7 @@ class PreResumeCommunicationService:
         session = self.sessions.get(session_id)
         return session.to_dict() if session else None
 
-    def _classify_intent(self, text: str) -> Tuple[str, List[str]]:
+    def _classify_intent(self, text: str, awaiting_pre_vetting_opt_in: bool = False) -> Tuple[str, List[str]]:
         normalized = (text or "").strip()
         lowered = normalized.lower()
         links = parse_resume_links(normalized)
@@ -446,6 +462,52 @@ class PreResumeCommunicationService:
         )
         if any(marker in lowered for marker in explicit_opt_in_markers):
             return "pre_vetting_opt_in", links
+
+        context_affirmative_markers = (
+            "yes",
+            "yep",
+            "yeah",
+            "sure",
+            "ok",
+            "okay",
+            "go ahead",
+            "let's do it",
+            "lets do it",
+            "works for me",
+            "fine with me",
+            "да",
+            "ага",
+            "конечно",
+            "давай",
+            "погнали",
+            "si",
+            "sí",
+            "claro",
+            "dale",
+            "vamos",
+        )
+        context_negative_markers = (
+            "not now",
+            "later",
+            "maybe later",
+            "no",
+            "nope",
+            "нет",
+            "позже",
+            "не сейчас",
+            "ahora no",
+            "despues",
+            "después",
+            "luego",
+            "quizas luego",
+            "quizás luego",
+        )
+        if awaiting_pre_vetting_opt_in and not any(marker in lowered for marker in context_negative_markers):
+            stripped = re.sub(r"[!.?,]+", " ", lowered).strip()
+            tokens = [tok for tok in stripped.split() if tok]
+            short_reply = len(tokens) <= 8
+            if short_reply and any(marker in lowered for marker in context_affirmative_markers):
+                return "pre_vetting_opt_in", links
 
         interest_markers = (
             "interested",

@@ -100,6 +100,19 @@ class PreResumeServiceTests(unittest.TestCase):
         self.assertEqual(out["reason"], "terminal_status")
         self.assertEqual(out["state"]["status"], "unreachable")
 
+    def test_contextual_yes_is_opt_in_after_pre_vetting_question(self) -> None:
+        service = PreResumeCommunicationService()
+        self._start_default_session(service)
+        state = service.get_session("s1")
+        assert state is not None
+        state["awaiting_pre_vetting_opt_in"] = True
+        service.seed_session(state)
+
+        out = service.handle_inbound("s1", "yes, lets do it")
+        self.assertEqual(out["intent"], "pre_vetting_opt_in")
+        self.assertEqual(out["state"]["status"], "interview_opt_in")
+        self.assertFalse(bool(out["state"].get("awaiting_pre_vetting_opt_in")))
+
     def test_language_template_fallback(self) -> None:
         with TemporaryDirectory() as td:
             templates = {

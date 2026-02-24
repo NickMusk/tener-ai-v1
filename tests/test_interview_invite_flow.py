@@ -132,9 +132,16 @@ class InterviewInviteFlowTests(unittest.TestCase):
             outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
             conversation_id = int(outreach["conversation_ids"][0])
 
+            first = workflow.process_inbound_message(
+                conversation_id=conversation_id,
+                text="Sounds interesting, what is next",
+            )
+            self.assertEqual(first["mode"], "pre_resume")
+            self.assertIn("quick async pre vetting", str(first.get("reply", "")).lower())
+
             result = workflow.process_inbound_message(
                 conversation_id=conversation_id,
-                text="I agree to async pre-vetting interview, send the link.",
+                text="Yes, sounds good",
             )
             self.assertEqual(result["mode"], "pre_resume")
             self.assertEqual(result["intent"], "pre_vetting_opt_in")
