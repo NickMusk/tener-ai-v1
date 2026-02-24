@@ -233,6 +233,29 @@ Response `200`:
 }
 ```
 
+### 7.3.1 Get session scorecard (per-question scoring)
+
+`GET /api/interviews/sessions/{session_id}/scorecard`
+
+Response `200`:
+```json
+{
+  "session_id": "iv_...",
+  "status": "scored",
+  "scorecard": {
+    "technical_score": 81.5,
+    "soft_skills_score": 78.0,
+    "culture_fit_score": 84.0,
+    "total_score": 80.95,
+    "score_confidence": 1.0,
+    "transcription_scoring": {
+      "applied": true,
+      "question_scores": []
+    }
+  }
+}
+```
+
 ### 7.4 Manual sync (internal)
 
 `POST /api/interviews/sessions/{session_id}/refresh`
@@ -470,5 +493,7 @@ Optional env:
 - `TENER_INTERVIEW_SOURCE_DB_PATH` (default `./runtime/tener_v1.sqlite3`)
 - `TENER_INTERVIEW_SOURCE_API_BASE` (if set, use main Tener API as JD/candidate source)
 - `TENER_INTERVIEW_SOURCE_API_TIMEOUT_SECONDS` (default `20`)
+- `TENER_INTERVIEW_TRANSCRIPTION_SCORING_CRITERIA_PATH` (default `./config/interview_transcription_scoring_criteria.json`)
+- `TENER_INTERVIEW_TOTAL_SCORE_FORMULA_PATH` (default `./config/interview_total_score_formula.json`)
 - `TENER_INTERVIEW_ALLOW_SYNTHETIC_EMAIL` (default `true`)
 - `TENER_INTERVIEW_SYNTHETIC_EMAIL_DOMAIN` (default `interview.local`)

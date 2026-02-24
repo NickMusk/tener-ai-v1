@@ -270,11 +270,13 @@
                   <th>Candidate</th>
                   <th>Status</th>
                   <th>Refresh</th>
+                  <th>Scorecard</th>
                 </tr>
               </thead>
               <tbody id="session-rows"></tbody>
             </table>
           </div>
+          <div id="scorecard-view" class="muted" style="margin-top: 10px"></div>
         </section>
 
         <section class="panel">
@@ -507,6 +509,7 @@
             <td>${safeText(item.candidate_name)} <span class="mono">#${safeText(item.candidate_id)}</span></td>
             <td><span class="${statusClass(item.status)}">${safeText(item.status)}</span></td>
             <td><button class="secondary" data-refresh-session="${item.session_id}">Refresh</button></td>
+            <td><button class="secondary" data-scorecard-session="${item.session_id}">Scorecard</button></td>
           `;
           tbody.appendChild(tr);
         }
@@ -534,6 +537,23 @@
           body: JSON.stringify({ force: true }),
         });
         await loadResults();
+      }
+
+      async function loadScorecard(sessionId) {
+        const out = await api(`/api/interviews/sessions/${sessionId}/scorecard`);
+        const card = out.scorecard || {};
+        const scoring = card.transcription_scoring || {};
+        const rows = Array.isArray(scoring.question_scores) ? scoring.question_scores : [];
+        const lines = [];
+        lines.push(`Session: ${sessionId}`);
+        lines.push(`Total: ${safeText(card.total_score)} | Confidence: ${safeText(card.score_confidence)}`);
+        lines.push(`Tech: ${safeText(card.technical_score)} | Soft: ${safeText(card.soft_skills_score)} | Culture: ${safeText(card.culture_fit_score)}`);
+        lines.push(`Transcription scoring applied: ${safeText(scoring.applied)}`);
+        lines.push("Per question:");
+        for (const row of rows) {
+          lines.push(`- [${safeText(row.dimension)}] ${safeText(row.title)} => ${safeText(row.score)}`);
+        }
+        $("scorecard-view").textContent = lines.join("\n");
       }
 
       async function refreshAllForJob() {
@@ -574,6 +594,14 @@
             if (!sessionId) return;
             target.setAttribute("disabled", "disabled");
             await refreshOneSession(sessionId);
+            target.removeAttribute("disabled");
+            return;
+          }
+          if (target.hasAttribute("data-scorecard-session")) {
+            const sessionId = target.getAttribute("data-scorecard-session");
+            if (!sessionId) return;
+            target.setAttribute("disabled", "disabled");
+            await loadScorecard(sessionId);
             target.removeAttribute("disabled");
             return;
           }

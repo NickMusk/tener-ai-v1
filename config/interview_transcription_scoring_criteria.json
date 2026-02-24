@@ -1,0 +1,98 @@
+{
+  "version": "1.0",
+  "defaults": {
+    "weights": {
+      "keyword": 0.6,
+      "length": 0.25,
+      "clarity": 0.15
+    },
+    "rubric": {
+      "min_words": 20,
+      "ideal_words": 80,
+      "max_words": 260
+    },
+    "disallowed_patterns": [
+      "\\bno\\s+idea\\b",
+      "\\bi\\s+don'?t\\s+know\\b",
+      "\\bi\\s+have\\s+no\\s+experience\\b"
+    ],
+    "filler_words": [
+      "um",
+      "uh",
+      "like",
+      "you know",
+      "kind of",
+      "sort of"
+    ]
+  },
+  "question_rules": [
+    {
+      "id": "intro_relevant_project",
+      "dimension": "soft_skills",
+      "match": {
+        "title_contains": [
+          "introduce",
+          "background",
+          "relevant project"
+        ]
+      },
+      "required_keywords": [
+        "project",
+        "role",
+        "result"
+      ],
+      "optional_keywords": [
+        "impact",
+        "stack",
+        "team",
+        "ownership"
+      ]
+    },
+    {
+      "id": "technical_challenge",
+      "dimension": "technical",
+      "match": {
+        "title_contains": [
+          "technical challenge",
+          "challenging problem",
+          "technical problem",
+          "architecture"
+        ]
+      },
+      "required_keywords": [
+        "problem",
+        "solution",
+        "result"
+      ],
+      "optional_keywords": [
+        "trade-off",
+        "debug",
+        "performance",
+        "scalability",
+        "design"
+      ]
+    },
+    {
+      "id": "cross_functional_collaboration",
+      "dimension": "soft_skills",
+      "match": {
+        "title_contains": [
+          "cross-functional",
+          "collaborate",
+          "team"
+        ]
+      },
+      "required_keywords": [
+        "communication",
+        "stakeholder",
+        "alignment"
+      ],
+      "optional_keywords": [
+        "conflict",
+        "feedback",
+        "prioritization",
+        "expectations"
+      ]
+    }
+  ]
+}

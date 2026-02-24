@@ -7,6 +7,7 @@ from uuid import uuid4
 from .db import InterviewDatabase, utc_now_iso
 from .providers.base import InterviewProviderAdapter
 from .scoring import InterviewScoringEngine
+from .transcription_scoring import TranscriptionScoringEngine
 from .token_service import InterviewTokenService, InvalidTokenError
 
 UTC = timezone.utc
@@ -19,6 +20,7 @@ class InterviewService:
         provider: InterviewProviderAdapter,
         token_service: InterviewTokenService,
         scoring_engine: InterviewScoringEngine,
+        transcription_scoring_engine: Optional[TranscriptionScoringEngine] = None,
         default_ttl_hours: int = 72,
         public_base_url: str = "",
     ) -> None:
@@ -26,6 +28,7 @@ class InterviewService:
         self.provider = provider
         self.token_service = token_service
         self.scoring_engine = scoring_engine
+        self.transcription_scoring_engine = transcription_scoring_engine
         self.default_ttl_hours = max(1, int(default_ttl_hours))
         self.public_base_url = public_base_url.rstrip("/")
 
@@ -201,6 +204,37 @@ class InterviewService:
                 "soft_skills_score": (result or {}).get("soft_skills_score"),
                 "culture_fit_score": (result or {}).get("culture_fit_score"),
                 "total_score": (result or {}).get("total_score"),
+            },
+        }
+
+    def get_session_scorecard(self, session_id: str) -> Optional[Dict[str, Any]]:
+        session = self.db.get_session(session_id)
+        if not session:
+            return None
+        result = self.db.get_latest_result(session_id)
+        if not result:
+            return {
+                "session_id": session_id,
+                "status": session.get("status"),
+                "scorecard": None,
+            }
+        normalized_json = result.get("normalized_json") if isinstance(result.get("normalized_json"), dict) else {}
+        transcription_scoring = (
+            normalized_json.get("transcription_scoring")
+            if isinstance(normalized_json.get("transcription_scoring"), dict)
+            else {}
+        )
+        return {
+            "session_id": session_id,
+            "status": session.get("status"),
+            "scorecard": {
+                "technical_score": result.get("technical_score"),
+                "soft_skills_score": result.get("soft_skills_score"),
+                "culture_fit_score": result.get("culture_fit_score"),
+                "total_score": result.get("total_score"),
+                "score_confidence": result.get("score_confidence"),
+                "pass_recommendation": result.get("pass_recommendation"),
+                "transcription_scoring": transcription_scoring,
             },
         }
 
@@ -380,7 +414,28 @@ class InterviewService:
                 "error": {"code": err_code, "message": err_message},
             }
 
+        transcription_scoring: Dict[str, Any] = {}
+        if self.transcription_scoring_engine is not None:
+            try:
+                transcription_scoring = self.transcription_scoring_engine.score_provider_payload(raw)
+            except Exception as exc:
+                transcription_scoring = {
+                    "applied": False,
+                    "reason": f"transcription_scoring_failed: {exc}",
+                    "scores": {},
+                    "question_scores": [],
+                }
+
+        if transcription_scoring.get("applied") and isinstance(transcription_scoring.get("scores"), dict):
+            raw = dict(raw)
+            raw["scores"] = dict(transcription_scoring.get("scores") or {})
+            raw["transcription_scoring"] = transcription_scoring
+
         normalized = self.scoring_engine.normalize_provider_result(raw)
+        if transcription_scoring:
+            normalized_json = normalized.get("normalized_json") if isinstance(normalized.get("normalized_json"), dict) else {}
+            normalized_json["transcription_scoring"] = transcription_scoring
+            normalized["normalized_json"] = normalized_json
         self.db.insert_result(
             session_id=session_id,
             provider_result_id=raw.get("result_id"),
@@ -422,6 +477,11 @@ class InterviewService:
                 "culture_fit_score": normalized.get("culture_fit_score"),
                 "total_score": normalized.get("total_score"),
                 "score_confidence": normalized.get("score_confidence"),
+                "question_scores": (
+                    transcription_scoring.get("question_scores")
+                    if isinstance(transcription_scoring.get("question_scores"), list)
+                    else []
+                ),
             },
         }
 
@@ -546,10 +606,21 @@ class InterviewService:
     def _format_result(result: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         if not result:
             return None
+        normalized_json = result.get("normalized_json") if isinstance(result.get("normalized_json"), dict) else {}
+        transcription_scoring = (
+            normalized_json.get("transcription_scoring")
+            if isinstance(normalized_json.get("transcription_scoring"), dict)
+            else {}
+        )
         return {
             "technical_score": result.get("technical_score"),
             "soft_skills_score": result.get("soft_skills_score"),
             "culture_fit_score": result.get("culture_fit_score"),
             "total_score": result.get("total_score"),
             "score_confidence": result.get("score_confidence"),
+            "question_scores": (
+                transcription_scoring.get("question_scores")
+                if isinstance(transcription_scoring.get("question_scores"), list)
+                else []
+            ),
         }

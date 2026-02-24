@@ -15,6 +15,15 @@ Required Render envs for this service:
 Service reads JD/candidates from main API via:
 - `TENER_INTERVIEW_SOURCE_API_BASE=https://tener-ai-v1.onrender.com`
 
+Custom transcription scoring criteria file:
+- `config/interview_transcription_scoring_criteria.json`
+- env override: `TENER_INTERVIEW_TRANSCRIPTION_SCORING_CRITERIA_PATH`
+
+Total candidate score formula file:
+- `config/interview_total_score_formula.json`
+- env override: `TENER_INTERVIEW_TOTAL_SCORE_FORMULA_PATH`
+- includes weights (`technical/soft_skills/culture_fit`), missing strategy, and recommendation thresholds
+
 ## 0) Get Hireflix `position_id` (assessment analog)
 
 List positions:
@@ -111,6 +120,14 @@ curl -sS "http://127.0.0.1:8090/api/jobs/1/interview-leaderboard?limit=50"
 ```
 
 This response is ready for candidate ranking in dashboard.
+
+## 6.1) Get per-question scorecard
+
+```bash
+curl -sS "http://127.0.0.1:8090/api/interviews/sessions/<SESSION_ID>/scorecard"
+```
+
+This returns dimension scores + `transcription_scoring.question_scores` with `0..100` for each question.
 
 ## 7) Batch run for multiple candidates
 

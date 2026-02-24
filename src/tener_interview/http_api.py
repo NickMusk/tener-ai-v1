@@ -17,6 +17,7 @@ from .service import InterviewService
 from .source_api import SourceAPIClient
 from .source_db import SourceReadDatabase
 from .token_service import InterviewTokenService
+from .transcription_scoring import TranscriptionScoringEngine
 
 
 def project_root() -> Path:
@@ -60,12 +61,18 @@ def build_services() -> Dict[str, Any]:
         provider_name = "hireflix_mock"
 
     token_service = InterviewTokenService(secret=config.token_secret)
-    scoring_engine = InterviewScoringEngine()
+    scoring_engine = InterviewScoringEngine(
+        formula_path=config.total_score_formula_path,
+    )
+    transcription_scoring_engine = TranscriptionScoringEngine(
+        criteria_path=config.transcription_scoring_criteria_path,
+    )
     service = InterviewService(
         db=db,
         provider=provider,
         token_service=token_service,
         scoring_engine=scoring_engine,
+        transcription_scoring_engine=transcription_scoring_engine,
         default_ttl_hours=config.token_ttl_hours,
         public_base_url=config.public_base_url,
     )
@@ -111,6 +118,7 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
                         "health": "GET /health",
                         "start_session": "POST /api/interviews/sessions/start",
                         "get_session": "GET /api/interviews/sessions/{session_id}",
+                        "get_scorecard": "GET /api/interviews/sessions/{session_id}/scorecard",
                         "refresh_session": "POST /api/interviews/sessions/{session_id}/refresh",
                         "list_sessions": "GET /api/interviews/sessions?job_id=1&status=in_progress&limit=100",
                         "entry_link": "GET /i/{token}",
@@ -123,6 +131,8 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
                     "provider": SERVICES.get("provider_name"),
                     "provider_error": SERVICES.get("provider_error") or None,
                     "source_db": SERVICES["source_db"].status(),
+                    "transcription_scoring_criteria_path": SERVICES["config"].transcription_scoring_criteria_path,
+                    "total_score_formula_path": SERVICES["config"].total_score_formula_path,
                 },
             )
             return
@@ -197,6 +207,16 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path.startswith("/api/interviews/sessions/"):
+            scorecard_m = re.match(r"^/api/interviews/sessions/([^/]+)/scorecard$", parsed.path)
+            if scorecard_m:
+                session_id = scorecard_m.group(1)
+                scorecard = SERVICES["interview"].get_session_scorecard(session_id)
+                if not scorecard:
+                    self._json_response(HTTPStatus.NOT_FOUND, self._error("INTERVIEW_SESSION_NOT_FOUND", "session not found"))
+                    return
+                self._json_response(HTTPStatus.OK, scorecard)
+                return
+
             m = re.match(r"^/api/interviews/sessions/([^/]+)$", parsed.path)
             if not m:
                 self._json_response(HTTPStatus.BAD_REQUEST, self._error("INTERVIEW_SESSION_ID_INVALID", "invalid session id"))

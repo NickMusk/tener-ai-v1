@@ -11,6 +11,8 @@ class InterviewModuleConfig:
     source_db_path: str
     source_api_base: str
     source_api_timeout_seconds: int
+    transcription_scoring_criteria_path: str
+    total_score_formula_path: str
     host: str
     port: int
     token_secret: str
@@ -35,6 +37,14 @@ class InterviewModuleConfig:
         source_db_path = os.environ.get(
             "TENER_INTERVIEW_SOURCE_DB_PATH",
             str(root / "runtime" / "tener_v1.sqlite3"),
+        )
+        transcription_scoring_criteria_path = os.environ.get(
+            "TENER_INTERVIEW_TRANSCRIPTION_SCORING_CRITERIA_PATH",
+            str(root / "config" / "interview_transcription_scoring_criteria.json"),
+        )
+        total_score_formula_path = os.environ.get(
+            "TENER_INTERVIEW_TOTAL_SCORE_FORMULA_PATH",
+            str(root / "config" / "interview_total_score_formula.json"),
         )
         host = os.environ.get("TENER_INTERVIEW_HOST", "127.0.0.1")
         port_raw = os.environ.get("TENER_INTERVIEW_PORT", "8090")
@@ -81,6 +91,8 @@ class InterviewModuleConfig:
             source_db_path=source_db_path,
             source_api_base=source_api_base,
             source_api_timeout_seconds=max(3, source_timeout_seconds),
+            transcription_scoring_criteria_path=transcription_scoring_criteria_path,
+            total_score_formula_path=total_score_formula_path,
             host=host,
             port=port,
             token_secret=token_secret,

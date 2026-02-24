@@ -1,0 +1,14 @@
+{
+  "version": "1.0",
+  "weights": {
+    "technical": 0.5,
+    "soft_skills": 0.3,
+    "culture_fit": 0.2
+  },
+  "missing_dimensions_strategy": "renormalize",
+  "recommendation_thresholds": {
+    "strong_yes": 85,
+    "yes": 75,
+    "mixed": 60
+  }
+}
