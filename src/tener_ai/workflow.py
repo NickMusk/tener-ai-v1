@@ -8,6 +8,9 @@ from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .db import Database
 from .pre_resume_service import PreResumeCommunicationService
 
+FORCED_TEST_PUBLIC_IDENTIFIER = "olena-bachek-b8523121a"
+FORCED_TEST_SCORE = 0.99
+
 
 @dataclass
 class WorkflowSummary:
@@ -47,17 +50,26 @@ class WorkflowService:
         self.contact_all_mode = contact_all_mode
         self.require_resume_before_final_verify = require_resume_before_final_verify
         self.stage_instructions = dict(stage_instructions or {})
+        self.forced_test_public_identifier = FORCED_TEST_PUBLIC_IDENTIFIER
+        self.forced_test_score = FORCED_TEST_SCORE
 
     def source_candidates(self, job_id: int, limit: int = 30) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
         profiles = self.sourcing_agent.find_candidates(job=job, limit=limit)
+        profiles = self._inject_forced_test_candidate(job=job, profiles=profiles, limit=limit)
+        forced_included = any(self._is_forced_test_candidate(p) for p in profiles)
 
         self.db.log_operation(
             operation="agent.sourcing.search",
             status="ok",
             entity_type="job",
             entity_id=str(job_id),
-            details={"profiles_found": len(profiles), "limit": limit},
+            details={
+                "profiles_found": len(profiles),
+                "limit": limit,
+                "forced_test_public_identifier": self.forced_test_public_identifier,
+                "forced_test_included": forced_included,
+            },
         )
         return {
             "job_id": job_id,
@@ -78,6 +90,17 @@ class WorkflowService:
 
         for profile in enriched_profiles:
             score, status, notes = self.verification_agent.verify_candidate(job=job, profile=profile)
+            if self._is_forced_test_candidate(profile):
+                score = max(float(score), self.forced_test_score)
+                status = "verified"
+                notes = dict(notes or {})
+                notes["forced_test_candidate"] = True
+                notes["forced_test_public_identifier"] = self.forced_test_public_identifier
+                notes["forced_score"] = self.forced_test_score
+                notes["human_explanation"] = (
+                    "Тестовый кандидат принудительно приоритизирован: "
+                    f"score установлен на {self.forced_test_score}."
+                )
             if self.contact_all_mode and status == "rejected":
                 status = "needs_resume"
                 notes = dict(notes)
@@ -1044,6 +1067,155 @@ class WorkflowService:
             details={"delivery": delivery},
         )
         return delivery
+
+    def _inject_forced_test_candidate(
+        self,
+        job: Dict[str, Any],
+        profiles: List[Dict[str, Any]],
+        limit: int,
+    ) -> List[Dict[str, Any]]:
+        forced = self._resolve_forced_test_candidate(job=job)
+        if not forced:
+            return profiles
+
+        target_limit = max(1, min(int(limit or 1), 100))
+        forced = self._mark_forced_test_candidate(forced)
+
+        merged: List[Dict[str, Any]] = [forced]
+        seen = {self._profile_identity_key(forced)}
+
+        for profile in profiles:
+            key = self._profile_identity_key(profile)
+            if key in seen:
+                continue
+            if self._is_forced_test_candidate(profile):
+                profile = self._mark_forced_test_candidate(profile)
+                key = self._profile_identity_key(profile)
+            merged.append(profile)
+            seen.add(key)
+            if len(merged) >= target_limit:
+                break
+
+        return merged[:target_limit]
+
+    def _resolve_forced_test_candidate(self, job: Dict[str, Any]) -> Dict[str, Any] | None:
+        provider = getattr(self.sourcing_agent, "linkedin_provider", None)
+        if provider is None:
+            return None
+        provider_name = provider.__class__.__name__.lower()
+        # Keep this hardcoded override for real Unipile runs and avoid perturbing mock/offline tests.
+        if "unipile" not in provider_name:
+            return None
+
+        search_fn = getattr(provider, "search_profiles", None)
+        if not callable(search_fn):
+            return None
+
+        fallback = {
+            "linkedin_id": self.forced_test_public_identifier,
+            "unipile_profile_id": self.forced_test_public_identifier,
+            "attendee_provider_id": self.forced_test_public_identifier,
+            "full_name": "Olena Bachek (Test)",
+            "headline": "Senior Backend Engineer",
+            "location": str(job.get("location") or "Remote"),
+            "languages": ["en"],
+            "skills": [],
+            "years_experience": 8,
+            "raw": {
+                "public_identifier": self.forced_test_public_identifier,
+                "forced_test_candidate": True,
+                "source": "workflow_fallback",
+            },
+        }
+
+        try:
+            found = search_fn(query=self.forced_test_public_identifier, limit=20) or []
+        except Exception:
+            return fallback
+
+        if not isinstance(found, list) or not found:
+            return fallback
+
+        for profile in found:
+            if isinstance(profile, dict) and self._is_forced_test_candidate(profile):
+                return profile
+
+        for profile in found:
+            if not isinstance(profile, dict):
+                continue
+            raw = profile.get("raw") if isinstance(profile.get("raw"), dict) else {}
+            public_identifier = str(raw.get("public_identifier") or "").strip().lower()
+            if public_identifier == self.forced_test_public_identifier:
+                return profile
+
+        first = found[0]
+        if isinstance(first, dict):
+            return first
+        return fallback
+
+    def _mark_forced_test_candidate(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        out = dict(profile)
+        raw = out.get("raw") if isinstance(out.get("raw"), dict) else {}
+        raw = dict(raw)
+        raw["forced_test_candidate"] = True
+        raw["forced_test_public_identifier"] = self.forced_test_public_identifier
+        raw.setdefault("public_identifier", self.forced_test_public_identifier)
+        out["raw"] = raw
+
+        if not str(out.get("linkedin_id") or "").strip():
+            out["linkedin_id"] = self.forced_test_public_identifier
+        if not str(out.get("attendee_provider_id") or "").strip():
+            out["attendee_provider_id"] = str(out.get("linkedin_id") or self.forced_test_public_identifier)
+        if not str(out.get("unipile_profile_id") or "").strip():
+            out["unipile_profile_id"] = str(out.get("linkedin_id") or self.forced_test_public_identifier)
+        if not str(out.get("full_name") or "").strip():
+            out["full_name"] = "Olena Bachek (Test)"
+        if not isinstance(out.get("languages"), list) or not out.get("languages"):
+            out["languages"] = ["en"]
+        if not str(out.get("location") or "").strip():
+            out["location"] = "Remote"
+        return out
+
+    def _is_forced_test_candidate(self, profile: Dict[str, Any]) -> bool:
+        target = self.forced_test_public_identifier
+        for field in ("linkedin_id", "attendee_provider_id", "unipile_profile_id", "provider_id"):
+            value = str(profile.get(field) or "").strip().lower()
+            if value == target:
+                return True
+
+        raw = profile.get("raw")
+        if not isinstance(raw, dict):
+            return False
+
+        if bool(raw.get("forced_test_candidate")):
+            return True
+
+        buckets = [raw]
+        if isinstance(raw.get("detail"), dict):
+            buckets.append(raw["detail"])
+        if isinstance(raw.get("search"), dict):
+            buckets.append(raw["search"])
+
+        for bucket in buckets:
+            public_identifier = str(bucket.get("public_identifier") or "").strip().lower()
+            if public_identifier == target:
+                return True
+        return False
+
+    @staticmethod
+    def _profile_identity_key(profile: Dict[str, Any]) -> str:
+        for field in ("linkedin_id", "unipile_profile_id", "attendee_provider_id", "provider_id", "id"):
+            value = profile.get(field)
+            if isinstance(value, str) and value.strip():
+                return f"id:{value.strip().lower()}"
+        raw = profile.get("raw")
+        if isinstance(raw, dict):
+            public_identifier = raw.get("public_identifier")
+            if isinstance(public_identifier, str) and public_identifier.strip():
+                return f"public:{public_identifier.strip().lower()}"
+        name = str(profile.get("full_name") or profile.get("name") or "").strip().lower()
+        headline = str(profile.get("headline") or "").strip().lower()
+        return f"fallback:{name}|{headline}"
 
     def _get_job_or_raise(self, job_id: int) -> Dict[str, Any]:
         job = self.db.get_job(job_id)
