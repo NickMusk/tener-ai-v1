@@ -84,6 +84,7 @@ class Database:
             channel TEXT NOT NULL,
             status TEXT NOT NULL,
             external_chat_id TEXT UNIQUE,
+            linkedin_account_id INTEGER,
             last_message_at TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY(job_id) REFERENCES jobs(id),
@@ -177,6 +178,85 @@ class Database:
             UNIQUE(job_id, candidate_id, agent_key, stage_key),
             FOREIGN KEY(job_id) REFERENCES jobs(id),
             FOREIGN KEY(candidate_id) REFERENCES candidates(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS linkedin_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            provider TEXT NOT NULL,
+            provider_account_id TEXT NOT NULL UNIQUE,
+            provider_user_id TEXT,
+            label TEXT,
+            status TEXT NOT NULL,
+            metadata TEXT,
+            connected_at TEXT,
+            last_synced_at TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS linkedin_onboarding_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL UNIQUE,
+            provider TEXT NOT NULL,
+            status TEXT NOT NULL,
+            state_nonce TEXT NOT NULL,
+            state_expires_at TEXT NOT NULL,
+            redirect_uri TEXT,
+            connect_url TEXT,
+            provider_account_id TEXT,
+            error TEXT,
+            metadata TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_linkedin_accounts_status
+            ON linkedin_accounts(status);
+        CREATE INDEX IF NOT EXISTS idx_linkedin_onboarding_sessions_status
+            ON linkedin_onboarding_sessions(status);
+        CREATE INDEX IF NOT EXISTS idx_linkedin_onboarding_sessions_provider_account
+            ON linkedin_onboarding_sessions(provider_account_id);
+
+        CREATE TABLE IF NOT EXISTS outbound_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL,
+            candidate_id INTEGER NOT NULL,
+            conversation_id INTEGER NOT NULL,
+            action_type TEXT NOT NULL,
+            status TEXT NOT NULL,
+            priority INTEGER NOT NULL DEFAULT 0,
+            not_before TEXT NOT NULL,
+            attempts INTEGER NOT NULL DEFAULT 0,
+            account_id INTEGER,
+            payload_json TEXT NOT NULL,
+            result_json TEXT,
+            last_error TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_outbound_actions_status_due
+            ON outbound_actions(status, not_before, priority DESC, id ASC);
+        CREATE INDEX IF NOT EXISTS idx_outbound_actions_job
+            ON outbound_actions(job_id, status, id DESC);
+
+        CREATE TABLE IF NOT EXISTS linkedin_account_daily_counters (
+            account_id INTEGER NOT NULL,
+            day_utc TEXT NOT NULL,
+            connect_sent INTEGER NOT NULL DEFAULT 0,
+            new_threads_sent INTEGER NOT NULL DEFAULT 0,
+            replies_sent INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(account_id, day_utc)
+        );
+
+        CREATE TABLE IF NOT EXISTS linkedin_account_weekly_counters (
+            account_id INTEGER NOT NULL,
+            week_start_utc TEXT NOT NULL,
+            connect_sent INTEGER NOT NULL DEFAULT 0,
+            new_threads_sent INTEGER NOT NULL DEFAULT 0,
+            replies_sent INTEGER NOT NULL DEFAULT 0,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(account_id, week_start_utc)
         );
         """
         with self.transaction() as conn:
@@ -573,6 +653,18 @@ class Database:
             )
             return cur.rowcount > 0
 
+    def set_conversation_linkedin_account(self, conversation_id: int, account_id: Optional[int]) -> bool:
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                UPDATE conversations
+                SET linkedin_account_id = ?
+                WHERE id = ?
+                """,
+                (account_id, conversation_id),
+            )
+            return cur.rowcount > 0
+
     def list_conversations_overview(self, limit: int = 200, job_id: Optional[int] = None) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(limit, 2000))
         where = ""
@@ -689,6 +781,528 @@ class Database:
             (max(1, min(limit, 1000)),),
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
+
+    def create_outbound_action(
+        self,
+        *,
+        job_id: int,
+        candidate_id: int,
+        conversation_id: int,
+        action_type: str,
+        payload: Dict[str, Any],
+        priority: int = 0,
+        not_before: Optional[str] = None,
+    ) -> int:
+        now = utc_now_iso()
+        due = str(not_before or now)
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO outbound_actions (
+                    job_id, candidate_id, conversation_id, action_type, status, priority,
+                    not_before, attempts, account_id, payload_json, result_json, last_error,
+                    created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, 'pending', ?, ?, 0, NULL, ?, NULL, NULL, ?, ?)
+                """,
+                (
+                    job_id,
+                    candidate_id,
+                    conversation_id,
+                    action_type,
+                    int(priority),
+                    due,
+                    json.dumps(payload or {}),
+                    now,
+                    now,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def list_pending_outbound_actions(
+        self,
+        *,
+        limit: int = 100,
+        job_id: Optional[int] = None,
+        action_ids: Optional[List[int]] = None,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 100), 2000))
+        args: List[Any] = [utc_now_iso()]
+        where_parts = ["status = 'pending'", "not_before <= ?"]
+        if job_id is not None:
+            where_parts.append("job_id = ?")
+            args.append(int(job_id))
+        if action_ids:
+            valid_ids = [int(x) for x in action_ids if int(x) > 0]
+            if valid_ids:
+                placeholders = ",".join(["?"] * len(valid_ids))
+                where_parts.append(f"id IN ({placeholders})")
+                args.extend(valid_ids)
+        query = f"""
+        SELECT *
+        FROM outbound_actions
+        WHERE {' AND '.join(where_parts)}
+        ORDER BY priority DESC, id ASC
+        LIMIT ?
+        """
+        args.append(safe_limit)
+        rows = self._conn.execute(query, tuple(args)).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def claim_outbound_action(self, action_id: int) -> bool:
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                UPDATE outbound_actions
+                SET
+                    status = 'running',
+                    attempts = attempts + 1,
+                    updated_at = ?
+                WHERE id = ? AND status = 'pending'
+                """,
+                (utc_now_iso(), int(action_id)),
+            )
+            return cur.rowcount > 0
+
+    def complete_outbound_action(
+        self,
+        *,
+        action_id: int,
+        status: str,
+        account_id: Optional[int] = None,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+    ) -> bool:
+        normalized = str(status or "").strip().lower() or "completed"
+        if normalized not in {"completed", "failed", "pending"}:
+            normalized = "completed"
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                UPDATE outbound_actions
+                SET
+                    status = ?,
+                    account_id = ?,
+                    result_json = ?,
+                    last_error = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    normalized,
+                    account_id,
+                    json.dumps(result or {}),
+                    (str(error or "")[:400] or None),
+                    utc_now_iso(),
+                    int(action_id),
+                ),
+            )
+            return cur.rowcount > 0
+
+    def release_outbound_action(
+        self,
+        *,
+        action_id: int,
+        not_before: str,
+        error: Optional[str] = None,
+    ) -> bool:
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                UPDATE outbound_actions
+                SET
+                    status = 'pending',
+                    not_before = ?,
+                    last_error = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    str(not_before),
+                    (str(error or "")[:400] or None),
+                    utc_now_iso(),
+                    int(action_id),
+                ),
+            )
+            return cur.rowcount > 0
+
+    def get_outbound_action(self, action_id: int) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            "SELECT * FROM outbound_actions WHERE id = ?",
+            (int(action_id),),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def get_linkedin_account_daily_counter(self, account_id: int, day_utc: str) -> Dict[str, Any]:
+        row = self._conn.execute(
+            """
+            SELECT *
+            FROM linkedin_account_daily_counters
+            WHERE account_id = ? AND day_utc = ?
+            """,
+            (int(account_id), str(day_utc)),
+        ).fetchone()
+        if not row:
+            return {
+                "account_id": int(account_id),
+                "day_utc": str(day_utc),
+                "connect_sent": 0,
+                "new_threads_sent": 0,
+                "replies_sent": 0,
+            }
+        return self._row_to_dict(row)
+
+    def get_linkedin_account_weekly_counter(self, account_id: int, week_start_utc: str) -> Dict[str, Any]:
+        row = self._conn.execute(
+            """
+            SELECT *
+            FROM linkedin_account_weekly_counters
+            WHERE account_id = ? AND week_start_utc = ?
+            """,
+            (int(account_id), str(week_start_utc)),
+        ).fetchone()
+        if not row:
+            return {
+                "account_id": int(account_id),
+                "week_start_utc": str(week_start_utc),
+                "connect_sent": 0,
+                "new_threads_sent": 0,
+                "replies_sent": 0,
+            }
+        return self._row_to_dict(row)
+
+    def increment_linkedin_account_counters(
+        self,
+        *,
+        account_id: int,
+        day_utc: str,
+        week_start_utc: str,
+        connect_delta: int = 0,
+        new_threads_delta: int = 0,
+        replies_delta: int = 0,
+    ) -> None:
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO linkedin_account_daily_counters (
+                    account_id, day_utc, connect_sent, new_threads_sent, replies_sent, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(account_id, day_utc)
+                DO UPDATE SET
+                    connect_sent = connect_sent + excluded.connect_sent,
+                    new_threads_sent = new_threads_sent + excluded.new_threads_sent,
+                    replies_sent = replies_sent + excluded.replies_sent,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    int(account_id),
+                    str(day_utc),
+                    int(connect_delta),
+                    int(new_threads_delta),
+                    int(replies_delta),
+                    now,
+                ),
+            )
+            conn.execute(
+                """
+                INSERT INTO linkedin_account_weekly_counters (
+                    account_id, week_start_utc, connect_sent, new_threads_sent, replies_sent, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(account_id, week_start_utc)
+                DO UPDATE SET
+                    connect_sent = connect_sent + excluded.connect_sent,
+                    new_threads_sent = new_threads_sent + excluded.new_threads_sent,
+                    replies_sent = replies_sent + excluded.replies_sent,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    int(account_id),
+                    str(week_start_utc),
+                    int(connect_delta),
+                    int(new_threads_delta),
+                    int(replies_delta),
+                    now,
+                ),
+            )
+
+    def create_linkedin_onboarding_session(
+        self,
+        session_id: str,
+        provider: str,
+        state_nonce: str,
+        state_expires_at: str,
+        redirect_uri: str,
+        connect_url: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO linkedin_onboarding_sessions (
+                    session_id, provider, status, state_nonce, state_expires_at, redirect_uri,
+                    connect_url, provider_account_id, error, metadata, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?)
+                """,
+                (
+                    session_id,
+                    provider,
+                    "pending",
+                    state_nonce,
+                    state_expires_at,
+                    redirect_uri,
+                    connect_url,
+                    json.dumps(metadata or {}),
+                    now,
+                    now,
+                ),
+            )
+
+    def get_linkedin_onboarding_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            "SELECT * FROM linkedin_onboarding_sessions WHERE session_id = ? ORDER BY id DESC LIMIT 1",
+            (session_id,),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def update_linkedin_onboarding_session_status(
+        self,
+        session_id: str,
+        status: str,
+        provider_account_id: Optional[str] = None,
+        error: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        with self.transaction() as conn:
+            existing_row = conn.execute(
+                """
+                SELECT metadata
+                FROM linkedin_onboarding_sessions
+                WHERE session_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (session_id,),
+            ).fetchone()
+            merged_metadata: Dict[str, Any] = {}
+            if existing_row and existing_row["metadata"]:
+                try:
+                    merged_metadata = json.loads(existing_row["metadata"])
+                except json.JSONDecodeError:
+                    merged_metadata = {}
+            if metadata:
+                merged_metadata.update(metadata)
+            cur = conn.execute(
+                """
+                UPDATE linkedin_onboarding_sessions
+                SET
+                    status = ?,
+                    provider_account_id = ?,
+                    error = ?,
+                    metadata = ?,
+                    updated_at = ?
+                WHERE session_id = ?
+                """,
+                (
+                    status,
+                    provider_account_id,
+                    error,
+                    json.dumps(merged_metadata),
+                    utc_now_iso(),
+                    session_id,
+                ),
+            )
+            return cur.rowcount > 0
+
+    def upsert_linkedin_account(
+        self,
+        provider: str,
+        provider_account_id: str,
+        status: str,
+        *,
+        label: Optional[str] = None,
+        provider_user_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        connected_at: Optional[str] = None,
+        last_synced_at: Optional[str] = None,
+    ) -> int:
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            existing = conn.execute(
+                """
+                SELECT id, metadata, connected_at
+                FROM linkedin_accounts
+                WHERE provider_account_id = ?
+                ORDER BY id DESC
+                LIMIT 1
+                """,
+                (provider_account_id,),
+            ).fetchone()
+            merged_metadata: Dict[str, Any] = {}
+            if existing and existing["metadata"]:
+                try:
+                    merged_metadata = json.loads(existing["metadata"])
+                except json.JSONDecodeError:
+                    merged_metadata = {}
+            if metadata:
+                merged_metadata.update(metadata)
+            normalized_connected_at = connected_at
+            if not normalized_connected_at:
+                if status == "connected":
+                    normalized_connected_at = (existing["connected_at"] if existing else None) or now
+                elif existing:
+                    normalized_connected_at = existing["connected_at"]
+            normalized_last_synced_at = last_synced_at or now
+
+            if existing:
+                account_id = int(existing["id"])
+                conn.execute(
+                    """
+                    UPDATE linkedin_accounts
+                    SET
+                        provider = ?,
+                        provider_user_id = COALESCE(?, provider_user_id),
+                        label = COALESCE(?, label),
+                        status = ?,
+                        metadata = ?,
+                        connected_at = ?,
+                        last_synced_at = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        provider,
+                        provider_user_id,
+                        label,
+                        status,
+                        json.dumps(merged_metadata),
+                        normalized_connected_at,
+                        normalized_last_synced_at,
+                        now,
+                        account_id,
+                    ),
+                )
+                return account_id
+
+            cur = conn.execute(
+                """
+                INSERT INTO linkedin_accounts (
+                    provider,
+                    provider_account_id,
+                    provider_user_id,
+                    label,
+                    status,
+                    metadata,
+                    connected_at,
+                    last_synced_at,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    provider,
+                    provider_account_id,
+                    provider_user_id,
+                    label,
+                    status,
+                    json.dumps(merged_metadata),
+                    normalized_connected_at,
+                    normalized_last_synced_at,
+                    now,
+                    now,
+                ),
+            )
+            return int(cur.lastrowid)
+
+    def get_linkedin_account(self, account_id: int) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            "SELECT * FROM linkedin_accounts WHERE id = ?",
+            (account_id,),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def get_linkedin_account_by_provider_account_id(self, provider_account_id: str) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            """
+            SELECT *
+            FROM linkedin_accounts
+            WHERE provider_account_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (provider_account_id,),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def list_linkedin_accounts(self, limit: int = 200, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(limit, 2000))
+        if status:
+            rows = self._conn.execute(
+                """
+                SELECT *
+                FROM linkedin_accounts
+                WHERE status = ?
+                ORDER BY updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (status, safe_limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT *
+                FROM linkedin_accounts
+                ORDER BY updated_at DESC, id DESC
+                LIMIT ?
+                """,
+                (safe_limit,),
+            ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def update_linkedin_account_status(
+        self,
+        account_id: int,
+        status: str,
+        *,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        with self.transaction() as conn:
+            existing = conn.execute(
+                "SELECT metadata FROM linkedin_accounts WHERE id = ?",
+                (account_id,),
+            ).fetchone()
+            if not existing:
+                return False
+            merged_metadata: Dict[str, Any] = {}
+            if existing["metadata"]:
+                try:
+                    merged_metadata = json.loads(existing["metadata"])
+                except json.JSONDecodeError:
+                    merged_metadata = {}
+            if metadata:
+                merged_metadata.update(metadata)
+            cur = conn.execute(
+                """
+                UPDATE linkedin_accounts
+                SET
+                    status = ?,
+                    metadata = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    status,
+                    json.dumps(merged_metadata),
+                    utc_now_iso(),
+                    account_id,
+                ),
+            )
+            return cur.rowcount > 0
 
     def upsert_pre_resume_session(
         self,
@@ -1126,6 +1740,9 @@ class Database:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE conversations ADD COLUMN external_chat_id TEXT")
                 conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_conversations_external_chat_id ON conversations(external_chat_id)")
+        if "linkedin_account_id" not in columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE conversations ADD COLUMN linkedin_account_id INTEGER")
 
     def _table_columns(self, table_name: str) -> List[str]:
         rows = self._conn.execute(f"PRAGMA table_info({table_name})").fetchall()
@@ -1140,10 +1757,13 @@ class Database:
             "skills",
             "verification_notes",
             "meta",
+            "metadata",
             "details",
             "resume_links",
             "state_json",
             "output_json",
+            "payload_json",
+            "result_json",
         ):
             if field in item and item[field]:
                 try:

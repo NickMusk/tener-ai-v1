@@ -12,6 +12,7 @@ from typing import Any, Dict, List
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .db import Database
 from .instructions import AgentEvaluationPlaybook
+from .linkedin_provider import UnipileLinkedInProvider
 from .pre_resume_service import PreResumeCommunicationService
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
@@ -61,6 +62,12 @@ class WorkflowService:
         interview_invite_ttl_hours: int = 72,
         interview_max_followups: int = 2,
         interview_followup_delays_hours: List[float] | None = None,
+        linkedin_outreach_policy: Dict[str, Any] | None = None,
+        managed_linkedin_enabled: bool = True,
+        managed_linkedin_dispatch_inline: bool = True,
+        managed_unipile_api_key: str = "",
+        managed_unipile_base_url: str = "https://api.unipile.com",
+        managed_unipile_timeout_seconds: int = 30,
     ) -> None:
         self.db = db
         self.sourcing_agent = sourcing_agent
@@ -108,6 +115,15 @@ class WorkflowService:
             )
         )
         self.test_job_keywords = [x.strip().lower() for x in raw_keywords.split(",") if x.strip()]
+        self.linkedin_outreach_policy = dict(linkedin_outreach_policy or {})
+        self.managed_linkedin_enabled = bool(managed_linkedin_enabled)
+        self.managed_linkedin_dispatch_inline = bool(managed_linkedin_dispatch_inline)
+        self.managed_unipile_api_key = str(managed_unipile_api_key or "").strip()
+        self.managed_unipile_base_url = str(managed_unipile_base_url or "https://api.unipile.com").strip()
+        try:
+            self.managed_unipile_timeout_seconds = max(5, int(managed_unipile_timeout_seconds))
+        except (TypeError, ValueError):
+            self.managed_unipile_timeout_seconds = 30
 
     def source_candidates(self, job_id: int, limit: int = 30, test_mode: bool | None = None) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
@@ -323,6 +339,195 @@ class WorkflowService:
         }
 
     def outreach_candidates(self, job_id: int, candidate_ids: List[int], test_mode: bool | None = None) -> Dict[str, Any]:
+        if self._managed_linkedin_available():
+            return self._outreach_candidates_managed(job_id=job_id, candidate_ids=candidate_ids, test_mode=test_mode)
+        return self._outreach_candidates_direct(job_id=job_id, candidate_ids=candidate_ids, test_mode=test_mode)
+
+    def _outreach_candidates_managed(self, job_id: int, candidate_ids: List[int], test_mode: bool | None = None) -> Dict[str, Any]:
+        job = self._get_job_or_raise(job_id)
+        forced_identifiers = self._load_forced_test_identifiers()
+        forced_lookup = self._build_forced_identifier_lookup(job=job, forced_identifiers=forced_identifiers)
+        forced_only = self._effective_test_mode(job=job, test_mode=test_mode, forced_identifiers=forced_identifiers)
+
+        out_items: List[Dict[str, Any]] = []
+        conversation_ids: List[int] = []
+        queued_action_ids: List[int] = []
+        failed = 0
+        test_filter_skipped = 0
+
+        for raw_id in candidate_ids:
+            try:
+                candidate_id = int(raw_id)
+            except (TypeError, ValueError):
+                failed += 1
+                continue
+
+            candidate = self.db.get_candidate(candidate_id)
+            if not candidate:
+                failed += 1
+                continue
+            match = self.db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
+            if forced_only:
+                forced_identifier = self._forced_test_identifier_for_profile(candidate, forced_lookup)
+                if not forced_identifier:
+                    forced_identifier = self._forced_test_identifier_from_match(match, forced_lookup)
+                if not forced_identifier:
+                    test_filter_skipped += 1
+                    self.db.log_operation(
+                        operation="agent.outreach.test_filter_skip",
+                        status="skipped",
+                        entity_type="candidate",
+                        entity_id=str(candidate_id),
+                        details={
+                            "job_id": job_id,
+                            "reason": "test_job_forced_only",
+                            "forced_test_ids_file": self.forced_test_ids_path,
+                        },
+                    )
+                    continue
+
+            screening_status = str((match or {}).get("status") or "")
+            request_resume = self.require_resume_before_final_verify or screening_status == "needs_resume"
+            conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+            language = str((candidate.get("languages") or ["en"])[0]).lower()
+            message = ""
+            session_state: Dict[str, Any] | None = None
+            started_pre_resume_session = False
+            pre_resume_session_id = None
+            if request_resume and self.pre_resume_service is not None:
+                pre_resume_session_id = f"pre-{conversation_id}"
+                session = self.db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
+                if session and isinstance(session.get("state_json"), dict):
+                    if self.pre_resume_service.get_session(pre_resume_session_id) is None:
+                        self.pre_resume_service.seed_session(session["state_json"])
+                    session_state = session["state_json"]
+                    language = str(session_state.get("language") or language)
+                else:
+                    started = self.pre_resume_service.start_session(
+                        session_id=pre_resume_session_id,
+                        candidate_name=str(candidate.get("full_name") or "there"),
+                        job_title=str(job.get("title") or "this role"),
+                        scope_summary=self.outreach_agent.matching_engine.summarize_scope(job),
+                        core_profile_summary=", ".join(
+                            self.outreach_agent.matching_engine.build_core_profile(job).get("core_skills") or []
+                        )
+                        or self.outreach_agent.matching_engine.summarize_scope(job),
+                        language=str((candidate.get("languages") or ["en"])[0]).lower(),
+                    )
+                    session_state = started["state"]
+                    language = str(session_state.get("language") or "en")
+                    message = str(started.get("outbound") or "")
+                    started_pre_resume_session = True
+                self.db.upsert_pre_resume_session(
+                    session_id=pre_resume_session_id,
+                    conversation_id=conversation_id,
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    state=session_state,
+                    instruction=self.stage_instructions.get("pre_resume", ""),
+                )
+                if not message:
+                    language, message = self.outreach_agent.compose_screening_message(
+                        job=job,
+                        candidate=candidate,
+                        request_resume=True,
+                    )
+            else:
+                language, message = self.outreach_agent.compose_screening_message(
+                    job=job,
+                    candidate=candidate,
+                    request_resume=request_resume,
+                )
+
+            message = self._compose_linkedin_outreach_message(
+                job=job,
+                candidate=candidate,
+                language=language,
+                fallback_message=message,
+                request_resume=request_resume,
+                state=session_state,
+            )
+            if started_pre_resume_session and pre_resume_session_id and isinstance(session_state, dict):
+                self.db.insert_pre_resume_event(
+                    session_id=pre_resume_session_id,
+                    conversation_id=conversation_id,
+                    event_type="session_started",
+                    intent="started",
+                    inbound_text=None,
+                    outbound_text=message,
+                    state_status=session_state.get("status"),
+                    details={"job_id": job_id, "candidate_id": candidate_id, "source": "outreach"},
+                )
+
+            priority = self._outreach_priority(match=match)
+            action_id = self.db.create_outbound_action(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                conversation_id=conversation_id,
+                action_type="outreach_initial",
+                priority=priority,
+                payload={
+                    "language": language,
+                    "message": message,
+                    "request_resume": bool(request_resume),
+                    "screening_status": screening_status or None,
+                    "pre_resume_session_id": pre_resume_session_id,
+                },
+            )
+            queued_action_ids.append(action_id)
+            out_items.append(
+                {
+                    "candidate_id": candidate_id,
+                    "conversation_id": conversation_id,
+                    "language": language,
+                    "delivery_status": "queued",
+                    "request_resume": request_resume,
+                    "screening_status": screening_status or None,
+                    "pre_resume_session_id": pre_resume_session_id,
+                    "action_id": action_id,
+                }
+            )
+            conversation_ids.append(conversation_id)
+
+        sent = 0
+        pending_connection = 0
+        if self.managed_linkedin_dispatch_inline and queued_action_ids:
+            dispatched = self.dispatch_outbound_actions(limit=len(queued_action_ids), action_ids=queued_action_ids, job_id=job_id)
+            sent = int(dispatched.get("sent") or 0)
+            pending_connection = int(dispatched.get("pending_connection") or 0)
+            failed += int(dispatched.get("failed") or 0)
+            by_action_id = {
+                int(item.get("action_id") or 0): item
+                for item in (dispatched.get("items") or [])
+                if isinstance(item, dict) and int(item.get("action_id") or 0) > 0
+            }
+            for item in out_items:
+                action_id = int(item.get("action_id") or 0)
+                result = by_action_id.get(action_id)
+                if not result:
+                    continue
+                item["delivery_status"] = result.get("delivery_status") or item.get("delivery_status")
+                item["delivery"] = result.get("delivery")
+                item["connect_request"] = result.get("connect_request")
+                item["external_chat_id"] = result.get("external_chat_id")
+                item["chat_binding"] = result.get("chat_binding")
+                item["linkedin_account_id"] = result.get("linkedin_account_id")
+        return {
+            "job_id": job_id,
+            "items": out_items,
+            "conversation_ids": conversation_ids,
+            "sent": sent,
+            "pending_connection": pending_connection,
+            "failed": failed,
+            "queued": len(queued_action_ids),
+            "test_filter_skipped": test_filter_skipped,
+            "test_job_forced_only_active": forced_only,
+            "test_mode_requested": test_mode,
+            "total": len(out_items),
+            "instruction": self.stage_instructions.get("outreach", ""),
+        }
+
+    def _outreach_candidates_direct(self, job_id: int, candidate_ids: List[int], test_mode: bool | None = None) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
         forced_identifiers = self._load_forced_test_identifiers()
         forced_lookup = self._build_forced_identifier_lookup(job=job, forced_identifiers=forced_identifiers)
@@ -2567,10 +2772,436 @@ class WorkflowService:
                 "chat_id": (conversation or {}).get("external_chat_id"),
                 "mock": True,
             }
+        if self._managed_linkedin_available():
+            account_id = int((conversation or {}).get("linkedin_account_id") or 0)
+            if account_id > 0:
+                account = self.db.get_linkedin_account(account_id)
+                provider_account_id = str((account or {}).get("provider_account_id") or "").strip()
+                if provider_account_id:
+                    try:
+                        provider = self._build_managed_provider(account_id=provider_account_id)
+                        out = provider.send_message(candidate_profile=candidate, message=message)
+                        if out.get("sent"):
+                            self._increment_managed_account_counters(
+                                account_id=account_id,
+                                connect_delta=0,
+                                new_threads_delta=0,
+                                replies_delta=1,
+                            )
+                        return out
+                    except Exception as exc:
+                        return {"sent": False, "provider": "linkedin", "error": str(exc)}
         try:
             return self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
         except Exception as exc:
             return {"sent": False, "provider": "linkedin", "error": str(exc)}
+
+    def dispatch_outbound_actions(
+        self,
+        *,
+        limit: int = 100,
+        action_ids: List[int] | None = None,
+        job_id: int | None = None,
+    ) -> Dict[str, Any]:
+        safe_limit = max(1, min(int(limit or 100), 500))
+        rows = self.db.list_pending_outbound_actions(limit=safe_limit, job_id=job_id, action_ids=action_ids)
+        processed = 0
+        sent = 0
+        pending_connection = 0
+        failed = 0
+        deferred = 0
+        items: List[Dict[str, Any]] = []
+
+        for row in rows:
+            action_id = int(row.get("id") or 0)
+            if action_id <= 0:
+                continue
+            if not self.db.claim_outbound_action(action_id):
+                continue
+            processed += 1
+            result = self._dispatch_single_outbound_action(row=row)
+            status = str(result.get("delivery_status") or "").strip().lower()
+            if status == "sent":
+                sent += 1
+            elif status == "pending_connection":
+                pending_connection += 1
+            elif status == "deferred":
+                deferred += 1
+            elif status == "failed":
+                failed += 1
+            items.append(result)
+
+        return {
+            "processed": processed,
+            "sent": sent,
+            "pending_connection": pending_connection,
+            "failed": failed,
+            "deferred": deferred,
+            "items": items,
+        }
+
+    def _dispatch_single_outbound_action(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        action_id = int(row.get("id") or 0)
+        job_id = int(row.get("job_id") or 0)
+        candidate_id = int(row.get("candidate_id") or 0)
+        conversation_id = int(row.get("conversation_id") or 0)
+        payload = row.get("payload_json") if isinstance(row.get("payload_json"), dict) else {}
+        language = str(payload.get("language") or "en").strip().lower() or "en"
+        message = str(payload.get("message") or "").strip()
+        request_resume = bool(payload.get("request_resume"))
+        screening_status = str(payload.get("screening_status") or "")
+        pre_resume_session_id = payload.get("pre_resume_session_id")
+
+        candidate = self.db.get_candidate(candidate_id)
+        conversation = self.db.get_conversation(conversation_id)
+        job = self.db.get_job(job_id)
+        if not candidate or not conversation or not job or not message:
+            error = "action_payload_invalid_or_missing_entities"
+            self.db.complete_outbound_action(
+                action_id=action_id,
+                status="failed",
+                result={"reason": error},
+                error=error,
+            )
+            return {
+                "action_id": action_id,
+                "conversation_id": conversation_id,
+                "candidate_id": candidate_id,
+                "delivery_status": "failed",
+                "error": error,
+            }
+
+        account = self._select_linkedin_account_for_new_thread()
+        if not account:
+            retry_at = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
+            self.db.release_outbound_action(
+                action_id=action_id,
+                not_before=retry_at,
+                error="no_connected_account_or_daily_budget",
+            )
+            return {
+                "action_id": action_id,
+                "conversation_id": conversation_id,
+                "candidate_id": candidate_id,
+                "delivery_status": "deferred",
+                "error": "no_connected_account_or_daily_budget",
+            }
+
+        provider_account_id = str(account.get("provider_account_id") or "").strip()
+        account_id = int(account.get("id") or 0)
+        provider = self._build_managed_provider(account_id=provider_account_id)
+
+        connect_request = None
+        delivery_status = "failed"
+        try:
+            delivery = provider.send_message(candidate_profile=candidate, message=message)
+        except Exception as exc:
+            delivery = {"sent": False, "provider": "unipile", "error": str(exc)}
+
+        if delivery.get("sent"):
+            delivery_status = "sent"
+            self.db.set_conversation_linkedin_account(conversation_id=conversation_id, account_id=account_id)
+            self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+            self.db.update_candidate_match_status(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                status="outreach_sent",
+                extra_notes={"outreach_state": "sent", "linkedin_account_id": account_id},
+            )
+            self._increment_managed_account_counters(account_id=account_id, connect_delta=0, new_threads_delta=1, replies_delta=0)
+        elif self._is_connection_required_error(delivery):
+            if not self._can_send_connect_request(account=account):
+                retry_at = (datetime.now(timezone.utc) + timedelta(hours=12)).isoformat()
+                self.db.release_outbound_action(
+                    action_id=action_id,
+                    not_before=retry_at,
+                    error="connect_budget_reached",
+                )
+                return {
+                    "action_id": action_id,
+                    "conversation_id": conversation_id,
+                    "candidate_id": candidate_id,
+                    "delivery_status": "deferred",
+                    "error": "connect_budget_reached",
+                    "linkedin_account_id": account_id,
+                }
+            _, connect_message = self.outreach_agent.compose_connection_request(job=job, candidate=candidate)
+            try:
+                connect_request = provider.send_connection_request(
+                    candidate_profile=candidate,
+                    message=connect_message,
+                )
+            except Exception as exc:
+                connect_request = {"sent": False, "provider": "unipile", "error": str(exc)}
+
+            if connect_request.get("sent"):
+                delivery_status = "pending_connection"
+                self.db.set_conversation_linkedin_account(conversation_id=conversation_id, account_id=account_id)
+                self.db.update_conversation_status(conversation_id=conversation_id, status="waiting_connection")
+                self.db.update_candidate_match_status(
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    status="outreach_pending_connection",
+                    extra_notes={
+                        "outreach_state": "waiting_connection",
+                        "connect_request": connect_request,
+                        "linkedin_account_id": account_id,
+                    },
+                )
+                self._increment_managed_account_counters(account_id=account_id, connect_delta=1, new_threads_delta=0, replies_delta=0)
+            else:
+                delivery_status = "failed"
+                self.db.log_operation(
+                    operation="agent.outreach.connect_request",
+                    status="error",
+                    entity_type="candidate",
+                    entity_id=str(candidate_id),
+                    details={"job_id": job_id, "connect_request": connect_request, "delivery": delivery},
+                )
+        else:
+            delivery_status = "failed"
+            self.db.log_operation(
+                operation="agent.outreach.delivery_error",
+                status="error",
+                entity_type="candidate",
+                entity_id=str(candidate_id),
+                details={"job_id": job_id, "delivery": delivery},
+            )
+
+        external_chat_id = str(delivery.get("chat_id") or "").strip()
+        chat_binding = None
+        if external_chat_id:
+            chat_binding = self.db.set_conversation_external_chat_id(
+                conversation_id=conversation_id,
+                external_chat_id=external_chat_id,
+            )
+            binding_status = str((chat_binding or {}).get("status") or "")
+            if binding_status not in {"set", "rebound_same_candidate"}:
+                self.db.log_operation(
+                    operation="agent.outreach.chat_binding",
+                    status="partial",
+                    entity_type="conversation",
+                    entity_id=str(conversation_id),
+                    details={"candidate_id": candidate_id, "chat_binding": chat_binding},
+                )
+
+        self.db.add_message(
+            conversation_id=conversation_id,
+            direction="outbound",
+            content=message,
+            candidate_language=language,
+            meta={
+                "type": "outreach" if delivery_status == "sent" else "outreach_pending_connection",
+                "auto": True,
+                "delivery": delivery,
+                "delivery_status": delivery_status,
+                "connect_request": connect_request,
+                "pending_delivery": delivery_status == "pending_connection",
+                "request_resume": request_resume,
+                "screening_status": screening_status or None,
+                "pre_resume_session_id": pre_resume_session_id,
+                "external_chat_id": external_chat_id or None,
+                "chat_binding": chat_binding,
+                "linkedin_account_id": account_id,
+            },
+        )
+        self.db.log_operation(
+            operation="agent.outreach.send",
+            status="ok" if delivery_status in {"sent", "pending_connection"} else "error",
+            entity_type="conversation",
+            entity_id=str(conversation_id),
+            details={
+                "candidate_id": candidate_id,
+                "language": language,
+                "delivery": delivery,
+                "delivery_status": delivery_status,
+                "connect_request": connect_request,
+                "request_resume": request_resume,
+                "screening_status": screening_status or None,
+                "pre_resume_session_id": pre_resume_session_id,
+                "external_chat_id": external_chat_id or None,
+                "chat_binding": chat_binding,
+                "linkedin_account_id": account_id,
+            },
+        )
+        self._record_communication_outreach_assessment(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            delivery_status=delivery_status,
+            delivery=delivery,
+            connect_request=connect_request,
+            request_resume=request_resume,
+        )
+        self.db.complete_outbound_action(
+            action_id=action_id,
+            status="completed" if delivery_status in {"sent", "pending_connection"} else "failed",
+            account_id=account_id,
+            result={
+                "delivery_status": delivery_status,
+                "delivery": delivery,
+                "connect_request": connect_request,
+                "external_chat_id": external_chat_id or None,
+                "chat_binding": chat_binding,
+                "linkedin_account_id": account_id,
+            },
+            error=None if delivery_status in {"sent", "pending_connection"} else "delivery_failed",
+        )
+        return {
+            "action_id": action_id,
+            "conversation_id": conversation_id,
+            "candidate_id": candidate_id,
+            "delivery_status": delivery_status,
+            "delivery": delivery,
+            "connect_request": connect_request,
+            "external_chat_id": external_chat_id or None,
+            "chat_binding": chat_binding,
+            "linkedin_account_id": account_id,
+        }
+
+    def _managed_linkedin_available(self) -> bool:
+        return self.managed_linkedin_enabled and bool(self.managed_unipile_api_key)
+
+    def _build_managed_provider(self, account_id: str) -> UnipileLinkedInProvider:
+        return UnipileLinkedInProvider(
+            api_key=self.managed_unipile_api_key,
+            base_url=self.managed_unipile_base_url,
+            account_id=account_id,
+            timeout_seconds=self.managed_unipile_timeout_seconds,
+        )
+
+    def _outreach_priority(self, match: Dict[str, Any] | None) -> int:
+        raw = (match or {}).get("score")
+        try:
+            score = float(raw)
+        except (TypeError, ValueError):
+            score = 0.0
+        if score <= 1.0:
+            score = score * 100.0
+        return int(max(0.0, min(100.0, score)) * 100)
+
+    def _select_linkedin_account_for_new_thread(self) -> Dict[str, Any] | None:
+        rows = self.db.list_linkedin_accounts(limit=500, status="connected")
+        if not rows:
+            return None
+        day = self._utc_day_key()
+        daily_cap = self._policy_daily_new_threads_cap()
+        eligible: List[tuple[int, int, Dict[str, Any]]] = []
+        for row in rows:
+            account_id = int(row.get("id") or 0)
+            if account_id <= 0:
+                continue
+            counters = self.db.get_linkedin_account_daily_counter(account_id=account_id, day_utc=day)
+            sent = int(counters.get("new_threads_sent") or 0)
+            if sent >= daily_cap:
+                continue
+            eligible.append((sent, account_id, row))
+        if not eligible:
+            return None
+        eligible.sort(key=lambda item: (item[0], item[1]))
+        return eligible[0][2]
+
+    def _can_send_connect_request(self, account: Dict[str, Any]) -> bool:
+        account_id = int(account.get("id") or 0)
+        if account_id <= 0:
+            return False
+        day = self._utc_day_key()
+        week_start = self._utc_week_start_key()
+        daily = self.db.get_linkedin_account_daily_counter(account_id=account_id, day_utc=day)
+        weekly = self.db.get_linkedin_account_weekly_counter(account_id=account_id, week_start_utc=week_start)
+        daily_connect_sent = int(daily.get("connect_sent") or 0)
+        weekly_connect_sent = int(weekly.get("connect_sent") or 0)
+        weekly_cap = self._policy_weekly_connect_cap()
+        allowed_today = self._policy_allowed_connects_today(account=account)
+        return weekly_connect_sent < weekly_cap and daily_connect_sent < allowed_today
+
+    def _increment_managed_account_counters(
+        self,
+        *,
+        account_id: int,
+        connect_delta: int,
+        new_threads_delta: int,
+        replies_delta: int,
+    ) -> None:
+        self.db.increment_linkedin_account_counters(
+            account_id=account_id,
+            day_utc=self._utc_day_key(),
+            week_start_utc=self._utc_week_start_key(),
+            connect_delta=connect_delta,
+            new_threads_delta=new_threads_delta,
+            replies_delta=replies_delta,
+        )
+
+    def _policy_daily_new_threads_cap(self) -> int:
+        outbound = (
+            self.linkedin_outreach_policy.get("outbound_messages")
+            if isinstance(self.linkedin_outreach_policy.get("outbound_messages"), dict)
+            else {}
+        )
+        per_account = outbound.get("daily_new_threads_per_account") if isinstance(outbound.get("daily_new_threads_per_account"), dict) else {}
+        raw = per_account.get("max")
+        try:
+            cap = int(raw)
+        except (TypeError, ValueError):
+            cap = 15
+        return max(1, min(cap, 200))
+
+    def _policy_weekly_connect_cap(self) -> int:
+        connect = (
+            self.linkedin_outreach_policy.get("connect_invites")
+            if isinstance(self.linkedin_outreach_policy.get("connect_invites"), dict)
+            else {}
+        )
+        raw = connect.get("weekly_cap_per_account")
+        try:
+            cap = int(raw)
+        except (TypeError, ValueError):
+            cap = 100
+        return max(1, min(cap, 700))
+
+    def _policy_allowed_connects_today(self, account: Dict[str, Any]) -> int:
+        weekly_cap = self._policy_weekly_connect_cap()
+        connected_at = self._parse_iso_datetime(str(account.get("connected_at") or ""))
+        created_at = self._parse_iso_datetime(str(account.get("created_at") or ""))
+        anchor = connected_at or created_at or datetime.now(timezone.utc)
+        age_days = max(1, int((datetime.now(timezone.utc) - anchor).days) + 1)
+
+        warmup = self.linkedin_outreach_policy.get("warmup") if isinstance(self.linkedin_outreach_policy.get("warmup"), dict) else {}
+        invite_ramp = warmup.get("invite_ramp") if isinstance(warmup.get("invite_ramp"), list) else []
+        early_max = 3
+        increment_max = 2
+        if invite_ramp:
+            first = invite_ramp[0] if isinstance(invite_ramp[0], dict) else {}
+            first_range = first.get("invites_per_day") if isinstance(first.get("invites_per_day"), dict) else {}
+            try:
+                early_max = max(1, int(first_range.get("max")))
+            except (TypeError, ValueError):
+                early_max = 3
+            if len(invite_ramp) > 1 and isinstance(invite_ramp[1], dict):
+                second = invite_ramp[1]
+                inc = second.get("daily_increment") if isinstance(second.get("daily_increment"), dict) else {}
+                try:
+                    increment_max = max(1, int(inc.get("max")))
+                except (TypeError, ValueError):
+                    increment_max = 2
+
+        if age_days <= 2:
+            return 0
+        if age_days <= 7:
+            return early_max
+        if age_days <= 21:
+            value = early_max + ((age_days - 7) * increment_max)
+            return max(1, min(value, weekly_cap))
+        return max(1, min(weekly_cap // 7, weekly_cap))
+
+    @staticmethod
+    def _utc_day_key() -> str:
+        return datetime.now(timezone.utc).date().isoformat()
+
+    @staticmethod
+    def _utc_week_start_key() -> str:
+        now = datetime.now(timezone.utc).date()
+        monday = now - timedelta(days=now.weekday())
+        return monday.isoformat()
 
     def _compose_linkedin_outreach_message(
         self,
@@ -3117,7 +3748,25 @@ class WorkflowService:
             return {"sent": False, "reason": "pending_message_empty"}
 
         try:
-            delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
+            conversation = self.db.get_conversation(conversation_id)
+            if self._managed_linkedin_available() and conversation:
+                account_id = int(conversation.get("linkedin_account_id") or 0)
+                account = self.db.get_linkedin_account(account_id) if account_id > 0 else None
+                provider_account_id = str((account or {}).get("provider_account_id") or "").strip()
+                if provider_account_id:
+                    provider = self._build_managed_provider(account_id=provider_account_id)
+                    delivery = provider.send_message(candidate_profile=candidate, message=message)
+                    if delivery.get("sent"):
+                        self._increment_managed_account_counters(
+                            account_id=account_id,
+                            connect_delta=0,
+                            new_threads_delta=0,
+                            replies_delta=1,
+                        )
+                else:
+                    delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
+            else:
+                delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
         except Exception as exc:
             delivery = {"sent": False, "provider": "linkedin", "error": str(exc)}
 

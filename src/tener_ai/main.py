@@ -17,9 +17,11 @@ from .candidate_scoring import CandidateScoringPolicy
 from .db import Database
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
 from .interview_client import InterviewAPIClient
+from .linkedin_accounts import LinkedInAccountService
 from .llm_responder import CandidateLLMResponder
 from .linkedin_provider import build_linkedin_provider
 from .matching import MatchingEngine
+from .outreach_policy import LinkedInOutreachPolicy
 from .pre_resume_service import PreResumeCommunicationService
 from .workflow import WorkflowService
 
@@ -87,6 +89,10 @@ def build_services() -> Dict[str, Any]:
         "TENER_SCORING_FORMULA_PATH",
         str(root / "config" / "candidate_scoring_formula.json"),
     )
+    outreach_policy_path = os.environ.get(
+        "TENER_OUTREACH_POLICY_PATH",
+        str(root / "config" / "linkedin_outreach_policy.json"),
+    )
     mock_profiles_path = os.environ.get("TENER_MOCK_LINKEDIN_DATA_PATH", str(root / "data" / "mock_linkedin_profiles.json"))
     forced_test_ids_path = os.environ.get(
         "TENER_FORCED_TEST_IDS_PATH",
@@ -110,8 +116,34 @@ def build_services() -> Dict[str, Any]:
     instructions = AgentInstructions(path=instructions_path)
     evaluation_playbook = AgentEvaluationPlaybook(path=evaluation_playbook_path)
     scoring_formula = CandidateScoringPolicy(path=scoring_formula_path)
+    outreach_policy = LinkedInOutreachPolicy(path=outreach_policy_path)
     matching_engine = MatchingEngine(rules_path=rules_path)
     linkedin_provider = build_linkedin_provider(mock_dataset_path=mock_profiles_path)
+    unipile_timeout_raw = os.environ.get("UNIPILE_TIMEOUT_SECONDS", "30")
+    connect_ttl_raw = os.environ.get("TENER_LINKEDIN_CONNECT_STATE_TTL_SECONDS", "900")
+    try:
+        unipile_timeout = int(unipile_timeout_raw)
+    except ValueError:
+        unipile_timeout = 30
+    try:
+        connect_ttl = int(connect_ttl_raw)
+    except ValueError:
+        connect_ttl = 900
+
+    linkedin_account_service = LinkedInAccountService(
+        db=db,
+        provider="unipile",
+        api_key=os.environ.get("UNIPILE_API_KEY", ""),
+        base_url=os.environ.get("UNIPILE_BASE_URL", "https://api.unipile.com"),
+        timeout_seconds=unipile_timeout,
+        state_secret=os.environ.get("TENER_LINKEDIN_CONNECT_STATE_SECRET", ""),
+        state_ttl_seconds=connect_ttl,
+        connect_url_template=os.environ.get("TENER_UNIPILE_CONNECT_URL_TEMPLATE", ""),
+        callback_url=os.environ.get("TENER_LINKEDIN_CONNECT_CALLBACK_URL", ""),
+        accounts_path=os.environ.get("UNIPILE_ACCOUNTS_PATH", "/api/v1/accounts"),
+        hosted_connect_path=os.environ.get("UNIPILE_HOSTED_LINKEDIN_CONNECT_PATH", "/api/v1/hosted/accounts/linkedin"),
+        disconnect_path_template=os.environ.get("UNIPILE_DISCONNECT_PATH_TEMPLATE", "/api/v1/accounts/{account_id}"),
+    )
 
     sourcing_agent = SourcingAgent(
         linkedin_provider=linkedin_provider,
@@ -208,6 +240,12 @@ def build_services() -> Dict[str, Any]:
         interview_invite_ttl_hours=interview_invite_ttl_hours,
         interview_max_followups=interview_max_followups,
         interview_followup_delays_hours=interview_followup_delays or None,
+        linkedin_outreach_policy=outreach_policy.to_dict(),
+        managed_linkedin_enabled=env_bool("TENER_MANAGED_LINKEDIN_ENABLED", True),
+        managed_linkedin_dispatch_inline=env_bool("TENER_MANAGED_LINKEDIN_DISPATCH_INLINE", True),
+        managed_unipile_api_key=os.environ.get("UNIPILE_API_KEY", ""),
+        managed_unipile_base_url=os.environ.get("UNIPILE_BASE_URL", "https://api.unipile.com"),
+        managed_unipile_timeout_seconds=unipile_timeout,
         stage_instructions={
             "sourcing": instructions.get("sourcing"),
             "enrich": instructions.get("enrich"),
@@ -225,6 +263,8 @@ def build_services() -> Dict[str, Any]:
         "instructions": instructions,
         "evaluation_playbook": evaluation_playbook,
         "scoring_formula": scoring_formula,
+        "outreach_policy": outreach_policy,
+        "linkedin_accounts": linkedin_account_service,
         "matching_engine": matching_engine,
         "pre_resume": pre_resume_service,
         "workflow": workflow,
@@ -271,11 +311,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "verify_step": "POST /api/steps/verify",
                         "add_step": "POST /api/steps/add",
                         "outreach_step": "POST /api/steps/outreach",
+                        "outreach_dispatch_run": "POST /api/outreach/dispatch/run",
                         "outreach_poll_connections": "POST /api/outreach/poll-connections",
                         "inbound_poll": "POST /api/inbound/poll",
                         "instructions": "GET /api/instructions",
+                        "outreach_policy": "GET /api/outreach-policy",
                         "agent_system": "GET /api/agent-system",
                         "reload_instructions": "POST /api/instructions/reload",
+                        "reload_outreach_policy": "POST /api/outreach-policy/reload",
                         "pre_resume_start": "POST /api/pre-resume/sessions/start",
                         "pre_resume_list": "GET /api/pre-resume/sessions?limit=100&status=awaiting_reply",
                         "pre_resume_get": "GET /api/pre-resume/sessions/{session_id}",
@@ -288,6 +331,11 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "interview_followups_run": "POST /api/interviews/followups/run",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "chats_overview": "GET /api/chats/overview?limit=200",
+                        "linkedin_accounts_list": "GET /api/linkedin/accounts?limit=200&status=connected",
+                        "linkedin_connect_callback": "GET /api/linkedin/accounts/connect/callback?state=...",
+                        "linkedin_connect_start": "POST /api/linkedin/accounts/connect/start",
+                        "linkedin_account_sync": "POST /api/linkedin/accounts/{account_id}/sync",
+                        "linkedin_account_disconnect": "POST /api/linkedin/accounts/{account_id}/disconnect",
                         "add_manual_account": "POST /api/agent/accounts/manual",
                         "unipile_webhook": "POST /api/webhooks/unipile",
                         "conversation_inbound": "POST /api/conversations/{conversation_id}/inbound",
@@ -304,6 +352,53 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
         if parsed.path == "/api/instructions":
             self._json_response(HTTPStatus.OK, SERVICES["instructions"].to_dict())
+            return
+
+        if parsed.path == "/api/outreach-policy":
+            self._json_response(HTTPStatus.OK, SERVICES["outreach_policy"].to_dict())
+            return
+
+        if parsed.path == "/api/linkedin/accounts":
+            if not self._require_admin_access():
+                return
+            params = parse_qs(parsed.query or "")
+            limit = self._safe_int((params.get("limit") or ["200"])[0], 200) or 200
+            status = str((params.get("status") or [""])[0] or "").strip().lower() or None
+            out = SERVICES["linkedin_accounts"].list_accounts(status=status, limit=limit)
+            self._json_response(HTTPStatus.OK, out)
+            return
+
+        if parsed.path == "/api/linkedin/accounts/connect/callback":
+            params = parse_qs(parsed.query or "")
+            out = SERVICES["linkedin_accounts"].complete_connect_callback(query=params)
+            status = str(out.get("status") or "").strip().lower()
+            SERVICES["db"].log_operation(
+                operation="linkedin.connect.callback",
+                status="ok" if status in {"connected", "already_completed"} else "error",
+                entity_type="linkedin_onboarding",
+                entity_id=str(out.get("session_id") or ""),
+                details={"result": out},
+            )
+            if status in {"connected", "already_completed"}:
+                self._html_response(
+                    HTTPStatus.OK,
+                    """
+                    <html><body style="font-family:Arial,sans-serif;padding:24px;">
+                    <h2>LinkedIn account connected</h2>
+                    <p>You can close this tab and return to Tener dashboard.</p>
+                    </body></html>
+                    """.strip(),
+                )
+                return
+            self._html_response(
+                HTTPStatus.BAD_REQUEST,
+                f"""
+                <html><body style="font-family:Arial,sans-serif;padding:24px;">
+                <h2>LinkedIn connect failed</h2>
+                <p>{self._escape_html(str(out.get("reason") or "unknown_error"))}</p>
+                </body></html>
+                """.strip(),
+            )
             return
 
         if parsed.path == "/api/agent-system":
@@ -339,6 +434,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     },
                     "evaluation_playbook": SERVICES["evaluation_playbook"].to_dict(),
                     "scoring_formula": SERVICES["scoring_formula"].to_dict(),
+                    "outreach_policy": SERVICES["outreach_policy"].to_dict(),
                 },
             )
             return
@@ -390,7 +486,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
                 return
             rows = SERVICES["db"].list_candidates_for_job(job_id)
-            rows = [SERVICES["scoring_formula"].decorate_candidate_row(row) for row in rows]
+            scoring_formula = SERVICES.get("scoring_formula")
+            if scoring_formula is not None:
+                rows = [scoring_formula.decorate_candidate_row(row) for row in rows]
             self._json_response(HTTPStatus.OK, {"job_id": job_id, "items": rows})
             return
 
@@ -455,6 +553,93 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         payload = self._read_json_body()
         if isinstance(payload, dict) and payload.get("_error"):
             self._json_response(HTTPStatus.BAD_REQUEST, payload)
+            return
+
+        if parsed.path == "/api/linkedin/accounts/connect/start":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            label = str(body.get("label") or "").strip()
+            callback_url = str(
+                body.get("callback_url")
+                or SERVICES["linkedin_accounts"].callback_url
+                or f"{self._public_base_url()}/api/linkedin/accounts/connect/callback"
+            ).strip()
+            if not callback_url:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "callback_url is required"})
+                return
+            try:
+                out = SERVICES["linkedin_accounts"].start_connect(callback_url=callback_url, label=label)
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "failed_to_start_linkedin_connect", "details": str(exc)},
+                )
+                return
+            SERVICES["db"].log_operation(
+                operation="linkedin.connect.start",
+                status="ok",
+                entity_type="linkedin_onboarding",
+                entity_id=str(out.get("session_id") or ""),
+                details={"label": label, "callback_url": callback_url},
+            )
+            self._json_response(HTTPStatus.OK, out)
+            return
+
+        match_sync = re.match(r"^/api/linkedin/accounts/(\d+)/sync$", parsed.path)
+        if match_sync:
+            if not self._require_admin_access():
+                return
+            account_id = self._safe_int(match_sync.group(1), None)
+            if account_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid account id"})
+                return
+            try:
+                out = SERVICES["linkedin_accounts"].sync_accounts(account_id=account_id)
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "linkedin_account_sync_failed", "details": str(exc)},
+                )
+                return
+            status = str(out.get("status") or "").lower()
+            SERVICES["db"].log_operation(
+                operation="linkedin.account.sync",
+                status="ok" if status == "ok" else "error",
+                entity_type="linkedin_account",
+                entity_id=str(account_id),
+                details=out,
+            )
+            http_status = HTTPStatus.OK if status == "ok" else HTTPStatus.BAD_REQUEST
+            self._json_response(http_status, out)
+            return
+
+        match_disconnect = re.match(r"^/api/linkedin/accounts/(\d+)/disconnect$", parsed.path)
+        if match_disconnect:
+            if not self._require_admin_access():
+                return
+            account_id = self._safe_int(match_disconnect.group(1), None)
+            if account_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid account id"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                body = {}
+            remote_disable = bool(body.get("remote_disable"))
+            out = SERVICES["linkedin_accounts"].disconnect_account(account_id=account_id, remote_disable=remote_disable)
+            status = str(out.get("status") or "").lower()
+            SERVICES["db"].log_operation(
+                operation="linkedin.account.disconnect",
+                status="ok" if status == "ok" else "error",
+                entity_type="linkedin_account",
+                entity_id=str(account_id),
+                details=out,
+            )
+            http_status = HTTPStatus.OK if status == "ok" else HTTPStatus.NOT_FOUND
+            self._json_response(http_status, out)
             return
 
         if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/jd"):
@@ -987,6 +1172,27 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, result)
             return
 
+        if parsed.path == "/api/outreach/dispatch/run":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            limit = self._safe_int(body.get("limit"), 100) or 100
+            job_id_raw = body.get("job_id")
+            job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
+            try:
+                result = SERVICES["workflow"].dispatch_outbound_actions(limit=limit, job_id=job_id)
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "outreach dispatch run failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
         if parsed.path == "/api/outreach/poll-connections":
             body = payload or {}
             if not isinstance(body, dict):
@@ -1347,6 +1553,16 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
+        if parsed.path == "/api/outreach-policy/reload":
+            SERVICES["outreach_policy"].reload()
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "outreach_policy": SERVICES["outreach_policy"].to_dict(),
+                },
+            )
+            return
+
         self._json_response(HTTPStatus.NOT_FOUND, {"error": "route not found"})
 
     def _persist_job_step_progress(self, job_id: int, step: str, status: str, output: Dict[str, Any] | None = None) -> None:
@@ -1478,6 +1694,42 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         if text in {"0", "false", "no", "off"}:
             return False
         return default
+
+    def _require_admin_access(self) -> bool:
+        expected = str(os.environ.get("TENER_ADMIN_API_TOKEN", "") or "").strip()
+        if not expected:
+            return True
+        auth = str(self.headers.get("Authorization", "") or "").strip()
+        incoming = ""
+        if auth.lower().startswith("bearer "):
+            incoming = auth[7:].strip()
+        if incoming and incoming == expected:
+            return True
+        self._json_response(HTTPStatus.UNAUTHORIZED, {"error": "admin auth required"})
+        return False
+
+    def _public_base_url(self) -> str:
+        configured = str(os.environ.get("TENER_PUBLIC_BASE_URL", "") or "").strip().rstrip("/")
+        if configured:
+            return configured
+        host = str(self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "").strip()
+        proto = str(self.headers.get("X-Forwarded-Proto") or "").strip().lower()
+        if not proto:
+            proto = "https" if os.environ.get("RENDER") else "http"
+        if host:
+            return f"{proto}://{host}"
+        return "http://localhost:8080"
+
+    @staticmethod
+    def _escape_html(text: str) -> str:
+        return (
+            str(text or "")
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&#x27;")
+        )
 
     @staticmethod
     def _pick_str(payload: Dict[str, Any], *paths: str) -> str:
@@ -1680,6 +1932,43 @@ def run() -> None:
 
         threading.Thread(target=_inbound_poll_loop, daemon=True, name="unipile-inbound-poller").start()
         print(f"Unipile inbound poll scheduler enabled: every {poll_interval_seconds}s")
+
+    if env_bool("TENER_OUTBOUND_DISPATCH_SCHEDULER_ENABLED", True):
+        dispatch_interval_seconds = max(15, int(os.environ.get("TENER_OUTBOUND_DISPATCH_INTERVAL_SECONDS", "30")))
+        dispatch_limit = max(1, int(os.environ.get("TENER_OUTBOUND_DISPATCH_BATCH_LIMIT", "100")))
+        if scheduler_stop is None:
+            scheduler_stop = threading.Event()
+
+        def _outbound_dispatch_loop() -> None:
+            while not scheduler_stop.is_set():
+                try:
+                    result = SERVICES["workflow"].dispatch_outbound_actions(limit=dispatch_limit)
+                    if int(result.get("processed") or 0) > 0:
+                        SERVICES["db"].log_operation(
+                            operation="scheduler.outreach.dispatch",
+                            status="ok",
+                            entity_type="scheduler",
+                            entity_id="outbound_dispatch",
+                            details={
+                                "processed": int(result.get("processed") or 0),
+                                "sent": int(result.get("sent") or 0),
+                                "pending_connection": int(result.get("pending_connection") or 0),
+                                "deferred": int(result.get("deferred") or 0),
+                                "failed": int(result.get("failed") or 0),
+                            },
+                        )
+                except Exception as exc:
+                    SERVICES["db"].log_operation(
+                        operation="scheduler.outreach.dispatch",
+                        status="error",
+                        entity_type="scheduler",
+                        entity_id="outbound_dispatch",
+                        details={"error": str(exc)},
+                    )
+                scheduler_stop.wait(dispatch_interval_seconds)
+
+        threading.Thread(target=_outbound_dispatch_loop, daemon=True, name="outbound-dispatch-scheduler").start()
+        print(f"Outbound dispatch scheduler enabled: every {dispatch_interval_seconds}s")
 
     if env_bool("TENER_INTERVIEW_SCHEDULER_ENABLED", True):
         interview_interval_seconds = max(30, int(os.environ.get("TENER_INTERVIEW_SCHEDULER_INTERVAL_SECONDS", "180")))

@@ -1,0 +1,64 @@
+{
+  "version": "2026-02-25.multi-account-v1",
+  "provider": "unipile",
+  "multi_account_profile_pool": {
+    "enabled": true,
+    "target_accounts": {
+      "min": 50,
+      "max": 100
+    }
+  },
+  "connect_invites": {
+    "weekly_cap_per_account": 100,
+    "same_candidate_multi_account_allowed": true
+  },
+  "outbound_messages": {
+    "daily_new_threads_per_account": {
+      "min": 10,
+      "max": 15
+    },
+    "replies_unlimited": true
+  },
+  "priority_routing": {
+    "strategy": "highest_priority_first",
+    "tie_breaker": "fifo"
+  },
+  "warmup": {
+    "profile_completion_sequence": [
+      {
+        "day": 1,
+        "action": "Upload profile photo"
+      },
+      {
+        "day": 2,
+        "action": "Add work experience"
+      },
+      {
+        "day": 3,
+        "action": "Add banner and finish profile details"
+      }
+    ],
+    "invite_ramp": [
+      {
+        "day_from": 3,
+        "day_to": 7,
+        "invites_per_day": {
+          "min": 2,
+          "max": 3
+        }
+      },
+      {
+        "day_from": 8,
+        "day_to": 21,
+        "daily_increment": {
+          "min": 1,
+          "max": 2
+        }
+      }
+    ],
+    "target_stable_volume_week": 3
+  },
+  "quiet_hours": {
+    "enabled": false
+  }
+}

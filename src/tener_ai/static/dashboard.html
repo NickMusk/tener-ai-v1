@@ -710,6 +710,43 @@
 
       <section class="agent-layout">
         <div class="card">
+          <div class="panel-title"><span>LinkedIn Accounts (Unipile)</span><span class="mono">/api/linkedin/accounts</span></div>
+          <div class="form-grid">
+            <div class="full">
+              <label class="muted">Admin Token (optional, required if backend enforces TENER_ADMIN_API_TOKEN)</label>
+              <input id="linkedin-admin-token" placeholder="Bearer token value">
+            </div>
+            <div>
+              <label class="muted">Account Label (optional)</label>
+              <input id="linkedin-account-label" placeholder="US Recruiter 01">
+            </div>
+            <div class="full button-row" style="justify-content:flex-start;">
+              <button id="linkedin-save-token-btn">Save Token</button>
+              <button id="linkedin-connect-btn">Connect LinkedIn</button>
+              <button id="linkedin-refresh-btn">Refresh Accounts</button>
+            </div>
+          </div>
+          <div style="overflow:auto;margin-top:8px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Label</th>
+                  <th>Provider Account ID</th>
+                  <th>Status</th>
+                  <th>Connected</th>
+                  <th>Synced</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="linkedin-accounts-tbody">
+                <tr><td colspan="7" class="muted">No connected accounts yet</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card">
           <div class="panel-title"><span>Accounts In Active Communication</span><span class="mono">GET /api/chats/overview</span></div>
           <div style="overflow:auto;">
             <table>
@@ -837,6 +874,7 @@
     const AGENT_SELECTED_JOB_STORAGE_KEY = "tener.agentSelectedJobId";
     const TEST_MODE_STORAGE_KEY = "tener.testMode";
     const CANDS_OVERALL_FILTER_STORAGE_KEY = "tener.candidatesOverallFilter";
+    const LINKEDIN_ADMIN_TOKEN_STORAGE_KEY = "tener.linkedinAdminToken";
     const PIPELINE_STEPS = ["source", "enrich", "verify", "add", "outreach"];
 
     const state = {
@@ -857,6 +895,8 @@
       addedCandidates: [],
       outreachItems: [],
       agentAccounts: [],
+      linkedinAccounts: [],
+      linkedinAdminToken: "",
       agentConversationId: null,
       selectedSnapshotStep: "source",
       stepSnapshots: defaultStepSnapshots()
@@ -873,9 +913,12 @@
     };
 
     async function api(path, opts = {}) {
+      const authHeader = state.linkedinAdminToken
+        ? { Authorization: `Bearer ${state.linkedinAdminToken}` }
+        : {};
       const res = await fetch(path, {
         ...opts,
-        headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) }
+        headers: { 'Content-Type': 'application/json', ...authHeader, ...(opts.headers || {}) }
       });
       const rawText = await res.text();
       let data = {};
@@ -1475,6 +1518,103 @@
       await onSelectedJobChanged(jobId);
     }
 
+    function renderLinkedinAccounts() {
+      const body = $("linkedin-accounts-tbody");
+      if (!body) return;
+      const accounts = state.linkedinAccounts || [];
+      if (!accounts.length) {
+        body.innerHTML = '<tr><td colspan="7" class="muted">No connected accounts yet</td></tr>';
+        return;
+      }
+      body.innerHTML = accounts.map((row) => {
+        const status = escapeHtml(row.status || "-");
+        const connectedAt = escapeHtml((row.connected_at || "").replace("T", " ").slice(0, 19) || "-");
+        const syncedAt = escapeHtml((row.last_synced_at || "").replace("T", " ").slice(0, 19) || "-");
+        return `
+          <tr>
+            <td class="mono">${Number(row.id || 0)}</td>
+            <td>${escapeHtml(row.label || "-")}</td>
+            <td class="mono">${escapeHtml(row.provider_account_id || "-")}</td>
+            <td>${status}</td>
+            <td class="mono">${connectedAt}</td>
+            <td class="mono">${syncedAt}</td>
+            <td>
+              <button class="linkedin-sync-btn" data-account-id="${Number(row.id || 0)}">Sync</button>
+              <button class="linkedin-disconnect-btn" data-account-id="${Number(row.id || 0)}">Disconnect</button>
+            </td>
+          </tr>
+        `;
+      }).join("");
+
+      document.querySelectorAll(".linkedin-sync-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const accountId = Number(btn.dataset.accountId || "0");
+          if (!accountId) return;
+          try {
+            await api(`/api/linkedin/accounts/${accountId}/sync`, {
+              method: "POST",
+              body: JSON.stringify({}),
+            });
+            await refreshLinkedinAccounts();
+          } catch (e) {
+            alert(e.message);
+          }
+        });
+      });
+      document.querySelectorAll(".linkedin-disconnect-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const accountId = Number(btn.dataset.accountId || "0");
+          if (!accountId) return;
+          const confirmed = window.confirm("Disconnect this LinkedIn account?");
+          if (!confirmed) return;
+          try {
+            await api(`/api/linkedin/accounts/${accountId}/disconnect`, {
+              method: "POST",
+              body: JSON.stringify({ remote_disable: false }),
+            });
+            await refreshLinkedinAccounts();
+          } catch (e) {
+            alert(e.message);
+          }
+        });
+      });
+    }
+
+    async function refreshLinkedinAccounts() {
+      if (!$("linkedin-accounts-tbody")) return;
+      try {
+        const out = await api('/api/linkedin/accounts?limit=300');
+        state.linkedinAccounts = out.items || [];
+        renderLinkedinAccounts();
+      } catch (e) {
+        $("linkedin-accounts-tbody").innerHTML = `<tr><td colspan="7" class="muted">Failed: ${escapeHtml(e.message)}</td></tr>`;
+      }
+    }
+
+    function saveLinkedinAdminToken() {
+      const input = $("linkedin-admin-token");
+      if (!input) return;
+      state.linkedinAdminToken = String(input.value || "").trim();
+      if (state.linkedinAdminToken) {
+        localStorage.setItem(LINKEDIN_ADMIN_TOKEN_STORAGE_KEY, state.linkedinAdminToken);
+      } else {
+        localStorage.removeItem(LINKEDIN_ADMIN_TOKEN_STORAGE_KEY);
+      }
+    }
+
+    async function startLinkedinConnect() {
+      const label = String(($("linkedin-account-label") || {}).value || "").trim();
+      const out = await api('/api/linkedin/accounts/connect/start', {
+        method: 'POST',
+        body: JSON.stringify({ label }),
+      });
+      const connectUrl = String(out.connect_url || "").trim();
+      if (!connectUrl) {
+        throw new Error("Connect URL is missing in response");
+      }
+      window.open(connectUrl, '_blank', 'noopener,noreferrer');
+    }
+
     function renderAgentAccounts() {
       const body = $("agent-accounts-tbody");
       const accounts = state.agentAccounts || [];
@@ -1954,6 +2094,7 @@
       await loadAgentSystem();
       await loadJobs();
       await onSelectedJobChanged(state.jobId);
+      await refreshLinkedinAccounts();
     }
 
     function bindEvents() {
@@ -1981,6 +2122,12 @@
       });
       $("agent-save-jd-btn").addEventListener('click', () => saveAgentJd().catch(e => alert(e.message)));
       $("agent-refresh-accounts-btn").addEventListener('click', () => refreshAgentAccounts().catch(e => alert(e.message)));
+      $("linkedin-save-token-btn").addEventListener('click', () => {
+        saveLinkedinAdminToken();
+        refreshLinkedinAccounts().catch(e => alert(e.message));
+      });
+      $("linkedin-refresh-btn").addEventListener('click', () => refreshLinkedinAccounts().catch(e => alert(e.message)));
+      $("linkedin-connect-btn").addEventListener('click', () => startLinkedinConnect().catch(e => alert(e.message)));
       $("agent-add-manual-btn").addEventListener('click', () => addManualAgentAccount().catch(e => alert(e.message)));
       $("agent-send-inbound-btn").addEventListener('click', () => sendAgentInboundMessage().catch(e => alert(e.message)));
       $("agent-refresh-chat-btn").addEventListener('click', () => {
@@ -2015,6 +2162,8 @@
 
     bindEvents();
     resetCreateJobForm();
+    state.linkedinAdminToken = localStorage.getItem(LINKEDIN_ADMIN_TOKEN_STORAGE_KEY) || "";
+    if ($("linkedin-admin-token")) $("linkedin-admin-token").value = state.linkedinAdminToken;
     setTestMode((localStorage.getItem(TEST_MODE_STORAGE_KEY) || "1") !== "0");
     setCandidatesOverallFilter(localStorage.getItem(CANDS_OVERALL_FILTER_STORAGE_KEY) || "all");
     renderSnapshotTabs();
