@@ -10,8 +10,10 @@ from typing import Any, Dict
 from urllib.parse import urlparse
 
 from tener_ai.company_culture_profile import (
+    BingRssSearchProvider,
     BraveHtmlSearchProvider,
     CompanyCultureProfileService,
+    DuckDuckGoHtmlSearchProvider,
     GoogleCSESearchProvider,
     HeuristicCompanyProfileSynthesizer,
     OpenAICompanyProfileSynthesizer,
@@ -43,7 +45,7 @@ def env_int(name: str, default: int, minimum: int = 1) -> int:
 
 
 def build_services() -> Dict[str, Any]:
-    search_mode = str(os.environ.get("TENER_COMPANY_PROFILE_SEARCH_MODE", "brave_html")).strip().lower()
+    search_mode = str(os.environ.get("TENER_COMPANY_PROFILE_SEARCH_MODE", "bing_rss")).strip().lower()
     allow_seed_fallback = env_bool("TENER_COMPANY_PROFILE_ALLOW_SEED_FALLBACK", True)
 
     website_seed = str(os.environ.get("TENER_COMPANY_PROFILE_SEED_WEBSITE", "")).strip()
@@ -57,11 +59,17 @@ def build_services() -> Dict[str, Any]:
             search_provider = GoogleCSESearchProvider(api_key=google_api_key, cx=google_cx)
             search_backend = "google_cse"
         elif allow_seed_fallback:
-            search_provider = BraveHtmlSearchProvider()
-            search_backend = "brave_fallback"
-            runtime_warnings.append("Google CSE is not configured. Brave Search fallback is active.")
+            search_provider = BingRssSearchProvider()
+            search_backend = "bing_rss_fallback"
+            runtime_warnings.append("Google CSE is not configured. Bing RSS fallback is active.")
         else:
             raise RuntimeError("Google CSE credentials are required: GOOGLE_CSE_API_KEY and GOOGLE_CSE_CX")
+    elif search_mode in {"bing", "bing_rss", "bing_xml"}:
+        search_provider = BingRssSearchProvider()
+        search_backend = "bing_rss"
+    elif search_mode in {"duckduckgo", "duckduckgo_html", "ddg"}:
+        search_provider = DuckDuckGoHtmlSearchProvider()
+        search_backend = "duckduckgo_html"
     elif search_mode in {"brave", "brave_html"}:
         search_provider = BraveHtmlSearchProvider()
         search_backend = "brave_html"
@@ -69,7 +77,9 @@ def build_services() -> Dict[str, Any]:
         search_provider = SeedSearchProvider(company_name=company_seed, website_url=website_seed)
         search_backend = "seed"
     else:
-        raise RuntimeError(f"Unsupported search mode: {search_mode}. Supported: google_cse, brave_html, seed")
+        raise RuntimeError(
+            f"Unsupported search mode: {search_mode}. Supported: bing_rss, duckduckgo_html, google_cse, brave_html, seed"
+        )
 
     llm_enabled = env_bool("TENER_COMPANY_PROFILE_USE_LLM", True)
     llm_api_key = str(os.environ.get("OPENAI_API_KEY", "")).strip()

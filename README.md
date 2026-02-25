@@ -91,7 +91,7 @@ PYTHONPATH=src python3 -m tener_company_profile
 ```
 
 Useful switches:
-- `TENER_COMPANY_PROFILE_SEARCH_MODE=brave_html|google_cse|seed`
+- `TENER_COMPANY_PROFILE_SEARCH_MODE=bing_rss|duckduckgo_html|brave_html|google_cse|seed`
 - `TENER_COMPANY_PROFILE_ALLOW_SEED_FALLBACK=true|false`
 - `TENER_COMPANY_PROFILE_MIN_JOB_BOARD_LINKS=3`
 - `TENER_COMPANY_PROFILE_PORT=8095`

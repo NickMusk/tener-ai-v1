@@ -243,7 +243,7 @@ Response:
 - `TENER_COMPANY_PROFILE_FETCH_TIMEOUT_SECONDS` (default `15`)
 - `TENER_COMPANY_PROFILE_MIN_TEXT_CHARS` (default `600`)
 - `TENER_COMPANY_PROFILE_LLM_MODEL` (default `gpt-4o-mini`)
-- `TENER_COMPANY_PROFILE_SEARCH_PROVIDER` (default `google_cse`)
+- `TENER_COMPANY_PROFILE_SEARCH_MODE` (default `bing_rss`; options: `bing_rss|duckduckgo_html|brave_html|google_cse|seed`)
 - `GOOGLE_CSE_API_KEY` / `GOOGLE_CSE_CX` (if Google CSE is used)
 
 ## 11. Metrics

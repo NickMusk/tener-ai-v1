@@ -2,8 +2,10 @@ import unittest
 from typing import Dict, List
 
 from tener_ai.company_culture_profile import (
+    BingRssSearchProvider,
     BraveHtmlSearchProvider,
     CompanyCultureProfileService,
+    DuckDuckGoHtmlSearchProvider,
     FetchResponse,
     HeuristicCompanyProfileSynthesizer,
     SeedSearchProvider,
@@ -258,10 +260,47 @@ class CompanyCultureProfileTests(unittest.TestCase):
         self.assertEqual(out[0].url, "https://notion.so/culture")
         self.assertIn("Notion Company Culture", out[0].title)
 
+    def test_duckduckgo_html_parser_extracts_result_pairs(self) -> None:
+        html = """
+        <div class="results">
+          <a class="result__a" href="https://duckduckgo.com/l/?uddg=https%3A%2F%2Fboards.greenhouse.io%2Fnotion%2Fjobs%2F1">
+            Senior Backend Engineer - Notion
+          </a>
+          <a class="result__a" href="https://www.notion.so/careers">Notion Careers</a>
+        </div>
+        """
+        out = DuckDuckGoHtmlSearchProvider._parse_results_from_html(
+            html=html,
+            query="notion jobs",
+            limit=10,
+        )
+        self.assertEqual(len(out), 2)
+        self.assertEqual(out[0].url, "https://boards.greenhouse.io/notion/jobs/1")
+        self.assertIn("Senior Backend Engineer", out[0].title)
+
     def test_is_job_board_url_detects_common_patterns(self) -> None:
         self.assertTrue(is_job_board_url("https://boards.greenhouse.io/acme/jobs/123"))
         self.assertTrue(is_job_board_url("https://acme.ai/careers/backend-engineer"))
         self.assertFalse(is_job_board_url("https://acme.ai/about"))
+
+    def test_bing_rss_parser_extracts_items(self) -> None:
+        rss = """<?xml version="1.0" encoding="utf-8"?>
+        <rss version="2.0"><channel>
+          <item>
+            <title>Notion Careers</title>
+            <link>https://www.notion.so/careers</link>
+            <description>Open roles and hiring process</description>
+          </item>
+          <item>
+            <title>Greenhouse Notion Jobs</title>
+            <link>https://boards.greenhouse.io/notion/jobs/123</link>
+            <description>Backend Engineer</description>
+          </item>
+        </channel></rss>"""
+        out = BingRssSearchProvider._parse_results_from_rss(rss_xml=rss, query="notion jobs", limit=10)
+        self.assertEqual(len(out), 2)
+        self.assertEqual(out[0].url, "https://notion.so/careers")
+        self.assertIn("Notion Careers", out[0].title)
 
 
 if __name__ == "__main__":

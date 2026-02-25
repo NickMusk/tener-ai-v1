@@ -3,6 +3,7 @@ from __future__ import annotations
 import html as html_utils
 import json
 import re
+import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Protocol
@@ -247,6 +248,169 @@ class BraveHtmlSearchProvider:
         text = text.replace("\\/", "/")
         text = bytes(text, "utf-8").decode("unicode_escape", errors="ignore")
         return html_utils.unescape(text).strip()
+
+
+class DuckDuckGoHtmlSearchProvider:
+    """
+    Free, no-key search provider based on DuckDuckGo HTML endpoints.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str = "https://duckduckgo.com/html",
+        timeout_seconds: int = 20,
+        user_agent: str = DEFAULT_FETCH_USER_AGENT,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = max(3, int(timeout_seconds))
+        self.user_agent = user_agent.strip() or DEFAULT_FETCH_USER_AGENT
+
+    def search(self, query: str, limit: int) -> List[SearchResult]:
+        normalized_query = " ".join(str(query or "").split()).strip()
+        if not normalized_query:
+            return []
+        limit = max(1, min(int(limit or 1), 20))
+
+        params = urlparse.urlencode({"q": normalized_query})
+        url = f"{self.base_url}/?{params}"
+        req = urlrequest.Request(
+            url=url,
+            method="GET",
+            headers={
+                "Accept": "text/html,application/xhtml+xml",
+                "User-Agent": self.user_agent,
+            },
+        )
+        with urlrequest.urlopen(req, timeout=self.timeout_seconds) as response:
+            html = response.read().decode("utf-8", errors="replace")
+        return self._parse_results_from_html(html=html, query=normalized_query, limit=limit)
+
+    @staticmethod
+    def _parse_results_from_html(*, html: str, query: str, limit: int) -> List[SearchResult]:
+        pattern = re.compile(
+            r'<a[^>]+class="[^"]*result__a[^"]*"[^>]+href="([^"]+)"[^>]*>(.*?)</a>',
+            flags=re.IGNORECASE | re.DOTALL,
+        )
+        seen: set[str] = set()
+        out: List[SearchResult] = []
+        rank = 0
+        for href, raw_title in pattern.findall(str(html or "")):
+            url = DuckDuckGoHtmlSearchProvider._extract_target_url(href)
+            canonical = canonicalize_url(url)
+            if not canonical or canonical in seen:
+                continue
+            seen.add(canonical)
+            rank += 1
+            title = re.sub(r"(?is)<[^>]+>", " ", raw_title)
+            title = html_utils.unescape(re.sub(r"\s+", " ", title)).strip()
+            out.append(
+                SearchResult(
+                    url=canonical,
+                    title=title[:300],
+                    snippet="",
+                    rank=rank,
+                    query=query,
+                )
+            )
+            if len(out) >= limit:
+                break
+        return out
+
+    @staticmethod
+    def _extract_target_url(href: str) -> str:
+        value = html_utils.unescape(str(href or "").strip())
+        if not value:
+            return ""
+        parsed = urlparse.urlparse(value)
+        if parsed.scheme in {"http", "https"} and parsed.netloc:
+            query_pairs = urlparse.parse_qs(parsed.query)
+            uddg = query_pairs.get("uddg")
+            if uddg and isinstance(uddg, list):
+                decoded = urlparse.unquote(str(uddg[0] or "").strip())
+                if decoded:
+                    return decoded
+            return value
+        if value.startswith("//"):
+            return f"https:{value}"
+        if value.startswith("/"):
+            query_pairs = urlparse.parse_qs(urlparse.urlparse(value).query)
+            uddg = query_pairs.get("uddg")
+            if uddg and isinstance(uddg, list):
+                return urlparse.unquote(str(uddg[0] or "").strip())
+        return value
+
+
+class BingRssSearchProvider:
+    """
+    Free, no-key provider using Bing RSS search output.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str = "https://www.bing.com/search",
+        timeout_seconds: int = 20,
+        user_agent: str = DEFAULT_FETCH_USER_AGENT,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = max(3, int(timeout_seconds))
+        self.user_agent = user_agent.strip() or DEFAULT_FETCH_USER_AGENT
+
+    def search(self, query: str, limit: int) -> List[SearchResult]:
+        normalized_query = " ".join(str(query or "").split()).strip()
+        if not normalized_query:
+            return []
+        limit = max(1, min(int(limit or 1), 20))
+
+        params = urlparse.urlencode({"q": normalized_query, "format": "rss"})
+        url = f"{self.base_url}?{params}"
+        req = urlrequest.Request(
+            url=url,
+            method="GET",
+            headers={
+                "Accept": "application/rss+xml,application/xml,text/xml,*/*;q=0.8",
+                "User-Agent": self.user_agent,
+            },
+        )
+        with urlrequest.urlopen(req, timeout=self.timeout_seconds) as response:
+            xml_text = response.read().decode("utf-8", errors="replace")
+        return self._parse_results_from_rss(rss_xml=xml_text, query=normalized_query, limit=limit)
+
+    @staticmethod
+    def _parse_results_from_rss(*, rss_xml: str, query: str, limit: int) -> List[SearchResult]:
+        try:
+            root = ET.fromstring(str(rss_xml or ""))
+        except ET.ParseError:
+            return []
+
+        seen: set[str] = set()
+        out: List[SearchResult] = []
+        rank = 0
+        for item in root.findall(".//item"):
+            link_node = item.find("link")
+            title_node = item.find("title")
+            desc_node = item.find("description")
+            raw_link = str(link_node.text or "").strip() if link_node is not None else ""
+            canonical = canonicalize_url(raw_link)
+            if not canonical or canonical in seen:
+                continue
+            seen.add(canonical)
+            rank += 1
+            title = html_utils.unescape(str(title_node.text or "").strip()) if title_node is not None else ""
+            snippet = html_utils.unescape(str(desc_node.text or "").strip()) if desc_node is not None else ""
+            out.append(
+                SearchResult(
+                    url=canonical,
+                    title=title[:300],
+                    snippet=snippet[:400],
+                    rank=rank,
+                    query=query,
+                )
+            )
+            if len(out) >= limit:
+                break
+        return out
 
 
 class GoogleCSESearchProvider:
