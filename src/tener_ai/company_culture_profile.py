@@ -6,6 +6,7 @@ import re
 import xml.etree.ElementTree as ET
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Protocol
 from urllib import error as urlerror, parse as urlparse, request as urlrequest
 
@@ -94,6 +95,35 @@ JOB_SENTENCE_KEYWORDS = (
     "must have",
     "nice to have",
 )
+
+DEFAULT_CULTURE_ANALYSIS_RULES = """
+You are a senior organizational psychologist and culture analyst.
+
+You have scraped structured and unstructured data about a company from:
+- Official website (About, Mission, Values, Leadership pages)
+- Job descriptions across roles and levels
+- Public interviews of founders or executives
+- Glassdoor or employee reviews (if available)
+- Press releases and blog posts
+
+Your task is NOT to summarize the company.
+Your task is to infer and reconstruct the real operational culture of the company.
+
+Avoid marketing language. Avoid generic phrases.
+Extract implicit signals from patterns in language, expectations, hiring criteria, and leadership communication.
+
+Rules:
+- Do not copy phrases from the website.
+- Do not repeat generic values like "innovation", "integrity", or "customer-centric".
+- Infer from patterns.
+- If data suggests high standards, state it clearly.
+- If data suggests bureaucracy, state it clearly.
+- If data is inconsistent, highlight ambiguity.
+
+Output tone:
+Analytical, sharp, direct. No fluff. No PR language.
+Write as if advising a candidate whether they truly fit this environment.
+""".strip()
 
 
 @dataclass
@@ -760,16 +790,36 @@ class SimpleHtmlTextExtractor:
 
 
 class HeuristicCompanyProfileSynthesizer:
-    VALUE_KEYWORDS = {
-        "ownership": ["ownership", "own", "accountability", "responsibility"],
-        "transparency": ["transparent", "transparency", "open communication"],
-        "collaboration": ["collaboration", "collaborative", "teamwork", "cross-functional"],
-        "customer focus": ["customer", "user-centric", "client-first"],
-        "learning": ["learning", "mentorship", "growth", "continuous improvement"],
-        "speed": ["fast-paced", "speed", "iteration", "rapid"],
-        "quality": ["quality", "excellence", "high standards", "craftsmanship"],
-        "innovation": ["innovation", "experiment", "research", "creative"],
-        "remote-first": ["remote", "distributed", "async", "asynchronous"],
+    MISSION_KEYWORDS = {
+        "mission": ["mission", "impact", "purpose", "change", "transform"],
+        "revenue": ["revenue", "pipeline", "quota", "growth targets", "upsell", "sales"],
+        "execution": ["ship", "delivery", "execution", "deadline", "operator", "ownership"],
+        "global": ["global", "worldwide", "category-defining", "industry-leading", "at scale"],
+    }
+
+    PERFORMANCE_KEYWORDS = {
+        "high": ["high standards", "fast-paced", "urgency", "intense", "ownership", "self-starter"],
+        "balanced": ["sustainable", "balance", "well-being", "healthy pace"],
+        "lifestyle": ["work-life", "low stress", "flexible schedule"],
+        "process": ["process", "compliance", "control", "governance", "risk management"],
+        "output": ["outcomes", "results", "ship", "impact", "deliver"],
+    }
+
+    DECISION_KEYWORDS = {
+        "founder": ["founder", "ceo", "executive team", "leadership team"],
+        "data": ["data-driven", "metrics", "experiments", "a/b", "hypothesis"],
+        "consensus": ["consensus", "alignment", "cross-functional", "stakeholder"],
+        "hierarchy": ["approval", "chain of command", "escalate", "sign-off"],
+        "docs": ["written", "documentation", "memo", "spec", "rfc"],
+        "autonomy": ["autonomy", "independent", "ownership", "self-directed"],
+    }
+
+    RISK_KEYWORDS = {
+        "speed": ["move fast", "urgency", "fast-paced", "rapid iteration", "ship quickly"],
+        "correctness": ["correctness", "reliability", "quality bar", "compliance", "regulatory"],
+        "failure_learning": ["learn from failure", "postmortem", "retrospective", "iterate"],
+        "failure_blame": ["zero mistakes", "error-free", "no tolerance for errors"],
+        "experimentation": ["experiment", "prototype", "test and learn", "pilot"],
     }
 
     def generate_profile(
@@ -778,64 +828,69 @@ class HeuristicCompanyProfileSynthesizer:
         website_url: str,
         sources: List[ScrapedSource],
     ) -> Dict[str, Any]:
-        text_blocks = [source.extracted_text for source in sources if source.fetch_status == "ok" and source.extracted_text]
+        ok_sources = [x for x in sources if getattr(x, "fetch_status", "") == "ok" and getattr(x, "extracted_text", "")]
+        text_blocks = [str(getattr(source, "extracted_text", "")) for source in ok_sources]
         corpus = " ".join(text_blocks).lower()
-        matched_values: List[str] = []
-        for label, keywords in self.VALUE_KEYWORDS.items():
-            for keyword in keywords:
-                if keyword in corpus:
-                    matched_values.append(label)
-                    break
+        job_corpus = " ".join(
+            str(getattr(source, "extracted_text", ""))
+            for source in ok_sources
+            if str(getattr(source, "source_kind", "")).strip().lower() == "job_board"
+        ).lower()
 
-        if not matched_values:
-            matched_values = ["collaboration", "ownership", "quality"]
-        values = self._top_unique(matched_values, limit=5)
-
-        work_style = []
-        if "remote-first" in values:
-            work_style.append("remote-first collaboration with async communication")
-        if "speed" in values:
-            work_style.append("short feedback loops and iterative delivery")
-        if "quality" in values:
-            work_style.append("strong quality bar and engineering discipline")
-        if not work_style:
-            work_style = ["collaborative execution with measurable delivery expectations"]
-
-        management_style = []
-        if "ownership" in values:
-            management_style.append("high ownership with clear accountability")
-        if "transparency" in values:
-            management_style.append("transparent communication and context sharing")
-        if not management_style:
-            management_style = ["pragmatic management with focus on outcomes"]
-
-        hiring_signals = self._extract_hiring_signals(corpus)
-        risks = []
-        if len(sources) < 3:
-            risks.append("Limited source coverage; regenerate with more publicly available materials.")
-        if "glassdoor.com" not in " ".join(source.domain for source in sources):
-            risks.append("Employee-review evidence is limited or missing.")
-
-        summary = (
-            f"{company_name} appears to emphasize {', '.join(values[:3])}. "
-            f"Public signals suggest {work_style[0]}. "
-            f"Management style is likely {management_style[0]}. "
-            "This profile is generated without LLM synthesis and should be treated as a draft for manual review."
+        mission = self._infer_mission_orientation(corpus=corpus)
+        performance = self._infer_performance_expectations(corpus=corpus, job_corpus=job_corpus)
+        decision = self._infer_decision_style(corpus=corpus)
+        risk = self._infer_risk_speed_tolerance(corpus=corpus)
+        talent = self._infer_talent_profile(corpus=corpus, job_corpus=job_corpus)
+        collaboration = self._infer_collaboration_model(corpus=corpus, job_corpus=job_corpus)
+        contradictions = self._infer_contradictions(
+            performance=performance,
+            decision=decision,
+            risk=risk,
+            collaboration=collaboration,
         )
-        questions = [
-            f"Tell us about a project where you demonstrated {values[0]} in practice.",
-            "How do you adapt your collaboration style to match a new team's working norms?",
-            "What environment helps you deliver your highest-quality work consistently?",
-        ]
+        who_join, who_avoid = self._infer_join_avoid(talent=talent, performance=performance, decision=decision)
+
+        matched_values = self._extract_values(corpus)
+        summary = (
+            f"{company_name} looks like a {performance['mode']} environment with "
+            f"{risk['speed_vs_perfection']} trade-offs. Decision style appears {decision['style']} "
+            f"with {decision['autonomy']} autonomy expectations. "
+            f"Primary fit pattern: {talent['thrives'][0] if talent['thrives'] else 'independent operators with strong execution discipline'}."
+        )
+        gaps = self._evidence_gaps(sources=ok_sources)
+        risks = self._unique_preserve_order(contradictions + gaps, limit=6)
+        hiring_signals = self._unique_preserve_order(
+            [f"expects {x}" for x in (talent["thrives"] or [])] + [f"penalizes {x}" for x in (talent["struggles"] or [])],
+            limit=8,
+        )
 
         return {
             "summary_200_300_words": summary,
-            "culture_values": values,
-            "work_style": work_style[:5],
-            "management_style": management_style[:5],
-            "hiring_signals": hiring_signals[:5],
-            "risks_or_unknowns": risks[:5],
-            "culture_interview_questions": questions[:3],
+            "culture_values": matched_values[:8],
+            "work_style": [
+                performance["assessment"],
+                collaboration["assessment"],
+                risk["assessment"],
+            ][:5],
+            "management_style": [decision["assessment"]][:5],
+            "hiring_signals": hiring_signals[:8],
+            "risks_or_unknowns": risks[:8],
+            "culture_interview_questions": [
+                "Tell us about a time you challenged a decision with data and changed the outcome.",
+                "Describe the highest-pressure environment where you still maintained quality.",
+                "What kind of management style makes you underperform?",
+            ],
+            "mission_orientation": mission,
+            "performance_expectations": performance,
+            "decision_making_style": decision,
+            "risk_speed_tolerance": risk,
+            "talent_profile_they_attract": talent,
+            "collaboration_model": collaboration,
+            "cultural_contradictions": contradictions,
+            "who_should_join": who_join,
+            "who_should_avoid": who_avoid,
+            "evidence_gaps": gaps,
         }
 
     @staticmethod
@@ -845,19 +900,218 @@ class HeuristicCompanyProfileSynthesizer:
         return [item[0] for item in ordered[:limit]]
 
     @staticmethod
-    def _extract_hiring_signals(corpus: str) -> List[str]:
-        signals: List[str] = []
-        if "code review" in corpus:
-            signals.append("mentions code review as part of team process")
-        if "fast-paced" in corpus or "rapid" in corpus:
-            signals.append("high-velocity execution environment")
-        if "remote" in corpus or "distributed" in corpus:
-            signals.append("supports distributed or remote collaboration")
-        if "customer" in corpus:
-            signals.append("customer impact is visible in company narrative")
-        if not signals:
-            signals.append("public sources contain limited explicit hiring process details")
-        return signals
+    def _extract_values(corpus: str) -> List[str]:
+        values: List[str] = []
+        for label, keywords in CULTURE_ATTRIBUTE_KEYWORDS.items():
+            if any(keyword in corpus for keyword in keywords):
+                values.append(label)
+        return values or ["high standards", "ownership", "cross-functional collaboration"]
+
+    @staticmethod
+    def _score_hits(corpus: str, tokens: List[str]) -> int:
+        return sum(1 for token in tokens if token in corpus)
+
+    def _infer_mission_orientation(self, *, corpus: str) -> Dict[str, Any]:
+        mission_score = self._score_hits(corpus, self.MISSION_KEYWORDS["mission"])
+        revenue_score = self._score_hits(corpus, self.MISSION_KEYWORDS["revenue"])
+        execution_score = self._score_hits(corpus, self.MISSION_KEYWORDS["execution"])
+        global_score = self._score_hits(corpus, self.MISSION_KEYWORDS["global"])
+
+        intensity = "high" if mission_score + execution_score >= 5 else "moderate" if mission_score + execution_score >= 2 else "low"
+        if mission_score >= max(revenue_score, execution_score):
+            orientation = "mission-driven"
+        elif revenue_score >= max(mission_score, execution_score):
+            orientation = "revenue-driven"
+        else:
+            orientation = "execution-driven"
+        ambition = "global" if global_score >= 2 else "incremental"
+        assessment = (
+            f"Mission intensity looks {intensity}. Language leans {orientation} with {ambition} ambition. "
+            "The pattern suggests this is judged by shipped outcomes, not narrative alone."
+        )
+        return {
+            "mission_intensity": intensity,
+            "orientation": orientation,
+            "ambition_scope": ambition,
+            "assessment": assessment,
+        }
+
+    def _infer_performance_expectations(self, *, corpus: str, job_corpus: str) -> Dict[str, Any]:
+        high = self._score_hits(corpus, self.PERFORMANCE_KEYWORDS["high"]) + self._score_hits(job_corpus, self.PERFORMANCE_KEYWORDS["high"])
+        balanced = self._score_hits(corpus, self.PERFORMANCE_KEYWORDS["balanced"])
+        lifestyle = self._score_hits(corpus, self.PERFORMANCE_KEYWORDS["lifestyle"])
+        process_score = self._score_hits(corpus, self.PERFORMANCE_KEYWORDS["process"])
+        output_score = self._score_hits(corpus, self.PERFORMANCE_KEYWORDS["output"]) + self._score_hits(
+            job_corpus, self.PERFORMANCE_KEYWORDS["output"]
+        )
+
+        if high >= max(balanced, lifestyle) + 1:
+            mode = "high-performance"
+        elif lifestyle > high and lifestyle > balanced:
+            mode = "lifestyle-oriented"
+        else:
+            mode = "balanced"
+        output_vs_process = "output-biased" if output_score > process_score else "process-biased" if process_score > output_score else "balanced"
+        assessment = (
+            f"The environment reads as {mode}. Expectations point to {output_vs_process} evaluation. "
+            "Ownership and pace signals are explicit in hiring language."
+        )
+        return {"mode": mode, "output_vs_process": output_vs_process, "assessment": assessment}
+
+    def _infer_decision_style(self, *, corpus: str) -> Dict[str, Any]:
+        founder = self._score_hits(corpus, self.DECISION_KEYWORDS["founder"])
+        data = self._score_hits(corpus, self.DECISION_KEYWORDS["data"])
+        consensus = self._score_hits(corpus, self.DECISION_KEYWORDS["consensus"])
+        hierarchy = self._score_hits(corpus, self.DECISION_KEYWORDS["hierarchy"])
+        docs = self._score_hits(corpus, self.DECISION_KEYWORDS["docs"])
+        autonomy_hits = self._score_hits(corpus, self.DECISION_KEYWORDS["autonomy"])
+
+        style = "data-driven"
+        best = max(founder, data, consensus, hierarchy)
+        if best == founder and founder > 0:
+            style = "founder-led"
+        elif best == consensus and consensus > 0:
+            style = "consensus-driven"
+        elif best == hierarchy and hierarchy > 0:
+            style = "hierarchical"
+        autonomy = "high" if autonomy_hits >= 2 else "moderate" if autonomy_hits == 1 else "low"
+        documentation = "strong" if docs >= 2 else "moderate" if docs == 1 else "weak"
+        assessment = f"Decision-making appears {style}. Autonomy expectation is {autonomy}, and documentation discipline is {documentation}."
+        return {
+            "style": style,
+            "autonomy": autonomy,
+            "documentation": documentation,
+            "assessment": assessment,
+        }
+
+    def _infer_risk_speed_tolerance(self, *, corpus: str) -> Dict[str, Any]:
+        speed = self._score_hits(corpus, self.RISK_KEYWORDS["speed"])
+        correctness = self._score_hits(corpus, self.RISK_KEYWORDS["correctness"])
+        learning = self._score_hits(corpus, self.RISK_KEYWORDS["failure_learning"])
+        blame = self._score_hits(corpus, self.RISK_KEYWORDS["failure_blame"])
+        experimentation = self._score_hits(corpus, self.RISK_KEYWORDS["experimentation"])
+
+        speed_vs_perfection = "speed-biased" if speed > correctness else "correctness-biased" if correctness > speed else "balanced"
+        failure = "learning-oriented" if learning >= blame else "zero-defect"
+        experimentation_mode = "visible" if experimentation >= 2 else "limited" if experimentation == 1 else "unclear"
+        assessment = (
+            f"Risk posture is {speed_vs_perfection}. Failure handling looks {failure}. "
+            f"Experimentation is {experimentation_mode}."
+        )
+        return {
+            "speed_vs_perfection": speed_vs_perfection,
+            "failure_handling": failure,
+            "experimentation": experimentation_mode,
+            "assessment": assessment,
+        }
+
+    @staticmethod
+    def _infer_talent_profile(*, corpus: str, job_corpus: str) -> Dict[str, Any]:
+        thriving: List[str] = []
+        struggling: List[str] = []
+        blob = f"{corpus} {job_corpus}"
+        if any(x in blob for x in ["ownership", "self-starter", "autonomy"]):
+            thriving.append("high-agency operators who execute without hand-holding")
+            struggling.append("people who need constant direction")
+        if any(x in blob for x in ["fast-paced", "urgency", "rapid"]):
+            thriving.append("people comfortable with sustained urgency")
+            struggling.append("people who optimize for slow consensus")
+        if any(x in blob for x in ["cross-functional", "stakeholder", "collaboration"]):
+            thriving.append("strong cross-functional communicators")
+        if any(x in blob for x in ["quality", "high standards", "correctness", "reliability"]):
+            thriving.append("people with a strong quality bar under pressure")
+            struggling.append("people who trade correctness for convenience")
+        if not thriving:
+            thriving.append("self-directed contributors with strong execution discipline")
+        if not struggling:
+            struggling.append("people who avoid accountability in ambiguous environments")
+        assessment = (
+            f"Talent fit skews toward {thriving[0]}. Friction risk is highest for {struggling[0]}."
+        )
+        return {
+            "thrives": HeuristicCompanyProfileSynthesizer._unique_preserve_order(thriving, limit=6),
+            "struggles": HeuristicCompanyProfileSynthesizer._unique_preserve_order(struggling, limit=6),
+            "assessment": assessment,
+        }
+
+    @staticmethod
+    def _infer_collaboration_model(*, corpus: str, job_corpus: str) -> Dict[str, Any]:
+        blob = f"{corpus} {job_corpus}"
+        cross = sum(1 for x in ["cross-functional", "stakeholder", "partner with", "collaborat"] if x in blob)
+        process = sum(1 for x in ["process", "documentation", "compliance", "planning"] if x in blob)
+        independent = sum(1 for x in ["ownership", "autonomy", "self-starter", "independent"] if x in blob)
+
+        cross_intensity = "high" if cross >= 3 else "medium" if cross >= 1 else "low"
+        if process > independent + 1:
+            shape = "structured process"
+        elif independent > process + 1:
+            shape = "independent operators"
+        else:
+            shape = "fluid execution"
+        assessment = f"Collaboration intensity is {cross_intensity}. Operating shape looks like {shape}."
+        return {
+            "cross_functional_intensity": cross_intensity,
+            "operating_shape": shape,
+            "assessment": assessment,
+        }
+
+    @staticmethod
+    def _infer_contradictions(
+        *,
+        performance: Dict[str, Any],
+        decision: Dict[str, Any],
+        risk: Dict[str, Any],
+        collaboration: Dict[str, Any],
+    ) -> List[str]:
+        contradictions: List[str] = []
+        if performance.get("mode") == "high-performance" and risk.get("speed_vs_perfection") == "correctness-biased":
+            contradictions.append("Hiring language signals urgency, but risk posture emphasizes control and correctness.")
+        if decision.get("autonomy") == "high" and decision.get("style") in {"hierarchical", "founder-led"}:
+            contradictions.append("Autonomy is requested, yet decision power appears concentrated at the top.")
+        if collaboration.get("operating_shape") == "independent operators" and collaboration.get("cross_functional_intensity") == "high":
+            contradictions.append("The model expects independent execution and heavy coordination at the same time.")
+        return contradictions
+
+    @staticmethod
+    def _infer_join_avoid(
+        *, talent: Dict[str, Any], performance: Dict[str, Any], decision: Dict[str, Any]
+    ) -> tuple[List[str], List[str]]:
+        join = list(talent.get("thrives") or [])
+        avoid = list(talent.get("struggles") or [])
+        if performance.get("mode") == "high-performance":
+            avoid.append("if you need a low-pressure environment")
+        if decision.get("autonomy") == "high":
+            avoid.append("if you expect frequent top-down prioritization")
+        join.append("if you prefer direct feedback and clear accountability")
+        return (
+            HeuristicCompanyProfileSynthesizer._unique_preserve_order(join, limit=6),
+            HeuristicCompanyProfileSynthesizer._unique_preserve_order(avoid, limit=6),
+        )
+
+    @staticmethod
+    def _evidence_gaps(sources: List[ScrapedSource]) -> List[str]:
+        gaps: List[str] = []
+        domains = " ".join(str(getattr(source, "domain", "")) for source in sources)
+        if len(sources) < 4:
+            gaps.append("Source coverage is limited; profile confidence is medium-to-low.")
+        if "glassdoor.com" not in domains:
+            gaps.append("No meaningful employee-review evidence was captured.")
+        return gaps
+
+    @staticmethod
+    def _unique_preserve_order(values: List[str], limit: int) -> List[str]:
+        out: List[str] = []
+        seen: set[str] = set()
+        for item in values:
+            text = str(item or "").strip()
+            key = text.lower()
+            if not text or key in seen:
+                continue
+            seen.add(key)
+            out.append(text)
+            if len(out) >= limit:
+                break
+        return out
 
 
 class OpenAICompanyProfileSynthesizer:
@@ -868,12 +1122,14 @@ class OpenAICompanyProfileSynthesizer:
         base_url: str = "https://api.openai.com/v1",
         timeout_seconds: int = 30,
         max_chars_per_source: int = 2500,
+        analysis_rules_path: str = "",
     ) -> None:
         self.api_key = api_key.strip()
         self.model = model.strip() or "gpt-4o-mini"
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = max(5, int(timeout_seconds))
         self.max_chars_per_source = max(600, int(max_chars_per_source))
+        self.analysis_rules = self._load_analysis_rules(path=analysis_rules_path)
 
     def generate_profile(
         self,
@@ -892,6 +1148,7 @@ class OpenAICompanyProfileSynthesizer:
                 {
                     "url": source.url,
                     "title": source.title,
+                    "source_kind": source.source_kind or "general",
                     "text": source.extracted_text[: self.max_chars_per_source],
                 }
             )
@@ -908,24 +1165,59 @@ class OpenAICompanyProfileSynthesizer:
                     "role": "system",
                     "content": (
                         "You are an evidence-based company culture analyst. "
-                        "Output strict JSON only. Do not invent facts not present in evidence."
+                        "Output strict JSON only. No markdown. No PR language."
                     ),
                 },
                 {
                     "role": "user",
                     "content": json.dumps(
                         {
-                            "task": "Build company cultural profile from evidence.",
+                            "task": (
+                                "Infer the real operating culture from evidence. "
+                                "Be explicit about trade-offs, pressure profile, and who will fail in this environment."
+                            ),
                             "company_name": company_name,
                             "website_url": website_url,
+                            "analysis_rules": self.analysis_rules,
                             "required_schema": {
-                                "summary_200_300_words": "string",
-                                "culture_values": "array[string]",
-                                "work_style": "array[string]",
-                                "management_style": "array[string]",
-                                "hiring_signals": "array[string]",
-                                "risks_or_unknowns": "array[string]",
-                                "culture_interview_questions": "array[string] with 2-3 items",
+                                "mission_orientation": {
+                                    "mission_intensity": "string",
+                                    "orientation": "string",
+                                    "ambition_scope": "string",
+                                    "assessment": "string",
+                                },
+                                "performance_expectations": {
+                                    "mode": "string",
+                                    "output_vs_process": "string",
+                                    "assessment": "string",
+                                },
+                                "decision_making_style": {
+                                    "style": "string",
+                                    "autonomy": "string",
+                                    "documentation": "string",
+                                    "assessment": "string",
+                                },
+                                "risk_speed_tolerance": {
+                                    "speed_vs_perfection": "string",
+                                    "failure_handling": "string",
+                                    "experimentation": "string",
+                                    "assessment": "string",
+                                },
+                                "talent_profile_they_attract": {
+                                    "thrives": "array[string]",
+                                    "struggles": "array[string]",
+                                    "assessment": "string",
+                                },
+                                "collaboration_model": {
+                                    "cross_functional_intensity": "string",
+                                    "operating_shape": "string",
+                                    "assessment": "string",
+                                },
+                                "cultural_contradictions": "array[string]",
+                                "who_should_join": "array[string]",
+                                "who_should_avoid": "array[string]",
+                                "evidence_gaps": "array[string]",
+                                "summary_200_300_words": "string (direct tone, no marketing language)",
                             },
                             "evidence": evidence,
                         },
@@ -964,6 +1256,22 @@ class OpenAICompanyProfileSynthesizer:
         message = choices[0].get("message") if isinstance(choices[0], dict) else None
         content = message.get("content") if isinstance(message, dict) else ""
         return content if isinstance(content, str) else ""
+
+    @staticmethod
+    def _load_analysis_rules(path: str) -> str:
+        cleaned = str(path or "").strip()
+        if cleaned:
+            target = Path(cleaned)
+            if not target.is_absolute() and not target.exists():
+                target = Path(__file__).resolve().parents[2] / cleaned
+            if target.exists():
+                try:
+                    text = target.read_text(encoding="utf-8").strip()
+                    if text:
+                        return text
+                except OSError:
+                    pass
+        return DEFAULT_CULTURE_ANALYSIS_RULES
 
 
 class CompanyCultureProfileService:
@@ -1056,6 +1364,7 @@ class CompanyCultureProfileService:
             warnings.append("no_scraped_sources_for_synthesis")
             profile = self._fallback_profile(normalized_name)
         profile = self._merge_profile_with_job_board_insights(profile, job_board_insights)
+        profile = self._normalize_profile_shape(profile, company_name=normalized_name)
 
         return {
             "company_name": normalized_name,
@@ -1243,6 +1552,141 @@ class CompanyCultureProfileService:
         return merged
 
     @staticmethod
+    def _normalize_profile_shape(profile: Dict[str, Any], *, company_name: str) -> Dict[str, Any]:
+        normalized = dict(profile or {})
+
+        def as_list(value: Any, *, limit: int = 8) -> List[str]:
+            if isinstance(value, list):
+                items = [str(x).strip() for x in value if str(x).strip()]
+                return CompanyCultureProfileService._unique_preserve_order(items, limit=limit)
+            if isinstance(value, str) and value.strip():
+                return [value.strip()][:limit]
+            return []
+
+        def as_str(value: Any, fallback: str = "") -> str:
+            text = str(value or "").strip()
+            return text or fallback
+
+        mission = normalized.get("mission_orientation")
+        if not isinstance(mission, dict):
+            mission = {"assessment": as_str(mission)}
+        performance = normalized.get("performance_expectations")
+        if not isinstance(performance, dict):
+            performance = {"assessment": as_str(performance)}
+        decision = normalized.get("decision_making_style")
+        if not isinstance(decision, dict):
+            decision = {"assessment": as_str(decision)}
+        risk = normalized.get("risk_speed_tolerance")
+        if not isinstance(risk, dict):
+            risk = {"assessment": as_str(risk)}
+        talent = normalized.get("talent_profile_they_attract")
+        if not isinstance(talent, dict):
+            talent = {"assessment": as_str(talent), "thrives": [], "struggles": []}
+        collaboration = normalized.get("collaboration_model")
+        if not isinstance(collaboration, dict):
+            collaboration = {"assessment": as_str(collaboration)}
+
+        mission.setdefault("mission_intensity", "unclear")
+        mission.setdefault("orientation", "mixed")
+        mission.setdefault("ambition_scope", "unclear")
+        mission["assessment"] = as_str(mission.get("assessment"), "Mission signals are present but not yet conclusive.")
+
+        performance.setdefault("mode", "unclear")
+        performance.setdefault("output_vs_process", "unclear")
+        performance["assessment"] = as_str(
+            performance.get("assessment"),
+            "Performance profile is unclear due to limited explicit language in sources.",
+        )
+
+        decision.setdefault("style", "mixed")
+        decision.setdefault("autonomy", "unclear")
+        decision.setdefault("documentation", "unclear")
+        decision["assessment"] = as_str(
+            decision.get("assessment"),
+            "Decision style signals are mixed and require more direct leadership evidence.",
+        )
+
+        risk.setdefault("speed_vs_perfection", "unclear")
+        risk.setdefault("failure_handling", "unclear")
+        risk.setdefault("experimentation", "unclear")
+        risk["assessment"] = as_str(
+            risk.get("assessment"),
+            "Risk posture is not explicit in available materials.",
+        )
+
+        talent["thrives"] = as_list(talent.get("thrives"), limit=8)
+        talent["struggles"] = as_list(talent.get("struggles"), limit=8)
+        talent["assessment"] = as_str(talent.get("assessment"), "Candidate fit profile remains partially inferred.")
+
+        collaboration.setdefault("cross_functional_intensity", "unclear")
+        collaboration.setdefault("operating_shape", "unclear")
+        collaboration["assessment"] = as_str(
+            collaboration.get("assessment"),
+            "Collaboration model is partially visible but not fully explicit.",
+        )
+
+        contradictions = as_list(normalized.get("cultural_contradictions"), limit=8)
+        who_join = as_list(normalized.get("who_should_join"), limit=8)
+        who_avoid = as_list(normalized.get("who_should_avoid"), limit=8)
+        evidence_gaps = as_list(normalized.get("evidence_gaps"), limit=8)
+
+        summary = as_str(normalized.get("summary_200_300_words"))
+        if not summary:
+            summary = (
+                f"{company_name} appears to operate with {as_str(performance.get('mode'), 'mixed')} expectations, "
+                f"{as_str(decision.get('style'), 'mixed')} decision dynamics, and "
+                f"{as_str(risk.get('speed_vs_perfection'), 'unclear')} risk trade-offs. "
+                "This profile should be treated as directional until more primary sources are added."
+            )
+
+        culture_values = as_list(normalized.get("culture_values"), limit=8)
+        if not culture_values:
+            culture_values = as_list(normalized.get("cultural_attributes_in_job_ads"), limit=8)
+
+        work_style = as_list(normalized.get("work_style"), limit=8)
+        if not work_style:
+            work_style = [performance["assessment"], collaboration["assessment"]]
+        management_style = as_list(normalized.get("management_style"), limit=8)
+        if not management_style:
+            management_style = [decision["assessment"]]
+        hiring_signals = as_list(normalized.get("hiring_signals"), limit=8)
+        if not hiring_signals:
+            hiring_signals = [f"fit: {x}" for x in talent["thrives"][:4]]
+        risks = as_list(normalized.get("risks_or_unknowns"), limit=8)
+        if not risks:
+            risks = contradictions[:4] + evidence_gaps[:4]
+        questions = as_list(normalized.get("culture_interview_questions"), limit=3)
+        if len(questions) < 2:
+            questions = [
+                "Describe a time you pushed back on a decision and what happened.",
+                "How do you balance delivery speed against quality when stakes are high?",
+                "What type of manager and operating cadence makes you perform poorly?",
+            ]
+
+        normalized.update(
+            {
+                "summary_200_300_words": summary,
+                "culture_values": culture_values,
+                "work_style": work_style,
+                "management_style": management_style,
+                "hiring_signals": hiring_signals,
+                "risks_or_unknowns": CompanyCultureProfileService._unique_preserve_order(risks, limit=8),
+                "culture_interview_questions": questions[:3],
+                "mission_orientation": mission,
+                "performance_expectations": performance,
+                "decision_making_style": decision,
+                "risk_speed_tolerance": risk,
+                "talent_profile_they_attract": talent,
+                "collaboration_model": collaboration,
+                "cultural_contradictions": contradictions,
+                "who_should_join": who_join,
+                "who_should_avoid": who_avoid,
+                "evidence_gaps": evidence_gaps,
+            }
+        )
+        return normalized
+
+    @staticmethod
     def _extract_job_signal_snippets(text: str, limit: int = 3) -> List[str]:
         chunks = re.split(r"(?<=[\.\!\?])\s+|\s[•\-]\s", str(text or ""))
         out: List[str] = []
@@ -1308,8 +1752,8 @@ class CompanyCultureProfileService:
     def _fallback_profile(company_name: str) -> Dict[str, Any]:
         return {
             "summary_200_300_words": (
-                f"{company_name} profile was generated with limited confidence due to missing or weak source evidence. "
-                "Please review source links and regenerate once enough public information is available."
+                f"{company_name} has insufficient external evidence for a reliable operating-culture read. "
+                "Current output is provisional and should not be used for candidate fit decisions without more sources."
             ),
             "culture_values": [],
             "work_style": [],
@@ -1317,7 +1761,17 @@ class CompanyCultureProfileService:
             "hiring_signals": [],
             "risks_or_unknowns": ["Insufficient evidence from scraped sources."],
             "culture_interview_questions": [
-                "What team values are most important for success in this company?",
-                "Describe a project where your collaboration style matched the team's culture.",
+                "Describe a time you challenged a leadership decision with data.",
+                "In high-pressure situations, how do you trade speed against quality?",
             ],
+            "mission_orientation": {"assessment": "Not enough evidence."},
+            "performance_expectations": {"assessment": "Not enough evidence."},
+            "decision_making_style": {"assessment": "Not enough evidence."},
+            "risk_speed_tolerance": {"assessment": "Not enough evidence."},
+            "talent_profile_they_attract": {"thrives": [], "struggles": [], "assessment": "Not enough evidence."},
+            "collaboration_model": {"assessment": "Not enough evidence."},
+            "cultural_contradictions": [],
+            "who_should_join": [],
+            "who_should_avoid": [],
+            "evidence_gaps": ["Insufficient evidence from scraped sources."],
         }

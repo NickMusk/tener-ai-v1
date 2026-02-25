@@ -68,6 +68,7 @@ Standalone service for company culture profile scraping/synthesis with mini dash
 It now prioritizes job-board pages (Greenhouse/Lever/Workday/etc.) to extract:
 - what candidate profiles the company hired for previously
 - which culture attributes are emphasized in job ads
+- and it generates an operational culture profile (mission/performance/decision/risk/join-vs-avoid)
 
 Run:
 
@@ -94,6 +95,7 @@ Useful switches:
 - `TENER_COMPANY_PROFILE_SEARCH_MODE=bing_rss|duckduckgo_html|brave_html|google_cse|seed`
 - `TENER_COMPANY_PROFILE_ALLOW_SEED_FALLBACK=true|false`
 - `TENER_COMPANY_PROFILE_MIN_JOB_BOARD_LINKS=3`
+- `TENER_COMPANY_PROFILE_ANALYSIS_RULES_PATH=config/instructions/company_culture_profile_analysis_rules.md`
 - `TENER_COMPANY_PROFILE_PORT=8095`
 
 ## API

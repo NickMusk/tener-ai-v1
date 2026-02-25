@@ -337,6 +337,38 @@
           <ul id="roles-list" class="list"></ul>
         </div>
         <div style="margin-top:10px;">
+          <div class="tiny">Mission Orientation</div>
+          <p id="mission-orientation" class="tiny"></p>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="tiny">Performance Expectations</div>
+          <p id="performance-expectations" class="tiny"></p>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="tiny">Decision-Making Style</div>
+          <p id="decision-style" class="tiny"></p>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="tiny">Risk & Speed Tolerance</div>
+          <p id="risk-speed" class="tiny"></p>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="tiny">Collaboration Model</div>
+          <p id="collaboration-model" class="tiny"></p>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="tiny">Cultural Contradictions</div>
+          <ul id="contradictions-list" class="list"></ul>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="tiny">Who Should Join</div>
+          <ul id="who-join-list" class="list"></ul>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="tiny">Who Should Avoid</div>
+          <ul id="who-avoid-list" class="list"></ul>
+        </div>
+        <div style="margin-top:10px;">
           <div class="tiny">Interview Questions</div>
           <ul id="questions-list" class="list"></ul>
         </div>
@@ -440,6 +472,11 @@
       const result = payload?.result || {};
       const profile = result.profile || {};
       const insights = result.job_board_insights || {};
+      const mission = profile.mission_orientation || {};
+      const performance = profile.performance_expectations || {};
+      const decision = profile.decision_making_style || {};
+      const risk = profile.risk_speed_tolerance || {};
+      const collaboration = profile.collaboration_model || {};
 
       $("m-latency").textContent = String(payload?.latency_ms || 0);
       $("m-found").textContent = String(result.searched_links_total || 0);
@@ -451,6 +488,14 @@
       renderList($("candidate-profiles-list"), profile.candidate_profiles_sought || insights.candidate_profiles_sought);
       renderList($("job-culture-list"), profile.cultural_attributes_in_job_ads || insights.cultural_attributes_in_job_ads);
       renderList($("roles-list"), insights.example_roles_seen);
+      $("mission-orientation").textContent = mission.assessment || "No data";
+      $("performance-expectations").textContent = performance.assessment || "No data";
+      $("decision-style").textContent = decision.assessment || "No data";
+      $("risk-speed").textContent = risk.assessment || "No data";
+      $("collaboration-model").textContent = collaboration.assessment || "No data";
+      renderList($("contradictions-list"), profile.cultural_contradictions);
+      renderList($("who-join-list"), profile.who_should_join);
+      renderList($("who-avoid-list"), profile.who_should_avoid);
       renderList($("questions-list"), profile.culture_interview_questions);
       renderSources(result.sources);
       $("raw-json").textContent = JSON.stringify(payload, null, 2);

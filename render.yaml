@@ -56,6 +56,8 @@ services:
         value: "true"
       - key: TENER_COMPANY_PROFILE_USE_LLM
         value: "true"
+      - key: TENER_COMPANY_PROFILE_ANALYSIS_RULES_PATH
+        value: config/instructions/company_culture_profile_analysis_rules.md
       - key: TENER_COMPANY_PROFILE_SEED_COMPANY
         value: Tener
       - key: TENER_COMPANY_PROFILE_SEED_WEBSITE

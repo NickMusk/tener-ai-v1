@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Dict, List
 
 from tener_ai.company_culture_profile import (
@@ -8,6 +10,7 @@ from tener_ai.company_culture_profile import (
     DuckDuckGoHtmlSearchProvider,
     FetchResponse,
     HeuristicCompanyProfileSynthesizer,
+    OpenAICompanyProfileSynthesizer,
     SeedSearchProvider,
     SearchResult,
     build_google_queries,
@@ -216,6 +219,9 @@ class CompanyCultureProfileTests(unittest.TestCase):
         self.assertGreaterEqual(int(out["job_board_insights"]["job_board_sources_total"]), 1)
         self.assertIn("candidate_profiles_sought", out["profile"])
         self.assertTrue(out["profile"]["candidate_profiles_sought"])
+        self.assertIn("mission_orientation", out["profile"])
+        self.assertIn("performance_expectations", out["profile"])
+        self.assertIn("who_should_avoid", out["profile"])
         self.assertEqual(out["warnings"], [])
 
     def test_seed_search_provider_returns_urls(self) -> None:
@@ -244,6 +250,14 @@ class CompanyCultureProfileTests(unittest.TestCase):
         self.assertIn("summary_200_300_words", profile)
         self.assertIn("culture_values", profile)
         self.assertIn("culture_interview_questions", profile)
+        self.assertIn("mission_orientation", profile)
+        self.assertIn("performance_expectations", profile)
+        self.assertIn("decision_making_style", profile)
+        self.assertIn("risk_speed_tolerance", profile)
+        self.assertIn("talent_profile_they_attract", profile)
+        self.assertIn("collaboration_model", profile)
+        self.assertIn("who_should_join", profile)
+        self.assertIn("who_should_avoid", profile)
         self.assertGreater(len(profile["culture_interview_questions"]), 1)
 
     def test_brave_html_parser_extracts_result_pairs(self) -> None:
@@ -301,6 +315,16 @@ class CompanyCultureProfileTests(unittest.TestCase):
         self.assertEqual(len(out), 2)
         self.assertEqual(out[0].url, "https://notion.so/careers")
         self.assertIn("Notion Careers", out[0].title)
+
+    def test_openai_synthesizer_loads_analysis_rules_from_file(self) -> None:
+        with TemporaryDirectory() as td:
+            path = Path(td) / "rules.md"
+            path.write_text("Rule A\nRule B", encoding="utf-8")
+            synth = OpenAICompanyProfileSynthesizer(
+                api_key="test-key",
+                analysis_rules_path=str(path),
+            )
+            self.assertIn("Rule A", synth.analysis_rules)
 
 
 if __name__ == "__main__":

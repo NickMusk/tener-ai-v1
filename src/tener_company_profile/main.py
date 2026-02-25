@@ -90,6 +90,12 @@ def build_services() -> Dict[str, Any]:
             base_url=str(os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")).strip(),
             timeout_seconds=env_int("TENER_COMPANY_PROFILE_LLM_TIMEOUT_SECONDS", 30, minimum=5),
             max_chars_per_source=env_int("TENER_COMPANY_PROFILE_LLM_MAX_CHARS_PER_SOURCE", 2500, minimum=300),
+            analysis_rules_path=str(
+                os.environ.get(
+                    "TENER_COMPANY_PROFILE_ANALYSIS_RULES_PATH",
+                    str(project_root() / "config" / "instructions" / "company_culture_profile_analysis_rules.md"),
+                )
+            ).strip(),
         )
         llm_backend = "openai"
     else:
