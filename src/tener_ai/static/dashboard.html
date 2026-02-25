@@ -717,6 +717,7 @@
                 <tr>
                   <th>Conversation</th>
                   <th>Candidate</th>
+                  <th>Job</th>
                   <th>Source</th>
                   <th>Pre-resume</th>
                   <th>Last Message</th>
@@ -724,7 +725,7 @@
                 </tr>
               </thead>
               <tbody id="agent-accounts-tbody">
-                <tr><td colspan="6" class="muted">Select job</td></tr>
+                <tr><td colspan="7" class="muted">No conversations yet</td></tr>
               </tbody>
             </table>
           </div>
@@ -833,12 +834,15 @@
     }
 
     const SELECTED_JOB_STORAGE_KEY = "tener.selectedJobId";
+    const AGENT_SELECTED_JOB_STORAGE_KEY = "tener.agentSelectedJobId";
     const TEST_MODE_STORAGE_KEY = "tener.testMode";
     const CANDS_OVERALL_FILTER_STORAGE_KEY = "tener.candidatesOverallFilter";
     const PIPELINE_STEPS = ["source", "enrich", "verify", "add", "outreach"];
 
     const state = {
       jobId: null,
+      agentJobId: null,
+      jobs: [],
       testMode: true,
       candidatesOverallFilter: "all",
       activeView: "pipeline",
@@ -1066,13 +1070,27 @@
 
     function selectedJobId() {
       const fromPipeline = $("job-select") ? $("job-select").value : "";
-      const fromAgent = $("agent-job-select") ? $("agent-job-select").value : "";
-      return Number(fromPipeline || fromAgent || state.jobId || 0) || null;
+      return Number(fromPipeline || state.jobId || 0) || null;
+    }
+
+    function normalizeAgentJobId(value) {
+      const raw = String(value ?? "").trim().toLowerCase();
+      if (!raw || raw === "all" || raw === "0") return null;
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed) || parsed <= 0) return null;
+      return parsed;
     }
 
     function selectedAgentJobId() {
       const fromAgent = $("agent-job-select") ? $("agent-job-select").value : "";
-      return Number(fromAgent || state.jobId || 0) || null;
+      return normalizeAgentJobId(fromAgent || state.agentJobId || "");
+    }
+
+    function getJobById(jobId) {
+      const safeId = Number(jobId || 0) || null;
+      if (!safeId) return null;
+      const jobs = Array.isArray(state.jobs) ? state.jobs : [];
+      return jobs.find((x) => Number(x.id) === safeId) || null;
     }
 
     function isTestModeEnabled() {
@@ -1241,7 +1259,12 @@
       $("view-agent").classList.toggle("active", state.activeView === "agent");
     }
 
-    function setAgentJobMeta(job) {
+    function setAgentJobMeta(job, allJobs = false) {
+      if (allJobs) {
+        $("agent-job-title").textContent = "all jobs";
+        $("agent-jd-text").value = "";
+        return;
+      }
       if (!job) {
         $("agent-job-title").textContent = "no job selected";
         $("agent-jd-text").value = "";
@@ -1255,9 +1278,10 @@
     }
 
     function syncJobSelectors() {
-      const value = state.jobId ? String(state.jobId) : "";
-      if ($("job-select")) $("job-select").value = value;
-      if ($("agent-job-select")) $("agent-job-select").value = value;
+      const pipelineValue = state.jobId ? String(state.jobId) : "";
+      const agentValue = state.agentJobId ? String(state.agentJobId) : "all";
+      if ($("job-select")) $("job-select").value = pipelineValue;
+      if ($("agent-job-select")) $("agent-job-select").value = agentValue;
     }
 
     async function onSelectedJobChanged(jobId) {
@@ -1270,7 +1294,6 @@
       syncJobSelectors();
       if (!state.jobId) {
         syncJobMeta(null);
-        setAgentJobMeta(null);
         await loadJobProgress(null);
         await refreshCandidates();
         await refreshLogs();
@@ -1280,14 +1303,25 @@
       try {
         const job = await api(`/api/jobs/${state.jobId}`);
         syncJobMeta(job);
-        setAgentJobMeta(job);
       } catch {
         syncJobMeta(null);
-        setAgentJobMeta(null);
       }
       await loadJobProgress(state.jobId);
       await refreshCandidates();
       await refreshLogs();
+      await refreshAgentAccounts();
+    }
+
+    async function onSelectedAgentJobChanged(jobId) {
+      state.agentJobId = normalizeAgentJobId(jobId);
+      if (state.agentJobId) {
+        localStorage.setItem(AGENT_SELECTED_JOB_STORAGE_KEY, String(state.agentJobId));
+      } else {
+        localStorage.setItem(AGENT_SELECTED_JOB_STORAGE_KEY, "all");
+      }
+      syncJobSelectors();
+      const selected = state.agentJobId ? getJobById(state.agentJobId) : null;
+      setAgentJobMeta(selected, state.agentJobId === null);
       await refreshAgentAccounts();
     }
 
@@ -1316,14 +1350,16 @@
       const agentSelect = $("agent-job-select");
       if (pipelineSelect) pipelineSelect.innerHTML = '';
       if (agentSelect) agentSelect.innerHTML = '';
+      state.jobs = Array.isArray(data.items) ? data.items : [];
 
-      if (!data.items || !data.items.length) {
+      if (!state.jobs.length) {
         const opt = document.createElement('option');
         opt.value = '';
         opt.textContent = 'No jobs yet';
         if (pipelineSelect) pipelineSelect.appendChild(opt.cloneNode(true));
-        if (agentSelect) agentSelect.appendChild(opt);
+        if (agentSelect) agentSelect.appendChild(opt.cloneNode(true));
         state.jobId = null;
+        state.agentJobId = null;
         $("job-label").textContent = 'none';
         $("job-meta").textContent = 'Create a job from modal window to start manual pipeline.';
         setAgentJobMeta(null);
@@ -1332,13 +1368,32 @@
       }
 
       const rememberedJobId = Number(localStorage.getItem(SELECTED_JOB_STORAGE_KEY) || "0") || null;
-      const preferredJobId = state.jobId && data.items.some((x) => Number(x.id) === Number(state.jobId))
+      const preferredJobId = state.jobId && state.jobs.some((x) => Number(x.id) === Number(state.jobId))
         ? Number(state.jobId)
-        : (rememberedJobId && data.items.some((x) => Number(x.id) === rememberedJobId))
+        : (rememberedJobId && state.jobs.some((x) => Number(x.id) === rememberedJobId))
           ? rememberedJobId
-          : Number(data.items[0].id);
+          : Number(state.jobs[0].id);
 
-      data.items.forEach((job) => {
+      const rememberedAgentRaw = localStorage.getItem(AGENT_SELECTED_JOB_STORAGE_KEY);
+      const rememberedAgentJobId = rememberedAgentRaw === null ? null : normalizeAgentJobId(rememberedAgentRaw);
+      let preferredAgentJobId = state.agentJobId && state.jobs.some((x) => Number(x.id) === Number(state.agentJobId))
+        ? Number(state.agentJobId)
+        : rememberedAgentRaw !== null
+          ? (rememberedAgentRaw === "all" ? null : rememberedAgentJobId)
+          : preferredJobId;
+      if (preferredAgentJobId && !state.jobs.some((x) => Number(x.id) === Number(preferredAgentJobId))) {
+        preferredAgentJobId = preferredJobId;
+      }
+
+      if (agentSelect) {
+        const allOpt = document.createElement('option');
+        allOpt.value = 'all';
+        allOpt.textContent = 'All jobs';
+        if (preferredAgentJobId === null) allOpt.selected = true;
+        agentSelect.appendChild(allOpt);
+      }
+
+      state.jobs.forEach((job) => {
         const opt = document.createElement('option');
         opt.value = job.id;
         const company = String(job.company || "").trim();
@@ -1349,16 +1404,18 @@
           pipelineSelect.appendChild(clone);
         }
         if (agentSelect) {
-          if (Number(job.id) === preferredJobId) opt.selected = true;
+          if (Number(job.id) === preferredAgentJobId) opt.selected = true;
           agentSelect.appendChild(opt);
         }
       });
 
       state.jobId = preferredJobId;
+      state.agentJobId = preferredAgentJobId;
       syncJobSelectors();
-      const selected = data.items.find((x) => Number(x.id) === state.jobId) || null;
-      syncJobMeta(selected);
-      setAgentJobMeta(selected);
+      const selected = getJobById(state.jobId);
+      syncJobMeta(selected || null);
+      const selectedAgent = getJobById(state.agentJobId);
+      setAgentJobMeta(selectedAgent || null, state.agentJobId === null);
     }
 
     function syncJobMeta(job) {
@@ -1406,7 +1463,7 @@
 
     async function saveAgentJd() {
       const jobId = selectedAgentJobId();
-      if (!jobId) return alert('Select a job');
+      if (!jobId) return alert('Select a specific job (not All jobs)');
       const jdText = $("agent-jd-text").value.trim();
       if (!jdText) return alert('JD description is required');
       const out = await api(`/api/jobs/${jobId}/jd`, {
@@ -1422,12 +1479,17 @@
       const body = $("agent-accounts-tbody");
       const accounts = state.agentAccounts || [];
       if (!accounts.length) {
-        body.innerHTML = '<tr><td colspan="6" class="muted">No active conversations for this job</td></tr>';
+        const msg = selectedAgentJobId()
+          ? "No active conversations for this job"
+          : "No active conversations across all jobs";
+        body.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(msg)}</td></tr>`;
         return;
       }
       body.innerHTML = accounts.map((row) => {
         const selected = Number(row.conversation_id) === Number(state.agentConversationId) ? 'row-selected' : '';
         const candidate = escapeHtml(row.candidate_name || `Candidate ${row.candidate_id}`);
+        const jobTitle = escapeHtml(row.job_title || "-");
+        const jobLabel = Number(row.job_id || 0) > 0 ? `#${Number(row.job_id)} ${jobTitle}` : jobTitle;
         const source = escapeHtml(row.candidate_source || '-');
         const status = escapeHtml(row.pre_resume_status || row.conversation_status || '-');
         const last = escapeHtml(shortText(row.last_message || '-', 100));
@@ -1435,6 +1497,7 @@
           <tr class="${selected}">
             <td class="mono">${row.conversation_id}</td>
             <td>${candidate}</td>
+            <td>${jobLabel}</td>
             <td>${source}</td>
             <td>${status}</td>
             <td>${last}</td>
@@ -1456,15 +1519,8 @@
 
     async function refreshAgentAccounts() {
       const jobId = selectedAgentJobId();
-      if (!jobId) {
-        state.agentAccounts = [];
-        state.agentConversationId = null;
-        renderAgentAccounts();
-        $("agent-chat-title").textContent = "No conversation selected";
-        $("agent-chat-messages").innerHTML = '<div class="muted">Select job first.</div>';
-        return;
-      }
-      const out = await api(`/api/chats/overview?limit=300&job_id=${encodeURIComponent(jobId)}`);
+      const scopeQuery = jobId ? `&job_id=${encodeURIComponent(jobId)}` : "";
+      const out = await api(`/api/chats/overview?limit=300${scopeQuery}`);
       state.agentAccounts = out.items || [];
       if (!state.agentAccounts.some((x) => Number(x.conversation_id) === Number(state.agentConversationId))) {
         state.agentConversationId = null;
@@ -1472,6 +1528,9 @@
       renderAgentAccounts();
       if (state.agentConversationId) {
         await openAgentConversation(state.agentConversationId);
+      } else {
+        $("agent-chat-title").textContent = "No conversation selected";
+        $("agent-chat-messages").innerHTML = '<div class="muted">Open any account to see dialogue.</div>';
       }
     }
 
@@ -1506,13 +1565,15 @@
       }).join('');
       state.agentConversationId = Number(conversationId);
       if (convo && convo.job_id && Number(convo.job_id) !== Number(state.jobId)) {
-        await onSelectedJobChanged(Number(convo.job_id));
+        if (selectedAgentJobId() !== null) {
+          await onSelectedJobChanged(Number(convo.job_id));
+        }
       }
     }
 
     async function addManualAgentAccount() {
       const jobId = selectedAgentJobId();
-      if (!jobId) return alert('Select a job');
+      if (!jobId) return alert('Select a specific job (not All jobs)');
       const fullName = $("agent-manual-name").value.trim();
       if (!fullName) return alert('Candidate name is required');
       const payload = {
@@ -1939,7 +2000,7 @@
       });
 
       $("agent-job-select").addEventListener('change', async (e) => {
-        await onSelectedJobChanged(Number(e.target.value || '0') || null);
+        await onSelectedAgentJobChanged(e.target.value);
       });
       $("test-mode-toggle").addEventListener('change', () => {
         const enabled = isTestModeEnabled();
