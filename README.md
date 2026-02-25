@@ -62,6 +62,36 @@ PYTHONPATH=src python3 -m tener_ai
 Server starts on `http://127.0.0.1:8080`.
 Server binds `0.0.0.0` and uses `PORT` automatically in cloud.
 
+## Company Profile Test Service
+
+Standalone service for company culture profile scraping/synthesis with mini dashboard.
+
+Run:
+
+```bash
+cd "/Users/Nick/Documents/Tener prototype"
+PYTHONPATH=src python3 -m tener_company_profile
+```
+
+Service defaults:
+- API/UI: `http://127.0.0.1:8095`
+- dashboard: `GET /dashboard`
+- generate: `POST /api/company-profiles/generate`
+
+Recommended env vars for real Google + LLM mode:
+
+```bash
+export GOOGLE_CSE_API_KEY="<google_key>"
+export GOOGLE_CSE_CX="<google_cse_id>"
+export OPENAI_API_KEY="<openai_key>"
+PYTHONPATH=src python3 -m tener_company_profile
+```
+
+Useful switches:
+- `TENER_COMPANY_PROFILE_SEARCH_MODE=google_cse|seed`
+- `TENER_COMPANY_PROFILE_ALLOW_SEED_FALLBACK=true|false`
+- `TENER_COMPANY_PROFILE_PORT=8095`
+
 ## API
 
 ### 1) Create Job

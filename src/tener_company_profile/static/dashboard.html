@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tener Company Profile Lab</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0a0e14;
+      --bg-card: #141921;
+      --bg-hover: #1a1f2a;
+      --accent-green: #00ff87;
+      --accent-green-dim: rgba(0, 255, 135, 0.12);
+      --accent-green-glow: rgba(0, 255, 135, 0.35);
+      --accent-blue: #00d4ff;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --border-color: #30363d;
+      --ok: #10b981;
+      --warn: #f59e0b;
+      --err: #ef4444;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      min-height: 100vh;
+      font-family: 'DM Sans', sans-serif;
+      color: var(--text-primary);
+      background: radial-gradient(circle at 20% 20%, var(--accent-green-dim) 0%, transparent 45%),
+                  radial-gradient(circle at 80% 10%, rgba(0, 212, 255, 0.08) 0%, transparent 35%),
+                  var(--bg-dark);
+      display: grid;
+      grid-template-columns: 280px 1fr;
+    }
+
+    .sidebar {
+      border-right: 1px solid var(--border-color);
+      background: rgba(20, 25, 33, 0.95);
+      padding: 26px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      height: 100vh;
+      position: sticky;
+      top: 0;
+    }
+
+    .logo {
+      font-family: 'Space Mono', monospace;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .logo span { color: var(--accent-green); }
+    .subnote { color: var(--text-secondary); font-size: 13px; line-height: 1.4; }
+
+    .badge {
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-family: 'Space Mono', monospace;
+      display: inline-block;
+    }
+
+    .badge.ok { color: var(--ok); border-color: var(--ok); }
+    .badge.warn { color: var(--warn); border-color: var(--warn); }
+    .badge.err { color: var(--err); border-color: var(--err); }
+
+    .runtime {
+      border: 1px solid var(--border-color);
+      background: var(--bg-card);
+      border-radius: 12px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .runtime .row {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .mono {
+      font-family: 'Space Mono', monospace;
+      color: var(--text-primary);
+      font-size: 12px;
+    }
+
+    .main {
+      padding: 24px;
+      display: grid;
+      gap: 16px;
+      align-content: start;
+    }
+
+    .card {
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      background: var(--bg-card);
+      padding: 16px;
+    }
+
+    .title {
+      font-family: 'Space Mono', monospace;
+      font-size: 22px;
+      line-height: 1.2;
+      background: linear-gradient(135deg, var(--text-primary), var(--accent-green));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .subtitle {
+      color: var(--text-secondary);
+      margin-top: 7px;
+      font-size: 14px;
+    }
+
+    .form-grid {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .form-grid .full { grid-column: 1 / -1; }
+
+    input, button {
+      width: 100%;
+      border: 1px solid var(--border-color);
+      border-radius: 9px;
+      padding: 11px 12px;
+      background: #0f141c;
+      color: var(--text-primary);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+    }
+
+    button {
+      background: var(--bg-hover);
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button:hover { border-color: var(--accent-green); }
+
+    .btn-primary {
+      background: var(--accent-green);
+      color: #08120d;
+      border-color: var(--accent-green);
+      box-shadow: 0 0 20px var(--accent-green-glow);
+    }
+
+    .button-row { display: flex; gap: 8px; }
+
+    .status-line {
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--text-secondary);
+      min-height: 18px;
+    }
+
+    .status-line strong { color: var(--text-primary); }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      border: 1px solid var(--border-color);
+      border-radius: 11px;
+      background: #111722;
+      padding: 12px;
+    }
+
+    .metric .label {
+      font-size: 11px;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .metric .value {
+      margin-top: 4px;
+      color: var(--accent-green);
+      font-family: 'Space Mono', monospace;
+      font-size: 24px;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.2fr 1fr;
+      gap: 12px;
+    }
+
+    .section-title {
+      font-family: 'Space Mono', monospace;
+      font-size: 14px;
+      margin-bottom: 10px;
+      color: var(--accent-blue);
+    }
+
+    .summary {
+      color: var(--text-primary);
+      line-height: 1.55;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+
+    .list {
+      list-style: none;
+      display: grid;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .list li {
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 8px 9px;
+      background: #101620;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+
+    th, td {
+      border-bottom: 1px solid var(--border-color);
+      padding: 8px 6px;
+      vertical-align: top;
+      text-align: left;
+    }
+
+    th { color: var(--text-secondary); font-weight: 600; }
+    td { color: var(--text-primary); }
+    .tiny { font-size: 11px; color: var(--text-secondary); }
+
+    pre {
+      margin-top: 10px;
+      border: 1px solid var(--border-color);
+      background: #0f141c;
+      border-radius: 10px;
+      padding: 10px;
+      max-height: 320px;
+      overflow: auto;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #9ad6ff;
+    }
+
+    @media (max-width: 1100px) {
+      body { grid-template-columns: 1fr; }
+      .sidebar { height: auto; position: relative; }
+      .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .layout { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div>
+      <div class="logo">Tener<span>.AI</span></div>
+      <p class="subnote">Company Culture Profile Lab</p>
+    </div>
+    <div>
+      <span id="health-badge" class="badge warn">loading</span>
+    </div>
+    <div class="runtime">
+      <div class="row"><span>Search</span><span id="runtime-search" class="mono">-</span></div>
+      <div class="row"><span>LLM</span><span id="runtime-llm" class="mono">-</span></div>
+      <div class="row"><span>Warnings</span><span id="runtime-warn-count" class="mono">0</span></div>
+    </div>
+    <div id="runtime-warnings" class="runtime"></div>
+  </aside>
+
+  <main class="main">
+    <section class="card">
+      <h1 class="title">Company Culture Profile Generator</h1>
+      <p class="subtitle">Input company name + website. Service runs search, scraping, and profile synthesis.</p>
+
+      <div class="form-grid">
+        <div>
+          <label class="tiny">Company Name</label>
+          <input id="company-name" value="Stripe" placeholder="Acme Labs">
+        </div>
+        <div>
+          <label class="tiny">Company Website</label>
+          <input id="company-website" value="https://stripe.com" placeholder="https://company.com">
+        </div>
+        <div class="full button-row">
+          <button id="sample-btn">Sample</button>
+          <button id="run-btn" class="btn-primary">Generate Profile</button>
+        </div>
+      </div>
+      <div id="status-line" class="status-line"></div>
+    </section>
+
+    <section class="grid-4">
+      <div class="metric"><div class="label">Latency (ms)</div><div id="m-latency" class="value">0</div></div>
+      <div class="metric"><div class="label">Links Found</div><div id="m-found" class="value">0</div></div>
+      <div class="metric"><div class="label">Scraped OK</div><div id="m-ok" class="value">0</div></div>
+      <div class="metric"><div class="label">Scraped Failed</div><div id="m-fail" class="value">0</div></div>
+    </section>
+
+    <section class="layout">
+      <div class="card">
+        <div class="section-title">Culture Profile</div>
+        <p id="summary" class="summary">No result yet.</p>
+        <div style="margin-top:12px;">
+          <div class="tiny">Culture Values</div>
+          <ul id="values-list" class="list"></ul>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="tiny">Interview Questions</div>
+          <ul id="questions-list" class="list"></ul>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">Sources</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Domain</th>
+              <th>Chars</th>
+              <th>URL</th>
+            </tr>
+          </thead>
+          <tbody id="sources-body"></tbody>
+        </table>
+        <pre id="raw-json">{}</pre>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    function setStatus(text, tone = "muted") {
+      const el = $("status-line");
+      el.innerHTML = text;
+      el.style.color = tone === "ok" ? "var(--ok)" : tone === "err" ? "var(--err)" : tone === "warn" ? "var(--warn)" : "var(--text-secondary)";
+    }
+
+    function setHealth(ok) {
+      const badge = $("health-badge");
+      badge.textContent = ok ? "healthy" : "error";
+      badge.className = `badge ${ok ? "ok" : "err"}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    async function api(path, options = {}) {
+      const response = await fetch(path, {
+        headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+        ...options,
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const msg = data.error || data.details || `HTTP ${response.status}`;
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function renderRuntime(runtime) {
+      $("runtime-search").textContent = runtime?.search_backend || "-";
+      $("runtime-llm").textContent = runtime?.llm_backend || "-";
+      const warnings = Array.isArray(runtime?.warnings) ? runtime.warnings : [];
+      $("runtime-warn-count").textContent = String(warnings.length);
+      $("runtime-warnings").innerHTML = warnings.length
+        ? warnings.map((w) => `<div class="tiny">${escapeHtml(w)}</div>`).join("")
+        : `<div class="tiny">No runtime warnings.</div>`;
+    }
+
+    function renderList(container, items) {
+      const normalized = Array.isArray(items) ? items : [];
+      if (!normalized.length) {
+        container.innerHTML = `<li class="tiny">No data</li>`;
+        return;
+      }
+      container.innerHTML = normalized.map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+    }
+
+    function renderSources(items) {
+      const rows = Array.isArray(items) ? items : [];
+      if (!rows.length) {
+        $("sources-body").innerHTML = `<tr><td colspan="4" class="tiny">No sources</td></tr>`;
+        return;
+      }
+      $("sources-body").innerHTML = rows.map((row) => {
+        const status = String(row.fetch_status || "");
+        const color = status === "ok" ? "var(--ok)" : status === "too_short" ? "var(--warn)" : "var(--err)";
+        return `
+          <tr>
+            <td style="color:${color};">${escapeHtml(status)}</td>
+            <td>${escapeHtml(row.domain)}</td>
+            <td>${escapeHtml(row.text_chars)}</td>
+            <td class="tiny">${escapeHtml(row.url)}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function renderResult(payload) {
+      const result = payload?.result || {};
+      const profile = result.profile || {};
+
+      $("m-latency").textContent = String(payload?.latency_ms || 0);
+      $("m-found").textContent = String(result.searched_links_total || 0);
+      $("m-ok").textContent = String(result.scraped_success_total || 0);
+      $("m-fail").textContent = String(result.scraped_failed_total || 0);
+
+      $("summary").textContent = profile.summary_200_300_words || "No summary generated.";
+      renderList($("values-list"), profile.culture_values);
+      renderList($("questions-list"), profile.culture_interview_questions);
+      renderSources(result.sources);
+      $("raw-json").textContent = JSON.stringify(payload, null, 2);
+    }
+
+    async function loadHealth() {
+      try {
+        const health = await api("/health");
+        setHealth(health?.status === "ok");
+        renderRuntime(health?.runtime || {});
+      } catch (err) {
+        setHealth(false);
+        setStatus(`Health check failed: <strong>${escapeHtml(err.message)}</strong>`, "err");
+      }
+    }
+
+    async function runGeneration() {
+      const companyName = $("company-name").value.trim();
+      const companyWebsite = $("company-website").value.trim();
+      if (!companyName || !companyWebsite) {
+        setStatus("Please provide company name and website.", "warn");
+        return;
+      }
+      setStatus("Running search, scraping, and synthesis...", "warn");
+      $("run-btn").disabled = true;
+      try {
+        const payload = await api("/api/company-profiles/generate", {
+          method: "POST",
+          body: JSON.stringify({
+            company_name: companyName,
+            company_website_url: companyWebsite,
+          }),
+        });
+        renderRuntime(payload?.runtime || {});
+        renderResult(payload);
+        const warningCount = (payload?.result?.warnings || []).length;
+        if (warningCount > 0) {
+          setStatus(`Generated with ${warningCount} warnings.`, "warn");
+        } else {
+          setStatus("Profile generated successfully.", "ok");
+        }
+      } catch (err) {
+        setStatus(`Generation failed: <strong>${escapeHtml(err.message)}</strong>`, "err");
+      } finally {
+        $("run-btn").disabled = false;
+      }
+    }
+
+    $("sample-btn").addEventListener("click", () => {
+      $("company-name").value = "Notion";
+      $("company-website").value = "https://www.notion.so";
+    });
+    $("run-btn").addEventListener("click", runGeneration);
+
+    loadHealth();
+  </script>
+</body>
+</html>

@@ -40,3 +40,31 @@ services:
       name: tener-interview-data
       mountPath: /var/data
       sizeGB: 1
+
+  - type: web
+    name: tener-company-profile
+    runtime: python
+    plan: starter
+    autoDeploy: true
+    buildCommand: pip install .
+    startCommand: TENER_COMPANY_PROFILE_HOST=0.0.0.0 TENER_COMPANY_PROFILE_PORT=$PORT PYTHONPATH=src python -m tener_company_profile
+    healthCheckPath: /health
+    envVars:
+      - key: TENER_COMPANY_PROFILE_SEARCH_MODE
+        value: google_cse
+      - key: TENER_COMPANY_PROFILE_ALLOW_SEED_FALLBACK
+        value: "true"
+      - key: TENER_COMPANY_PROFILE_USE_LLM
+        value: "true"
+      - key: TENER_COMPANY_PROFILE_SEED_COMPANY
+        value: Tener
+      - key: TENER_COMPANY_PROFILE_SEED_WEBSITE
+        value: https://tener.ai
+      - key: GOOGLE_CSE_API_KEY
+        sync: false
+      - key: GOOGLE_CSE_CX
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TENER_COMPANY_PROFILE_LLM_MODEL
+        value: gpt-4o-mini
