@@ -326,6 +326,12 @@ class CompanyCultureProfileTests(unittest.TestCase):
             )
             self.assertIn("Rule A", synth.analysis_rules)
 
+    def test_openai_parse_json_object_handles_wrapped_json(self) -> None:
+        raw = "```json\n{\"a\":1,\"b\":\"ok\"}\n```"
+        parsed = OpenAICompanyProfileSynthesizer._parse_json_object(raw)
+        self.assertIsInstance(parsed, dict)
+        self.assertEqual(parsed["a"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

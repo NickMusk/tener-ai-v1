@@ -1227,8 +1227,17 @@ class OpenAICompanyProfileSynthesizer:
             ],
         }
         raw = self._chat_completion(payload)
-        parsed = json.loads(raw) if raw else {}
-        return parsed if isinstance(parsed, dict) else {}
+        parsed = self._parse_json_object(raw)
+        if parsed is None:
+            repaired = self._repair_invalid_json(
+                invalid_output=raw,
+                company_name=company_name,
+                website_url=website_url,
+            )
+            parsed = self._parse_json_object(repaired)
+        if parsed is None:
+            raise RuntimeError("invalid_json_from_model")
+        return parsed
 
     def _chat_completion(self, payload: Dict[str, Any]) -> str:
         req = urlrequest.Request(
@@ -1256,6 +1265,65 @@ class OpenAICompanyProfileSynthesizer:
         message = choices[0].get("message") if isinstance(choices[0], dict) else None
         content = message.get("content") if isinstance(message, dict) else ""
         return content if isinstance(content, str) else ""
+
+    def _repair_invalid_json(self, *, invalid_output: str, company_name: str, website_url: str) -> str:
+        repair_payload = {
+            "model": self.model,
+            "temperature": 0.0,
+            "max_tokens": 1400,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You convert malformed model output into strict valid JSON object. Return JSON only.",
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "task": "Repair malformed JSON response into strict JSON object.",
+                            "company_name": company_name,
+                            "website_url": website_url,
+                            "malformed_output": str(invalid_output or "")[:12000],
+                            "note": (
+                                "Preserve meaning but remove invalid syntax. "
+                                "Do not add markdown. Output JSON object only."
+                            ),
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            ],
+        }
+        return self._chat_completion(repair_payload)
+
+    @staticmethod
+    def _parse_json_object(raw: str) -> Optional[Dict[str, Any]]:
+        text = str(raw or "").strip()
+        if not text:
+            return None
+        try:
+            parsed = json.loads(text)
+            return parsed if isinstance(parsed, dict) else None
+        except json.JSONDecodeError:
+            pass
+
+        start = text.find("{")
+        end = text.rfind("}")
+        if start >= 0 and end > start:
+            candidate = text[start : end + 1]
+            try:
+                parsed = json.loads(candidate)
+                return parsed if isinstance(parsed, dict) else None
+            except json.JSONDecodeError:
+                # Remove non-printable control chars and retry once.
+                sanitized = re.sub(r"[\x00-\x08\x0B\x0C\x0E-\x1F]", " ", candidate)
+                try:
+                    parsed = json.loads(sanitized)
+                    return parsed if isinstance(parsed, dict) else None
+                except json.JSONDecodeError:
+                    return None
+        return None
 
     @staticmethod
     def _load_analysis_rules(path: str) -> str:
