@@ -94,6 +94,7 @@ def build_services() -> Dict[str, Any]:
         synthesizer=synthesizer,
         max_links=env_int("TENER_COMPANY_PROFILE_MAX_LINKS", 10, minimum=1),
         per_query_limit=env_int("TENER_COMPANY_PROFILE_PER_QUERY_LIMIT", 10, minimum=1),
+        min_job_board_links=env_int("TENER_COMPANY_PROFILE_MIN_JOB_BOARD_LINKS", 3, minimum=0),
         fetch_timeout_seconds=env_int("TENER_COMPANY_PROFILE_FETCH_TIMEOUT_SECONDS", 15, minimum=3),
         min_text_chars=env_int("TENER_COMPANY_PROFILE_MIN_TEXT_CHARS", 600, minimum=1),
     )

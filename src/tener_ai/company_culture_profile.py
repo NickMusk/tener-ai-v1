@@ -25,6 +25,75 @@ DEFAULT_FETCH_USER_AGENT = (
     "Mozilla/5.0 (compatible; TenerCompanyProfileBot/1.0; +https://tener.ai)"
 )
 
+JOB_BOARD_DOMAIN_MARKERS = (
+    "boards.greenhouse.io",
+    "greenhouse.io",
+    "jobs.lever.co",
+    "lever.co",
+    "jobs.ashbyhq.com",
+    "ashbyhq.com",
+    "workdayjobs.com",
+    "myworkdayjobs.com",
+    "smartrecruiters.com",
+    "jobvite.com",
+    "icims.com",
+    "applytojob.com",
+    "teamtailor.com",
+    "recruitee.com",
+    "workable.com",
+    "bamboohr.com",
+    "wellfound.com",
+    "indeed.com",
+    "ziprecruiter.com",
+)
+
+JOB_BOARD_PATH_MARKERS = (
+    "/jobs",
+    "/job/",
+    "/careers",
+    "/open-roles",
+    "/positions",
+    "/vacancies",
+    "/join-us",
+)
+
+CANDIDATE_SIGNAL_KEYWORDS = {
+    "ownership in ambiguous environments": ["ownership", "self-starter", "autonomous", "ambiguity"],
+    "cross-functional collaboration": ["cross-functional", "stakeholder", "collaborat", "partner with"],
+    "strong communication": ["communication", "written", "verbal", "present", "influence"],
+    "analytical problem solving": ["analytical", "problem-solving", "data-driven", "metrics"],
+    "leadership and mentoring": ["mentor", "coaching", "people manager", "leadership", "team lead"],
+    "high execution velocity": ["fast-paced", "rapid", "iterate", "ship", "execution"],
+    "customer orientation": ["customer", "user", "client"],
+    "technical depth": ["architecture", "distributed systems", "scalable", "system design", "code review"],
+}
+
+CULTURE_ATTRIBUTE_KEYWORDS = {
+    "ownership": ["ownership", "accountability", "responsibility"],
+    "collaboration": ["collaboration", "teamwork", "cross-functional"],
+    "transparency": ["transparent", "open communication", "candor"],
+    "learning": ["learning", "growth mindset", "continuous improvement", "mentorship"],
+    "inclusion": ["inclusive", "belonging", "diverse", "equity"],
+    "customer focus": ["customer", "user-first", "customer obsession"],
+    "quality bar": ["high standards", "quality", "craftsmanship", "excellence"],
+    "bias for action": ["fast-paced", "urgency", "move fast", "bias for action"],
+    "remote-first": ["remote", "distributed", "async", "asynchronous"],
+}
+
+JOB_SENTENCE_KEYWORDS = (
+    "requirements",
+    "qualifications",
+    "you will",
+    "you'll",
+    "you have",
+    "you bring",
+    "ideal candidate",
+    "we're looking for",
+    "responsibilities",
+    "must have",
+    "nice to have",
+)
+
 
 @dataclass
 class SearchResult:
@@ -56,6 +125,7 @@ class ScrapedSource:
     extracted_text: str = ""
     error_code: str = ""
     error_message: str = ""
+    source_kind: str = ""
 
     def as_dict(self) -> Dict[str, Any]:
         return {
@@ -69,6 +139,7 @@ class ScrapedSource:
             "text_chars": self.text_chars,
             "error_code": self.error_code,
             "error_message": self.error_message,
+            "source_kind": self.source_kind or "general",
         }
 
 
@@ -261,6 +332,8 @@ class SeedSearchProvider:
             (website, "Official website", "Company website"),
             (f"https://{domain}/about", "About", "About company and mission"),
             (f"https://{domain}/careers", "Careers", "Careers and work environment"),
+            (f"https://boards.greenhouse.io/{slug}", "Greenhouse jobs", "Open roles and hiring requirements"),
+            (f"https://jobs.lever.co/{slug}", "Lever jobs", "Role descriptions and qualifications"),
             (f"https://{domain}/culture", "Culture", "Values and team principles"),
             (f"https://www.linkedin.com/company/{slug}/", "LinkedIn company page", "Company updates"),
             (
@@ -323,6 +396,37 @@ def canonicalize_url(url: str) -> str:
     return urlparse.urlunparse((scheme, domain, path, "", query, ""))
 
 
+def is_job_board_url(url: str) -> bool:
+    canonical = canonicalize_url(url)
+    if not canonical:
+        return False
+    parsed = urlparse.urlparse(canonical)
+    domain = (parsed.netloc or "").lower()
+    path = (parsed.path or "").lower()
+    if any(marker in domain for marker in JOB_BOARD_DOMAIN_MARKERS):
+        return True
+    if domain.startswith("jobs.") or domain.startswith("careers."):
+        return True
+    if any(marker in path for marker in JOB_BOARD_PATH_MARKERS):
+        return True
+    if domain.endswith("linkedin.com") and "/jobs" in path:
+        return True
+    if domain.endswith("glassdoor.com") and "/job-listing" in path:
+        return True
+    return False
+
+
+def classify_source_kind(url: str, official_domain: str = "") -> str:
+    domain = normalize_domain(url)
+    if not domain:
+        return "general"
+    if is_job_board_url(url):
+        return "job_board"
+    if official_domain and (domain == official_domain or domain.endswith(f".{official_domain}")):
+        return "official"
+    return "general"
+
+
 def build_google_queries(company_name: str, website_url: str) -> List[str]:
     name = " ".join(str(company_name or "").split()).strip()
     if not name:
@@ -336,10 +440,20 @@ def build_google_queries(company_name: str, website_url: str) -> List[str]:
         f"\"{name}\" employee reviews",
         f"\"{name}\" glassdoor",
         f"\"{name}\" linkedin company",
+        f"\"{name}\" jobs",
+        f"\"{name}\" careers",
+        f"\"{name}\" open roles",
+        f"\"{name}\" \"we're hiring\"",
+        f"\"{name}\" site:boards.greenhouse.io",
+        f"\"{name}\" site:jobs.lever.co",
+        f"\"{name}\" site:workdayjobs.com",
+        f"\"{name}\" site:jobs.smartrecruiters.com",
+        f"\"{name}\" site:jobs.ashbyhq.com",
     ]
     if domain:
         candidates.insert(0, f"site:{domain} \"{name}\" values")
         candidates.insert(1, f"site:{domain} \"{name}\" careers team")
+        candidates.insert(2, f"site:{domain} \"{name}\" open roles")
 
     seen: set[str] = set()
     out: List[str] = []
@@ -360,6 +474,8 @@ def score_search_result(result: SearchResult, official_domain: str) -> int:
         score += 300
     elif official_domain and domain.endswith(f".{official_domain}"):
         score += 220
+    if is_job_board_url(result.url):
+        score += 180
 
     rank = result.rank if result.rank > 0 else 99
     score += max(0, 120 - rank * 8)
@@ -368,6 +484,9 @@ def score_search_result(result: SearchResult, official_domain: str) -> int:
     for token in ("culture", "values", "mission", "about", "careers", "team"):
         if token in title_blob:
             score += 20
+    for token in ("job", "role", "hiring", "requirements", "qualifications"):
+        if token in title_blob:
+            score += 16
     return score
 
 
@@ -377,9 +496,11 @@ def select_top_urls(
     official_domain: str,
     max_links: int = 10,
     force_include_url: str = "",
+    min_job_board_links: int = 2,
 ) -> List[SearchResult]:
     normalized_force = canonicalize_url(force_include_url)
     max_links = max(1, int(max_links or 1))
+    min_job_board_links = max(0, int(min_job_board_links or 0))
 
     dedup: Dict[str, SearchResult] = {}
     for item in results:
@@ -411,6 +532,16 @@ def select_top_urls(
     if normalized_force:
         seen.add(normalized_force)
         picked.append(SearchResult(url=normalized_force, title="Official website", rank=0, query="seed"))
+
+    job_board_picked = 0
+    for item in ranked:
+        if len(picked) >= max_links or job_board_picked >= min_job_board_links:
+            break
+        if item.url in seen or not is_job_board_url(item.url):
+            continue
+        seen.add(item.url)
+        picked.append(item)
+        job_board_picked += 1
 
     for item in ranked:
         if len(picked) >= max_links:
@@ -681,6 +812,7 @@ class CompanyCultureProfileService:
         synthesizer: CompanyProfileSynthesizer,
         max_links: int = 10,
         per_query_limit: int = 10,
+        min_job_board_links: int = 2,
         fetch_timeout_seconds: int = 15,
         min_text_chars: int = 600,
     ) -> None:
@@ -690,6 +822,7 @@ class CompanyCultureProfileService:
         self.synthesizer = synthesizer
         self.max_links = max(1, int(max_links))
         self.per_query_limit = max(1, int(per_query_limit))
+        self.min_job_board_links = max(0, int(min_job_board_links))
         self.fetch_timeout_seconds = max(3, int(fetch_timeout_seconds))
         self.min_text_chars = max(1, int(min_text_chars))
 
@@ -726,22 +859,31 @@ class CompanyCultureProfileService:
             official_domain=official_domain,
             max_links=self.max_links,
             force_include_url=normalized_website,
+            min_job_board_links=self.min_job_board_links,
         )
 
         sources: List[ScrapedSource] = []
         for item in selected:
-            source = self._scrape_one(item)
+            source = self._scrape_one(item, official_domain=official_domain)
             sources.append(source)
 
         success_sources = [item for item in sources if item.fetch_status == "ok"]
+        job_board_insights = self._extract_job_board_insights(success_sources)
+        synthesis_sources = list(success_sources)
+        job_board_synthesis_source = self._build_job_board_synthesis_source(job_board_insights)
+        if job_board_synthesis_source is not None:
+            synthesis_sources.append(job_board_synthesis_source)
+
         warnings: List[str] = []
+        if int(job_board_insights.get("job_board_sources_total") or 0) <= 0:
+            warnings.append("job_board_evidence_missing")
         profile: Dict[str, Any] = {}
-        if success_sources:
+        if synthesis_sources:
             try:
                 profile = self.synthesizer.generate_profile(
                     company_name=normalized_name,
                     website_url=normalized_website,
-                    sources=success_sources,
+                    sources=synthesis_sources,
                 )
             except Exception as exc:
                 warnings.append(f"llm_synthesis_failed: {exc}")
@@ -749,6 +891,7 @@ class CompanyCultureProfileService:
         else:
             warnings.append("no_scraped_sources_for_synthesis")
             profile = self._fallback_profile(normalized_name)
+        profile = self._merge_profile_with_job_board_insights(profile, job_board_insights)
 
         return {
             "company_name": normalized_name,
@@ -759,12 +902,14 @@ class CompanyCultureProfileService:
             "scraped_success_total": len(success_sources),
             "scraped_failed_total": len(sources) - len(success_sources),
             "sources": [item.as_dict() for item in sources],
+            "job_board_insights": job_board_insights,
             "profile": profile,
             "warnings": warnings,
         }
 
-    def _scrape_one(self, item: SearchResult) -> ScrapedSource:
+    def _scrape_one(self, item: SearchResult, *, official_domain: str) -> ScrapedSource:
         domain = normalize_domain(item.url)
+        source_kind = classify_source_kind(item.url, official_domain=official_domain)
         try:
             response = self.page_fetcher.fetch(item.url, timeout_seconds=self.fetch_timeout_seconds)
         except urlerror.HTTPError as exc:
@@ -779,6 +924,7 @@ class CompanyCultureProfileService:
                 text_chars=0,
                 error_code="http_error",
                 error_message=str(exc),
+                source_kind=source_kind,
             )
         except Exception as exc:
             return ScrapedSource(
@@ -792,6 +938,7 @@ class CompanyCultureProfileService:
                 text_chars=0,
                 error_code="fetch_error",
                 error_message=str(exc),
+                source_kind=source_kind,
             )
 
         body = str(response.body or "")
@@ -808,6 +955,7 @@ class CompanyCultureProfileService:
                 text_chars=0,
                 error_code="http_error",
                 error_message=f"status={response.status_code}",
+                source_kind=source_kind,
             )
 
         if "text/html" in content_type or body.lstrip().lower().startswith("<!doctype html") or "<html" in body[:200].lower():
@@ -815,7 +963,10 @@ class CompanyCultureProfileService:
         else:
             cleaned = re.sub(r"\s+", " ", body).strip()
 
-        if len(cleaned) < self.min_text_chars:
+        min_chars = self.min_text_chars
+        if source_kind == "job_board":
+            min_chars = max(180, min(self.min_text_chars, 320))
+        if len(cleaned) < min_chars:
             return ScrapedSource(
                 url=item.url,
                 domain=domain,
@@ -827,6 +978,7 @@ class CompanyCultureProfileService:
                 text_chars=len(cleaned),
                 error_code="too_short",
                 error_message=f"text_chars={len(cleaned)}",
+                source_kind=source_kind,
             )
 
         return ScrapedSource(
@@ -839,7 +991,154 @@ class CompanyCultureProfileService:
             http_status=response.status_code,
             text_chars=len(cleaned),
             extracted_text=cleaned,
+            source_kind=source_kind,
         )
+
+    def _extract_job_board_insights(self, sources: List[ScrapedSource]) -> Dict[str, Any]:
+        job_sources = [x for x in sources if x.source_kind == "job_board"]
+        if not job_sources:
+            return {
+                "job_board_sources_total": 0,
+                "candidate_profiles_sought": [],
+                "cultural_attributes_in_job_ads": [],
+                "example_roles_seen": [],
+                "evidence_snippets": [],
+            }
+
+        candidate_hits: List[str] = []
+        culture_hits: List[str] = []
+        snippets: List[str] = []
+        roles: List[str] = []
+
+        for source in job_sources:
+            text = str(source.extracted_text or "")
+            lower = text.lower()
+            for label, keywords in CANDIDATE_SIGNAL_KEYWORDS.items():
+                if any(keyword in lower for keyword in keywords):
+                    candidate_hits.append(label)
+            for label, keywords in CULTURE_ATTRIBUTE_KEYWORDS.items():
+                if any(keyword in lower for keyword in keywords):
+                    culture_hits.append(label)
+            snippets.extend(self._extract_job_signal_snippets(text, limit=3))
+            roles.extend(self._extract_role_labels(source))
+
+        return {
+            "job_board_sources_total": len(job_sources),
+            "candidate_profiles_sought": self._top_labels(candidate_hits, limit=8),
+            "cultural_attributes_in_job_ads": self._top_labels(culture_hits, limit=8),
+            "example_roles_seen": self._unique_preserve_order([r for r in roles if r], limit=8),
+            "evidence_snippets": self._unique_preserve_order(snippets, limit=8),
+        }
+
+    def _build_job_board_synthesis_source(self, insights: Dict[str, Any]) -> Optional[ScrapedSource]:
+        source_total = int(insights.get("job_board_sources_total") or 0)
+        if source_total <= 0:
+            return None
+        candidate_profiles = insights.get("candidate_profiles_sought") or []
+        culture_attrs = insights.get("cultural_attributes_in_job_ads") or []
+        role_samples = insights.get("example_roles_seen") or []
+        snippets = insights.get("evidence_snippets") or []
+        summary = (
+            "Job board extracted evidence. "
+            f"Job-board pages analyzed: {source_total}. "
+            f"Candidate profiles sought: {', '.join(candidate_profiles[:6]) or 'n/a'}. "
+            f"Cultural attributes in job ads: {', '.join(culture_attrs[:6]) or 'n/a'}. "
+            f"Example roles: {', '.join(role_samples[:6]) or 'n/a'}. "
+            f"Evidence snippets: {' | '.join(snippets[:4]) or 'n/a'}."
+        )
+        return ScrapedSource(
+            url="job-board://insights",
+            domain="job-board",
+            title="Job board extracted insights",
+            query="job board insights",
+            search_rank=0,
+            fetch_status="ok",
+            http_status=200,
+            text_chars=len(summary),
+            extracted_text=summary,
+            source_kind="job_board",
+        )
+
+    @staticmethod
+    def _merge_profile_with_job_board_insights(
+        profile: Dict[str, Any], insights: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        merged = dict(profile or {})
+        hiring_signals = list(merged.get("hiring_signals") or [])
+        candidate_profiles = [str(x).strip() for x in (insights.get("candidate_profiles_sought") or []) if str(x).strip()]
+        culture_attrs = [str(x).strip() for x in (insights.get("cultural_attributes_in_job_ads") or []) if str(x).strip()]
+
+        for item in candidate_profiles[:4]:
+            hiring_signals.append(f"job-board pattern: seeks {item}")
+        for item in culture_attrs[:3]:
+            hiring_signals.append(f"job-board culture signal: {item}")
+
+        merged["hiring_signals"] = CompanyCultureProfileService._unique_preserve_order(hiring_signals, limit=8)
+        merged["candidate_profiles_sought"] = candidate_profiles[:8]
+        merged["cultural_attributes_in_job_ads"] = culture_attrs[:8]
+        return merged
+
+    @staticmethod
+    def _extract_job_signal_snippets(text: str, limit: int = 3) -> List[str]:
+        chunks = re.split(r"(?<=[\.\!\?])\s+|\s[•\-]\s", str(text or ""))
+        out: List[str] = []
+        for chunk in chunks:
+            normalized = re.sub(r"\s+", " ", chunk).strip()
+            if len(normalized) < 50 or len(normalized) > 240:
+                continue
+            lower = normalized.lower()
+            if any(token in lower for token in JOB_SENTENCE_KEYWORDS):
+                out.append(normalized)
+            if len(out) >= limit:
+                break
+        return out
+
+    @staticmethod
+    def _extract_role_labels(source: ScrapedSource) -> List[str]:
+        roles: List[str] = []
+        title = re.sub(r"\s+", " ", str(source.title or "")).strip()
+        if title:
+            title = re.sub(r"\s+[-|].*$", "", title).strip()
+            if 4 <= len(title) <= 90:
+                roles.append(title)
+
+        pattern = re.compile(
+            r"\b(?:senior|staff|principal|lead|head|director|vp|junior)?\s*"
+            r"(?:software|backend|frontend|full[- ]stack|data|machine learning|ml|product|design|"
+            r"operations|marketing|sales|security|devops|qa|clinical|research)?\s*"
+            r"(?:engineer|developer|scientist|manager|designer|analyst|architect|specialist)\b",
+            flags=re.IGNORECASE,
+        )
+        for match in pattern.findall(str(source.extracted_text or "")[:4000]):
+            candidate = re.sub(r"\s+", " ", str(match)).strip()
+            if 4 <= len(candidate) <= 80:
+                roles.append(candidate.title())
+            if len(roles) >= 6:
+                break
+        return roles
+
+    @staticmethod
+    def _top_labels(values: List[str], limit: int) -> List[str]:
+        counts = Counter([str(x).strip().lower() for x in values if str(x).strip()])
+        if not counts:
+            return []
+        ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+        return [item[0] for item in ordered[:limit]]
+
+    @staticmethod
+    def _unique_preserve_order(values: List[str], limit: int) -> List[str]:
+        out: List[str] = []
+        seen: set[str] = set()
+        for item in values:
+            text = str(item or "").strip()
+            key = text.lower()
+            if not text or key in seen:
+                continue
+            seen.add(key)
+            out.append(text)
+            if len(out) >= limit:
+                break
+        return out
 
     @staticmethod
     def _fallback_profile(company_name: str) -> Dict[str, Any]:

@@ -65,6 +65,9 @@ Server binds `0.0.0.0` and uses `PORT` automatically in cloud.
 ## Company Profile Test Service
 
 Standalone service for company culture profile scraping/synthesis with mini dashboard.
+It now prioritizes job-board pages (Greenhouse/Lever/Workday/etc.) to extract:
+- what candidate profiles the company hired for previously
+- which culture attributes are emphasized in job ads
 
 Run:
 
@@ -90,6 +93,7 @@ PYTHONPATH=src python3 -m tener_company_profile
 Useful switches:
 - `TENER_COMPANY_PROFILE_SEARCH_MODE=brave_html|google_cse|seed`
 - `TENER_COMPANY_PROFILE_ALLOW_SEED_FALLBACK=true|false`
+- `TENER_COMPANY_PROFILE_MIN_JOB_BOARD_LINKS=3`
 - `TENER_COMPANY_PROFILE_PORT=8095`
 
 ## API

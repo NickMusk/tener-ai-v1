@@ -325,6 +325,18 @@
           <ul id="values-list" class="list"></ul>
         </div>
         <div style="margin-top:10px;">
+          <div class="tiny">Job-board Candidate Signals</div>
+          <ul id="candidate-profiles-list" class="list"></ul>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="tiny">Job-ad Cultural Attributes</div>
+          <ul id="job-culture-list" class="list"></ul>
+        </div>
+        <div style="margin-top:10px;">
+          <div class="tiny">Roles Seen In Job Ads</div>
+          <ul id="roles-list" class="list"></ul>
+        </div>
+        <div style="margin-top:10px;">
           <div class="tiny">Interview Questions</div>
           <ul id="questions-list" class="list"></ul>
         </div>
@@ -336,6 +348,7 @@
           <thead>
             <tr>
               <th>Status</th>
+              <th>Kind</th>
               <th>Domain</th>
               <th>Chars</th>
               <th>URL</th>
@@ -405,7 +418,7 @@
     function renderSources(items) {
       const rows = Array.isArray(items) ? items : [];
       if (!rows.length) {
-        $("sources-body").innerHTML = `<tr><td colspan="4" class="tiny">No sources</td></tr>`;
+        $("sources-body").innerHTML = `<tr><td colspan="5" class="tiny">No sources</td></tr>`;
         return;
       }
       $("sources-body").innerHTML = rows.map((row) => {
@@ -414,6 +427,7 @@
         return `
           <tr>
             <td style="color:${color};">${escapeHtml(status)}</td>
+            <td>${escapeHtml(row.source_kind || "general")}</td>
             <td>${escapeHtml(row.domain)}</td>
             <td>${escapeHtml(row.text_chars)}</td>
             <td class="tiny">${escapeHtml(row.url)}</td>
@@ -425,6 +439,7 @@
     function renderResult(payload) {
       const result = payload?.result || {};
       const profile = result.profile || {};
+      const insights = result.job_board_insights || {};
 
       $("m-latency").textContent = String(payload?.latency_ms || 0);
       $("m-found").textContent = String(result.searched_links_total || 0);
@@ -433,6 +448,9 @@
 
       $("summary").textContent = profile.summary_200_300_words || "No summary generated.";
       renderList($("values-list"), profile.culture_values);
+      renderList($("candidate-profiles-list"), profile.candidate_profiles_sought || insights.candidate_profiles_sought);
+      renderList($("job-culture-list"), profile.cultural_attributes_in_job_ads || insights.cultural_attributes_in_job_ads);
+      renderList($("roles-list"), insights.example_roles_seen);
       renderList($("questions-list"), profile.culture_interview_questions);
       renderSources(result.sources);
       $("raw-json").textContent = JSON.stringify(payload, null, 2);

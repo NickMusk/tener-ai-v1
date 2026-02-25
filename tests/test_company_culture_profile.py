@@ -10,6 +10,7 @@ from tener_ai.company_culture_profile import (
     SearchResult,
     build_google_queries,
     canonicalize_url,
+    is_job_board_url,
     normalize_domain,
     select_top_urls,
 )
@@ -31,16 +32,28 @@ class _FakeSearchProvider:
                 rank=2,
             ),
             SearchResult(
+                url="https://boards.greenhouse.io/acmeai/jobs/4499111",
+                title="Senior Backend Engineer at Acme",
+                snippet="Role requirements and team culture",
+                rank=3,
+            ),
+            SearchResult(
+                url="https://jobs.lever.co/acmeai/abcd-1234",
+                title="Product Manager - Acme",
+                snippet="Qualifications and collaboration style",
+                rank=4,
+            ),
+            SearchResult(
                 url="https://www.glassdoor.com/Overview/Working-at-Acme",
                 title="Glassdoor",
                 snippet="Employee reviews",
-                rank=3,
+                rank=5,
             ),
             SearchResult(
                 url="https://www.linkedin.com/company/acme-ai/",
                 title="LinkedIn",
                 snippet="Company page",
-                rank=4,
+                rank=6,
             ),
         ]
         return base[:limit]
@@ -66,6 +79,29 @@ class _FakePageFetcher:
                 status_code=200,
                 content_type="text/html; charset=utf-8",
                 body="<html><body>We hire engineers who thrive in fast feedback loops and remote-first teams.</body></html>",
+            ),
+            "https://boards.greenhouse.io/acmeai/jobs/4499111": FetchResponse(
+                url=url,
+                status_code=200,
+                content_type="text/html; charset=utf-8",
+                body=(
+                    "<html><body>"
+                    "Senior Backend Engineer. Responsibilities: design scalable systems and partner cross-functional teams. "
+                    "Requirements: 5+ years experience, strong communication, ownership mindset, code review discipline. "
+                    "Our culture values transparency, collaboration, and customer impact."
+                    "</body></html>"
+                ),
+            ),
+            "https://jobs.lever.co/acmeai/abcd-1234": FetchResponse(
+                url=url,
+                status_code=200,
+                content_type="text/html; charset=utf-8",
+                body=(
+                    "<html><body>"
+                    "Product Manager role. We are looking for analytical, data-driven candidates with stakeholder management. "
+                    "You will lead rapid iterations and work in a fast-paced, inclusive team."
+                    "</body></html>"
+                ),
             ),
             "https://www.glassdoor.com/Overview/Working-at-Acme": FetchResponse(
                 url=url,
@@ -119,9 +155,10 @@ class _FakeSynthesizer:
 class CompanyCultureProfileTests(unittest.TestCase):
     def test_build_google_queries_includes_domain_and_culture_intent(self) -> None:
         queries = build_google_queries("Acme AI", "https://www.acme.ai")
-        self.assertGreaterEqual(len(queries), 6)
+        self.assertGreaterEqual(len(queries), 10)
         self.assertTrue(any("site:acme.ai" in query for query in queries))
         self.assertTrue(any("culture" in query.lower() for query in queries))
+        self.assertTrue(any("greenhouse" in query.lower() for query in queries))
 
     def test_select_top_urls_dedupes_and_prioritizes_official_domain(self) -> None:
         results = [
@@ -138,6 +175,22 @@ class CompanyCultureProfileTests(unittest.TestCase):
         self.assertEqual(len(selected), 2)
         self.assertEqual(selected[0].url, "https://acme.ai/")
         self.assertEqual(normalize_domain(selected[1].url), "acme.ai")
+
+    def test_select_top_urls_includes_job_boards_when_available(self) -> None:
+        results = [
+            SearchResult(url="https://acme.ai/about", title="About", snippet="", rank=1),
+            SearchResult(url="https://boards.greenhouse.io/acme/jobs/1", title="Backend Engineer", snippet="", rank=5),
+            SearchResult(url="https://jobs.lever.co/acme/2", title="Product Manager", snippet="", rank=6),
+        ]
+        selected = select_top_urls(
+            results,
+            official_domain="acme.ai",
+            max_links=4,
+            force_include_url="https://acme.ai",
+            min_job_board_links=2,
+        )
+        self.assertTrue(any(is_job_board_url(item.url) for item in selected))
+        self.assertGreaterEqual(sum(1 for item in selected if is_job_board_url(item.url)), 2)
 
     def test_generate_profile_runs_full_pipeline(self) -> None:
         service = CompanyCultureProfileService(
@@ -157,14 +210,18 @@ class CompanyCultureProfileTests(unittest.TestCase):
         self.assertGreater(out["scraped_success_total"], 0)
         self.assertIn("profile", out)
         self.assertIn("summary_200_300_words", out["profile"])
+        self.assertIn("job_board_insights", out)
+        self.assertGreaterEqual(int(out["job_board_insights"]["job_board_sources_total"]), 1)
+        self.assertIn("candidate_profiles_sought", out["profile"])
+        self.assertTrue(out["profile"]["candidate_profiles_sought"])
         self.assertEqual(out["warnings"], [])
 
     def test_seed_search_provider_returns_urls(self) -> None:
         provider = SeedSearchProvider(company_name="Acme AI", website_url="https://www.acme.ai")
-        items = provider.search('"Acme AI" culture', limit=5)
-        self.assertEqual(len(items), 5)
+        items = provider.search('"Acme AI" culture', limit=7)
+        self.assertEqual(len(items), 7)
         self.assertEqual(items[0].url, "https://acme.ai/")
-        self.assertTrue(any("linkedin.com" in row.url for row in items))
+        self.assertTrue(any(is_job_board_url(row.url) for row in items))
 
     def test_heuristic_synthesizer_returns_profile_shape(self) -> None:
         synthesizer = HeuristicCompanyProfileSynthesizer()
@@ -200,6 +257,11 @@ class CompanyCultureProfileTests(unittest.TestCase):
         self.assertEqual(len(out), 2)
         self.assertEqual(out[0].url, "https://notion.so/culture")
         self.assertIn("Notion Company Culture", out[0].title)
+
+    def test_is_job_board_url_detects_common_patterns(self) -> None:
+        self.assertTrue(is_job_board_url("https://boards.greenhouse.io/acme/jobs/123"))
+        self.assertTrue(is_job_board_url("https://acme.ai/careers/backend-engineer"))
+        self.assertFalse(is_job_board_url("https://acme.ai/about"))
 
 
 if __name__ == "__main__":

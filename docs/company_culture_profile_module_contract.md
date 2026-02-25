@@ -63,6 +63,13 @@ Validation:
   "scraped_success_total": 8,
   "scraped_failed_total": 2,
   "sources": [],
+  "job_board_insights": {
+    "job_board_sources_total": 0,
+    "candidate_profiles_sought": [],
+    "cultural_attributes_in_job_ads": [],
+    "example_roles_seen": [],
+    "evidence_snippets": []
+  },
   "profile": {
     "summary_200_300_words": "",
     "culture_values": [],
@@ -88,6 +95,9 @@ Generate a compact query set (6-8 queries), for example:
 - `"Acme Labs" glassdoor`
 - `"Acme Labs" linkedin company`
 - `site:acme.example "Acme Labs" values`
+- `"Acme Labs" site:boards.greenhouse.io`
+- `"Acme Labs" site:jobs.lever.co`
+- `"Acme Labs" site:workdayjobs.com`
 
 ### 5.2 Search stage
 
@@ -100,6 +110,7 @@ Generate a compact query set (6-8 queries), for example:
 Selection rules:
 - canonicalize URLs and deduplicate
 - prioritize official company domain and subdomains
+- enforce a minimum quota of job-board links when available
 - score by intent terms (`culture`, `values`, `about`, `careers`, `team`)
 - keep source diversity (not only one domain when possible)
 - final cap: exactly 10 URLs (or fewer if not available)
