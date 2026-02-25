@@ -2,6 +2,7 @@ import unittest
 from typing import Dict, List
 
 from tener_ai.company_culture_profile import (
+    BraveHtmlSearchProvider,
     CompanyCultureProfileService,
     FetchResponse,
     HeuristicCompanyProfileSynthesizer,
@@ -185,6 +186,20 @@ class CompanyCultureProfileTests(unittest.TestCase):
         self.assertIn("culture_values", profile)
         self.assertIn("culture_interview_questions", profile)
         self.assertGreater(len(profile["culture_interview_questions"]), 1)
+
+    def test_brave_html_parser_extracts_result_pairs(self) -> None:
+        html = """
+        <script>
+        const x = {results:[
+          {title:"Notion Company Culture \\/ Values",url:"https:\\/\\/www.notion.so\\/culture"},
+          {title:"Built In: Notion culture",url:"https:\\/\\/www.builtinnyc.com\\/company\\/notion\\/faq\\/culture-values"}
+        ]};
+        </script>
+        """
+        out = BraveHtmlSearchProvider._parse_results_from_html(html=html, query="notion culture", limit=10)
+        self.assertEqual(len(out), 2)
+        self.assertEqual(out[0].url, "https://notion.so/culture")
+        self.assertIn("Notion Company Culture", out[0].title)
 
 
 if __name__ == "__main__":

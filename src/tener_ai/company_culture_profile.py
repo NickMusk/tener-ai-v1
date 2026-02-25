@@ -97,6 +97,87 @@ class CompanyProfileSynthesizer(Protocol):
         ...
 
 
+class BraveHtmlSearchProvider:
+    """
+    Free, no-key search provider that parses Brave Search web results.
+    """
+
+    def __init__(
+        self,
+        *,
+        base_url: str = "https://search.brave.com/search",
+        timeout_seconds: int = 20,
+        user_agent: str = DEFAULT_FETCH_USER_AGENT,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.timeout_seconds = max(3, int(timeout_seconds))
+        self.user_agent = user_agent.strip() or DEFAULT_FETCH_USER_AGENT
+
+    def search(self, query: str, limit: int) -> List[SearchResult]:
+        normalized_query = " ".join(str(query or "").split()).strip()
+        if not normalized_query:
+            return []
+        limit = max(1, min(int(limit or 1), 20))
+
+        params = urlparse.urlencode(
+            {
+                "q": normalized_query,
+                "source": "web",
+            }
+        )
+        url = f"{self.base_url}?{params}"
+        req = urlrequest.Request(
+            url=url,
+            method="GET",
+            headers={
+                "Accept": "text/html,application/xhtml+xml",
+                "User-Agent": self.user_agent,
+            },
+        )
+        with urlrequest.urlopen(req, timeout=self.timeout_seconds) as response:
+            html = response.read().decode("utf-8", errors="replace")
+        return self._parse_results_from_html(html=html, query=normalized_query, limit=limit)
+
+    @staticmethod
+    def _parse_results_from_html(*, html: str, query: str, limit: int) -> List[SearchResult]:
+        # Brave embeds hydrated results as JS objects containing title:"...",url:"...".
+        pairs = re.findall(
+            r'title:"((?:\\.|[^"\\]){1,600})",url:"(https?:\\/\\/(?:\\.|[^"\\])+?)"',
+            html,
+        )
+        seen: set[str] = set()
+        out: List[SearchResult] = []
+        rank = 0
+        for raw_title, raw_url in pairs:
+            title = BraveHtmlSearchProvider._decode_js_string(raw_title)
+            url = BraveHtmlSearchProvider._decode_js_string(raw_url)
+            canonical = canonicalize_url(url)
+            if not canonical or canonical in seen:
+                continue
+            seen.add(canonical)
+            rank += 1
+            out.append(
+                SearchResult(
+                    url=canonical,
+                    title=title[:300],
+                    snippet="",
+                    rank=rank,
+                    query=query,
+                )
+            )
+            if len(out) >= limit:
+                break
+        return out
+
+    @staticmethod
+    def _decode_js_string(value: str) -> str:
+        text = str(value or "")
+        # Convert common JS escapes to plain text.
+        text = text.replace("\\/", "/")
+        text = bytes(text, "utf-8").decode("unicode_escape", errors="ignore")
+        return html_utils.unescape(text).strip()
+
+
 class GoogleCSESearchProvider:
     def __init__(
         self,

@@ -51,7 +51,7 @@ services:
     healthCheckPath: /health
     envVars:
       - key: TENER_COMPANY_PROFILE_SEARCH_MODE
-        value: google_cse
+        value: brave_html
       - key: TENER_COMPANY_PROFILE_ALLOW_SEED_FALLBACK
         value: "true"
       - key: TENER_COMPANY_PROFILE_USE_LLM
