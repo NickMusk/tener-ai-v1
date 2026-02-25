@@ -109,6 +109,43 @@ class UnipileProviderParsingTests(unittest.TestCase):
         self.assertEqual(out[0]["full_name"], "Alex Morgan")
         self.assertTrue(any("/api/v1/linkedin/search" in call[1] for call in provider.calls))
 
+    def test_search_profiles_recovers_when_configured_path_is_users(self) -> None:
+        class FakeProvider(UnipileLinkedInProvider):
+            def __init__(self) -> None:
+                super().__init__(api_key="k", base_url="https://api.example.com", account_id="acc")
+                self.calls = []
+                self.search_path = "/api/v1/users"
+
+            def _request_json(self, method, url, payload=None):  # type: ignore[override]
+                self.calls.append((method, url, payload))
+                if "/api/v1/users/search" in url:
+                    return {
+                        "items": [
+                            {
+                                "object": "UserProfile",
+                                "provider_id": "good_2",
+                                "public_identifier": "jane-doe",
+                                "full_name": "Jane Doe",
+                                "headline": "Fullstack Engineer",
+                                "location": "US",
+                                "languages": ["en"],
+                                "skills": ["python", "react"],
+                                "years_experience": 6,
+                            }
+                        ]
+                    }
+                if "/api/v1/users?" in url:
+                    raise RuntimeError(
+                        'Unipile HTTP error 404: {"message":"Cannot GET /api/v1/users?...","error":"Not Found","statusCode":404}'
+                    )
+                return {}
+
+        provider = FakeProvider()
+        out = provider.search_profiles(query="fullstack engineer", limit=10)
+        self.assertEqual(len(out), 1)
+        self.assertEqual(out[0]["full_name"], "Jane Doe")
+        self.assertTrue(any("/api/v1/users/search" in call[1] for call in provider.calls))
+
     def test_extract_years_from_headline(self) -> None:
         self.assertEqual(self.provider._extract_years_from_text("Senior Backend Engineer | 7.6+ YOE"), 7)
         self.assertEqual(self.provider._extract_years_from_text("Platform engineer with 10 years experience"), 10)

@@ -584,11 +584,21 @@ class UnipileLinkedInProvider(LinkedInProvider):
                     return
 
     def _candidate_search_paths(self) -> List[str]:
+        configured = (self.search_path or "").strip()
+        configured_normalized = configured if configured.startswith("/") else (f"/{configured}" if configured else "")
+        configured_users_search = ""
+        if configured_normalized.rstrip("/") in {"/api/v1/users", "/users"}:
+            configured_users_search = f"{configured_normalized.rstrip('/')}/search"
+
         candidates = [
             self.search_path,
+            configured_users_search,
+            "/api/v1/users/search",
             "/api/v1/linkedin/search",
             "/api/v1/search",
             "/api/v1/users",
+            "/users/search",
+            "/users",
         ]
         out: List[str] = []
         seen = set()
