@@ -1427,7 +1427,12 @@ class CompanyCultureProfileService:
                 )
             except Exception as exc:
                 warnings.append(f"llm_synthesis_failed: {exc}")
-                profile = self._fallback_profile(normalized_name)
+                warnings.append("heuristic_fallback_active")
+                profile = HeuristicCompanyProfileSynthesizer().generate_profile(
+                    company_name=normalized_name,
+                    website_url=normalized_website,
+                    sources=synthesis_sources,
+                )
         else:
             warnings.append("no_scraped_sources_for_synthesis")
             profile = self._fallback_profile(normalized_name)

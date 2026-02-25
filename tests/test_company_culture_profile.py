@@ -157,6 +157,11 @@ class _FakeSynthesizer:
         }
 
 
+class _FailingSynthesizer:
+    def generate_profile(self, company_name: str, website_url: str, sources):  # type: ignore[no-untyped-def]
+        raise RuntimeError("bad_json")
+
+
 class CompanyCultureProfileTests(unittest.TestCase):
     def test_build_google_queries_includes_domain_and_culture_intent(self) -> None:
         queries = build_google_queries("Acme AI", "https://www.acme.ai")
@@ -223,6 +228,21 @@ class CompanyCultureProfileTests(unittest.TestCase):
         self.assertIn("performance_expectations", out["profile"])
         self.assertIn("who_should_avoid", out["profile"])
         self.assertEqual(out["warnings"], [])
+
+    def test_generate_profile_uses_heuristic_when_llm_fails(self) -> None:
+        service = CompanyCultureProfileService(
+            search_provider=_FakeSearchProvider(),
+            page_fetcher=_FakePageFetcher(),
+            content_extractor=_FakeExtractor(),
+            synthesizer=_FailingSynthesizer(),
+            max_links=10,
+            per_query_limit=4,
+            min_text_chars=20,
+        )
+        out = service.generate(company_name="Acme AI", website_url="https://www.acme.ai")
+        self.assertTrue(any("llm_synthesis_failed" in str(x) for x in out["warnings"]))
+        self.assertIn("heuristic_fallback_active", out["warnings"])
+        self.assertTrue((out["profile"] or {}).get("who_should_avoid"))
 
     def test_seed_search_provider_returns_urls(self) -> None:
         provider = SeedSearchProvider(company_name="Acme AI", website_url="https://www.acme.ai")
