@@ -245,33 +245,112 @@ class CandidateProfileService:
             raise ValueError("job not found for demo profile")
 
         core_profile = self.matching_engine.build_core_profile(chosen_job)
-        required = list(core_profile.get("core_skills") or [])[:6]
+        required = [str(item).strip() for item in (core_profile.get("core_skills") or []) if str(item).strip()][:6]
         if not required:
             required = ["python", "aws", "docker", "ci/cd"]
-        matched = required[: max(1, len(required) - 1)]
-        missing = [item for item in required if item not in set(matched)]
-        nice_to_have = ["react", "node.js", "llm orchestration", "system design"]
-        company_culture_profile = {
-            "values": ["high ownership", "direct communication", "fast execution", "product thinking"],
-            "team_style": "small autonomous team working directly with Founder and CTO",
-            "decision_style": "pragmatic with high accountability",
-            "delivery_environment": "fast moving US AI startup",
+
+        demo_fixture = {
+            "candidate": {
+                "full_name": "Tkachenko Victor",
+                "headline": "Front-end Practice Lead / Engineering Manager",
+                "location": "Dnipro, Ukraine",
+                "languages": ["en", "uk"],
+                "skills": [
+                    "html5",
+                    "angular",
+                    "react",
+                    "vue",
+                    "backbone",
+                    "jquery",
+                    "core web vitals",
+                    "browser internals",
+                    "spa",
+                    "ssr",
+                    "pwa",
+                    "bootstrap",
+                    "qunit",
+                    "sinon",
+                    "agile",
+                    "scrum",
+                    "ci/cd",
+                    "frontend architecture",
+                    "mentoring",
+                    "hiring",
+                ],
+                "years_experience": 13,
+            },
+            "nice_to_have_skills": [
+                "frontend leadership",
+                "core web vitals optimization",
+                "mentoring and coaching",
+                "cross team release coordination",
+            ],
+            "company_culture_profile": {
+                "values": [
+                    "high ownership",
+                    "direct communication",
+                    "mentorship culture",
+                    "fast but disciplined execution",
+                ],
+                "team_style": "autonomous squads with strong cross-functional collaboration and frequent peer reviews",
+                "decision_style": "pragmatic decisions backed by metrics and measurable delivery outcomes",
+                "delivery_environment": "high throughput product environment with continuous releases",
+            },
+            "predictive_behavior_signals": [
+                "Reduced customer site load time from around 4 seconds to near 1 second, indicating sustained performance ownership under production constraints.",
+                "Built and scaled a frontend department to six engineers, a strong proxy for team enablement and hiring maturity.",
+                "Ran in-house training tracks with roughly 30 participants and around 10 hires, suggesting repeatable mentorship and onboarding impact.",
+                "Maintained tutoring cohorts with a hiring conversion near 40 percent, which correlates with strong communication clarity and coaching consistency.",
+            ],
+            "assessment": {
+                "sourcing_vetting": {
+                    "score": 82.0,
+                    "status": "qualified",
+                    "reason": "Strong senior frontend leadership depth and measurable engineering outcomes.",
+                },
+                "communication": {
+                    "score": 85.0,
+                    "status": "in_dialogue",
+                    "reason": "Communication is concise and concrete with clear ownership language.",
+                },
+                "interview_evaluation": {
+                    "score": 84.0,
+                    "status": "scored",
+                    "reason": "Interview discussion shows practical architecture judgment and strong mentoring signals.",
+                },
+            },
+            "chat": {
+                "outbound": "Hey, thanks for sharing your resume. We reviewed it and your profile is now in interview review.",
+                "inbound_preview": "Shared my CV and examples of frontend performance and leadership work",
+                "event_reason": "Candidate shared CV quickly and highlighted measurable leadership and web performance impact.",
+            },
+            "resume_links": [
+                "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
+            ],
+            "human_explanation": (
+                "Demo profile mirrors Victor Tkachenko CV: senior frontend leadership, proven Core Web Vitals outcomes, "
+                "team scaling, and long-term mentoring footprint."
+            ),
         }
-        predictive_behavior_signals = [
-            "Asked about team structure and deployment practices before compensation, which is correlated with stronger retention.",
-            "Used specific project examples instead of generic claims during discussion, a positive interview depth signal.",
-            "Raised roadmap and ownership questions early, indicating product thinking and long term motivation.",
-        ]
+
+        candidate_skills_norm = {str(item).strip().lower() for item in demo_fixture["candidate"]["skills"] if str(item).strip()}
+        matched = [item for item in required if str(item).strip().lower() in candidate_skills_norm]
+        if not matched and required:
+            matched = required[:1]
+        missing = [item for item in required if item not in set(matched)]
+        nice_to_have = list(demo_fixture["nice_to_have_skills"])
+        company_culture_profile = dict(demo_fixture["company_culture_profile"])
+        predictive_behavior_signals = list(demo_fixture["predictive_behavior_signals"])
         demo_linkedin_id = f"demo-profile-candidate-{job_id_int}"
         demo_candidate_id = self.db.upsert_candidate(
             {
                 "linkedin_id": demo_linkedin_id,
-                "full_name": "Henry Wright",
-                "headline": "Senior Fullstack Engineer",
-                "location": "Warsaw, Poland",
-                "languages": ["en"],
-                "skills": sorted(set(matched + ["react", "node.js", "llm"])),
-                "years_experience": 7,
+                "full_name": str(demo_fixture["candidate"]["full_name"]),
+                "headline": str(demo_fixture["candidate"]["headline"]),
+                "location": str(demo_fixture["candidate"]["location"]),
+                "languages": list(demo_fixture["candidate"]["languages"]),
+                "skills": sorted(set(list(demo_fixture["candidate"]["skills"]) + matched)),
+                "years_experience": int(demo_fixture["candidate"]["years_experience"]),
                 "raw": {},
             },
             source="demo",
@@ -285,17 +364,17 @@ class CandidateProfileService:
             "predictive_behavior_signals": predictive_behavior_signals,
             "components": {
                 "skills_match": round(float(len(matched)) / float(max(len(required), 1)), 3),
-                "seniority_match": 1.0,
-                "location_match": 0.8,
+                "seniority_match": 1.0 if int(demo_fixture["candidate"]["years_experience"]) >= 8 else 0.8,
+                "location_match": 0.6,
                 "language_match": 1.0,
             },
-            "human_explanation": "Demo profile for UI validation. Candidate matches most core requirements with one gap.",
+            "human_explanation": str(demo_fixture["human_explanation"]),
             "rules_version": "demo_fixture",
         }
         self.db.create_candidate_match(
             job_id=job_id_int,
             candidate_id=demo_candidate_id,
-            score=0.83,
+            score=0.81,
             status="verified",
             verification_notes=notes,
         )
@@ -305,9 +384,12 @@ class CandidateProfileService:
             agent_key="sourcing_vetting",
             agent_name=AGENT_DEFAULT_NAMES["sourcing_vetting"],
             stage_key="vetting",
-            score=86.0,
-            status="qualified",
-            reason="Strong technical alignment for core stack and seniority.",
+            score=float((demo_fixture["assessment"]["sourcing_vetting"] or {}).get("score") or 0.0),
+            status=str((demo_fixture["assessment"]["sourcing_vetting"] or {}).get("status") or "qualified"),
+            reason=str(
+                (demo_fixture["assessment"]["sourcing_vetting"] or {}).get("reason")
+                or "Strong technical alignment for core stack and seniority."
+            ),
             details={"matched_required_skills": matched, "missing_required_skills": missing},
         )
         self.db.upsert_candidate_agent_assessment(
@@ -316,17 +398,21 @@ class CandidateProfileService:
             agent_key="communication",
             agent_name=AGENT_DEFAULT_NAMES["communication"],
             stage_key="dialogue",
-            score=79.0,
-            status="in_dialogue",
-            reason="Replies are clear and cooperative, with minor ambiguity on availability.",
+            score=float((demo_fixture["assessment"]["communication"] or {}).get("score") or 0.0),
+            status=str((demo_fixture["assessment"]["communication"] or {}).get("status") or "in_dialogue"),
+            reason=str(
+                (demo_fixture["assessment"]["communication"] or {}).get("reason")
+                or "Replies are clear and cooperative, with minor ambiguity on availability."
+            ),
             details={
                 "quality_adjustment": 3.5,
                 "quality_signals": {
-                    "word_count": 42,
-                    "unique_word_ratio": 0.78,
-                    "turns": 4,
+                    "word_count": 68,
+                    "unique_word_ratio": 0.81,
+                    "turns": 5,
                     "followups_sent": 1,
                     "filler_count": 0,
+                    "specificity_markers": 4,
                 },
             },
         )
@@ -336,17 +422,20 @@ class CandidateProfileService:
             agent_key="interview_evaluation",
             agent_name=AGENT_DEFAULT_NAMES["interview_evaluation"],
             stage_key="interview_results",
-            score=84.0,
-            status="scored",
-            reason="Interview indicates solid ownership and architecture decision quality.",
+            score=float((demo_fixture["assessment"]["interview_evaluation"] or {}).get("score") or 0.0),
+            status=str((demo_fixture["assessment"]["interview_evaluation"] or {}).get("status") or "scored"),
+            reason=str(
+                (demo_fixture["assessment"]["interview_evaluation"] or {}).get("reason")
+                or "Interview indicates solid ownership and architecture decision quality."
+            ),
             details={
-                "technical_score": 82,
-                "soft_skills_score": 80,
-                "culture_fit_score": 88,
+                "technical_score": 85,
+                "soft_skills_score": 84,
+                "culture_fit_score": 86,
                 "score_confidence": 0.73,
                 "interview_signals": [
-                    "Answered with concrete system tradeoffs, not textbook abstractions.",
-                    "Clarified requirements before proposing architecture choices.",
+                    "Connected architecture choices to measurable product metrics and delivery constraints.",
+                    "Described mentoring and hiring processes with concrete operational details.",
                 ],
             },
         )
@@ -369,25 +458,23 @@ class CandidateProfileService:
         self.db.add_message(
             conversation_id=conversation_id,
             direction="outbound",
-            content="Hey, thanks for sharing your CV. We moved your profile to interview review.",
+            content=str((demo_fixture["chat"] or {}).get("outbound") or ""),
             candidate_language="en",
             meta={"type": "demo_seed", "auto": True},
         )
         session_state = {
             "session_id": f"pre-{conversation_id}",
-            "candidate_name": "Henry Wright",
+            "candidate_name": str(demo_fixture["candidate"]["full_name"]),
             "job_title": str(chosen_job.get("title") or "Demo role"),
             "scope_summary": ", ".join(required),
             "core_profile_summary": ", ".join(required),
             "language": "en",
             "status": "resume_received",
             "followups_sent": 1,
-            "turns": 3,
+            "turns": 5,
             "last_intent": "resume_shared",
             "last_error": None,
-            "resume_links": [
-                "https://www.w3.org/WAI/ER/tests/xhtml/testfiles/resources/pdf/dummy.pdf",
-            ],
+            "resume_links": list(demo_fixture["resume_links"]),
             "created_at": datetime.now(UTC).isoformat(),
             "updated_at": datetime.now(UTC).isoformat(),
             "next_followup_at": None,
@@ -406,12 +493,12 @@ class CandidateProfileService:
             conversation_id=conversation_id,
             event_type="inbound_processed",
             intent="resume_shared",
-            inbound_text="Attached my resume",
+            inbound_text=str((demo_fixture["chat"] or {}).get("inbound_preview") or "Attached my resume"),
             outbound_text="Great, resume received",
             state_status="resume_received",
             details={
                 "source": "demo_fixture",
-                "signal": "candidate shared resume quickly and asked about team setup",
+                "signal": str((demo_fixture["chat"] or {}).get("event_reason") or ""),
             },
         )
         self.db.log_operation(
