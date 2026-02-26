@@ -8,6 +8,7 @@ from typing import Any, Dict, List
 from tener_ai.agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from tener_ai.db import Database
 from tener_ai.matching import MatchingEngine
+from tener_ai.pre_resume_service import PreResumeCommunicationService
 from tener_ai.workflow import WorkflowService
 
 FORCED_TEST_ID = "olena-bachek-b8523121a"
@@ -181,6 +182,81 @@ class TestJobForcedOutreachTests(unittest.TestCase):
             self.assertEqual(out.get("test_filter_skipped"), 0)
             self.assertEqual(out.get("total"), 2)
             self.assertEqual(sorted(provider.sent_to), sorted([FORCED_PROVIDER_ID, "regular-candidate-1"]))
+
+    def test_pre_resume_followup_skips_non_forced_candidate_for_test_job(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "test_job_forced_followup.sqlite3"))
+            db.init_schema()
+            ids_file = Path(td) / "forced_ids.txt"
+            ids_file.write_text(f"{FORCED_TEST_ID}\n", encoding="utf-8")
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = _Provider()
+            pre_resume = PreResumeCommunicationService(templates_path=str(root / "config" / "outreach_templates.json"))
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=pre_resume,
+                forced_test_ids_path=str(ids_file),
+            )
+
+            job_id = db.insert_job(
+                title="Prod E2E smoke",
+                jd_text="Senior Backend Engineer with Python and AWS",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            candidate_id = db.upsert_candidate(
+                {
+                    "linkedin_id": "real-candidate-1",
+                    "full_name": "Real Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python"],
+                    "years_experience": 6,
+                    "raw": {},
+                }
+            )
+            conversation_id = db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+            session_id = f"pre-{conversation_id}"
+            started = pre_resume.start_session(
+                session_id=session_id,
+                candidate_name="Real Candidate",
+                job_title="Prod E2E smoke",
+                scope_summary="Senior Backend Engineer",
+                core_profile_summary="python, aws",
+                language="en",
+            )
+            state = dict(started["state"])
+            state["status"] = "awaiting_reply"
+            state["next_followup_at"] = "2000-01-01T00:00:00+00:00"
+            pre_resume.seed_session(state)
+            db.upsert_pre_resume_session(
+                session_id=session_id,
+                conversation_id=conversation_id,
+                job_id=job_id,
+                candidate_id=candidate_id,
+                state=state,
+                instruction="",
+            )
+
+            result = workflow.run_due_pre_resume_followups(job_id=job_id, limit=10)
+            self.assertEqual(result["sent"], 0)
+            self.assertEqual(result["skipped"], 1)
+            reasons = {str(item.get("reason") or "") for item in (result.get("items") or [])}
+            self.assertIn("test_job_forced_only", reasons)
+            followups = [
+                msg
+                for msg in db.list_messages(conversation_id=conversation_id)
+                if (msg.get("meta") or {}).get("type") == "pre_resume_followup"
+            ]
+            self.assertEqual(len(followups), 0)
 
 
 if __name__ == "__main__":

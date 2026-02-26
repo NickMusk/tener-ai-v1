@@ -1562,6 +1562,9 @@ class WorkflowService:
         skipped = 0
         errors = 0
         items: List[Dict[str, Any]] = []
+        forced_identifiers = self._load_forced_test_identifiers()
+        forced_lookup_by_job: Dict[int, List[str]] = {}
+        forced_mode_by_job: Dict[int, bool] = {}
 
         for row in due_rows:
             session_id = str(row.get("session_id") or "")
@@ -1574,6 +1577,57 @@ class WorkflowService:
             state_json = row.get("state_json") if isinstance(row.get("state_json"), dict) else {}
             if self.pre_resume_service.get_session(session_id) is None and state_json:
                 self.pre_resume_service.seed_session(state_json)
+
+            if forced_identifiers:
+                forced_only = forced_mode_by_job.get(job_ref)
+                if forced_only is None:
+                    job_ctx = self.db.get_job(job_ref) or {"id": job_ref}
+                    forced_only = self._effective_test_mode(
+                        job=job_ctx,
+                        test_mode=None,
+                        forced_identifiers=forced_identifiers,
+                    )
+                    forced_mode_by_job[job_ref] = forced_only
+                if forced_only:
+                    lookup = forced_lookup_by_job.get(job_ref)
+                    if lookup is None:
+                        job_ctx = self.db.get_job(job_ref) or {"id": job_ref}
+                        lookup = self._build_forced_identifier_lookup(
+                            job=job_ctx,
+                            forced_identifiers=forced_identifiers,
+                        )
+                        forced_lookup_by_job[job_ref] = lookup
+                    candidate_for_filter = self.db.get_candidate(candidate_id)
+                    match_for_filter = self.db.get_candidate_match(job_id=job_ref, candidate_id=candidate_id)
+                    forced_identifier = None
+                    if candidate_for_filter:
+                        forced_identifier = self._forced_test_identifier_for_profile(candidate_for_filter, lookup)
+                    if not forced_identifier:
+                        forced_identifier = self._forced_test_identifier_from_match(match_for_filter, lookup)
+                    if not forced_identifier:
+                        skipped += 1
+                        items.append(
+                            {
+                                "session_id": session_id,
+                                "conversation_id": conversation_id,
+                                "status": "skipped",
+                                "reason": "test_job_forced_only",
+                            }
+                        )
+                        self.db.log_operation(
+                            operation="agent.pre_resume.followup",
+                            status="skipped",
+                            entity_type="conversation",
+                            entity_id=str(conversation_id),
+                            details={
+                                "session_id": session_id,
+                                "job_id": job_ref,
+                                "candidate_id": candidate_id,
+                                "reason": "test_job_forced_only",
+                                "forced_test_ids_file": self.forced_test_ids_path,
+                            },
+                        )
+                        continue
 
             try:
                 result = self.pre_resume_service.build_followup(session_id=session_id)
@@ -1626,6 +1680,7 @@ class WorkflowService:
                     language=language,
                     history=history,
                     state=state,
+                    conversation=conversation,
                     fallback_message=outbound,
                 )
                 result["outbound"] = outbound
@@ -1925,6 +1980,7 @@ class WorkflowService:
                 entry_url=entry_url,
                 language=language,
                 followup_number=followup_number,
+                conversation=conversation,
             )
             delivery = self._send_auto_reply(candidate=candidate, message=message, conversation=conversation)
             outbound_id = self.db.add_message(
@@ -2074,6 +2130,7 @@ class WorkflowService:
             candidate=candidate,
             entry_url=entry_url,
             language=language,
+            conversation=conversation,
         )
         delivery = self._send_auto_reply(candidate=candidate, message=message, conversation=conversation)
         outbound_id = self.db.add_message(
@@ -2181,6 +2238,7 @@ class WorkflowService:
         candidate: Dict[str, Any],
         entry_url: str,
         language: str,
+        conversation: Dict[str, Any] | None = None,
     ) -> str:
         title = str(job.get("title") or "this role").strip() or "this role"
         fallback_by_lang = {
@@ -2205,7 +2263,7 @@ class WorkflowService:
         fallback = fallback_template.format(title=title, url=entry_url).strip()
         instruction = self._linkedin_generation_instruction(
             kind="interview_invite",
-            recruiter_name=self._linkedin_recruiter_name(),
+            recruiter_name=self._linkedin_recruiter_name(conversation=conversation),
             language=lang,
         )
         generated = self._maybe_llm_reply(
@@ -2229,6 +2287,7 @@ class WorkflowService:
         entry_url: str,
         language: str,
         followup_number: int,
+        conversation: Dict[str, Any] | None = None,
     ) -> str:
         name = str(candidate.get("full_name") or "there").strip() or "there"
         title = str(job.get("title") or "this role").strip() or "this role"
@@ -2247,7 +2306,7 @@ class WorkflowService:
         fallback = pool.get(lang, pool["en"]).format(name=name, title=title, url=entry_url)
         instruction = self._linkedin_generation_instruction(
             kind="interview_followup",
-            recruiter_name=self._linkedin_recruiter_name(),
+            recruiter_name=self._linkedin_recruiter_name(conversation=conversation),
             language=lang,
         )
         generated = self._maybe_llm_reply(
@@ -3231,8 +3290,9 @@ class WorkflowService:
         fallback_message: str,
         request_resume: bool,
         state: Dict[str, Any] | None,
+        conversation: Dict[str, Any] | None = None,
     ) -> str:
-        recruiter_name = self._linkedin_recruiter_name()
+        recruiter_name = self._linkedin_recruiter_name(conversation=conversation)
         fallback = self._linkedin_initial_fallback_message(
             job=job,
             recruiter_name=recruiter_name,
@@ -3263,8 +3323,9 @@ class WorkflowService:
         history: List[Dict[str, str]],
         state: Dict[str, Any] | None,
         fallback_message: str,
+        conversation: Dict[str, Any] | None = None,
     ) -> str:
-        recruiter_name = self._linkedin_recruiter_name()
+        recruiter_name = self._linkedin_recruiter_name(conversation=conversation)
         fallback = self._linkedin_followup_fallback_message(
             job=job,
             recruiter_name=recruiter_name,
@@ -3302,37 +3363,50 @@ class WorkflowService:
             if request_resume
             else "If this sounds relevant, send a short reply and your salary expectations"
         )
+        sign_block = (
+            "Best,\n"
+            f"{recruiter_name}\n"
+            "Senior Talent Acquisition Manager at Tener"
+            if recruiter_name
+            else "Best,\nSenior Talent Acquisition Manager at Tener"
+        )
         return (
             "Greetings,\n"
             f"We're Tener, and we're now looking for a {position} {role_owner}\n"
             "You'll work directly with the Founder and CTO on an autonomous coding agent, designing real agentic workflows, "
             f"RAG pipelines, LLM orchestration, and scalable ML infrastructure{skills_line}\n\n"
             f"{ask_line}\n\n"
-            "Best,\n"
-            f"{recruiter_name}\n"
-            "Senior Talent Acquisition Manager at Tener"
+            f"{sign_block}"
         )
 
     @staticmethod
     def _linkedin_followup_fallback_message(*, job: Dict[str, Any], recruiter_name: str) -> str:
         position = str(job.get("title") or "the role").strip() or "the role"
+        sign_block = (
+            "Warm regards,\n"
+            f"{recruiter_name}\n"
+            "Senior Talent Acquisition Manager at Digis (a Fiverr company)"
+            if recruiter_name
+            else "Warm regards,\nSenior Talent Acquisition Manager at Digis (a Fiverr company)"
+        )
         return (
             "Hey,\n"
             f"If {position} isn't quite what you're looking for right now, maybe someone from your network could be a good fit\n"
             "Either way, I'd really appreciate a short reply, just to know where things stand\n\n"
-            "Warm regards,\n"
-            f"{recruiter_name}\n"
-            "Senior Talent Acquisition Manager at Digis (a Fiverr company)"
+            f"{sign_block}"
         )
 
     @staticmethod
     def _linkedin_generation_instruction(*, kind: str, recruiter_name: str, language: str) -> str:
         normalized_kind = str(kind or "").strip().lower()
+        normalized_recruiter = str(recruiter_name or "").strip()
+        recruiter_context = normalized_recruiter if normalized_recruiter else "[none]"
         style_rules = WorkflowService._linkedin_style_rules()
         if normalized_kind == "interview_invite":
             return (
                 "Generate one LinkedIn message as plain text with paragraph breaks.\n"
                 f"Write in language: {language}.\n"
+                f"Recruiter name context: {recruiter_context}\n"
                 "Goal: candidate already agreed to quick pre vetting, now send interview link in one natural message.\n"
                 "Required structure:\n"
                 "1) First line must be exactly: Hey,\n"
@@ -3341,6 +3415,7 @@ class WorkflowService:
                 "4) Ask for a short reply once finished\n"
                 "Do not ask the candidate to repeat consent phrase.\n"
                 "Do not force corporate tone.\n"
+                "Do not invent recruiter names.\n"
                 "Style rules:\n"
                 f"{style_rules}\n"
                 "Adapt wording to context while preserving this structure and intent."
@@ -3349,53 +3424,101 @@ class WorkflowService:
             return (
                 "Generate one LinkedIn follow up message as plain text with paragraph breaks.\n"
                 f"Write in language: {language}.\n"
+                f"Recruiter name context: {recruiter_context}\n"
                 "Goal: remind about quick pre vetting link in a casual way.\n"
                 "Required structure:\n"
                 "1) Very short check in\n"
                 "2) Include interview link exactly as provided in context\n"
                 "3) Ask if help is needed or ask for quick status\n"
                 "Do not sound pushy.\n"
+                "Do not invent recruiter names.\n"
                 "Style rules:\n"
                 f"{style_rules}\n"
                 "Adapt wording to context while preserving this structure and intent."
             )
         if normalized_kind == "followup":
+            signature_rule = (
+                "4) Optional signature block:\n"
+                "Warm regards,\n"
+                f"{normalized_recruiter}\n"
+                "Senior Talent Acquisition Manager at Digis (a Fiverr company)\n"
+                if normalized_recruiter
+                else "4) Signature is optional and should not include a recruiter name when none is provided\n"
+            )
             return (
                 "Generate one LinkedIn follow up message as plain text with paragraph breaks.\n"
                 f"Write in language: {language}.\n"
+                f"Recruiter name context: {recruiter_context}\n"
                 "Required structure:\n"
                 "1) Start with a short greeting line like Hey,\n"
                 "2) Mention the role may not be a fit and ask for referral from the network\n"
                 "3) Ask for a short reply on current status\n"
-                "4) Signature exactly as:\n"
-                "Warm regards,\n"
-                f"{recruiter_name}\n"
-                "Senior Talent Acquisition Manager at Digis (a Fiverr company)\n"
+                f"{signature_rule}"
+                "Do not invent recruiter names.\n"
                 "Style rules:\n"
                 f"{style_rules}\n"
                 "Adapt wording to job and candidate context while preserving this structure and intent."
             )
+        signature_rule = (
+            "5) Signature block exactly as:\n"
+            "Best,\n"
+            f"{normalized_recruiter}\n"
+            "Senior Talent Acquisition Manager at Tener\n"
+            if normalized_recruiter
+            else "5) Signature is optional and should not include a recruiter name when none is provided\n"
+        )
         return (
             "Generate one first LinkedIn outreach message as plain text with paragraph breaks.\n"
             f"Write in language: {language}.\n"
+            f"Recruiter name context: {recruiter_context}\n"
             "Required structure:\n"
             "1) Start with Greetings,\n"
             "2) Mention Tener and that we are hiring for the specific position for a long term project with a fast moving US AI startup\n"
             "3) Mention direct collaboration with Founder and CTO on autonomous coding agent, agentic workflows, RAG pipelines, LLM orchestration, and scalable ML infrastructure\n"
             "4) Ask for CV and salary expectations\n"
-            "5) Signature exactly as:\n"
-            "Best,\n"
-            f"{recruiter_name}\n"
-            "Senior Talent Acquisition Manager at Tener\n"
+            f"{signature_rule}"
+            "Do not invent recruiter names.\n"
             "Style rules:\n"
             f"{style_rules}\n"
             "Adapt vocabulary and concrete details to the job and candidate context while preserving this structure and intent."
         )
 
-    @staticmethod
-    def _linkedin_recruiter_name() -> str:
+    def _linkedin_recruiter_name(self, *, conversation: Dict[str, Any] | None = None) -> str:
+        account_id = self._safe_int((conversation or {}).get("linkedin_account_id"), 0)
+        if account_id > 0:
+            account = self.db.get_linkedin_account(account_id)
+            if account:
+                label = str(account.get("label") or "").strip()
+                if label:
+                    return label
+                metadata = account.get("metadata") if isinstance(account.get("metadata"), dict) else {}
+                profile_like = metadata.get("profile") if isinstance(metadata.get("profile"), dict) else {}
+                remote_like = metadata.get("remote") if isinstance(metadata.get("remote"), dict) else {}
+                for bucket in (profile_like, remote_like, metadata):
+                    candidate_name = self._pick_name_from_metadata(bucket)
+                    if candidate_name:
+                        return candidate_name
         configured = str(os.environ.get("TENER_LINKEDIN_RECRUITER_NAME", "")).strip()
-        return configured or "Casey"
+        return configured
+
+    @staticmethod
+    def _pick_name_from_metadata(payload: Dict[str, Any] | None) -> str:
+        if not isinstance(payload, dict):
+            return ""
+        direct = (
+            payload.get("full_name")
+            or payload.get("fullName")
+            or payload.get("display_name")
+            or payload.get("displayName")
+            or payload.get("name")
+        )
+        direct_name = str(direct or "").strip()
+        if direct_name:
+            return direct_name
+        first = str(payload.get("first_name") or payload.get("firstName") or "").strip()
+        last = str(payload.get("last_name") or payload.get("lastName") or "").strip()
+        joined = " ".join(part for part in (first, last) if part).strip()
+        return joined
 
     @staticmethod
     def _linkedin_style_rules() -> str:
