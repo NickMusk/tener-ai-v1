@@ -34,6 +34,21 @@ SIGNAL_CATEGORIES = {
     "digital_footprint",
     "interview",
     "timing",
+    "linkedin_profile_depth",
+    "cv_consistency",
+    "skills_depth",
+    "domain_expertise",
+    "portfolio_quality",
+    "github_activity",
+    "social_presence",
+    "reference_signal",
+    "culture_fit",
+    "psychological_profile",
+    "learning_agility",
+    "salary_alignment",
+    "availability_risk",
+    "leadership_signal",
+    "collaboration_style",
 }
 
 

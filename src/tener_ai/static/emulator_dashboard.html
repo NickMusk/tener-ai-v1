@@ -510,22 +510,6 @@
       border-color: rgba(38, 208, 124, 0.48);
     }
 
-    .profiles {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      margin-top: 8px;
-    }
-
-    .profile-pill {
-      border: 1px solid #2b5678;
-      border-radius: 999px;
-      padding: 4px 8px;
-      background: rgba(20, 41, 61, 0.82);
-      font-size: 11px;
-      color: #cde5fb;
-    }
-
     @media (max-width: 1120px) {
       .topbar { grid-template-columns: 1fr; }
       .grid { grid-template-columns: 1fr; }
@@ -546,7 +530,6 @@
           <span>Shortcut: <strong>Space</strong> to Start/Pause</span>
           <span id="project-summary">No project selected</span>
         </div>
-        <div class="profiles" id="company-profiles"></div>
       </div>
       <div class="controls">
         <div class="control-row">
@@ -640,7 +623,6 @@
     const state = {
       projects: [],
       project: null,
-      companyProfiles: [],
       replay: {
         mode: 'idle',
         speed: 1,
@@ -1231,18 +1213,7 @@
       const phaseText = state.phase === 'idle' ? 'Idle' : safeText(state.phase);
       $('phase-pill').textContent = `${phaseText}`;
       const playBtn = $('play-pause');
-      playBtn.textContent = mode === 'playing' ? 'Pause' : (mode === 'complete' ? 'Replay' : 'Start');
-    }
-
-    function renderProfiles() {
-      const root = $('company-profiles');
-      root.innerHTML = '';
-      for (const profile of state.companyProfiles) {
-        const pill = document.createElement('span');
-        pill.className = 'profile-pill';
-        pill.textContent = `${safeText(profile.name)} (${safeText(profile.domain)})`;
-        root.appendChild(pill);
-      }
+      playBtn.textContent = mode === 'playing' ? 'Pause' : (mode === 'complete' ? 'Restart' : 'Start');
     }
 
     function render() {
@@ -1287,12 +1258,6 @@
       applyProject(project);
     }
 
-    async function loadCompanyProfiles() {
-      const out = await api('/api/emulator/company-profiles');
-      state.companyProfiles = out.items || [];
-      renderProfiles();
-    }
-
     function bindEvents() {
       $('project-select').addEventListener('change', async (event) => {
         const projectId = safeText(event.target.value, '');
@@ -1304,7 +1269,7 @@
         try {
           $('emulator-status').textContent = 'Status: reloading emulator datasets...';
           await api('/api/emulator/reload', { method: 'POST', body: '{}' });
-          await Promise.all([loadProjects(), loadCompanyProfiles(), loadHealth()]);
+          await Promise.all([loadProjects(), loadHealth()]);
         } catch (err) {
           alert(err.message || String(err));
         }
@@ -1348,7 +1313,7 @@
     async function bootstrap() {
       try {
         bindEvents();
-        await Promise.all([loadHealth(), loadCompanyProfiles(), loadProjects()]);
+        await Promise.all([loadHealth(), loadProjects()]);
       } catch (err) {
         $('emulator-status').textContent = `Status: error (${err.message || String(err)})`;
         setControlEnabled(false);
