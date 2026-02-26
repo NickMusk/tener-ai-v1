@@ -103,8 +103,18 @@ class CandidateProfileService:
                 scorecard=scorecard,
                 current_status_key=current_status_key,
             )
-            fit_breakdown = self._build_fit_breakdown(job=job, candidate=candidate, match=match, scorecard=scorecard)
             job_events = list(events_by_job.get(job_id, []))
+            job_conversations = list(conversations_by_job.get(job_id, []))
+            resumes_for_job = self._collect_resume_links(sessions=sessions_by_job.get(job_id, []))
+            fit_breakdown = self._build_fit_breakdown(
+                job=job,
+                candidate=candidate,
+                match=match,
+                scorecard=scorecard,
+                pre_resume_events=job_events,
+                conversations=job_conversations,
+                resume_links=resumes_for_job,
+            )
             job_conversation_ids = conversation_ids_by_job.get(job_id, set())
             job_logs = self._filter_logs_for_job(logs=logs, job_id=job_id, conversation_ids=job_conversation_ids)
             signals = self._build_signals_timeline(
@@ -115,6 +125,25 @@ class CandidateProfileService:
                 pre_resume_events=job_events,
                 logs=job_logs,
             )
+            culture_analysis = fit_breakdown.get("culture_fit") if isinstance(fit_breakdown.get("culture_fit"), dict) else {}
+            if culture_analysis:
+                signals.insert(
+                    0,
+                    {
+                        "kind": "culture_analysis",
+                        "job_id": job_id,
+                        "created_at": datetime.now(UTC).isoformat(),
+                        "agent_key": "culture_analyst",
+                        "agent_name": AGENT_DEFAULT_NAMES.get("culture_analyst", "Harper AI (Culture Analyst)"),
+                        "status": "generated",
+                        "reason": str((culture_analysis.get("analysis") or {}).get("summary") or "Culture fit analysis updated."),
+                        "signals": {
+                            "alignment_highlights": culture_analysis.get("alignment_highlights") or [],
+                            "concerns": culture_analysis.get("concerns") or [],
+                            "predictive_signals": culture_analysis.get("predictive_signals") or [],
+                        },
+                    },
+                )
             global_signals.extend(signals)
             explanation = self._build_fit_explanation(
                 candidate=candidate,
@@ -124,7 +153,6 @@ class CandidateProfileService:
                 signals=signals[:25],
                 include_explanation=include_explanation,
             )
-            resumes_for_job = self._collect_resume_links(sessions=sessions_by_job.get(job_id, []))
             jobs_payload.append(
                 {
                     "job": job,
@@ -229,6 +257,11 @@ class CandidateProfileService:
             "decision_style": "pragmatic with high accountability",
             "delivery_environment": "fast moving US AI startup",
         }
+        predictive_behavior_signals = [
+            "Asked about team structure and deployment practices before compensation, which is correlated with stronger retention.",
+            "Used specific project examples instead of generic claims during discussion, a positive interview depth signal.",
+            "Raised roadmap and ownership questions early, indicating product thinking and long term motivation.",
+        ]
         demo_linkedin_id = f"demo-profile-candidate-{job_id_int}"
         demo_candidate_id = self.db.upsert_candidate(
             {
@@ -249,6 +282,7 @@ class CandidateProfileService:
             "matched_skills": matched,
             "nice_to_have_skills": nice_to_have,
             "company_culture_profile": company_culture_profile,
+            "predictive_behavior_signals": predictive_behavior_signals,
             "components": {
                 "skills_match": round(float(len(matched)) / float(max(len(required), 1)), 3),
                 "seniority_match": 1.0,
@@ -310,6 +344,10 @@ class CandidateProfileService:
                 "soft_skills_score": 80,
                 "culture_fit_score": 88,
                 "score_confidence": 0.73,
+                "interview_signals": [
+                    "Answered with concrete system tradeoffs, not textbook abstractions.",
+                    "Clarified requirements before proposing architecture choices.",
+                ],
             },
         )
         self.db.update_candidate_match_status(
@@ -371,7 +409,10 @@ class CandidateProfileService:
             inbound_text="Attached my resume",
             outbound_text="Great, resume received",
             state_status="resume_received",
-            details={"source": "demo_fixture"},
+            details={
+                "source": "demo_fixture",
+                "signal": "candidate shared resume quickly and asked about team setup",
+            },
         )
         self.db.log_operation(
             operation="candidate.profile.demo_seed",
@@ -394,6 +435,9 @@ class CandidateProfileService:
         candidate: Dict[str, Any],
         match: Dict[str, Any],
         scorecard: Dict[str, Any],
+        pre_resume_events: List[Dict[str, Any]],
+        conversations: List[Dict[str, Any]],
+        resume_links: List[str],
     ) -> Dict[str, Any]:
         notes = match.get("verification_notes") if isinstance(match.get("verification_notes"), dict) else {}
         core_profile = notes.get("core_profile") if isinstance(notes.get("core_profile"), dict) else {}
@@ -422,6 +466,9 @@ class CandidateProfileService:
             candidate=candidate,
             match=match,
             scorecard=scorecard,
+            pre_resume_events=pre_resume_events,
+            conversations=conversations,
+            resume_links=resume_links,
         )
         risks: List[Dict[str, Any]] = []
         if missing_must_have:
@@ -520,9 +567,10 @@ class CandidateProfileService:
             "Use 4 short paragraphs.\n"
             "Paragraph 1: overall fit summary.\n"
             "Paragraph 2: must have and nice to have breakdown.\n"
-            "Paragraph 3: culture fit alignment and team environment match.\n"
+            "Paragraph 3: culture fit alignment and team environment match using culture analyst inputs.\n"
             "Paragraph 4: key risks and recommendation.\n"
-            "Be specific to provided signals and avoid generic wording."
+            "Be specific to provided signals and avoid generic wording.\n"
+            "Reference resume, chat, and interview signals when available."
         )
         inbound_text = json.dumps(
             {
@@ -568,6 +616,9 @@ class CandidateProfileService:
         cultural_highlights = (
             culture_fit.get("alignment_highlights") if isinstance(culture_fit.get("alignment_highlights"), list) else []
         )
+        analysis = culture_fit.get("analysis") if isinstance(culture_fit.get("analysis"), dict) else {}
+        analysis_agent = str(analysis.get("agent_name") or AGENT_DEFAULT_NAMES.get("culture_analyst", "Harper AI (Culture Analyst)")).strip()
+        analysis_summary = str(analysis.get("summary") or "").strip()
         top_risks = [str((item or {}).get("message") or "").strip() for item in risk_flags if isinstance(item, dict)]
         top_risks = [item for item in top_risks if item]
         name = str(candidate.get("full_name") or "Candidate").strip() or "Candidate"
@@ -576,7 +627,7 @@ class CandidateProfileService:
             f"{name} currently sits at overall status {status} with score {overall_text} for {title}.\n"
             f"Must-have coverage is {len(matched)}/{max(len(required), 1)}; matched: {', '.join(matched[:6]) or 'none'}; "
             f"missing: {', '.join(missing[:6]) or 'none'}.\n"
-            f"Culture-fit highlights: {', '.join(str(item) for item in cultural_highlights[:4]) or 'no strong cultural insights yet'}.\n"
+            f"{analysis_agent} culture analysis: {analysis_summary or ', '.join(str(item) for item in cultural_highlights[:4]) or 'no strong cultural insights yet'}.\n"
             f"Main risks: {', '.join(top_risks[:3]) or 'no critical risks detected from current data'}."
         )
 
@@ -692,6 +743,9 @@ class CandidateProfileService:
         candidate: Dict[str, Any],
         match: Dict[str, Any],
         scorecard: Dict[str, Any],
+        pre_resume_events: List[Dict[str, Any]],
+        conversations: List[Dict[str, Any]],
+        resume_links: List[str],
     ) -> Dict[str, Any]:
         notes = match.get("verification_notes") if isinstance(match.get("verification_notes"), dict) else {}
         raw_profile = notes.get("company_culture_profile") if isinstance(notes.get("company_culture_profile"), dict) else {}
@@ -717,17 +771,37 @@ class CandidateProfileService:
         alignment: List[str] = []
         concerns: List[str] = []
         evidence: List[str] = []
+        predictive_signals_raw = notes.get("predictive_behavior_signals") if isinstance(notes.get("predictive_behavior_signals"), list) else []
+        predictive_signals = [str(x).strip() for x in predictive_signals_raw if str(x).strip()]
+        chat_signal_lines = self._extract_chat_signal_lines(pre_resume_events=pre_resume_events, conversations=conversations)
+        interview_details = (scorecard.get("interview_evaluation") or {}).get("stages")
+        interview_latest = interview_details[0] if isinstance(interview_details, list) and interview_details else {}
+        interview_signals = (
+            interview_latest.get("signals") if isinstance(interview_latest.get("signals"), dict) else {}
+        )
 
         if communication_score is not None and communication_score >= 75:
             evidence.append(f"Communication score {communication_score:.1f} indicates clear async communication")
             alignment.append("strong communication fit for distributed startup environment")
+        elif communication_score is not None and communication_score < 60:
+            concerns.append("communication signal is below expected bar for high context async collaboration")
         if interview_score is not None and interview_score >= 80:
             evidence.append(f"Interview score {interview_score:.1f} supports decision quality and ownership")
             alignment.append("demonstrates ownership and architecture judgement")
+        elif interview_score is not None and interview_score < 65:
+            concerns.append("interview signal indicates inconsistent ownership or decision quality")
         if any(skill in candidate_skills for skill in ("llm", "ai", "rag")):
             alignment.append("brings direct AI product exposure relevant to agentic workflow roadmap")
-        if not alignment:
-            concerns.append("limited direct evidence for culture alignment from available dialogue")
+        if resume_links:
+            evidence.append(f"Resume submitted ({len(resume_links)} file(s)) and included in culture analysis context")
+        if chat_signal_lines:
+            evidence.append(f"Conversation analysis used {len(chat_signal_lines)} communication excerpts")
+            if any("team" in line.lower() or "deployment" in line.lower() or "roadmap" in line.lower() for line in chat_signal_lines):
+                alignment.append("asks team or delivery context questions, a positive long term retention pattern")
+        if isinstance(interview_signals, dict):
+            depth = interview_signals.get("interview_signals")
+            if isinstance(depth, list) and depth:
+                evidence.extend([str(x).strip() for x in depth[:2] if str(x).strip()])
 
         style = str(raw_profile.get("team_style") or "").strip()
         decision_style = str(raw_profile.get("decision_style") or "").strip()
@@ -735,12 +809,137 @@ class CandidateProfileService:
             evidence.append(f"Company team style: {style}")
         if decision_style:
             evidence.append(f"Decision style: {decision_style}")
+        if predictive_signals:
+            evidence.extend(predictive_signals[:3])
+            alignment.append("predictive behavior signals align with historical retention patterns")
+        if not alignment:
+            concerns.append("limited direct evidence for culture alignment from resume, chat, and interview data")
+
+        analysis = self._build_culture_agent_analysis(
+            job=job,
+            candidate=candidate,
+            company_culture_profile=raw_profile,
+            values=values,
+            resume_links=resume_links,
+            chat_signal_lines=chat_signal_lines,
+            interview_score=interview_score,
+            interview_signals=interview_signals if isinstance(interview_signals, dict) else {},
+            alignment=alignment,
+            concerns=concerns,
+            predictive_signals=predictive_signals,
+        )
 
         return {
             "company_values": values,
             "alignment_highlights": alignment[:6],
             "concerns": concerns[:4],
             "evidence": evidence[:8],
+            "predictive_signals": predictive_signals[:6],
+            "analysis": analysis,
+        }
+
+    @staticmethod
+    def _extract_chat_signal_lines(
+        *,
+        pre_resume_events: List[Dict[str, Any]],
+        conversations: List[Dict[str, Any]],
+    ) -> List[str]:
+        out: List[str] = []
+        seen: set[str] = set()
+        for event in pre_resume_events:
+            inbound = str(event.get("inbound_text") or "").strip()
+            outbound = str(event.get("outbound_text") or "").strip()
+            for text in (inbound, outbound):
+                if not text:
+                    continue
+                key = text.lower()
+                if key in seen:
+                    continue
+                seen.add(key)
+                out.append(text[:240])
+        for row in conversations:
+            last_message = str(row.get("last_message") or "").strip()
+            if not last_message:
+                continue
+            key = last_message.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(last_message[:240])
+        return out[:12]
+
+    def _build_culture_agent_analysis(
+        self,
+        *,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        company_culture_profile: Dict[str, Any],
+        values: List[str],
+        resume_links: List[str],
+        chat_signal_lines: List[str],
+        interview_score: float | None,
+        interview_signals: Dict[str, Any],
+        alignment: List[str],
+        concerns: List[str],
+        predictive_signals: List[str],
+    ) -> Dict[str, Any]:
+        agent_name = AGENT_DEFAULT_NAMES.get("culture_analyst", "Harper AI (Culture Analyst)")
+        fallback = (
+            f"{agent_name} sees culture fit as "
+            f"{'strong' if alignment else 'unclear'} based on resume submission, chat behavior, and interview evidence."
+        )
+        if predictive_signals:
+            fallback = f"{fallback} Key predictive signals: {'; '.join(predictive_signals[:2])}"
+
+        if self.llm_responder is not None:
+            instruction = (
+                "You are the Culture Analyst for candidate evaluation.\n"
+                "Write one concise paragraph in plain text.\n"
+                "Explain culture fit against company culture profile using ONLY available resume, chat, and interview signals.\n"
+                "Include at least one specific behavioral signal and one risk or caveat.\n"
+                "No bullet points."
+            )
+            inbound_text = json.dumps(
+                {
+                    "company_culture_profile": company_culture_profile,
+                    "company_values": values,
+                    "resume_links_count": len(resume_links),
+                    "chat_signals": chat_signal_lines[:8],
+                    "interview_score": interview_score,
+                    "interview_signals": interview_signals,
+                    "alignment_highlights": alignment[:6],
+                    "concerns": concerns[:4],
+                    "predictive_signals": predictive_signals[:6],
+                },
+                ensure_ascii=False,
+            )
+            generated = self.llm_responder.generate_candidate_reply(
+                mode="candidate_profile_culture_fit",
+                instruction=instruction,
+                job=job,
+                candidate=candidate,
+                inbound_text=inbound_text,
+                history=[],
+                fallback_reply=fallback,
+                language="en",
+                state={"culture_analyst": True},
+            )
+            summary = str(generated or fallback).strip() or fallback
+            source = "llm" if summary != fallback else "fallback"
+        else:
+            summary = fallback
+            source = "fallback"
+
+        return {
+            "agent_key": "culture_analyst",
+            "agent_name": agent_name,
+            "source": source,
+            "summary": summary,
+            "inputs": {
+                "resume_links_count": len(resume_links),
+                "chat_excerpt_count": len(chat_signal_lines),
+                "interview_score": interview_score,
+            },
         }
 
     @staticmethod

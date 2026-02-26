@@ -349,7 +349,8 @@
       font-family: 'DM Sans', sans-serif;
       font-size: 14px;
       min-height: 120px;
-      resize: vertical;
+      resize: none;
+      cursor: default;
     }
 
     .timeline {
@@ -583,7 +584,7 @@
         <section class="panel">
           <h3 class="card-title">Internal Notes</h3>
           <div class="analysis-sub">ADMIN NOTES (NOT VISIBLE TO CLIENT)</div>
-          <textarea id="internal-notes" class="notes-area" placeholder="Candidate notes will appear here"></textarea>
+          <textarea id="internal-notes" class="notes-area" placeholder="Candidate notes will appear here" readonly></textarea>
         </section>
 
         <section class="panel">
@@ -758,7 +759,10 @@
       const source = scorecard.sourcing_vetting || {};
       const comm = scorecard.communication || {};
       const interview = scorecard.interview_evaluation || {};
-      const cultureFit = ((interview.signals || {}).culture_fit_score);
+      const culture = (item.fit_breakdown || {}).culture_fit || {};
+      const alignmentCount = Array.isArray(culture.alignment_highlights) ? culture.alignment_highlights.length : 0;
+      const concernCount = Array.isArray(culture.concerns) ? culture.concerns.length : 0;
+      const cultureFit = Math.max(0, Math.min(100, 62 + alignmentCount * 9 - concernCount * 7));
 
       $("overall-score-big").textContent = formatScore(overall.overall_score);
       $("score-meta").textContent = `status: ${overall.overall_status || "review"} | generated: ${String(state.profile?.generated_at || "-").replace("T", " ").slice(0, 19)}`;
@@ -785,6 +789,7 @@
       const must = fit.must_have || {};
       const nice = fit.nice_to_have || {};
       const culture = fit.culture_fit || {};
+      const analysis = culture.analysis || {};
       const risks = Array.isArray(fit.risk_flags) ? fit.risk_flags : [];
       const riskClass = risks.length ? "fit-risk" : "";
 
@@ -810,6 +815,10 @@
           <ul class="fit-list">
             ${(Array.isArray(culture.alignment_highlights) ? culture.alignment_highlights : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>no strong culture signals yet</li>"}
           </ul>
+          <div class="muted" style="font-size:12px;margin:8px 0 6px;">Predictive behavioral signals</div>
+          <ul class="fit-list">
+            ${(Array.isArray(culture.predictive_signals) ? culture.predictive_signals : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>no predictive behavior signals yet</li>"}
+          </ul>
           <div class="muted" style="font-size:12px;margin:8px 0 6px;">Risks</div>
           <ul class="fit-list ${riskClass}">
             ${risks.map((x) => `<li>${escapeHtml(x.message || x.type || "risk")}</li>`).join("") || "<li>no critical risks</li>"}
@@ -822,8 +831,12 @@
         const lines = [];
         const overall = item.overall_scoring || {};
         lines.push(`Overall: ${overall.overall_status || "review"} (${formatScore(overall.overall_score)})`);
+        if (analysis.agent_name) lines.push(`Culture analyst: ${analysis.agent_name}`);
+        if (analysis.summary) lines.push(`Culture summary: ${analysis.summary}`);
         const highlights = Array.isArray(culture.alignment_highlights) ? culture.alignment_highlights : [];
         if (highlights.length) lines.push(`Culture highlights: ${highlights.slice(0, 2).join('; ')}`);
+        const predictive = Array.isArray(culture.predictive_signals) ? culture.predictive_signals : [];
+        if (predictive.length) lines.push(`Predictive signals: ${predictive.slice(0, 1).join('; ')}`);
         const risk = risks[0]?.message;
         if (risk) lines.push(`Primary risk: ${risk}`);
         internal.value = lines.join('\n');
@@ -851,13 +864,50 @@
         const score = (typeof signal.score === "number" && Number.isFinite(signal.score)) ? ` (${signal.score.toFixed(1)})` : "";
         return `${agent}: ${signal.reason || signal.status || "updated"}${score}`;
       }
+      if (signal.kind === "culture_analysis") {
+        return `${signal.agent_name || "Culture Analyst"}: ${signal.reason || "culture fit analysis updated"}`;
+      }
       if (signal.kind === "pre_resume_event") {
-        return `Pre resume: ${signal.event_type || "event"}${signal.intent ? ` (${signal.intent})` : ""}`;
+        if (signal.intent === "resume_shared") {
+          return "Candidate shared resume and moved to pre vetting stage";
+        }
+        if (signal.event_type === "followup_sent") {
+          return "Agent sent follow up to keep candidate engaged";
+        }
+        return `Pre resume stage updated: ${signal.event_type || "event"}${signal.intent ? ` (${signal.intent})` : ""}`;
       }
       if (signal.kind === "operation_log") {
+        const op = String(signal.operation || "");
+        if (op === "candidate.profile.demo_seed") return "Demo candidate profile prepared with full evaluation context";
+        if (op.startsWith("agent.interview")) return "Interview workflow synchronization processed";
         return `${signal.operation || "operation"} [${signal.status || "-"}]`;
       }
       return signal.kind || "signal";
+    }
+
+    function timelineSubtext(signal) {
+      if (signal.kind === "assessment_signal") {
+        const parts = [];
+        if (signal.stage_key) parts.push(`stage: ${signal.stage_key}`);
+        if (signal.status) parts.push(`status: ${signal.status}`);
+        if (signal.contributes_to_overall) parts.push("used in overall score");
+        return parts.join(" • ");
+      }
+      if (signal.kind === "pre_resume_event") {
+        if (signal.inbound_preview) return `Candidate: ${signal.inbound_preview}`;
+        if (signal.outbound_preview) return `Agent: ${signal.outbound_preview}`;
+      }
+      if (signal.kind === "culture_analysis") {
+        const highlights = signal.signals?.alignment_highlights;
+        if (Array.isArray(highlights) && highlights.length) {
+          return `Highlights: ${highlights.slice(0, 2).join("; ")}`;
+        }
+      }
+      if (signal.kind === "operation_log") {
+        const jobId = signal.signals?.job_id;
+        if (jobId) return `job #${jobId}`;
+      }
+      return "";
     }
 
     function renderSignals() {
@@ -872,15 +922,14 @@
       box.innerHTML = signals.map((signal) => {
         const meta = formatTimelineTime(signal.created_at);
         const text = timelineLabel(signal);
-        const detailsObj = signal.signals && typeof signal.signals === "object" ? signal.signals : {};
-        const detailsText = Object.keys(detailsObj).length ? JSON.stringify(detailsObj, null, 2) : "";
+        const subtext = timelineSubtext(signal);
         return `
           <div class="timeline-item">
             <div class="dot"></div>
             <div>
               <div class="timeline-meta">${escapeHtml(meta)}</div>
               <div class="timeline-text">${escapeHtml(text)}</div>
-              ${detailsText ? `<div class="timeline-details">${escapeHtml(detailsText)}</div>` : ""}
+              ${subtext ? `<div class="timeline-details">${escapeHtml(subtext)}</div>` : ""}
             </div>
           </div>
         `;
