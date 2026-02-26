@@ -129,6 +129,58 @@ class InterviewQuestionGenerationTests(unittest.TestCase):
             counts = meta.get("categories") if isinstance(meta.get("categories"), dict) else {}
             self.assertEqual(sum(int(v) for v in counts.values()), 10)
 
+    def test_generation_prefers_job_culture_profile_questions_when_available(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            guidelines_path = Path(tmpdir) / "guidelines.json"
+            profile_path = Path(tmpdir) / "company_profile.json"
+
+            guidelines_path.write_text(
+                json.dumps(
+                    {
+                        "version": "test-v3",
+                        "defaults": {"question_count": 5},
+                        "skill_dictionary": ["python", "aws", "sql"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "mission": "Default mission",
+                        "values": ["communication", "ownership", "collaboration"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            generator = InterviewQuestionGenerator(
+                guidelines_path=str(guidelines_path),
+                company_profile_path=str(profile_path),
+                company_name="Acme Labs",
+            )
+            out = generator.generate_for_job(
+                {
+                    "id": 303,
+                    "company": "Orbit AI",
+                    "title": "Senior Backend Engineer",
+                    "jd_text": "Strong Python and AWS experience. SQL optimization is important.",
+                    "company_culture_profile": {
+                        "culture_values": ["candor", "ownership", "high standards"],
+                        "culture_interview_questions": [
+                            "Tell us about a time you challenged a decision with evidence",
+                            "How do you balance speed and quality under pressure",
+                        ],
+                        "summary_200_300_words": "Team operates with high ownership and strong peer feedback loops.",
+                    },
+                }
+            )
+            questions = out.get("questions") if isinstance(out.get("questions"), list) else []
+            joined_titles = "\n".join(str((q or {}).get("title") or "") for q in questions if isinstance(q, dict))
+            self.assertIn("challenged a decision", joined_titles.lower())
+            meta = out.get("meta") if isinstance(out.get("meta"), dict) else {}
+            self.assertEqual(str(meta.get("culture_profile_source") or ""), "job")
+
 
 if __name__ == "__main__":
     unittest.main()

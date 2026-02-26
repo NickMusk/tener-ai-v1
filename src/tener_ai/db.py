@@ -44,12 +44,28 @@ class Database:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
             company TEXT,
+            company_website TEXT,
             jd_text TEXT NOT NULL,
             location TEXT,
             preferred_languages TEXT,
             seniority TEXT,
             linkedin_routing_mode TEXT NOT NULL DEFAULT 'auto',
             created_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS job_culture_profiles (
+            job_id INTEGER PRIMARY KEY,
+            status TEXT NOT NULL,
+            company_name TEXT,
+            company_website TEXT,
+            profile_json TEXT,
+            sources_json TEXT,
+            warnings_json TEXT,
+            search_queries_json TEXT,
+            error TEXT,
+            generated_at TEXT,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(job_id) REFERENCES jobs(id)
         );
 
         CREATE TABLE IF NOT EXISTS candidates (
@@ -283,18 +299,20 @@ class Database:
         preferred_languages: List[str],
         seniority: Optional[str],
         company: Optional[str] = None,
+        company_website: Optional[str] = None,
         linkedin_routing_mode: str = "auto",
     ) -> int:
         routing_mode = self._normalize_linkedin_routing_mode(linkedin_routing_mode)
         with self.transaction() as conn:
             cur = conn.execute(
                 """
-                INSERT INTO jobs (title, company, jd_text, location, preferred_languages, seniority, linkedin_routing_mode, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO jobs (title, company, company_website, jd_text, location, preferred_languages, seniority, linkedin_routing_mode, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     title,
                     company,
+                    company_website,
                     jd_text,
                     location,
                     json.dumps(preferred_languages),
@@ -307,7 +325,12 @@ class Database:
 
     def get_job(self, job_id: int) -> Optional[Dict[str, Any]]:
         row = self._conn.execute("SELECT * FROM jobs WHERE id = ?", (job_id,)).fetchone()
-        return self._row_to_dict(row) if row else None
+        if not row:
+            return None
+        item = self._row_to_dict(row)
+        profile = self.get_job_culture_profile(job_id=int(job_id))
+        self._attach_job_culture_profile(item=item, profile=profile)
+        return item
 
     def update_job_jd_text(self, job_id: int, jd_text: str) -> bool:
         with self.transaction() as conn:
@@ -326,7 +349,107 @@ class Database:
             "SELECT * FROM jobs ORDER BY id DESC LIMIT ?",
             (max(1, min(limit, 1000)),),
         ).fetchall()
-        return [self._row_to_dict(r) for r in rows]
+        items = [self._row_to_dict(r) for r in rows]
+        job_ids = [int(item.get("id") or 0) for item in items if int(item.get("id") or 0) > 0]
+        profiles = self.list_job_culture_profiles(job_ids=job_ids)
+        for item in items:
+            job_id = int(item.get("id") or 0)
+            self._attach_job_culture_profile(item=item, profile=profiles.get(job_id))
+        return items
+
+    def upsert_job_culture_profile(
+        self,
+        *,
+        job_id: int,
+        status: str,
+        company_name: Optional[str],
+        company_website: Optional[str],
+        profile: Optional[Dict[str, Any]],
+        sources: Optional[List[Dict[str, Any]]],
+        warnings: Optional[List[str]],
+        search_queries: Optional[List[str]],
+        error: Optional[str],
+        generated_at: Optional[str] = None,
+    ) -> None:
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO job_culture_profiles (
+                    job_id, status, company_name, company_website, profile_json, sources_json, warnings_json, search_queries_json, error, generated_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(job_id) DO UPDATE SET
+                    status = excluded.status,
+                    company_name = excluded.company_name,
+                    company_website = excluded.company_website,
+                    profile_json = excluded.profile_json,
+                    sources_json = excluded.sources_json,
+                    warnings_json = excluded.warnings_json,
+                    search_queries_json = excluded.search_queries_json,
+                    error = excluded.error,
+                    generated_at = excluded.generated_at,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    int(job_id),
+                    str(status or "unknown").strip().lower() or "unknown",
+                    company_name,
+                    company_website,
+                    json.dumps(profile or {}),
+                    json.dumps(sources or []),
+                    json.dumps(warnings or []),
+                    json.dumps(search_queries or []),
+                    (str(error or "").strip() or None),
+                    generated_at,
+                    now,
+                ),
+            )
+
+    def get_job_culture_profile(self, job_id: int) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            """
+            SELECT *
+            FROM job_culture_profiles
+            WHERE job_id = ?
+            LIMIT 1
+            """,
+            (int(job_id),),
+        ).fetchone()
+        if not row:
+            return None
+        return self._row_to_dict(row)
+
+    def list_job_culture_profiles(self, job_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+        normalized: List[int] = []
+        seen: set[int] = set()
+        for raw in job_ids or []:
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if value <= 0 or value in seen:
+                continue
+            seen.add(value)
+            normalized.append(value)
+        if not normalized:
+            return {}
+        placeholders = ",".join(["?"] * len(normalized))
+        rows = self._conn.execute(
+            f"""
+            SELECT *
+            FROM job_culture_profiles
+            WHERE job_id IN ({placeholders})
+            """,
+            tuple(normalized),
+        ).fetchall()
+        out: Dict[int, Dict[str, Any]] = {}
+        for row in rows:
+            parsed = self._row_to_dict(row)
+            key = int(parsed.get("job_id") or 0)
+            if key > 0:
+                out[key] = parsed
+        return out
 
     def update_job_linkedin_routing_mode(self, job_id: int, routing_mode: str) -> bool:
         normalized = self._normalize_linkedin_routing_mode(routing_mode)
@@ -582,10 +705,12 @@ class Database:
             m.created_at AS match_created_at,
             j.title AS job_title,
             j.company AS job_company,
+            j.company_website AS job_company_website,
             j.jd_text AS job_jd_text,
             j.location AS job_location,
             j.preferred_languages AS job_preferred_languages,
             j.seniority AS job_seniority,
+            cp.profile_json AS job_company_culture_profile,
             conv.id AS conversation_id,
             conv.status AS conversation_status,
             conv.external_chat_id,
@@ -619,6 +744,7 @@ class Database:
             ) AS last_message_created_at
         FROM candidate_job_matches m
         JOIN jobs j ON j.id = m.job_id
+        LEFT JOIN job_culture_profiles cp ON cp.job_id = m.job_id
         LEFT JOIN conversations conv ON conv.id = (
             SELECT c2.id
             FROM conversations c2
@@ -2076,15 +2202,57 @@ class Database:
     def derive_candidate_current_status(self, item: Dict[str, Any]) -> tuple[str, str]:
         return self._derive_candidate_current_status(item)
 
+    @staticmethod
+    def _attach_job_culture_profile(item: Dict[str, Any], profile: Optional[Dict[str, Any]]) -> None:
+        if not isinstance(item, dict):
+            return
+        if not isinstance(profile, dict):
+            item.setdefault("company_culture_profile_status", "not_generated")
+            item.setdefault("company_culture_profile", None)
+            item.setdefault("company_culture_profile_warnings", [])
+            item.setdefault("company_culture_profile_error", None)
+            item.setdefault("company_culture_profile_generated_at", None)
+            return
+        item["company_culture_profile_status"] = str(profile.get("status") or "unknown")
+        raw_profile = profile.get("profile_json")
+        item["company_culture_profile"] = raw_profile if isinstance(raw_profile, dict) else None
+        warnings = profile.get("warnings_json")
+        item["company_culture_profile_warnings"] = warnings if isinstance(warnings, list) else []
+        item["company_culture_profile_error"] = profile.get("error")
+        item["company_culture_profile_generated_at"] = profile.get("generated_at")
+
     def _migrate_schema(self) -> None:
         job_columns = self._table_columns("jobs")
         if "company" not in job_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN company TEXT")
+        if "company_website" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN company_website TEXT")
         if "linkedin_routing_mode" not in job_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN linkedin_routing_mode TEXT")
                 conn.execute("UPDATE jobs SET linkedin_routing_mode = 'auto' WHERE linkedin_routing_mode IS NULL OR TRIM(linkedin_routing_mode) = ''")
+
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS job_culture_profiles (
+                    job_id INTEGER PRIMARY KEY,
+                    status TEXT NOT NULL,
+                    company_name TEXT,
+                    company_website TEXT,
+                    profile_json TEXT,
+                    sources_json TEXT,
+                    warnings_json TEXT,
+                    search_queries_json TEXT,
+                    error TEXT,
+                    generated_at TEXT,
+                    updated_at TEXT NOT NULL,
+                    FOREIGN KEY(job_id) REFERENCES jobs(id)
+                )
+                """
+            )
 
         columns = self._table_columns("conversations")
         if "external_chat_id" not in columns:
@@ -2122,6 +2290,12 @@ class Database:
             "output_json",
             "payload_json",
             "result_json",
+            "profile_json",
+            "sources_json",
+            "warnings_json",
+            "search_queries_json",
+            "company_culture_profile",
+            "job_company_culture_profile",
         ):
             if field in item and item[field]:
                 try:

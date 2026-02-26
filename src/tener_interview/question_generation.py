@@ -60,7 +60,13 @@ class InterviewQuestionGenerator:
         jd_text = str(job.get("jd_text") or "").strip()
         job_company_name = str(job.get("company") or "").strip()
         company_name = job_company_name or self.company_name
-        values = self._company_values()
+        job_culture_profile = (
+            job.get("company_culture_profile")
+            if isinstance(job.get("company_culture_profile"), dict)
+            else {}
+        )
+        values = self._company_values(job_culture_profile=job_culture_profile)
+        culture_questions = self._culture_interview_questions(job_culture_profile=job_culture_profile)
         top_skills = self._extract_skills(jd_text)
 
         defaults = self.guidelines.get("defaults") if isinstance(self.guidelines.get("defaults"), dict) else {}
@@ -68,7 +74,11 @@ class InterviewQuestionGenerator:
         time_to_think = max(5, int(self._to_int(defaults.get("time_to_think"), 12)))
         retakes = max(0, int(self._to_int(defaults.get("retakes"), 1)))
 
-        mission = str(self.company_profile.get("mission") or "").strip()
+        mission = str(job_culture_profile.get("summary_200_300_words") or "").strip()
+        if not mission:
+            mission = str((job_culture_profile.get("mission_orientation") or {}).get("assessment") or "").strip()
+        if not mission:
+            mission = str(self.company_profile.get("mission") or "").strip()
         if not mission:
             mission = f"At {company_name}, we build teams that deliver measurable impact."
         mission_short = mission[:180].rstrip()
@@ -97,6 +107,7 @@ class InterviewQuestionGenerator:
                     company_name=company_name,
                     mission_short=mission_short,
                     value_primary=value_primary,
+                    profile_question=culture_questions[idx - 1] if idx - 1 < len(culture_questions) else None,
                 )
             else:
                 item = self._soft_skills_question(
@@ -131,6 +142,7 @@ class InterviewQuestionGenerator:
                 "company_name": company_name,
                 "skills_detected": top_skills,
                 "company_values": values,
+                "culture_profile_source": "job" if job_culture_profile else "default",
                 "categories": self._count_categories(questions),
             },
         }
@@ -216,7 +228,20 @@ class InterviewQuestionGenerator:
         return {"title": title, "description": description}
 
     @staticmethod
-    def _cultural_fit_question(*, index: int, company_name: str, mission_short: str, value_primary: str) -> Dict[str, Any]:
+    def _cultural_fit_question(
+        *,
+        index: int,
+        company_name: str,
+        mission_short: str,
+        value_primary: str,
+        profile_question: str | None = None,
+    ) -> Dict[str, Any]:
+        explicit = str(profile_question or "").strip()
+        if explicit:
+            return {
+                "title": f"[Cultural Fit] {explicit}",
+                "description": "Use a concrete experience and explain your reasoning.",
+            }
         prompts = [
             (
                 f"[Cultural Fit] At {company_name}, why does our mission resonate with you?",
@@ -243,13 +268,25 @@ class InterviewQuestionGenerator:
                 out[category] += 1
         return out
 
-    def _company_values(self) -> List[str]:
+    def _company_values(self, *, job_culture_profile: Dict[str, Any] | None = None) -> List[str]:
+        profile_values = self._to_str_list((job_culture_profile or {}).get("culture_values"))
+        if profile_values:
+            return profile_values
+        profile_values = self._to_str_list((job_culture_profile or {}).get("values"))
+        if profile_values:
+            return profile_values
         profile_values = self.company_profile.get("values")
         out = self._to_str_list(profile_values)
         if out:
             return out
         default_values = self.guidelines.get("company_values")
         return self._to_str_list(default_values) or ["clear communication", "ownership", "collaboration"]
+
+    def _culture_interview_questions(self, *, job_culture_profile: Dict[str, Any] | None = None) -> List[str]:
+        explicit = self._to_str_list((job_culture_profile or {}).get("culture_interview_questions"))
+        if explicit:
+            return explicit[:3]
+        return []
 
     def _extract_skills(self, jd_text: str, max_items: int = 4) -> List[str]:
         dictionary = self._to_str_list(self.guidelines.get("skill_dictionary"))

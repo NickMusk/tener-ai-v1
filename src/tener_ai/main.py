@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import ipaddress
 import os
 import re
 import threading
@@ -10,12 +11,24 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib import error as urlerror, request as urlrequest
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .candidate_profile import CandidateProfileService
 from .candidate_scoring import CandidateScoringPolicy
+from .company_culture_profile import (
+    BraveHtmlSearchProvider,
+    CompanyCultureProfileService,
+    GoogleCSESearchProvider,
+    HeuristicCompanyProfileSynthesizer,
+    OpenAICompanyProfileSynthesizer,
+    SeedSearchProvider,
+    SimpleHtmlTextExtractor,
+    UrllibPageFetcher,
+    canonicalize_url,
+)
 from .db import Database
+from .emulator import EmulatorProjectStore
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
 from .interview_client import InterviewAPIClient
 from .linkedin_accounts import LinkedInAccountService
@@ -98,6 +111,14 @@ def build_services() -> Dict[str, Any]:
     forced_test_ids_path = os.environ.get(
         "TENER_FORCED_TEST_IDS_PATH",
         str(root / "config" / "forced_test_linkedin_ids.txt"),
+    )
+    emulator_projects_dir = os.environ.get(
+        "TENER_EMULATOR_PROJECTS_DIR",
+        str(root / "config" / "emulator" / "projects"),
+    )
+    emulator_company_profiles_path = os.environ.get(
+        "TENER_EMULATOR_COMPANY_PROFILES_PATH",
+        str(root / "config" / "emulator" / "company_profiles.json"),
     )
     forced_test_score_raw = os.environ.get("TENER_FORCED_TEST_SCORE", "0.99")
     try:
@@ -224,6 +245,69 @@ def build_services() -> Dict[str, Any]:
             timeout_seconds=llm_timeout,
         )
 
+    culture_search_mode = str(os.environ.get("TENER_COMPANY_CULTURE_SEARCH_PROVIDER", "brave") or "brave").strip().lower()
+    culture_search_timeout_raw = os.environ.get("TENER_COMPANY_CULTURE_SEARCH_TIMEOUT_SECONDS", "20")
+    culture_fetch_timeout_raw = os.environ.get("TENER_COMPANY_CULTURE_FETCH_TIMEOUT_SECONDS", "15")
+    culture_max_links_raw = os.environ.get("TENER_COMPANY_CULTURE_MAX_LINKS", "10")
+    culture_per_query_raw = os.environ.get("TENER_COMPANY_CULTURE_PER_QUERY_LIMIT", "10")
+    culture_min_job_board_raw = os.environ.get("TENER_COMPANY_CULTURE_MIN_JOB_BOARD_LINKS", "2")
+    try:
+        culture_search_timeout = int(culture_search_timeout_raw)
+    except ValueError:
+        culture_search_timeout = 20
+    try:
+        culture_fetch_timeout = int(culture_fetch_timeout_raw)
+    except ValueError:
+        culture_fetch_timeout = 15
+    try:
+        culture_max_links = int(culture_max_links_raw)
+    except ValueError:
+        culture_max_links = 10
+    try:
+        culture_per_query = int(culture_per_query_raw)
+    except ValueError:
+        culture_per_query = 10
+    try:
+        culture_min_job_board = int(culture_min_job_board_raw)
+    except ValueError:
+        culture_min_job_board = 2
+
+    google_cse_api_key = str(os.environ.get("TENER_COMPANY_CULTURE_GOOGLE_CSE_API_KEY", "")).strip()
+    google_cse_cx = str(os.environ.get("TENER_COMPANY_CULTURE_GOOGLE_CSE_CX", "")).strip()
+    if culture_search_mode == "google" and google_cse_api_key and google_cse_cx:
+        culture_search_provider = GoogleCSESearchProvider(
+            api_key=google_cse_api_key,
+            cx=google_cse_cx,
+            timeout_seconds=culture_search_timeout,
+        )
+    elif culture_search_mode == "seed":
+        culture_search_provider = SeedSearchProvider(company_name="Tener", website_url="https://tener.ai")
+    else:
+        culture_search_provider = BraveHtmlSearchProvider(timeout_seconds=culture_search_timeout)
+
+    use_culture_llm = env_bool("TENER_COMPANY_CULTURE_USE_LLM", True)
+    if use_culture_llm and llm_api_key:
+        culture_synthesizer = OpenAICompanyProfileSynthesizer(
+            api_key=llm_api_key,
+            model=os.environ.get("TENER_COMPANY_CULTURE_LLM_MODEL", os.environ.get("TENER_LLM_MODEL", "gpt-4o-mini")),
+            base_url=os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+            timeout_seconds=max(10, llm_timeout),
+            analysis_rules_path=os.environ.get("TENER_COMPANY_CULTURE_ANALYSIS_RULES_PATH", ""),
+        )
+    else:
+        culture_synthesizer = HeuristicCompanyProfileSynthesizer()
+
+    company_culture_service = CompanyCultureProfileService(
+        search_provider=culture_search_provider,
+        page_fetcher=UrllibPageFetcher(),
+        content_extractor=SimpleHtmlTextExtractor(),
+        synthesizer=culture_synthesizer,
+        max_links=culture_max_links,
+        per_query_limit=culture_per_query,
+        min_job_board_links=culture_min_job_board,
+        fetch_timeout_seconds=culture_fetch_timeout,
+    )
+
     workflow = WorkflowService(
         db=db,
         sourcing_agent=sourcing_agent,
@@ -264,6 +348,10 @@ def build_services() -> Dict[str, Any]:
         scoring_policy=scoring_formula,
         llm_responder=llm_responder,
     )
+    emulator_store = EmulatorProjectStore(
+        projects_dir=emulator_projects_dir,
+        company_profiles_path=emulator_company_profiles_path,
+    )
 
     services = {
         "db": db,
@@ -275,6 +363,8 @@ def build_services() -> Dict[str, Any]:
         "matching_engine": matching_engine,
         "pre_resume": pre_resume_service,
         "candidate_profile": candidate_profile,
+        "emulator_store": emulator_store,
+        "company_culture": company_culture_service,
         "workflow": workflow,
         "interview_api_base": default_interview_api_base(),
     }
@@ -290,6 +380,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+
+        if parsed.path == "/dashboard/emulator":
+            dashboard = project_root() / "src" / "tener_ai" / "static" / "emulator_dashboard.html"
+            if not dashboard.exists():
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "emulator dashboard file not found"})
+                return
+            self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
+            return
 
         if parsed.path in {"/", "/dashboard"}:
             dashboard = project_root() / "src" / "tener_ai" / "static" / "dashboard.html"
@@ -325,6 +423,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "candidate_resume_preview": "GET /api/candidates/{candidate_id}/resume-preview?job_id=...&url=...",
                         "candidate_resume_content": "GET /api/candidates/{candidate_id}/resume-preview/content?url=...",
                         "candidate_demo_profile": "POST /api/candidates/demo-profile",
+                        "emulator_status": "GET /api/emulator",
+                        "emulator_projects": "GET /api/emulator/projects",
+                        "emulator_project": "GET /api/emulator/projects/{project_id}",
+                        "emulator_company_profiles": "GET /api/emulator/company-profiles",
+                        "emulator_company_profile": "GET /api/emulator/company-profiles/{company_key}",
+                        "emulator_reload": "POST /api/emulator/reload",
+                        "emulator_dashboard": "GET /dashboard/emulator",
                         "job_linkedin_routing": "GET /api/jobs/{job_id}/linkedin-routing",
                         "update_job_jd": "POST /api/jobs/{job_id}/jd",
                         "update_job_linkedin_routing": "POST /api/jobs/{job_id}/linkedin-routing",
@@ -367,6 +472,64 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     },
                 },
             )
+            return
+
+        if parsed.path == "/api/emulator":
+            emulator_store = SERVICES.get("emulator_store")
+            if emulator_store is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "emulator store unavailable"})
+                return
+            self._json_response(HTTPStatus.OK, emulator_store.health())
+            return
+
+        if parsed.path == "/api/emulator/projects":
+            emulator_store = SERVICES.get("emulator_store")
+            if emulator_store is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "emulator store unavailable"})
+                return
+            self._json_response(HTTPStatus.OK, {"items": emulator_store.list_projects()})
+            return
+
+        if parsed.path.startswith("/api/emulator/projects/"):
+            emulator_store = SERVICES.get("emulator_store")
+            if emulator_store is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "emulator store unavailable"})
+                return
+            match = re.match(r"^/api/emulator/projects/([^/]+)$", parsed.path)
+            if not match:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid project id"})
+                return
+            project_id = unquote(match.group(1))
+            project = emulator_store.get_project(project_id=project_id)
+            if project is None:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "emulator project not found"})
+                return
+            self._json_response(HTTPStatus.OK, project)
+            return
+
+        if parsed.path == "/api/emulator/company-profiles":
+            emulator_store = SERVICES.get("emulator_store")
+            if emulator_store is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "emulator store unavailable"})
+                return
+            self._json_response(HTTPStatus.OK, {"items": emulator_store.list_company_profiles()})
+            return
+
+        if parsed.path.startswith("/api/emulator/company-profiles/"):
+            emulator_store = SERVICES.get("emulator_store")
+            if emulator_store is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "emulator store unavailable"})
+                return
+            match = re.match(r"^/api/emulator/company-profiles/([^/]+)$", parsed.path)
+            if not match:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid company key"})
+                return
+            company_key = unquote(match.group(1))
+            profile = emulator_store.get_company_profile(company_key=company_key)
+            if profile is None:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "company profile not found"})
+                return
+            self._json_response(HTTPStatus.OK, profile)
             return
 
         if parsed.path.startswith("/api/candidates/") and parsed.path.endswith("/profile"):
@@ -725,6 +888,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         payload = self._read_json_body()
         if isinstance(payload, dict) and payload.get("_error"):
             self._json_response(HTTPStatus.BAD_REQUEST, payload)
+            return
+
+        if parsed.path == "/api/emulator/reload":
+            emulator_store = SERVICES.get("emulator_store")
+            if emulator_store is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "emulator store unavailable"})
+                return
+            self._json_response(HTTPStatus.OK, emulator_store.reload())
             return
 
         if parsed.path == "/api/linkedin/accounts/connect/start":
@@ -1145,6 +1316,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             title = str(body.get("title") or "").strip()
             jd_text = str(body.get("jd_text") or "").strip()
             company = str(body.get("company") or "").strip() or None
+            company_website_raw = str(body.get("company_website") or "").strip()
+            company_website = None
+            if company_website_raw:
+                company_website = self._validate_company_website(company_website_raw)
+                if not company_website:
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": "company_website must be a valid public http/https URL"})
+                    return
             if not title or not jd_text:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "title and jd_text are required"})
                 return
@@ -1161,26 +1339,38 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 preferred_languages=[str(x).lower() for x in preferred_languages if str(x).strip()],
                 seniority=(str(body.get("seniority")).lower() if body.get("seniority") else None),
                 company=company,
+                company_website=company_website,
             )
             SERVICES["db"].log_operation(
                 operation="job.created",
                 status="ok",
                 entity_type="job",
                 entity_id=str(job_id),
-                details={"title": title, "company": company},
+                details={"title": title, "company": company, "company_website": company_website},
             )
-            interview_assessment = self._prepare_job_interview_assessment(job_id=job_id)
-            SERVICES["db"].log_operation(
-                operation="job.interview_assessment.prepare",
-                status=str(interview_assessment.get("status") or "unknown"),
-                entity_type="job",
-                entity_id=str(job_id),
-                details=interview_assessment,
-            )
+            culture_profile = self._start_company_culture_profile_pipeline(job_id=job_id)
+            if str(culture_profile.get("status") or "").strip().lower() in {"pending", "running"}:
+                interview_assessment = {"status": "pending", "reason": "waiting_for_company_culture_profile"}
+            else:
+                interview_assessment = self._prepare_job_interview_assessment(job_id=job_id)
+                self._persist_job_step_progress(
+                    job_id=job_id,
+                    step="interview_assessment",
+                    status="success" if str(interview_assessment.get("status") or "") == "ok" else "error",
+                    output=interview_assessment,
+                )
+                SERVICES["db"].log_operation(
+                    operation="job.interview_assessment.prepare",
+                    status=str(interview_assessment.get("status") or "unknown"),
+                    entity_type="job",
+                    entity_id=str(job_id),
+                    details=interview_assessment,
+                )
             self._json_response(
                 HTTPStatus.CREATED,
                 {
                     "job_id": job_id,
+                    "company_culture_profile": culture_profile,
                     "interview_assessment": interview_assessment,
                 },
             )
@@ -1827,6 +2017,175 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         except Exception:
             # Progress persistence must not break primary API response path.
             return
+
+    @staticmethod
+    def _validate_company_website(raw_url: str) -> str | None:
+        normalized = canonicalize_url(str(raw_url or "").strip())
+        if not normalized:
+            return None
+        parsed = urlparse(normalized)
+        host = str(parsed.hostname or "").strip().lower()
+        if not host:
+            return None
+        if host in {"localhost", "127.0.0.1", "::1"}:
+            return None
+        if host.endswith(".local"):
+            return None
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            ip = None
+        if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast):
+            return None
+        return normalized
+
+    def _start_company_culture_profile_pipeline(self, *, job_id: int) -> Dict[str, Any]:
+        job = SERVICES["db"].get_job(int(job_id))
+        if not job:
+            return {"status": "error", "reason": "job_not_found"}
+        website = str(job.get("company_website") or "").strip()
+        company_name = str(job.get("company") or job.get("title") or "").strip()
+        if not website:
+            skipped = {
+                "status": "skipped",
+                "reason": "company_website_missing",
+                "job_id": int(job_id),
+            }
+            SERVICES["db"].upsert_job_culture_profile(
+                job_id=int(job_id),
+                status="skipped",
+                company_name=company_name or None,
+                company_website=None,
+                profile=None,
+                sources=None,
+                warnings=None,
+                search_queries=None,
+                error="company_website_missing",
+                generated_at=None,
+            )
+            self._persist_job_step_progress(job_id=int(job_id), step="culture_profile", status="skipped", output=skipped)
+            return skipped
+
+        pending = {
+            "status": "pending",
+            "job_id": int(job_id),
+            "company_name": company_name or None,
+            "company_website": website,
+        }
+        SERVICES["db"].upsert_job_culture_profile(
+            job_id=int(job_id),
+            status="pending",
+            company_name=company_name or None,
+            company_website=website,
+            profile=None,
+            sources=None,
+            warnings=None,
+            search_queries=None,
+            error=None,
+            generated_at=None,
+        )
+        self._persist_job_step_progress(job_id=int(job_id), step="culture_profile", status="pending", output=pending)
+
+        def _run() -> None:
+            profile_result = self._generate_company_culture_profile(job_id=int(job_id))
+            status = str(profile_result.get("status") or "").strip().lower()
+            progress_status = "success" if status == "ok" else ("skipped" if status == "skipped" else "error")
+            self._persist_job_step_progress(
+                job_id=int(job_id),
+                step="culture_profile",
+                status=progress_status,
+                output=profile_result,
+            )
+            SERVICES["db"].log_operation(
+                operation="job.company_culture_profile.generate",
+                status="ok" if status == "ok" else "error",
+                entity_type="job",
+                entity_id=str(job_id),
+                details=profile_result,
+            )
+            interview_assessment = self._prepare_job_interview_assessment(job_id=int(job_id))
+            interview_status = "success" if str(interview_assessment.get("status") or "") == "ok" else "error"
+            self._persist_job_step_progress(
+                job_id=int(job_id),
+                step="interview_assessment",
+                status=interview_status,
+                output=interview_assessment,
+            )
+            SERVICES["db"].log_operation(
+                operation="job.interview_assessment.prepare",
+                status=str(interview_assessment.get("status") or "unknown"),
+                entity_type="job",
+                entity_id=str(job_id),
+                details=interview_assessment,
+            )
+
+        threading.Thread(
+            target=_run,
+            daemon=True,
+            name=f"job-culture-profile-{int(job_id)}",
+        ).start()
+        return pending
+
+    def _generate_company_culture_profile(self, *, job_id: int) -> Dict[str, Any]:
+        job = SERVICES["db"].get_job(int(job_id))
+        if not job:
+            return {"status": "error", "reason": "job_not_found", "job_id": int(job_id)}
+        company_name = str(job.get("company") or job.get("title") or "").strip()
+        website = str(job.get("company_website") or "").strip()
+        if not company_name or not website:
+            return {"status": "skipped", "reason": "company_name_or_website_missing", "job_id": int(job_id)}
+
+        service: CompanyCultureProfileService | None = SERVICES.get("company_culture")
+        if service is None:
+            return {"status": "skipped", "reason": "company_culture_service_not_configured", "job_id": int(job_id)}
+
+        try:
+            generated = service.generate(company_name=company_name, website_url=website)
+            profile = generated.get("profile") if isinstance(generated.get("profile"), dict) else {}
+            sources = generated.get("sources") if isinstance(generated.get("sources"), list) else []
+            warnings = generated.get("warnings") if isinstance(generated.get("warnings"), list) else []
+            search_queries = generated.get("search_queries") if isinstance(generated.get("search_queries"), list) else []
+            SERVICES["db"].upsert_job_culture_profile(
+                job_id=int(job_id),
+                status="ready",
+                company_name=company_name,
+                company_website=website,
+                profile=profile,
+                sources=sources,
+                warnings=[str(x) for x in warnings if str(x).strip()],
+                search_queries=[str(x) for x in search_queries if str(x).strip()],
+                error=None,
+                generated_at=generated.get("generated_at") if isinstance(generated, dict) else None,
+            )
+            return {
+                "status": "ok",
+                "job_id": int(job_id),
+                "company_name": company_name,
+                "company_website": website,
+                "sources_total": len(sources),
+                "warnings_total": len(warnings),
+            }
+        except Exception as exc:
+            SERVICES["db"].upsert_job_culture_profile(
+                job_id=int(job_id),
+                status="error",
+                company_name=company_name,
+                company_website=website,
+                profile=None,
+                sources=None,
+                warnings=None,
+                search_queries=None,
+                error=str(exc),
+                generated_at=None,
+            )
+            return {
+                "status": "error",
+                "job_id": int(job_id),
+                "company_name": company_name,
+                "company_website": website,
+                "reason": "culture_profile_generation_failed",
+                "error": str(exc),
+            }
 
     def _prepare_job_interview_assessment(self, job_id: int) -> Dict[str, Any]:
         base = str(SERVICES.get("interview_api_base") or "").strip().rstrip("/")

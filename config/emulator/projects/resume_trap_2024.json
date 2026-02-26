@@ -1,0 +1,64 @@
+{
+  "id": "resume-trap-2024",
+  "company": "US SaaS Startup",
+  "role": "Full Stack Developer (React/Node)",
+  "year": "2024",
+  "companyProfile": {
+    "values": ["Customer obsession", "Fast iteration", "Cross-functional ownership"],
+    "upsides": ["Direct user impact", "Strong PM collaboration"],
+    "downsides": ["Context switching"],
+    "idealTraits": ["Product curiosity", "Reliable execution", "Clear communication"]
+  },
+  "candidates": [
+    {"id": "andrei-v", "name": "Andrei V.", "location": "Austin, US", "experience": "8 years", "currentScore": 63, "currentConfidence": 32, "stage": "sourced", "signals": [], "highlight": false},
+    {"id": "kateryna-b", "name": "Kateryna B.", "location": "Chicago, US", "experience": "9 years", "currentScore": 74, "currentConfidence": 33, "stage": "sourced", "signals": [], "highlight": true},
+    {"id": "maria-p", "name": "Maria P.", "location": "Boston, US", "experience": "6 years", "currentScore": 71, "currentConfidence": 31, "stage": "sourced", "signals": [], "highlight": false},
+    {"id": "jon-c", "name": "Jon C.", "location": "Denver, US", "experience": "5 years", "currentScore": 57, "currentConfidence": 28, "stage": "sourced", "signals": [], "highlight": false},
+    {"id": "nina-h", "name": "Nina H.", "location": "Seattle, US", "experience": "6 years", "currentScore": 55, "currentConfidence": 28, "stage": "sourced", "signals": [], "highlight": false},
+    {"id": "leo-r", "name": "Leo R.", "location": "Toronto, CA", "experience": "4 years", "currentScore": 52, "currentConfidence": 27, "stage": "sourced", "signals": [], "highlight": false}
+  ],
+  "events": [
+    {"id": "e01", "timestamp": "11:12:01", "type": "system", "title": "Pipeline started", "detail": "Loading full-stack role context", "sentiment": "neutral"},
+    {"id": "e02", "timestamp": "11:12:02", "type": "phase_marker", "title": "Sourcing phase", "detail": "Scanning candidate pool", "sentiment": "neutral"},
+    {"id": "e03", "timestamp": "11:12:03", "candidateId": "andrei-v", "type": "sourced", "title": "Candidate sourced", "detail": "Impressive resume keywords", "newScore": 63, "newConfidence": 32, "sentiment": "neutral"},
+    {"id": "e04", "timestamp": "11:12:03", "candidateId": "kateryna-b", "type": "sourced", "title": "Candidate sourced", "detail": "Strong product engineering background", "newScore": 74, "newConfidence": 33, "sentiment": "positive"},
+    {"id": "e05", "timestamp": "11:12:04", "candidateId": "maria-p", "type": "sourced", "title": "Candidate sourced", "detail": "Balanced frontend/backend profile", "newScore": 71, "newConfidence": 31, "sentiment": "neutral"},
+    {"id": "e06", "timestamp": "11:12:04", "candidateId": "jon-c", "type": "sourced", "title": "Candidate sourced", "detail": "Freelance-heavy path", "newScore": 57, "newConfidence": 28, "sentiment": "neutral"},
+    {"id": "e07", "timestamp": "11:12:05", "candidateId": "nina-h", "type": "sourced", "title": "Candidate sourced", "detail": "Strong React background", "newScore": 55, "newConfidence": 28, "sentiment": "neutral"},
+    {"id": "e08", "timestamp": "11:12:05", "candidateId": "leo-r", "type": "sourced", "title": "Candidate sourced", "detail": "Early-career growth profile", "newScore": 52, "newConfidence": 27, "sentiment": "neutral"},
+    {"id": "e09", "timestamp": "11:12:07", "type": "phase_marker", "title": "Filtering phase", "detail": "Analyzing tenure and product curiosity", "sentiment": "neutral"},
+    {"id": "e10", "timestamp": "11:12:08", "candidateId": "andrei-v", "type": "signal_detected", "title": "Tenure pattern risk", "detail": "Multiple short tenures in product teams", "scoreChange": -11, "newScore": 52, "signalCategory": "career_trajectory", "sentiment": "negative"},
+    {"id": "e11", "timestamp": "11:12:09", "candidateId": "andrei-v", "type": "signal_detected", "title": "Product curiosity signal", "detail": "No user-facing impact examples", "scoreChange": -8, "newScore": 44, "signalCategory": "communication", "sentiment": "negative"},
+    {"id": "e12", "timestamp": "11:12:09", "candidateId": "kateryna-b", "type": "signal_detected", "title": "Trajectory signal", "detail": "Consistent scope expansion and mentoring", "scoreChange": 6, "newScore": 80, "signalCategory": "career_trajectory", "sentiment": "positive"},
+    {"id": "e13", "timestamp": "11:12:10", "candidateId": "kateryna-b", "type": "signal_detected", "title": "Product signal", "detail": "Strong curiosity about customer metrics", "scoreChange": 3, "newScore": 83, "signalCategory": "communication", "sentiment": "positive"},
+    {"id": "e14", "timestamp": "11:12:10", "candidateIds": ["jon-c", "nina-h", "leo-r"], "type": "batch_eliminated", "title": "3 candidates eliminated", "detail": "Below interview threshold", "sentiment": "negative"},
+    {"id": "e15", "timestamp": "11:12:12", "type": "phase_marker", "title": "Dialogue phase", "detail": "Outreach + reply assessment", "sentiment": "neutral"},
+    {"id": "e16", "timestamp": "11:12:13", "candidateId": "andrei-v", "type": "message_received", "title": "Candidate reply", "detail": "Focused on compensation and title", "sentiment": "negative"},
+    {"id": "e17", "timestamp": "11:12:14", "candidateId": "andrei-v", "type": "score_update", "title": "Dialogue score update", "detail": "Low collaboration signal", "scoreChange": -2, "newScore": 42, "newConfidence": 73, "signalCategory": "communication", "sentiment": "negative"},
+    {"id": "e18", "timestamp": "11:12:15", "candidateId": "kateryna-b", "type": "message_received", "title": "Candidate reply", "detail": "Asked about roadmap and ownership boundaries", "sentiment": "positive"},
+    {"id": "e19", "timestamp": "11:12:16", "candidateId": "kateryna-b", "type": "score_update", "title": "Dialogue score update", "detail": "High product ownership signal", "scoreChange": 0, "newScore": 83, "newConfidence": 82, "signalCategory": "communication", "sentiment": "positive"},
+    {"id": "e20", "timestamp": "11:12:18", "type": "phase_marker", "title": "Interview phase", "detail": "Final calibration", "sentiment": "neutral"},
+    {"id": "e21", "timestamp": "11:12:20", "candidateId": "andrei-v", "type": "interview_complete", "title": "Interview completed", "detail": "Weak problem decomposition", "scoreChange": -3, "newScore": 39, "newConfidence": 79, "signalCategory": "interview", "sentiment": "negative"},
+    {"id": "e22", "timestamp": "11:12:21", "candidateId": "kateryna-b", "type": "interview_complete", "title": "Interview completed", "detail": "Strong architecture and stakeholder reasoning", "scoreChange": 1, "newScore": 84, "newConfidence": 85, "signalCategory": "interview", "sentiment": "positive"},
+    {"id": "e23", "timestamp": "11:12:23", "candidateId": "kateryna-b", "type": "shortlisted", "title": "Shortlisted #1", "detail": "Top recommendation", "newScore": 84, "newConfidence": 85, "sentiment": "positive"},
+    {"id": "e24", "timestamp": "11:12:24", "candidateId": "maria-p", "type": "shortlisted", "title": "Shortlisted #2", "detail": "Strong fallback candidate", "newScore": 76, "newConfidence": 75, "sentiment": "neutral"},
+    {"id": "e25", "timestamp": "11:12:25", "type": "system", "title": "Replay complete", "detail": "Shortlist generated", "sentiment": "neutral"}
+  ],
+  "reveal": {
+    "hiredCandidateId": "andrei-v",
+    "hiredOutcome": "Exited after 6 months; performance concerns",
+    "tenerTopPick": "kateryna-b",
+    "tenerOutcome": "Promoted to tech lead in 14 months",
+    "actualCost": "$39K",
+    "tenerCost": "$14K",
+    "actualTime": "41 days",
+    "tenerTime": "12 days",
+    "funnel": {
+      "sourced": 120,
+      "filtered": 25,
+      "outreach": 6,
+      "engaged": 3,
+      "shortlisted": 2
+    }
+  }
+}

@@ -240,6 +240,8 @@ class CandidateProfileApiTests(unittest.TestCase):
         jobs = profile.get("jobs") if isinstance(profile.get("jobs"), list) else []
         self.assertTrue(jobs)
         fit_breakdown = jobs[0].get("fit_breakdown") if isinstance(jobs[0].get("fit_breakdown"), dict) else {}
+        must_have = fit_breakdown.get("must_have") if isinstance(fit_breakdown.get("must_have"), dict) else {}
+        self.assertEqual(len(must_have.get("missing") or []), 1)
         nice = fit_breakdown.get("nice_to_have") if isinstance(fit_breakdown.get("nice_to_have"), dict) else {}
         self.assertGreater(len(nice.get("expected") or []), 0)
         self.assertIn("core web vitals optimization", [str(x).lower() for x in (nice.get("expected") or [])])

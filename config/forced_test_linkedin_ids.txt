@@ -2,4 +2,3 @@
 # Supports public identifiers (e.g. olena-bachek-b8523121a) or provider IDs.
 
 olena-bachek-b8523121a
-yevgenborysenko

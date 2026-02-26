@@ -88,10 +88,16 @@ class CandidateProfileService:
                 "id": job_id,
                 "title": str(match.get("job_title") or "").strip(),
                 "company": str(match.get("job_company") or "").strip() or None,
+                "company_website": str(match.get("job_company_website") or "").strip() or None,
                 "jd_text": str(match.get("job_jd_text") or "").strip(),
                 "location": str(match.get("job_location") or "").strip() or None,
                 "preferred_languages": match.get("job_preferred_languages") if isinstance(match.get("job_preferred_languages"), list) else [],
                 "seniority": str(match.get("job_seniority") or "").strip() or None,
+                "company_culture_profile": (
+                    match.get("job_company_culture_profile")
+                    if isinstance(match.get("job_company_culture_profile"), dict)
+                    else {}
+                ),
             }
             candidate_assessments = list(assessments_by_job.get(job_id, []))
             scorecard = self.db.build_agent_scorecard(
@@ -333,10 +339,13 @@ class CandidateProfileService:
             ),
         }
 
-        candidate_skills_norm = {str(item).strip().lower() for item in demo_fixture["candidate"]["skills"] if str(item).strip()}
-        matched = [item for item in required if str(item).strip().lower() in candidate_skills_norm]
-        if not matched and required:
-            matched = required[:1]
+        # Keep demo fixture deterministic: show exactly one missing must-have when possible.
+        if len(required) >= 2:
+            matched = required[:-1]
+        elif len(required) == 1:
+            matched = []
+        else:
+            matched = []
         missing = [item for item in required if item not in set(matched)]
         nice_to_have = list(demo_fixture["nice_to_have_skills"])
         company_culture_profile = dict(demo_fixture["company_culture_profile"])
@@ -835,9 +844,15 @@ class CandidateProfileService:
         resume_links: List[str],
     ) -> Dict[str, Any]:
         notes = match.get("verification_notes") if isinstance(match.get("verification_notes"), dict) else {}
-        raw_profile = notes.get("company_culture_profile") if isinstance(notes.get("company_culture_profile"), dict) else {}
+        job_level_profile = (
+            job.get("company_culture_profile") if isinstance(job.get("company_culture_profile"), dict) else {}
+        )
+        notes_profile = notes.get("company_culture_profile") if isinstance(notes.get("company_culture_profile"), dict) else {}
+        raw_profile = job_level_profile or notes_profile
         jd_text = str(job.get("jd_text") or "").lower()
-        values = [str(x).strip() for x in (raw_profile.get("values") or []) if str(x).strip()]
+        values = [str(x).strip() for x in (raw_profile.get("culture_values") or []) if str(x).strip()]
+        if not values:
+            values = [str(x).strip() for x in (raw_profile.get("values") or []) if str(x).strip()]
         if not values:
             inferred = []
             if any(token in jd_text for token in ("ownership", "autonomy", "owner", "self directed")):
@@ -860,6 +875,8 @@ class CandidateProfileService:
         evidence: List[str] = []
         predictive_signals_raw = notes.get("predictive_behavior_signals") if isinstance(notes.get("predictive_behavior_signals"), list) else []
         predictive_signals = [str(x).strip() for x in predictive_signals_raw if str(x).strip()]
+        if not predictive_signals:
+            predictive_signals = [str(x).strip() for x in (raw_profile.get("hiring_signals") or []) if str(x).strip()][:4]
         chat_signal_lines = self._extract_chat_signal_lines(pre_resume_events=pre_resume_events, conversations=conversations)
         interview_details = (scorecard.get("interview_evaluation") or {}).get("stages")
         interview_latest = interview_details[0] if isinstance(interview_details, list) and interview_details else {}
@@ -891,7 +908,13 @@ class CandidateProfileService:
                 evidence.extend([str(x).strip() for x in depth[:2] if str(x).strip()])
 
         style = str(raw_profile.get("team_style") or "").strip()
+        if not style:
+            work_style = raw_profile.get("work_style") if isinstance(raw_profile.get("work_style"), list) else []
+            style = "; ".join([str(x).strip() for x in work_style[:2] if str(x).strip()])
         decision_style = str(raw_profile.get("decision_style") or "").strip()
+        if not decision_style:
+            decision = raw_profile.get("decision_making_style") if isinstance(raw_profile.get("decision_making_style"), dict) else {}
+            decision_style = str(decision.get("assessment") or "").strip()
         if style:
             evidence.append(f"Company team style: {style}")
         if decision_style:

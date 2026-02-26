@@ -307,6 +307,29 @@
       font-size: 14px;
     }
 
+    .dashboard-footer-link {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .dashboard-footer-link a {
+      color: var(--accent-green);
+      text-decoration: none;
+      font-weight: 700;
+      border: 1px solid var(--accent-green);
+      border-radius: 9px;
+      padding: 7px 11px;
+      background: rgba(0, 255, 135, 0.08);
+    }
+
+    .dashboard-footer-link a:hover {
+      background: rgba(0, 255, 135, 0.16);
+    }
+
     .panel-actions {
       display: flex;
       gap: 8px;
@@ -835,6 +858,11 @@
         </div>
       </section>
     </section>
+
+    <section class="card dashboard-footer-link">
+      <span>Investor replay is available in standalone Emulator Mode.</span>
+      <a href="/dashboard/emulator">Open Emulator</a>
+    </section>
   </main>
 
   <div id="create-job-modal" class="modal" aria-hidden="true">
@@ -852,6 +880,10 @@
         <div>
           <label class="muted">Company</label>
           <input id="job-company" placeholder="Tener">
+        </div>
+        <div>
+          <label class="muted">Company Website</label>
+          <input id="job-company-website" placeholder="https://tener.ai">
         </div>
         <div>
           <label class="muted">Location</label>
@@ -931,6 +963,7 @@
     const DEFAULT_JOB_TEMPLATE = {
       title: "Senior Backend Engineer",
       company: "Tener",
+      company_website: "https://tener.ai",
       location: "Germany",
       seniority: "senior",
       preferred_languages: "en",
@@ -1419,6 +1452,7 @@
     function resetCreateJobForm() {
       $("job-title").value = DEFAULT_JOB_TEMPLATE.title;
       $("job-company").value = DEFAULT_JOB_TEMPLATE.company;
+      $("job-company-website").value = DEFAULT_JOB_TEMPLATE.company_website;
       $("job-location").value = DEFAULT_JOB_TEMPLATE.location;
       $("job-seniority").value = DEFAULT_JOB_TEMPLATE.seniority;
       $("job-languages").value = DEFAULT_JOB_TEMPLATE.preferred_languages;
@@ -1526,6 +1560,7 @@
         title,
         jd_text: jdText,
         company: $("job-company").value.trim() || null,
+        company_website: $("job-company-website").value.trim() || null,
         location: $("job-location").value.trim() || null,
         seniority: $("job-seniority").value || null,
         preferred_languages: $("job-languages").value

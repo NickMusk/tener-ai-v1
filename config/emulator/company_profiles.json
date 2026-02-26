@@ -1,0 +1,64 @@
+{
+  "profiles": [
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "domain": "stripe.com",
+      "summary": "High-performance fintech engineering culture with strong ownership.",
+      "profile": {
+        "values": ["Ownership", "Craft", "Clear writing"],
+        "candidate_profiles_sought": ["Systems-minded backend engineers", "Product engineers with API depth"]
+      }
+    },
+    {
+      "id": "fiverr",
+      "name": "Fiverr",
+      "domain": "fiverr.com",
+      "summary": "Marketplace speed with practical experimentation and measurable impact.",
+      "profile": {
+        "values": ["Execution", "Business impact", "Collaboration"],
+        "candidate_profiles_sought": ["Growth-minded full stack engineers", "Data-informed builders"]
+      }
+    },
+    {
+      "id": "wix",
+      "name": "Wix",
+      "domain": "wix.com",
+      "summary": "Product-first environment with strong frontend engineering standards.",
+      "profile": {
+        "values": ["Product quality", "Iteration", "Autonomy"],
+        "candidate_profiles_sought": ["Frontend specialists", "Design-system oriented engineers"]
+      }
+    },
+    {
+      "id": "monday",
+      "name": "Monday.com",
+      "domain": "monday.com",
+      "summary": "Fast-paced B2B product teams with high ownership and cross-functional alignment.",
+      "profile": {
+        "values": ["Ownership", "Speed", "Team collaboration"],
+        "candidate_profiles_sought": ["Full stack product engineers", "Customer-facing builders"]
+      }
+    },
+    {
+      "id": "checkout",
+      "name": "Checkout.com",
+      "domain": "checkout.com",
+      "summary": "Payments-grade reliability with high bar for operational rigor.",
+      "profile": {
+        "values": ["Reliability", "Security mindset", "Execution under pressure"],
+        "candidate_profiles_sought": ["Distributed systems engineers", "Infrastructure-minded backend engineers"]
+      }
+    },
+    {
+      "id": "zalando",
+      "name": "Zalando",
+      "domain": "zalando.com",
+      "summary": "E-commerce scale and platform thinking with strong data orientation.",
+      "profile": {
+        "values": ["Scale", "Pragmatism", "Cross-team delivery"],
+        "candidate_profiles_sought": ["Platform engineers", "Data-aware product engineers"]
+      }
+    }
+  ]
+}

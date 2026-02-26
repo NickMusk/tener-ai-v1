@@ -1,0 +1,63 @@
+{
+  "id": "hidden-gem-2024",
+  "company": "UK E-commerce Scaleup",
+  "role": "Senior Frontend Engineer (React/TypeScript)",
+  "year": "2024",
+  "companyProfile": {
+    "values": ["Bias for shipping", "Pragmatic quality", "Async collaboration"],
+    "upsides": ["Fast release cadence", "Strong design partnership"],
+    "downsides": ["Frequent priority shifts"],
+    "idealTraits": ["Execution discipline", "UI performance mindset", "Product empathy"]
+  },
+  "candidates": [
+    {"id": "viktor-k", "name": "Viktor K.", "location": "London, UK", "experience": "8 years", "currentScore": 62, "currentConfidence": 31, "stage": "sourced", "signals": [], "highlight": false},
+    {"id": "roman-t", "name": "Roman T.", "location": "Krakow, PL", "experience": "7 years", "currentScore": 73, "currentConfidence": 32, "stage": "sourced", "signals": [], "highlight": true},
+    {"id": "elena-m", "name": "Elena M.", "location": "Lisbon, PT", "experience": "6 years", "currentScore": 70, "currentConfidence": 30, "stage": "sourced", "signals": [], "highlight": false},
+    {"id": "tom-f", "name": "Tom F.", "location": "Manchester, UK", "experience": "5 years", "currentScore": 58, "currentConfidence": 28, "stage": "sourced", "signals": [], "highlight": false},
+    {"id": "irina-g", "name": "Irina G.", "location": "Bristol, UK", "experience": "5 years", "currentScore": 56, "currentConfidence": 28, "stage": "sourced", "signals": [], "highlight": false},
+    {"id": "david-l", "name": "David L.", "location": "Leeds, UK", "experience": "4 years", "currentScore": 54, "currentConfidence": 27, "stage": "sourced", "signals": [], "highlight": false}
+  ],
+  "events": [
+    {"id": "e01", "timestamp": "14:05:01", "type": "system", "title": "Pipeline started", "detail": "Loading frontend role context", "sentiment": "neutral"},
+    {"id": "e02", "timestamp": "14:05:02", "type": "phase_marker", "title": "Sourcing phase", "detail": "Collecting candidate pool", "sentiment": "neutral"},
+    {"id": "e03", "timestamp": "14:05:03", "candidateId": "viktor-k", "type": "sourced", "title": "Candidate sourced", "detail": "Strong branded resume", "newScore": 62, "newConfidence": 31, "sentiment": "neutral"},
+    {"id": "e04", "timestamp": "14:05:03", "candidateId": "roman-t", "type": "sourced", "title": "Candidate sourced", "detail": "High output open-source profile", "newScore": 73, "newConfidence": 32, "sentiment": "positive"},
+    {"id": "e05", "timestamp": "14:05:04", "candidateId": "elena-m", "type": "sourced", "title": "Candidate sourced", "detail": "Strong UI craftsmanship", "newScore": 70, "newConfidence": 30, "sentiment": "neutral"},
+    {"id": "e06", "timestamp": "14:05:04", "candidateId": "tom-f", "type": "sourced", "title": "Candidate sourced", "detail": "Good React fundamentals", "newScore": 58, "newConfidence": 28, "sentiment": "neutral"},
+    {"id": "e07", "timestamp": "14:05:05", "candidateId": "irina-g", "type": "sourced", "title": "Candidate sourced", "detail": "Mixed frontend/backend experience", "newScore": 56, "newConfidence": 28, "sentiment": "neutral"},
+    {"id": "e08", "timestamp": "14:05:05", "candidateId": "david-l", "type": "sourced", "title": "Candidate sourced", "detail": "Promising but limited seniority", "newScore": 54, "newConfidence": 27, "sentiment": "neutral"},
+    {"id": "e09", "timestamp": "14:05:07", "type": "phase_marker", "title": "Filtering phase", "detail": "Applying digital footprint signals", "sentiment": "neutral"},
+    {"id": "e10", "timestamp": "14:05:08", "candidateId": "viktor-k", "type": "signal_detected", "title": "Digital footprint signal", "detail": "Low public output despite strong CV", "scoreChange": -9, "newScore": 53, "signalCategory": "digital_footprint", "sentiment": "negative"},
+    {"id": "e11", "timestamp": "14:05:09", "candidateId": "roman-t", "type": "signal_detected", "title": "Digital footprint signal", "detail": "Consistent OSS shipping with production usage", "scoreChange": 8, "newScore": 81, "signalCategory": "digital_footprint", "sentiment": "positive"},
+    {"id": "e12", "timestamp": "14:05:10", "candidateId": "roman-t", "type": "signal_detected", "title": "Execution signal", "detail": "Detailed changelog and delivery cadence", "scoreChange": 3, "newScore": 84, "signalCategory": "timing", "sentiment": "positive"},
+    {"id": "e13", "timestamp": "14:05:11", "candidateIds": ["tom-f", "irina-g", "david-l"], "type": "batch_eliminated", "title": "3 candidates eliminated", "detail": "Below interview threshold", "sentiment": "negative"},
+    {"id": "e14", "timestamp": "14:05:13", "type": "phase_marker", "title": "Dialogue phase", "detail": "Assessing intent and communication", "sentiment": "neutral"},
+    {"id": "e15", "timestamp": "14:05:14", "candidateId": "roman-t", "type": "message_received", "title": "Candidate reply", "detail": "Asked about release ownership and team velocity", "sentiment": "positive"},
+    {"id": "e16", "timestamp": "14:05:15", "candidateId": "roman-t", "type": "score_update", "title": "Dialogue score update", "detail": "Strong ownership and product alignment", "scoreChange": 0, "newScore": 84, "newConfidence": 79, "signalCategory": "communication", "sentiment": "positive"},
+    {"id": "e17", "timestamp": "14:05:16", "candidateId": "viktor-k", "type": "message_received", "title": "Candidate reply", "detail": "Focused on title and headcount only", "sentiment": "negative"},
+    {"id": "e18", "timestamp": "14:05:17", "candidateId": "viktor-k", "type": "score_update", "title": "Dialogue score update", "detail": "Low product curiosity signal", "scoreChange": -5, "newScore": 48, "newConfidence": 71, "signalCategory": "communication", "sentiment": "negative"},
+    {"id": "e19", "timestamp": "14:05:18", "type": "phase_marker", "title": "Interview phase", "detail": "Final ranking pass", "sentiment": "neutral"},
+    {"id": "e20", "timestamp": "14:05:19", "candidateId": "roman-t", "type": "interview_complete", "title": "Interview completed", "detail": "High-quality implementation tradeoff reasoning", "scoreChange": 1, "newScore": 85, "newConfidence": 82, "signalCategory": "interview", "sentiment": "positive"},
+    {"id": "e21", "timestamp": "14:05:20", "candidateId": "viktor-k", "type": "interview_complete", "title": "Interview completed", "detail": "Low depth on performance decisions", "scoreChange": -1, "newScore": 47, "newConfidence": 77, "signalCategory": "interview", "sentiment": "negative"},
+    {"id": "e22", "timestamp": "14:05:22", "candidateId": "roman-t", "type": "shortlisted", "title": "Shortlisted #1", "detail": "Top recommendation", "newScore": 85, "newConfidence": 82, "sentiment": "positive"},
+    {"id": "e23", "timestamp": "14:05:23", "candidateId": "elena-m", "type": "shortlisted", "title": "Shortlisted #2", "detail": "Design-heavy specialist", "newScore": 77, "newConfidence": 74, "sentiment": "neutral"},
+    {"id": "e24", "timestamp": "14:05:24", "type": "system", "title": "Replay complete", "detail": "Shortlist generated", "sentiment": "neutral"}
+  ],
+  "reveal": {
+    "hiredCandidateId": "viktor-k",
+    "hiredOutcome": "Low delivery speed and missed milestones",
+    "tenerTopPick": "roman-t",
+    "tenerOutcome": "High output and strong retention after 16 months",
+    "actualCost": "$44K",
+    "tenerCost": "$15K",
+    "actualTime": "49 days",
+    "tenerTime": "11 days",
+    "funnel": {
+      "sourced": 180,
+      "filtered": 35,
+      "outreach": 7,
+      "engaged": 4,
+      "shortlisted": 2
+    }
+  }
+}

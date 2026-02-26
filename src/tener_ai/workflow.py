@@ -172,6 +172,11 @@ class WorkflowService:
 
     def verify_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
+        job_culture_profile = (
+            job.get("company_culture_profile")
+            if isinstance(job.get("company_culture_profile"), dict)
+            else {}
+        )
         forced_test_ids = self._load_forced_test_identifiers()
         enrich_result = self.enrich_profiles(job_id=job_id, profiles=profiles)
         enriched_profiles = enrich_result["profiles"]
@@ -183,11 +188,13 @@ class WorkflowService:
 
         for profile in enriched_profiles:
             score, status, notes = self.verification_agent.verify_candidate(job=job, profile=profile)
+            notes = dict(notes or {})
+            if job_culture_profile and not isinstance(notes.get("company_culture_profile"), dict):
+                notes["company_culture_profile"] = job_culture_profile
             forced_identifier = self._forced_test_identifier_for_profile(profile, forced_test_ids)
             if forced_identifier:
                 score = max(float(score), self.forced_test_score)
                 status = "verified"
-                notes = dict(notes or {})
                 notes["forced_test_candidate"] = True
                 notes["forced_test_identifier"] = forced_identifier
                 notes["forced_score"] = self.forced_test_score

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -25,12 +26,13 @@ class SourceReadDatabase:
     def list_jobs(self, limit: int = 200) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 200), 1000))
         try:
-            select_columns = self._job_select_columns()
+            select_columns, join_clause = self._job_select_columns(job_alias="j")
             rows = self._conn.execute(
                 f"""
                 SELECT {select_columns}
-                FROM jobs
-                ORDER BY id DESC
+                FROM jobs j
+                {join_clause}
+                ORDER BY j.id DESC
                 LIMIT ?
                 """,
                 (safe_limit,),
@@ -43,12 +45,13 @@ class SourceReadDatabase:
 
     def get_job(self, job_id: int) -> Dict[str, Any]:
         try:
-            select_columns = self._job_select_columns()
+            select_columns, join_clause = self._job_select_columns(job_alias="j")
             row = self._conn.execute(
                 f"""
                 SELECT {select_columns}
-                FROM jobs
-                WHERE id = ?
+                FROM jobs j
+                {join_clause}
+                WHERE j.id = ?
                 LIMIT 1
                 """,
                 (int(job_id),),
@@ -92,13 +95,43 @@ class SourceReadDatabase:
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
-        return dict(row)
+        item = dict(row)
+        for key in ("preferred_languages", "company_culture_profile"):
+            raw = item.get(key)
+            if not raw:
+                continue
+            if isinstance(raw, (dict, list)):
+                continue
+            try:
+                item[key] = json.loads(raw)
+            except Exception:
+                pass
+        return item
 
-    def _job_select_columns(self) -> str:
+    def _job_select_columns(self, job_alias: str = "jobs") -> tuple[str, str]:
         columns = set(self._table_columns("jobs"))
-        if "company" in columns:
-            return "id, title, company, jd_text, location, preferred_languages, seniority, created_at"
-        return "id, title, NULL AS company, jd_text, location, preferred_languages, seniority, created_at"
+        company_expr = f"{job_alias}.company" if "company" in columns else "NULL AS company"
+        website_expr = f"{job_alias}.company_website" if "company_website" in columns else "NULL AS company_website"
+        has_culture_table = self._table_exists("job_culture_profiles")
+        join_clause = (
+            f"LEFT JOIN job_culture_profiles cp ON cp.job_id = {job_alias}.id"
+            if has_culture_table
+            else ""
+        )
+        culture_profile_expr = "cp.profile_json AS company_culture_profile" if has_culture_table else "NULL AS company_culture_profile"
+        culture_status_expr = "cp.status AS company_culture_profile_status" if has_culture_table else "NULL AS company_culture_profile_status"
+        culture_generated_expr = (
+            "cp.generated_at AS company_culture_profile_generated_at"
+            if has_culture_table
+            else "NULL AS company_culture_profile_generated_at"
+        )
+        select_columns = (
+            f"{job_alias}.id, {job_alias}.title, {company_expr}, {website_expr}, "
+            f"{job_alias}.jd_text, {job_alias}.location, {job_alias}.preferred_languages, "
+            f"{job_alias}.seniority, {job_alias}.created_at, "
+            f"{culture_profile_expr}, {culture_status_expr}, {culture_generated_expr}"
+        )
+        return select_columns, join_clause
 
     def _table_columns(self, table_name: str) -> List[str]:
         try:
@@ -106,3 +139,13 @@ class SourceReadDatabase:
         except sqlite3.Error:
             return []
         return [str(row["name"]) for row in rows]
+
+    def _table_exists(self, table_name: str) -> bool:
+        try:
+            row = self._conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name = ? LIMIT 1",
+                (str(table_name),),
+            ).fetchone()
+        except sqlite3.Error:
+            return False
+        return row is not None

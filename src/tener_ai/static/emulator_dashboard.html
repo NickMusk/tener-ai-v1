@@ -1,0 +1,1357 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tener.ai Emulator Mode</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #08131e;
+      --panel: #122232;
+      --panel-soft: #162b40;
+      --line: #24415d;
+      --text: #e8f2ff;
+      --muted: #9cb7d0;
+      --good: #26d07c;
+      --bad: #ff5f5f;
+      --neutral: #7ca3c8;
+      --accent: #2dc2ff;
+      --amber: #ffb648;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Manrope', sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 18%, rgba(45, 194, 255, 0.16), transparent 36%),
+        radial-gradient(circle at 84% 12%, rgba(38, 208, 124, 0.12), transparent 36%),
+        linear-gradient(180deg, #08131e 0%, #060d15 100%);
+    }
+
+    .shell {
+      width: min(1500px, 96vw);
+      margin: 18px auto 26px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .card {
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(18, 34, 50, 0.98), rgba(12, 24, 36, 0.98));
+      border-radius: 14px;
+      padding: 14px;
+    }
+
+    .topbar {
+      display: grid;
+      grid-template-columns: 1.3fr 2fr;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .title {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin: 0;
+    }
+
+    .subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .quick-meta {
+      margin-top: 12px;
+      display: grid;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .controls {
+      display: grid;
+      gap: 10px;
+    }
+
+    .control-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    label {
+      font-size: 12px;
+      color: var(--muted);
+      font-weight: 600;
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    select,
+    button,
+    input[type="range"] {
+      border-radius: 9px;
+      border: 1px solid var(--line);
+      background: #0f1f2f;
+      color: var(--text);
+      padding: 9px 11px;
+      font-family: inherit;
+    }
+
+    select {
+      min-width: 260px;
+    }
+
+    button {
+      font-weight: 700;
+      cursor: pointer;
+      transition: border-color 0.18s ease, transform 0.18s ease, background 0.18s ease;
+    }
+
+    button:hover:not(:disabled) {
+      border-color: var(--accent);
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+
+    .primary {
+      background: rgba(45, 194, 255, 0.18);
+      border-color: rgba(45, 194, 255, 0.52);
+    }
+
+    .danger {
+      background: rgba(255, 95, 95, 0.14);
+      border-color: rgba(255, 95, 95, 0.45);
+    }
+
+    .progress-wrap {
+      display: grid;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .mono {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .phase-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 11px;
+      border-radius: 999px;
+      border: 1px solid #2e5575;
+      background: rgba(22, 43, 64, 0.92);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 2.2fr 1fr;
+      gap: 12px;
+      min-height: 540px;
+    }
+
+    .panel-title {
+      margin: 0 0 10px;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .table-wrap {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #0e1d2c;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 9px 10px;
+      border-bottom: 1px solid rgba(36, 65, 93, 0.55);
+      vertical-align: middle;
+    }
+
+    th {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      font-weight: 700;
+      background: #112235;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    tbody tr {
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity 0.24s ease, transform 0.24s ease, background 0.24s ease;
+      cursor: pointer;
+    }
+
+    tbody tr.is-visible {
+      opacity: 1;
+      transform: none;
+    }
+
+    tbody tr:hover {
+      background: rgba(45, 194, 255, 0.09);
+    }
+
+    tbody tr.selected {
+      background: rgba(45, 194, 255, 0.17);
+    }
+
+    tbody tr.is-eliminated {
+      opacity: 0.35;
+      text-decoration: line-through;
+    }
+
+    tbody tr.is-highlight {
+      box-shadow: inset 0 0 0 1px rgba(38, 208, 124, 0.55);
+    }
+
+    .score-chip {
+      display: inline-flex;
+      min-width: 54px;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 3px 8px;
+      font-weight: 800;
+      font-size: 12px;
+      border: 1px solid;
+      transition: color 0.28s ease, border-color 0.28s ease, background 0.28s ease;
+    }
+
+    .score-chip.good {
+      color: #d8ffec;
+      border-color: rgba(38, 208, 124, 0.7);
+      background: rgba(38, 208, 124, 0.2);
+    }
+
+    .score-chip.mid {
+      color: #fff4de;
+      border-color: rgba(255, 182, 72, 0.72);
+      background: rgba(255, 182, 72, 0.2);
+    }
+
+    .score-chip.bad {
+      color: #ffe5e5;
+      border-color: rgba(255, 95, 95, 0.72);
+      background: rgba(255, 95, 95, 0.2);
+    }
+
+    .score-pulse {
+      animation: pulse-score 0.34s ease;
+    }
+
+    @keyframes pulse-score {
+      0% { transform: scale(1); }
+      45% { transform: scale(1.13); }
+      100% { transform: scale(1); }
+    }
+
+    .progress {
+      height: 8px;
+      border-radius: 999px;
+      background: #0f2235;
+      border: 1px solid #264664;
+      overflow: hidden;
+    }
+
+    .progress > span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #2dc2ff, #26d07c);
+      transition: width 0.24s ease;
+    }
+
+    .stage-pill {
+      border: 1px solid #2d577a;
+      border-radius: 999px;
+      padding: 2px 7px;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #c8e3fb;
+      display: inline-flex;
+      align-items: center;
+      background: rgba(18, 43, 66, 0.75);
+    }
+
+    .confidence-track {
+      width: 76px;
+      height: 8px;
+      border-radius: 999px;
+      background: #102335;
+      border: 1px solid #285072;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .confidence-track > span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, #2dc2ff, #26d07c);
+      transition: width 0.5s ease;
+    }
+
+    .feed {
+      border: 1px solid var(--line);
+      background: #0f1f2f;
+      border-radius: 12px;
+      max-height: 486px;
+      overflow-y: auto;
+      padding: 8px;
+      display: grid;
+      gap: 7px;
+      align-content: start;
+    }
+
+    .feed-item {
+      border: 1px solid #285072;
+      border-left: 4px solid var(--neutral);
+      border-radius: 8px;
+      background: #12283b;
+      padding: 7px 8px;
+      font-size: 12px;
+      line-height: 1.4;
+      animation: feed-in 0.2s ease;
+    }
+
+    @keyframes feed-in {
+      from { opacity: 0; transform: translateY(-6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .feed-item.positive { border-left-color: var(--good); }
+    .feed-item.negative { border-left-color: var(--bad); }
+
+    .feed-item .head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: #d8e9fa;
+      font-weight: 700;
+    }
+
+    .feed-item .delta {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      border: 1px solid;
+    }
+
+    .delta.plus {
+      color: #d5ffe8;
+      border-color: rgba(38, 208, 124, 0.75);
+      background: rgba(38, 208, 124, 0.2);
+    }
+
+    .delta.minus {
+      color: #ffe4e4;
+      border-color: rgba(255, 95, 95, 0.75);
+      background: rgba(255, 95, 95, 0.2);
+    }
+
+    .detail-grid {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 12px;
+    }
+
+    .detail-empty {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .timeline {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .timeline .score-node {
+      border: 1px solid #2a5578;
+      background: #132a40;
+      border-radius: 8px;
+      padding: 4px 7px;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .timeline .arrow {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .signal-group {
+      border: 1px solid #2a4c6b;
+      border-radius: 9px;
+      padding: 8px;
+      margin-bottom: 8px;
+      background: rgba(20, 40, 60, 0.75);
+    }
+
+    .signal-group h4 {
+      margin: 0 0 6px;
+      font-size: 12px;
+      text-transform: capitalize;
+      color: #cfe6fd;
+    }
+
+    .signal-item {
+      font-size: 12px;
+      color: var(--text);
+      margin-bottom: 5px;
+    }
+
+    .signal-item:last-child { margin-bottom: 0; }
+
+    .reveal {
+      display: none;
+      gap: 12px;
+    }
+
+    .reveal.visible {
+      display: grid;
+      animation: reveal-in 0.35s ease;
+    }
+
+    @keyframes reveal-in {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .funnel {
+      font-size: 16px;
+      font-weight: 700;
+      color: #d9edff;
+    }
+
+    .shortlist {
+      display: grid;
+      gap: 7px;
+    }
+
+    .short-item {
+      border: 1px solid #2c587f;
+      border-radius: 10px;
+      padding: 8px 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(20, 42, 62, 0.85);
+      font-size: 13px;
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .compare-col {
+      border: 1px solid #2d5577;
+      border-radius: 11px;
+      padding: 10px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .compare-col.actual {
+      background: rgba(255, 95, 95, 0.12);
+      border-color: rgba(255, 95, 95, 0.48);
+    }
+
+    .compare-col.tener {
+      background: rgba(38, 208, 124, 0.12);
+      border-color: rgba(38, 208, 124, 0.48);
+    }
+
+    .profiles {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .profile-pill {
+      border: 1px solid #2b5678;
+      border-radius: 999px;
+      padding: 4px 8px;
+      background: rgba(20, 41, 61, 0.82);
+      font-size: 11px;
+      color: #cde5fb;
+    }
+
+    @media (max-width: 1120px) {
+      .topbar { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+      .detail-grid { grid-template-columns: 1fr; }
+      .compare { grid-template-columns: 1fr; }
+      select { min-width: 200px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="card topbar">
+      <div>
+        <h1 class="title">Tener.ai Emulator Mode</h1>
+        <p class="subtitle">Investor replay simulator: sourcing -> filtering -> dialogue -> interview -> reveal.</p>
+        <div class="quick-meta">
+          <span id="emulator-status">Status: loading...</span>
+          <span>Shortcut: <strong>Space</strong> to Play/Pause</span>
+          <span id="project-summary">No project selected</span>
+        </div>
+        <div class="profiles" id="company-profiles"></div>
+      </div>
+      <div class="controls">
+        <div class="control-row">
+          <label>Project
+            <select id="project-select"></select>
+          </label>
+          <button id="reload-projects">Reload projects</button>
+        </div>
+        <div class="control-row">
+          <button id="play-pause" class="primary" disabled>Play</button>
+          <button id="reset" disabled>Reset</button>
+          <button id="skip" class="danger" disabled>Skip to reveal</button>
+          <label>Speed
+            <select id="speed" disabled>
+              <option value="1">1x</option>
+              <option value="2">2x</option>
+              <option value="5">5x</option>
+            </select>
+          </label>
+          <span class="phase-pill" id="phase-pill">Idle</span>
+        </div>
+        <div class="progress-wrap">
+          <div class="mono" id="progress-label">Event 0 / 0</div>
+          <div class="progress"><span id="progress-fill"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="grid">
+      <section class="card">
+        <h2 class="panel-title">
+          <span>Candidate Table</span>
+          <span class="mono" id="candidate-count">0 active</span>
+        </h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Score</th>
+                <th>Confidence</th>
+                <th>Stage</th>
+                <th>Signals</th>
+              </tr>
+            </thead>
+            <tbody id="candidate-rows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="panel-title">
+          <span>Activity Feed</span>
+          <span class="mono" id="feed-count">0 events</span>
+        </h2>
+        <div id="feed" class="feed"></div>
+      </section>
+    </section>
+
+    <section class="card detail-grid">
+      <div>
+        <h2 class="panel-title">
+          <span>Selected Candidate Detail</span>
+          <span class="mono" id="selected-candidate-name">None</span>
+        </h2>
+        <div id="score-timeline" class="timeline"></div>
+      </div>
+      <div>
+        <h2 class="panel-title">
+          <span>Signal Breakdown</span>
+          <span class="mono" id="selected-stage">Stage: n/a</span>
+        </h2>
+        <div id="signal-groups" class="detail-empty">Select a candidate to inspect timeline and signals.</div>
+      </div>
+    </section>
+
+    <section class="card reveal" id="reveal-panel">
+      <h2 class="panel-title"><span>The Reveal</span><span class="mono">Phase 3</span></h2>
+      <div class="funnel" id="funnel-text"></div>
+      <div class="shortlist" id="shortlist"></div>
+      <div class="compare">
+        <div class="compare-col actual" id="actual-col"></div>
+        <div class="compare-col tener" id="tener-col"></div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const MAX_FEED_EVENTS = 120;
+
+    const state = {
+      projects: [],
+      project: null,
+      companyProfiles: [],
+      replay: {
+        mode: 'idle',
+        speed: 1,
+        eventIndex: 0,
+        timer: null,
+      },
+      candidatesById: new Map(),
+      candidateOrder: [],
+      selectedCandidateId: null,
+      feed: [],
+      phase: 'idle',
+      revealVisible: false,
+      needsSort: false,
+      dirtyRows: new Set(),
+      rafScheduled: false,
+      mutationQueue: [],
+    };
+
+    function $(id) {
+      return document.getElementById(id);
+    }
+
+    function safeText(value, fallback = '') {
+      if (value === null || value === undefined) return fallback;
+      return String(value);
+    }
+
+    function scoreClass(score) {
+      const numeric = Number(score || 0);
+      if (numeric >= 80) return 'good';
+      if (numeric >= 60) return 'mid';
+      return 'bad';
+    }
+
+    function stageLabel(stage) {
+      const map = {
+        sourced: 'Sourced',
+        filtered: 'Filtered',
+        in_dialogue: 'Dialogue',
+        interviewed: 'Interviewed',
+        shortlisted: 'Shortlisted',
+        eliminated: 'Eliminated',
+      };
+      return map[stage] || safeText(stage, 'Unknown');
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...opts,
+      });
+      const text = await res.text();
+      let data = {};
+      if (text) {
+        try {
+          data = JSON.parse(text);
+        } catch (_err) {
+          throw new Error(text.slice(0, 240));
+        }
+      }
+      if (!res.ok) {
+        throw new Error(data.error || `HTTP ${res.status}`);
+      }
+      return data;
+    }
+
+    function queueMutation(fn) {
+      state.mutationQueue.push(fn);
+      if (state.rafScheduled) return;
+      state.rafScheduled = true;
+      requestAnimationFrame(flushMutations);
+    }
+
+    function flushMutations() {
+      state.rafScheduled = false;
+      while (state.mutationQueue.length) {
+        const fn = state.mutationQueue.shift();
+        fn();
+      }
+      render();
+    }
+
+    function setControlEnabled(enabled) {
+      $('play-pause').disabled = !enabled;
+      $('reset').disabled = !enabled;
+      $('skip').disabled = !enabled;
+      $('speed').disabled = !enabled;
+    }
+
+    function clearReplayTimer() {
+      if (state.replay.timer) {
+        clearTimeout(state.replay.timer);
+        state.replay.timer = null;
+      }
+    }
+
+    function applyProject(project) {
+      clearReplayTimer();
+      state.project = project;
+      state.replay.mode = 'idle';
+      state.replay.eventIndex = 0;
+      state.revealVisible = false;
+      state.phase = 'idle';
+      state.feed = [];
+      state.needsSort = true;
+      state.dirtyRows.clear();
+      state.candidatesById = new Map();
+      state.candidateOrder = [];
+
+      const candidates = project.candidates || [];
+      for (const candidate of candidates) {
+        state.candidatesById.set(candidate.id, {
+          ...candidate,
+          visible: false,
+          eliminated: false,
+          stage: 'sourced',
+          signalEvents: [...(candidate.signals || [])],
+          scoreHistory: [Number(candidate.currentScore || 0)],
+        });
+      }
+
+      state.selectedCandidateId = candidates.length ? candidates[0].id : null;
+      rebuildCandidateRows();
+      render();
+      setControlEnabled(true);
+    }
+
+    function rebuildCandidateRows() {
+      const tbody = $('candidate-rows');
+      tbody.innerHTML = '';
+      for (const [candidateId, candidate] of state.candidatesById.entries()) {
+        const tr = document.createElement('tr');
+        tr.dataset.candidateId = candidateId;
+        tr.innerHTML = `
+          <td class="cell-name"></td>
+          <td><span class="score-chip"></span></td>
+          <td>
+            <div class="confidence-track"><span></span></div>
+            <div class="mono confidence-text" style="margin-top:4px"></div>
+          </td>
+          <td><span class="stage-pill"></span></td>
+          <td class="signal-count mono"></td>
+        `;
+        tr.addEventListener('click', () => {
+          state.selectedCandidateId = candidateId;
+          renderSelectedCandidate();
+          updateSelectedRowHighlight();
+        });
+        candidate.rowEl = tr;
+        tbody.appendChild(tr);
+      }
+      state.needsSort = true;
+    }
+
+    function updateSelectedRowHighlight() {
+      for (const candidate of state.candidatesById.values()) {
+        if (!candidate.rowEl) continue;
+        candidate.rowEl.classList.toggle('selected', state.selectedCandidateId === candidate.id);
+      }
+    }
+
+    function updateCandidateRow(candidate) {
+      if (!candidate.rowEl) return;
+      const row = candidate.rowEl;
+      row.classList.toggle('is-visible', !!candidate.visible);
+      row.classList.toggle('is-eliminated', candidate.stage === 'eliminated');
+      row.classList.toggle('is-highlight', !!candidate.highlight);
+
+      const nameCell = row.querySelector('.cell-name');
+      const scoreChip = row.querySelector('.score-chip');
+      const confidenceBar = row.querySelector('.confidence-track > span');
+      const confidenceText = row.querySelector('.confidence-text');
+      const stagePill = row.querySelector('.stage-pill');
+      const signalCount = row.querySelector('.signal-count');
+
+      nameCell.textContent = safeText(candidate.name, candidate.id);
+      scoreChip.textContent = `${Math.round(Number(candidate.currentScore || 0))}`;
+      scoreChip.className = `score-chip ${scoreClass(candidate.currentScore)}`;
+      if (candidate.pulseScore) {
+        scoreChip.classList.add('score-pulse');
+        candidate.pulseScore = false;
+      }
+      confidenceBar.style.width = `${Math.max(0, Math.min(100, Number(candidate.currentConfidence || 0)))}%`;
+      confidenceText.textContent = `${Math.round(Number(candidate.currentConfidence || 0))}%`;
+      stagePill.textContent = stageLabel(candidate.stage);
+      signalCount.textContent = `${(candidate.signalEvents || []).length}`;
+    }
+
+    function sortCandidates() {
+      if (!state.needsSort) return;
+      state.needsSort = false;
+      const candidates = Array.from(state.candidatesById.values());
+      candidates.sort((a, b) => {
+        const visibleDelta = Number(b.visible) - Number(a.visible);
+        if (visibleDelta !== 0) return visibleDelta;
+        const eliminatedDelta = Number(a.stage === 'eliminated') - Number(b.stage === 'eliminated');
+        if (eliminatedDelta !== 0) return eliminatedDelta;
+        const scoreDelta = Number(b.currentScore || 0) - Number(a.currentScore || 0);
+        if (scoreDelta !== 0) return scoreDelta;
+        return safeText(a.name).localeCompare(safeText(b.name));
+      });
+
+      state.candidateOrder = candidates.map((item) => item.id);
+      const tbody = $('candidate-rows');
+      for (const candidate of candidates) {
+        if (candidate.rowEl) tbody.appendChild(candidate.rowEl);
+      }
+    }
+
+    function pushFeedEvent(event) {
+      const names = (event.candidateIds || [])
+        .map((id) => state.candidatesById.get(id)?.name || id)
+        .filter(Boolean)
+        .slice(0, 4);
+      state.feed.unshift({
+        event,
+        names,
+      });
+      if (state.feed.length > MAX_FEED_EVENTS) {
+        state.feed.length = MAX_FEED_EVENTS;
+      }
+    }
+
+    function addSignalFromEvent(candidate, event) {
+      if (!event.signalCategory) return;
+      candidate.signalEvents.push({
+        id: event.id,
+        category: event.signalCategory,
+        sentiment: event.sentiment || 'neutral',
+        title: event.title,
+        detail: event.detail,
+        impact: event.scoreChange,
+      });
+    }
+
+    function applyEvent(event) {
+      if (!state.project) return;
+
+      if (event.type === 'phase_marker') {
+        state.phase = event.title || 'Phase';
+      }
+
+      if (event.type === 'batch_eliminated') {
+        for (const candidateId of event.candidateIds || []) {
+          const candidate = state.candidatesById.get(candidateId);
+          if (!candidate) continue;
+          candidate.visible = true;
+          candidate.stage = 'eliminated';
+          candidate.eliminated = true;
+          state.dirtyRows.add(candidateId);
+        }
+        state.needsSort = true;
+      }
+
+      const targetIds = [];
+      if (Array.isArray(event.candidateIds)) {
+        for (const id of event.candidateIds) {
+          if (id && !targetIds.includes(id)) targetIds.push(id);
+        }
+      }
+      if (event.candidateId && !targetIds.includes(event.candidateId)) {
+        targetIds.push(event.candidateId);
+      }
+
+      for (const candidateId of targetIds) {
+        const candidate = state.candidatesById.get(candidateId);
+        if (!candidate) continue;
+
+        if (event.type === 'sourced') {
+          candidate.visible = true;
+        }
+
+        if (event.type === 'eliminated') {
+          candidate.visible = true;
+          candidate.stage = 'eliminated';
+          candidate.eliminated = true;
+        }
+
+        if (event.type === 'shortlisted') {
+          candidate.visible = true;
+          candidate.stage = 'shortlisted';
+          candidate.highlight = true;
+        }
+
+        if (event.type === 'interview_complete' && candidate.stage !== 'shortlisted' && candidate.stage !== 'eliminated') {
+          candidate.stage = 'interviewed';
+        }
+
+        if ((event.type === 'message_sent' || event.type === 'message_received' || event.type === 'no_reply') && candidate.stage !== 'eliminated' && candidate.stage !== 'shortlisted') {
+          candidate.stage = 'in_dialogue';
+        }
+
+        const prevScore = Number(candidate.currentScore || 0);
+        if (typeof event.newScore === 'number') {
+          candidate.currentScore = event.newScore;
+        } else if (typeof event.scoreChange === 'number') {
+          candidate.currentScore = prevScore + event.scoreChange;
+        }
+
+        if (Number(candidate.currentScore || 0) !== prevScore) {
+          candidate.pulseScore = true;
+          candidate.scoreHistory.push(Number(candidate.currentScore || 0));
+        }
+
+        if (typeof event.newConfidence === 'number') {
+          candidate.currentConfidence = event.newConfidence;
+        }
+
+        addSignalFromEvent(candidate, event);
+
+        state.dirtyRows.add(candidateId);
+        state.needsSort = true;
+      }
+
+      pushFeedEvent(event);
+      state.replay.eventIndex += 1;
+
+      if (state.selectedCandidateId && state.dirtyRows.has(state.selectedCandidateId)) {
+        renderSelectedCandidate();
+      }
+
+      if (state.replay.eventIndex >= (state.project.events || []).length) {
+        state.replay.mode = 'complete';
+        state.revealVisible = true;
+        clearReplayTimer();
+      }
+    }
+
+    function eventDelay(event) {
+      const speed = Math.max(1, Number(state.replay.speed || 1));
+      let delay = 900;
+      switch (event.type) {
+        case 'sourced':
+          delay = 180;
+          break;
+        case 'batch_eliminated':
+          delay = 1100;
+          break;
+        case 'signal_detected':
+          delay = 1200;
+          break;
+        case 'message_received':
+        case 'score_update':
+          delay = 1900;
+          break;
+        case 'phase_marker':
+          delay = 1450;
+          break;
+        case 'interview_complete':
+        case 'shortlisted':
+          delay = 1150;
+          break;
+        case 'no_reply':
+          delay = 1500;
+          break;
+        default:
+          delay = 900;
+          break;
+      }
+      return Math.max(60, Math.round(delay / speed));
+    }
+
+    function stepReplay() {
+      if (!state.project || state.replay.mode !== 'playing') return;
+      const events = state.project.events || [];
+      if (state.replay.eventIndex >= events.length) {
+        state.replay.mode = 'complete';
+        state.revealVisible = true;
+        render();
+        return;
+      }
+      const event = events[state.replay.eventIndex];
+      queueMutation(() => applyEvent(event));
+      clearReplayTimer();
+      state.replay.timer = setTimeout(stepReplay, eventDelay(event));
+    }
+
+    function play() {
+      if (!state.project) return;
+      if (state.replay.mode === 'complete') {
+        resetReplay();
+      }
+      state.replay.mode = 'playing';
+      stepReplay();
+      render();
+    }
+
+    function pause() {
+      state.replay.mode = state.replay.mode === 'idle' ? 'idle' : 'paused';
+      clearReplayTimer();
+      render();
+    }
+
+    function resetReplay() {
+      if (!state.project) return;
+      clearReplayTimer();
+      applyProject(state.project);
+      render();
+    }
+
+    function skipToReveal() {
+      if (!state.project) return;
+      clearReplayTimer();
+      const events = state.project.events || [];
+      while (state.replay.eventIndex < events.length) {
+        applyEvent(events[state.replay.eventIndex]);
+      }
+      state.replay.mode = 'complete';
+      state.revealVisible = true;
+      render();
+    }
+
+    function renderFeed() {
+      const feed = $('feed');
+      feed.innerHTML = '';
+      for (const item of state.feed) {
+        const event = item.event;
+        const line = document.createElement('article');
+        line.className = `feed-item ${safeText(event.sentiment || 'neutral')}`;
+
+        let delta = '';
+        let deltaClass = '';
+        if (typeof event.scoreChange === 'number' && event.scoreChange !== 0) {
+          const prefix = event.scoreChange > 0 ? '+' : '';
+          delta = `${prefix}${Math.round(event.scoreChange)}`;
+          deltaClass = event.scoreChange > 0 ? 'plus' : 'minus';
+        }
+
+        const actor = item.names.length ? item.names.join(', ') : 'SYSTEM';
+        line.innerHTML = `
+          <div class="head">
+            <span>${safeText(event.timestamp)} · ${safeText(actor)}</span>
+            ${delta ? `<span class="delta ${deltaClass}">${delta}</span>` : ''}
+          </div>
+          <div>${safeText(event.title)} — ${safeText(event.detail)}</div>
+        `;
+        feed.appendChild(line);
+      }
+      $('feed-count').textContent = `${state.feed.length} events`;
+      feed.scrollTop = 0;
+    }
+
+    function renderSelectedCandidate() {
+      const candidate = state.candidatesById.get(state.selectedCandidateId || '');
+      $('selected-candidate-name').textContent = candidate ? `${candidate.name}` : 'None';
+      $('selected-stage').textContent = `Stage: ${candidate ? stageLabel(candidate.stage) : 'n/a'}`;
+
+      const timeline = $('score-timeline');
+      timeline.innerHTML = '';
+      if (!candidate) {
+        timeline.innerHTML = '<span class="detail-empty">Select a candidate to inspect score evolution.</span>';
+        $('signal-groups').innerHTML = 'Select a candidate to inspect timeline and signals.';
+        return;
+      }
+
+      const history = (candidate.scoreHistory || []).slice(-8);
+      history.forEach((score, index) => {
+        const node = document.createElement('span');
+        node.className = 'score-node';
+        node.textContent = `${Math.round(Number(score || 0))}`;
+        timeline.appendChild(node);
+        if (index < history.length - 1) {
+          const arrow = document.createElement('span');
+          arrow.className = 'arrow';
+          arrow.textContent = '→';
+          timeline.appendChild(arrow);
+        }
+      });
+
+      const grouped = {};
+      for (const signal of candidate.signalEvents || []) {
+        const category = safeText(signal.category, 'other');
+        if (!grouped[category]) grouped[category] = [];
+        grouped[category].push(signal);
+      }
+
+      const signalRoot = $('signal-groups');
+      signalRoot.innerHTML = '';
+      const categories = Object.keys(grouped);
+      if (!categories.length) {
+        signalRoot.innerHTML = '<div class="detail-empty">No signals yet for this candidate.</div>';
+        return;
+      }
+
+      for (const category of categories) {
+        const box = document.createElement('section');
+        box.className = 'signal-group';
+        box.innerHTML = `<h4>${safeText(category).replace(/_/g, ' ')}</h4>`;
+        for (const signal of grouped[category]) {
+          const row = document.createElement('div');
+          const impact = typeof signal.impact === 'number' && signal.impact !== 0
+            ? ` (${signal.impact > 0 ? '+' : ''}${Math.round(signal.impact)})`
+            : '';
+          row.className = 'signal-item';
+          row.textContent = `${safeText(signal.title)}${impact}: ${safeText(signal.detail)}`;
+          box.appendChild(row);
+        }
+        signalRoot.appendChild(box);
+      }
+    }
+
+    function revealShortlist() {
+      const panel = $('reveal-panel');
+      panel.classList.toggle('visible', !!state.revealVisible);
+      if (!state.revealVisible || !state.project) return;
+
+      const reveal = state.project.reveal || {};
+      const funnel = reveal.funnel || {};
+      $('funnel-text').textContent = `Funnel: ${funnel.sourced || 0} sourced -> ${funnel.filtered || 0} filtered -> ${funnel.outreach || 0} outreach -> ${funnel.engaged || 0} engaged -> ${funnel.shortlisted || 0} shortlisted`;
+
+      const candidates = Array.from(state.candidatesById.values());
+      let shortlist = candidates.filter((c) => c.stage === 'shortlisted');
+      if (!shortlist.length) {
+        shortlist = candidates.filter((c) => c.visible && c.stage !== 'eliminated');
+      }
+      shortlist.sort((a, b) => Number(b.currentScore || 0) - Number(a.currentScore || 0));
+      shortlist = shortlist.slice(0, 3);
+
+      const shortlistRoot = $('shortlist');
+      shortlistRoot.innerHTML = '';
+      shortlist.forEach((candidate, idx) => {
+        const item = document.createElement('div');
+        item.className = 'short-item';
+        item.innerHTML = `
+          <span>#${idx + 1} ${safeText(candidate.name)}</span>
+          <span class="mono">Score ${Math.round(Number(candidate.currentScore || 0))} · Conf ${Math.round(Number(candidate.currentConfidence || 0))}%</span>
+        `;
+        shortlistRoot.appendChild(item);
+      });
+
+      const hired = state.candidatesById.get(reveal.hiredCandidateId || '');
+      const topPick = state.candidatesById.get(reveal.tenerTopPick || '');
+
+      $('actual-col').innerHTML = `
+        <strong>What Actually Happened</strong><br>
+        Hired: ${safeText(hired?.name || reveal.hiredCandidateId)}<br>
+        Outcome: ${safeText(reveal.hiredOutcome)}<br>
+        Cost: ${safeText(reveal.actualCost, 'n/a')}<br>
+        Time: ${safeText(reveal.actualTime, 'n/a')}
+      `;
+
+      $('tener-col').innerHTML = `
+        <strong>What Tener Would Have Done</strong><br>
+        Recommended: ${safeText(topPick?.name || reveal.tenerTopPick)}<br>
+        Outcome: ${safeText(reveal.tenerOutcome)}<br>
+        Cost: ${safeText(reveal.tenerCost, 'n/a')}<br>
+        Time: ${safeText(reveal.tenerTime, 'n/a')}
+      `;
+    }
+
+    function renderRows() {
+      sortCandidates();
+      for (const candidateId of state.dirtyRows) {
+        const candidate = state.candidatesById.get(candidateId);
+        if (!candidate) continue;
+        updateCandidateRow(candidate);
+      }
+      if (state.dirtyRows.size === 0) {
+        for (const candidate of state.candidatesById.values()) {
+          if (!candidate.rowEl) continue;
+          if (candidate.rowEl.classList.contains('is-visible')) continue;
+          updateCandidateRow(candidate);
+        }
+      }
+      state.dirtyRows.clear();
+      updateSelectedRowHighlight();
+    }
+
+    function renderProjectMeta() {
+      if (!state.project) {
+        $('project-summary').textContent = 'No project selected';
+        $('candidate-count').textContent = '0 active';
+        return;
+      }
+      const events = state.project.events || [];
+      const visibleCount = Array.from(state.candidatesById.values()).filter((item) => item.visible).length;
+      $('project-summary').textContent = `${state.project.company} · ${state.project.role} · ${state.project.year}`;
+      $('candidate-count').textContent = `${visibleCount} active of ${state.project.candidates.length}`;
+      $('progress-label').textContent = `Event ${state.replay.eventIndex} / ${events.length}`;
+      const ratio = events.length ? (state.replay.eventIndex / events.length) * 100 : 0;
+      $('progress-fill').style.width = `${Math.max(0, Math.min(100, ratio))}%`;
+    }
+
+    function renderPhaseAndControls() {
+      const mode = state.replay.mode;
+      const phaseText = state.phase === 'idle' ? 'Idle' : safeText(state.phase);
+      $('phase-pill').textContent = `${phaseText}`;
+      const playBtn = $('play-pause');
+      playBtn.textContent = mode === 'playing' ? 'Pause' : (mode === 'complete' ? 'Replay' : 'Play');
+    }
+
+    function renderProfiles() {
+      const root = $('company-profiles');
+      root.innerHTML = '';
+      for (const profile of state.companyProfiles) {
+        const pill = document.createElement('span');
+        pill.className = 'profile-pill';
+        pill.textContent = `${safeText(profile.name)} (${safeText(profile.domain)})`;
+        root.appendChild(pill);
+      }
+    }
+
+    function render() {
+      renderProjectMeta();
+      renderRows();
+      renderFeed();
+      renderPhaseAndControls();
+      renderSelectedCandidate();
+      revealShortlist();
+    }
+
+    async function loadProjects() {
+      const out = await api('/api/emulator/projects');
+      const select = $('project-select');
+      select.innerHTML = '';
+      state.projects = out.items || [];
+
+      if (!state.projects.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No emulator projects available';
+        select.appendChild(option);
+        setControlEnabled(false);
+        return;
+      }
+
+      for (const item of state.projects) {
+        const option = document.createElement('option');
+        option.value = item.id;
+        option.textContent = `${item.company} — ${item.role} (${item.year})`;
+        select.appendChild(option);
+      }
+
+      const selected = select.value || state.projects[0].id;
+      select.value = selected;
+      await loadProject(selected);
+    }
+
+    async function loadProject(projectId) {
+      if (!projectId) return;
+      const project = await api(`/api/emulator/projects/${encodeURIComponent(projectId)}`);
+      applyProject(project);
+    }
+
+    async function loadCompanyProfiles() {
+      const out = await api('/api/emulator/company-profiles');
+      state.companyProfiles = out.items || [];
+      renderProfiles();
+    }
+
+    function bindEvents() {
+      $('project-select').addEventListener('change', async (event) => {
+        const projectId = safeText(event.target.value, '');
+        if (!projectId) return;
+        await loadProject(projectId);
+      });
+
+      $('reload-projects').addEventListener('click', async () => {
+        try {
+          $('emulator-status').textContent = 'Status: reloading emulator datasets...';
+          await api('/api/emulator/reload', { method: 'POST', body: '{}' });
+          await Promise.all([loadProjects(), loadCompanyProfiles(), loadHealth()]);
+        } catch (err) {
+          alert(err.message || String(err));
+        }
+      });
+
+      $('play-pause').addEventListener('click', () => {
+        if (state.replay.mode === 'playing') {
+          pause();
+          return;
+        }
+        play();
+      });
+
+      $('reset').addEventListener('click', () => resetReplay());
+      $('skip').addEventListener('click', () => skipToReveal());
+
+      $('speed').addEventListener('change', (event) => {
+        state.replay.speed = Number(event.target.value || 1);
+      });
+
+      document.addEventListener('keydown', (event) => {
+        if (event.code !== 'Space') return;
+        const target = event.target;
+        if (target && ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName)) return;
+        event.preventDefault();
+        if (state.replay.mode === 'playing') pause(); else play();
+      });
+    }
+
+    async function loadHealth() {
+      const out = await api('/api/emulator');
+      const status = out.status || 'unknown';
+      const loadError = out.load_error;
+      if (status === 'degraded' && loadError) {
+        $('emulator-status').textContent = `Status: degraded (${loadError})`;
+      } else {
+        $('emulator-status').textContent = `Status: ${status} (${out.project_count || 0} projects)`;
+      }
+    }
+
+    async function bootstrap() {
+      try {
+        bindEvents();
+        await Promise.all([loadHealth(), loadCompanyProfiles(), loadProjects()]);
+      } catch (err) {
+        $('emulator-status').textContent = `Status: error (${err.message || String(err)})`;
+        setControlEnabled(false);
+      }
+    }
+
+    bootstrap();
+  </script>
+</body>
+</html>

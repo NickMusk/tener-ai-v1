@@ -1,1 +1,1 @@
-__all__ = ["main", "pre_resume_service", "instructions", "llm_responder"]
+__all__ = ["main", "pre_resume_service", "instructions", "llm_responder", "emulator"]
