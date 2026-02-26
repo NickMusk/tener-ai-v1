@@ -218,6 +218,7 @@
     }
 
     tbody tr {
+      display: none;
       opacity: 0;
       transform: translateY(6px);
       transition: opacity 0.24s ease, transform 0.24s ease, background 0.24s ease;
@@ -225,6 +226,7 @@
     }
 
     tbody tr.is-visible {
+      display: table-row;
       opacity: 1;
       transform: none;
     }
@@ -541,7 +543,7 @@
         <p class="subtitle">Investor replay simulator: sourcing -> filtering -> dialogue -> interview -> reveal.</p>
         <div class="quick-meta">
           <span id="emulator-status">Status: loading...</span>
-          <span>Shortcut: <strong>Space</strong> to Play/Pause</span>
+          <span>Shortcut: <strong>Space</strong> to Start/Pause</span>
           <span id="project-summary">No project selected</span>
         </div>
         <div class="profiles" id="company-profiles"></div>
@@ -554,7 +556,7 @@
           <button id="reload-projects">Reload projects</button>
         </div>
         <div class="control-row">
-          <button id="play-pause" class="primary" disabled>Play</button>
+          <button id="play-pause" class="primary" disabled>Start</button>
           <button id="reset" disabled>Reset</button>
           <button id="skip" class="danger" disabled>Skip to reveal</button>
           <label>Speed
@@ -832,12 +834,14 @@
       state.needsSort = false;
       const candidates = Array.from(state.candidatesById.values());
       candidates.sort((a, b) => {
+        const scoreDelta = Number(b.currentScore || 0) - Number(a.currentScore || 0);
+        if (scoreDelta !== 0) return scoreDelta;
+        const confidenceDelta = Number(b.currentConfidence || 0) - Number(a.currentConfidence || 0);
+        if (confidenceDelta !== 0) return confidenceDelta;
         const visibleDelta = Number(b.visible) - Number(a.visible);
         if (visibleDelta !== 0) return visibleDelta;
         const eliminatedDelta = Number(a.stage === 'eliminated') - Number(b.stage === 'eliminated');
         if (eliminatedDelta !== 0) return eliminatedDelta;
-        const scoreDelta = Number(b.currentScore || 0) - Number(a.currentScore || 0);
-        if (scoreDelta !== 0) return scoreDelta;
         return safeText(a.name).localeCompare(safeText(b.name));
       });
 
@@ -1227,7 +1231,7 @@
       const phaseText = state.phase === 'idle' ? 'Idle' : safeText(state.phase);
       $('phase-pill').textContent = `${phaseText}`;
       const playBtn = $('play-pause');
-      playBtn.textContent = mode === 'playing' ? 'Pause' : (mode === 'complete' ? 'Replay' : 'Play');
+      playBtn.textContent = mode === 'playing' ? 'Pause' : (mode === 'complete' ? 'Replay' : 'Start');
     }
 
     function renderProfiles() {
