@@ -725,6 +725,27 @@
               <button id="linkedin-connect-btn">Connect LinkedIn</button>
               <button id="linkedin-refresh-btn">Refresh Accounts</button>
             </div>
+            <div class="full" style="margin-top:6px;border-top:1px solid var(--line);padding-top:8px;">
+              <label class="muted">Job Routing Override</label>
+              <div class="muted mono" id="linkedin-job-routing-job-label">Select a specific job in Casey AI panel</div>
+              <div class="form-grid" style="margin-top:6px;">
+                <div>
+                  <label class="muted">Routing mode</label>
+                  <select id="linkedin-job-routing-mode">
+                    <option value="auto">auto (all connected accounts)</option>
+                    <option value="manual">manual (selected accounts only)</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="muted">Assigned account IDs</label>
+                  <select id="linkedin-job-account-ids" multiple size="4"></select>
+                </div>
+                <div class="full button-row" style="justify-content:flex-start;">
+                  <button id="linkedin-save-job-routing-btn">Save Job Routing</button>
+                  <span class="muted mono" id="linkedin-job-routing-hint">No job selected</span>
+                </div>
+              </div>
+            </div>
           </div>
           <div style="overflow:auto;margin-top:8px;">
             <table>
@@ -896,6 +917,7 @@
       outreachItems: [],
       agentAccounts: [],
       linkedinAccounts: [],
+      jobLinkedinRouting: null,
       linkedinAdminToken: "",
       agentConversationId: null,
       selectedSnapshotStep: "source",
@@ -1365,6 +1387,7 @@
       syncJobSelectors();
       const selected = state.agentJobId ? getJobById(state.agentJobId) : null;
       setAgentJobMeta(selected, state.agentJobId === null);
+      await refreshJobLinkedinRouting();
       await refreshAgentAccounts();
     }
 
@@ -1518,33 +1541,129 @@
       await onSelectedJobChanged(jobId);
     }
 
+    function normalizeLinkedinRoutingMode(value) {
+      const mode = String(value || "").trim().toLowerCase();
+      return mode === "manual" ? "manual" : "auto";
+    }
+
+    function renderLinkedinJobRouting() {
+      const modeInput = $("linkedin-job-routing-mode");
+      const idsInput = $("linkedin-job-account-ids");
+      const hintEl = $("linkedin-job-routing-hint");
+      const jobLabel = $("linkedin-job-routing-job-label");
+      if (!modeInput || !idsInput || !hintEl || !jobLabel) return;
+
+      const jobId = selectedAgentJobId();
+      const selectedJob = jobId ? getJobById(jobId) : null;
+      if (!jobId || !selectedJob) {
+        jobLabel.textContent = "Select a specific job in Casey AI panel";
+        modeInput.value = "auto";
+        modeInput.disabled = true;
+        idsInput.disabled = true;
+        idsInput.innerHTML = "";
+        hintEl.textContent = "No job selected";
+        return;
+      }
+
+      const company = String(selectedJob.company || "").trim();
+      jobLabel.textContent = company
+        ? `Job #${selectedJob.id}: ${selectedJob.title} (${company})`
+        : `Job #${selectedJob.id}: ${selectedJob.title}`;
+
+      const routing = state.jobLinkedinRouting || {};
+      const mode = normalizeLinkedinRoutingMode(routing.routing_mode || "auto");
+      modeInput.value = mode;
+      modeInput.disabled = false;
+
+      const selectedIds = new Set((routing.account_ids || []).map((x) => Number(x || 0)).filter(Boolean));
+      const accounts = Array.isArray(routing.available_accounts)
+        ? routing.available_accounts
+        : (state.linkedinAccounts || []).filter((row) => String(row.status || "").toLowerCase() === "connected");
+      if (!accounts.length) {
+        idsInput.innerHTML = "";
+      } else {
+        idsInput.innerHTML = accounts
+          .map((row) => {
+            const id = Number(row.id || 0);
+            const label = String(row.label || "").trim() || `Account ${id}`;
+            const suffix = String(row.provider_account_id || "").trim();
+            const selected = selectedIds.has(id) ? "selected" : "";
+            return `<option value="${id}" ${selected}>#${id} ${escapeHtml(label)}${suffix ? ` • ${escapeHtml(suffix)}` : ""}</option>`;
+          })
+          .join("");
+      }
+      idsInput.disabled = mode !== "manual";
+      const selectedCount = selectedIds.size;
+      hintEl.textContent = mode === "manual"
+        ? `manual mode • assigned: ${selectedCount}`
+        : "auto mode • all connected accounts";
+    }
+
+    async function refreshJobLinkedinRouting() {
+      const jobId = selectedAgentJobId();
+      if (!jobId) {
+        state.jobLinkedinRouting = null;
+        renderLinkedinJobRouting();
+        return;
+      }
+      try {
+        const out = await api(`/api/jobs/${jobId}/linkedin-routing`);
+        state.jobLinkedinRouting = out || null;
+      } catch (e) {
+        state.jobLinkedinRouting = null;
+        $("linkedin-job-routing-hint").textContent = `Failed: ${e.message}`;
+      }
+      renderLinkedinJobRouting();
+    }
+
+    async function saveJobLinkedinRouting() {
+      const jobId = selectedAgentJobId();
+      if (!jobId) return alert('Select a specific job (not All jobs)');
+      const mode = normalizeLinkedinRoutingMode(($("linkedin-job-routing-mode") || {}).value || "auto");
+      const idsSelect = $("linkedin-job-account-ids");
+      const accountIds = idsSelect
+        ? Array.from(idsSelect.selectedOptions || []).map((x) => Number(x.value || 0)).filter(Boolean)
+        : [];
+      const out = await api(`/api/jobs/${jobId}/linkedin-routing`, {
+        method: 'POST',
+        body: JSON.stringify({
+          routing_mode: mode,
+          account_ids: accountIds,
+        }),
+      });
+      state.jobLinkedinRouting = out || null;
+      renderLinkedinJobRouting();
+      snapshot('linkedin.job_routing.saved', out);
+    }
+
     function renderLinkedinAccounts() {
       const body = $("linkedin-accounts-tbody");
       if (!body) return;
       const accounts = state.linkedinAccounts || [];
       if (!accounts.length) {
         body.innerHTML = '<tr><td colspan="7" class="muted">No connected accounts yet</td></tr>';
-        return;
+      } else {
+        body.innerHTML = accounts.map((row) => {
+          const status = escapeHtml(row.status || "-");
+          const connectedAt = escapeHtml((row.connected_at || "").replace("T", " ").slice(0, 19) || "-");
+          const syncedAt = escapeHtml((row.last_synced_at || "").replace("T", " ").slice(0, 19) || "-");
+          return `
+            <tr>
+              <td class="mono">${Number(row.id || 0)}</td>
+              <td>${escapeHtml(row.label || "-")}</td>
+              <td class="mono">${escapeHtml(row.provider_account_id || "-")}</td>
+              <td>${status}</td>
+              <td class="mono">${connectedAt}</td>
+              <td class="mono">${syncedAt}</td>
+              <td>
+                <button class="linkedin-sync-btn" data-account-id="${Number(row.id || 0)}">Sync</button>
+                <button class="linkedin-disconnect-btn" data-account-id="${Number(row.id || 0)}">Disconnect</button>
+              </td>
+            </tr>
+          `;
+        }).join("");
       }
-      body.innerHTML = accounts.map((row) => {
-        const status = escapeHtml(row.status || "-");
-        const connectedAt = escapeHtml((row.connected_at || "").replace("T", " ").slice(0, 19) || "-");
-        const syncedAt = escapeHtml((row.last_synced_at || "").replace("T", " ").slice(0, 19) || "-");
-        return `
-          <tr>
-            <td class="mono">${Number(row.id || 0)}</td>
-            <td>${escapeHtml(row.label || "-")}</td>
-            <td class="mono">${escapeHtml(row.provider_account_id || "-")}</td>
-            <td>${status}</td>
-            <td class="mono">${connectedAt}</td>
-            <td class="mono">${syncedAt}</td>
-            <td>
-              <button class="linkedin-sync-btn" data-account-id="${Number(row.id || 0)}">Sync</button>
-              <button class="linkedin-disconnect-btn" data-account-id="${Number(row.id || 0)}">Disconnect</button>
-            </td>
-          </tr>
-        `;
-      }).join("");
+      renderLinkedinJobRouting();
 
       document.querySelectorAll(".linkedin-sync-btn").forEach((btn) => {
         btn.addEventListener("click", async () => {
@@ -1586,8 +1705,10 @@
         const out = await api('/api/linkedin/accounts?limit=300');
         state.linkedinAccounts = out.items || [];
         renderLinkedinAccounts();
+        await refreshJobLinkedinRouting();
       } catch (e) {
         $("linkedin-accounts-tbody").innerHTML = `<tr><td colspan="7" class="muted">Failed: ${escapeHtml(e.message)}</td></tr>`;
+        renderLinkedinJobRouting();
       }
     }
 
@@ -2128,6 +2249,8 @@
       });
       $("linkedin-refresh-btn").addEventListener('click', () => refreshLinkedinAccounts().catch(e => alert(e.message)));
       $("linkedin-connect-btn").addEventListener('click', () => startLinkedinConnect().catch(e => alert(e.message)));
+      $("linkedin-job-routing-mode").addEventListener('change', () => renderLinkedinJobRouting());
+      $("linkedin-save-job-routing-btn").addEventListener('click', () => saveJobLinkedinRouting().catch(e => alert(e.message)));
       $("agent-add-manual-btn").addEventListener('click', () => addManualAgentAccount().catch(e => alert(e.message)));
       $("agent-send-inbound-btn").addEventListener('click', () => sendAgentInboundMessage().catch(e => alert(e.message)));
       $("agent-refresh-chat-btn").addEventListener('click', () => {
@@ -2168,6 +2291,7 @@
     setCandidatesOverallFilter(localStorage.getItem(CANDS_OVERALL_FILTER_STORAGE_KEY) || "all");
     renderSnapshotTabs();
     renderSelectedSnapshot();
+    renderLinkedinJobRouting();
     fullRefresh();
   </script>
 </body>

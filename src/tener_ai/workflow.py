@@ -2871,20 +2871,21 @@ class WorkflowService:
                 "error": error,
             }
 
-        account = self._select_linkedin_account_for_new_thread()
+        account, selection_error = self._select_linkedin_account_for_new_thread(job_id=job_id)
         if not account:
             retry_at = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
+            error_reason = selection_error or "no_connected_account_or_daily_budget"
             self.db.release_outbound_action(
                 action_id=action_id,
                 not_before=retry_at,
-                error="no_connected_account_or_daily_budget",
+                error=error_reason,
             )
             return {
                 "action_id": action_id,
                 "conversation_id": conversation_id,
                 "candidate_id": candidate_id,
                 "delivery_status": "deferred",
-                "error": "no_connected_account_or_daily_budget",
+                "error": error_reason,
             }
 
         provider_account_id = str(account.get("provider_account_id") or "").strip()
@@ -3079,10 +3080,10 @@ class WorkflowService:
             score = score * 100.0
         return int(max(0.0, min(100.0, score)) * 100)
 
-    def _select_linkedin_account_for_new_thread(self) -> Dict[str, Any] | None:
-        rows = self.db.list_linkedin_accounts(limit=500, status="connected")
+    def _select_linkedin_account_for_new_thread(self, *, job_id: int) -> tuple[Dict[str, Any] | None, str | None]:
+        rows, routing_error = self._connected_linkedin_accounts_for_job(job_id=job_id)
         if not rows:
-            return None
+            return None, routing_error or "no_connected_account"
         day = self._utc_day_key()
         daily_cap = self._policy_daily_new_threads_cap()
         eligible: List[tuple[int, int, Dict[str, Any]]] = []
@@ -3096,9 +3097,27 @@ class WorkflowService:
                 continue
             eligible.append((sent, account_id, row))
         if not eligible:
-            return None
+            return None, "daily_new_threads_budget_reached"
         eligible.sort(key=lambda item: (item[0], item[1]))
-        return eligible[0][2]
+        return eligible[0][2], None
+
+    def _connected_linkedin_accounts_for_job(self, *, job_id: int) -> tuple[List[Dict[str, Any]], str | None]:
+        job = self.db.get_job(job_id)
+        routing_mode = str((job or {}).get("linkedin_routing_mode") or "auto").strip().lower()
+        if routing_mode not in {"auto", "manual"}:
+            routing_mode = "auto"
+        if routing_mode == "manual":
+            assigned_ids = self.db.list_job_linkedin_account_ids(job_id=job_id)
+            if not assigned_ids:
+                return [], "manual_no_assigned_accounts"
+            rows = self.db.list_job_linkedin_accounts(job_id=job_id, status="connected")
+            if not rows:
+                return [], "manual_assigned_accounts_not_connected"
+            return rows, None
+        rows = self.db.list_linkedin_accounts(limit=500, status="connected")
+        if not rows:
+            return [], "no_connected_accounts"
+        return rows, None
 
     def _can_send_connect_request(self, account: Dict[str, Any]) -> bool:
         account_id = int(account.get("id") or 0)

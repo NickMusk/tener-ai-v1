@@ -304,7 +304,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "get_job": "GET /api/jobs/{job_id}",
                         "job_progress": "GET /api/jobs/{job_id}/progress",
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
+                        "job_linkedin_routing": "GET /api/jobs/{job_id}/linkedin-routing",
                         "update_job_jd": "POST /api/jobs/{job_id}/jd",
+                        "update_job_linkedin_routing": "POST /api/jobs/{job_id}/linkedin-routing",
                         "run_workflow": "POST /api/workflows/execute",
                         "source_step": "POST /api/steps/source",
                         "enrich_step": "POST /api/steps/enrich",
@@ -492,6 +494,33 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, {"job_id": job_id, "items": rows})
             return
 
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/linkedin-routing"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/linkedin-routing$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            job = SERVICES["db"].get_job(job_id)
+            if not job:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            routing_mode = str(job.get("linkedin_routing_mode") or "auto").strip().lower()
+            if routing_mode not in {"auto", "manual"}:
+                routing_mode = "auto"
+            account_ids = SERVICES["db"].list_job_linkedin_account_ids(job_id=job_id)
+            assigned_accounts = SERVICES["db"].list_job_linkedin_accounts(job_id=job_id)
+            available_accounts = SERVICES["db"].list_linkedin_accounts(limit=500, status="connected")
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "job_id": job_id,
+                    "routing_mode": routing_mode,
+                    "account_ids": account_ids,
+                    "assigned_accounts": assigned_accounts,
+                    "available_accounts": available_accounts,
+                },
+            )
+            return
+
         if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/progress"):
             job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/progress$")
             if job_id is None:
@@ -667,6 +696,63 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 details={"length": len(jd_text)},
             )
             self._json_response(HTTPStatus.OK, {"job_id": job_id, "jd_text": jd_text})
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/linkedin-routing"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/linkedin-routing$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            if not SERVICES["db"].get_job(job_id):
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            routing_mode_raw = body.get("routing_mode")
+            if routing_mode_raw is not None:
+                updated = SERVICES["db"].update_job_linkedin_routing_mode(
+                    job_id=job_id,
+                    routing_mode=str(routing_mode_raw),
+                )
+                if not updated:
+                    self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                    return
+
+            account_ids_raw = body.get("account_ids")
+            if account_ids_raw is not None:
+                if not isinstance(account_ids_raw, list):
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": "account_ids must be an array"})
+                    return
+                account_ids = SERVICES["db"].replace_job_linkedin_account_assignments(
+                    job_id=job_id,
+                    account_ids=account_ids_raw,
+                )
+            else:
+                account_ids = SERVICES["db"].list_job_linkedin_account_ids(job_id=job_id)
+
+            job = SERVICES["db"].get_job(job_id) or {}
+            routing_mode = str(job.get("linkedin_routing_mode") or "auto").strip().lower()
+            if routing_mode not in {"auto", "manual"}:
+                routing_mode = "auto"
+            assigned_accounts = SERVICES["db"].list_job_linkedin_accounts(job_id=job_id)
+            SERVICES["db"].log_operation(
+                operation="job.linkedin_routing.updated",
+                status="ok",
+                entity_type="job",
+                entity_id=str(job_id),
+                details={"routing_mode": routing_mode, "account_ids": account_ids},
+            )
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "job_id": job_id,
+                    "routing_mode": routing_mode,
+                    "account_ids": account_ids,
+                    "assigned_accounts": assigned_accounts,
+                },
+            )
             return
 
         if parsed.path == "/api/agent/accounts/manual":

@@ -161,7 +161,73 @@ class OutboundDispatchTests(unittest.TestCase):
 
             action = db.get_outbound_action(action_id)
             self.assertEqual(action["status"], "pending")
-            self.assertEqual(action["last_error"], "no_connected_account_or_daily_budget")
+            self.assertEqual(action["last_error"], "no_connected_accounts")
+
+    def test_manual_mode_blocks_when_no_assigned_accounts(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_manual_blocked.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-global",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="m0")
+            updated = db.update_job_linkedin_routing_mode(job_id=job_id, routing_mode="manual")
+            self.assertTrue(updated)
+
+            queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            action_id = int(queued["items"][0]["action_id"])
+            dispatched = workflow.dispatch_outbound_actions(limit=5, job_id=job_id)
+            self.assertEqual(dispatched["processed"], 1)
+            self.assertEqual(dispatched["deferred"], 1)
+            self.assertEqual(dispatched["sent"], 0)
+            action = db.get_outbound_action(action_id)
+            self.assertEqual(action["status"], "pending")
+            self.assertEqual(action["last_error"], "manual_no_assigned_accounts")
+
+    def test_manual_mode_uses_only_assigned_accounts(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_manual_assigned.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            account_1 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-a",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            account_2 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-b",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            providers = {
+                "acc-a": _ManagedStubProvider(account_ref="acc-a"),
+                "acc-b": _ManagedStubProvider(account_ref="acc-b"),
+            }
+            workflow._build_managed_provider = lambda account_id: providers[str(account_id)]  # type: ignore[method-assign]
+
+            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="m1")
+            self.assertTrue(db.update_job_linkedin_routing_mode(job_id=job_id, routing_mode="manual"))
+            assigned_ids = db.replace_job_linkedin_account_assignments(job_id=job_id, account_ids=[account_1])
+            self.assertEqual(assigned_ids, [account_1])
+
+            queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            action_id = int(queued["items"][0]["action_id"])
+            dispatched = workflow.dispatch_outbound_actions(limit=5, job_id=job_id)
+            self.assertEqual(dispatched["processed"], 1)
+            self.assertEqual(dispatched["sent"], 1)
+            action = db.get_outbound_action(action_id)
+            self.assertEqual(action["status"], "completed")
+            self.assertEqual(int(action["account_id"]), account_1)
+            self.assertEqual(len(providers["acc-a"].sent_messages), 1)
+            self.assertEqual(len(providers["acc-b"].sent_messages), 0)
 
     def test_dispatch_respects_connect_weekly_cap(self) -> None:
         with TemporaryDirectory() as td:

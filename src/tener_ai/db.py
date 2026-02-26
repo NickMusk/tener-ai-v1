@@ -48,6 +48,7 @@ class Database:
             location TEXT,
             preferred_languages TEXT,
             seniority TEXT,
+            linkedin_routing_mode TEXT NOT NULL DEFAULT 'auto',
             created_at TEXT NOT NULL
         );
 
@@ -258,6 +259,17 @@ class Database:
             updated_at TEXT NOT NULL,
             PRIMARY KEY(account_id, week_start_utc)
         );
+
+        CREATE TABLE IF NOT EXISTS job_linkedin_account_assignments (
+            job_id INTEGER NOT NULL,
+            account_id INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            PRIMARY KEY(job_id, account_id),
+            FOREIGN KEY(job_id) REFERENCES jobs(id),
+            FOREIGN KEY(account_id) REFERENCES linkedin_accounts(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_job_linkedin_account_assignments_job
+            ON job_linkedin_account_assignments(job_id, account_id);
         """
         with self.transaction() as conn:
             conn.executescript(schema)
@@ -271,12 +283,14 @@ class Database:
         preferred_languages: List[str],
         seniority: Optional[str],
         company: Optional[str] = None,
+        linkedin_routing_mode: str = "auto",
     ) -> int:
+        routing_mode = self._normalize_linkedin_routing_mode(linkedin_routing_mode)
         with self.transaction() as conn:
             cur = conn.execute(
                 """
-                INSERT INTO jobs (title, company, jd_text, location, preferred_languages, seniority, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO jobs (title, company, jd_text, location, preferred_languages, seniority, linkedin_routing_mode, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     title,
@@ -285,6 +299,7 @@ class Database:
                     location,
                     json.dumps(preferred_languages),
                     seniority,
+                    routing_mode,
                     utc_now_iso(),
                 ),
             )
@@ -310,6 +325,88 @@ class Database:
         rows = self._conn.execute(
             "SELECT * FROM jobs ORDER BY id DESC LIMIT ?",
             (max(1, min(limit, 1000)),),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def update_job_linkedin_routing_mode(self, job_id: int, routing_mode: str) -> bool:
+        normalized = self._normalize_linkedin_routing_mode(routing_mode)
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                UPDATE jobs
+                SET linkedin_routing_mode = ?
+                WHERE id = ?
+                """,
+                (normalized, int(job_id)),
+            )
+            return cur.rowcount > 0
+
+    def replace_job_linkedin_account_assignments(self, job_id: int, account_ids: List[int]) -> List[int]:
+        unique_ids: List[int] = []
+        seen: set[int] = set()
+        for raw in account_ids or []:
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if value <= 0 or value in seen:
+                continue
+            seen.add(value)
+            unique_ids.append(value)
+
+        existing_ids: List[int] = []
+        if unique_ids:
+            placeholders = ",".join(["?"] * len(unique_ids))
+            rows = self._conn.execute(
+                f"SELECT id FROM linkedin_accounts WHERE id IN ({placeholders})",
+                tuple(unique_ids),
+            ).fetchall()
+            existing_ids = sorted(int(r["id"]) for r in rows)
+
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            conn.execute(
+                "DELETE FROM job_linkedin_account_assignments WHERE job_id = ?",
+                (int(job_id),),
+            )
+            for account_id in existing_ids:
+                conn.execute(
+                    """
+                    INSERT INTO job_linkedin_account_assignments (job_id, account_id, created_at)
+                    VALUES (?, ?, ?)
+                    """,
+                    (int(job_id), int(account_id), now),
+                )
+        return existing_ids
+
+    def list_job_linkedin_account_ids(self, job_id: int) -> List[int]:
+        rows = self._conn.execute(
+            """
+            SELECT account_id
+            FROM job_linkedin_account_assignments
+            WHERE job_id = ?
+            ORDER BY account_id ASC
+            """,
+            (int(job_id),),
+        ).fetchall()
+        return [int(r["account_id"]) for r in rows]
+
+    def list_job_linkedin_accounts(self, job_id: int, status: Optional[str] = None) -> List[Dict[str, Any]]:
+        args: List[Any] = [int(job_id)]
+        where = ""
+        if status:
+            where = "AND a.status = ?"
+            args.append(str(status))
+        rows = self._conn.execute(
+            f"""
+            SELECT a.*
+            FROM job_linkedin_account_assignments ja
+            JOIN linkedin_accounts a ON a.id = ja.account_id
+            WHERE ja.job_id = ?
+            {where}
+            ORDER BY a.updated_at DESC, a.id DESC
+            """,
+            tuple(args),
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
@@ -1734,6 +1831,10 @@ class Database:
         if "company" not in job_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN company TEXT")
+        if "linkedin_routing_mode" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN linkedin_routing_mode TEXT")
+                conn.execute("UPDATE jobs SET linkedin_routing_mode = 'auto' WHERE linkedin_routing_mode IS NULL OR TRIM(linkedin_routing_mode) = ''")
 
         columns = self._table_columns("conversations")
         if "external_chat_id" not in columns:
@@ -1747,6 +1848,13 @@ class Database:
     def _table_columns(self, table_name: str) -> List[str]:
         rows = self._conn.execute(f"PRAGMA table_info({table_name})").fetchall()
         return [str(row["name"]) for row in rows]
+
+    @staticmethod
+    def _normalize_linkedin_routing_mode(mode: str | None) -> str:
+        normalized = str(mode or "").strip().lower()
+        if normalized in {"auto", "manual"}:
+            return normalized
+        return "auto"
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
