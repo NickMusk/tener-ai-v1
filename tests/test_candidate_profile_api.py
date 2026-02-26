@@ -234,6 +234,14 @@ class CandidateProfileApiTests(unittest.TestCase):
         profile_status, profile = self._request("GET", f"/api/candidates/{candidate_id}/profile")
         self.assertEqual(profile_status, 200)
         self.assertEqual(int(profile["candidate"]["id"]), candidate_id)
+        self.assertEqual(str(profile["candidate"].get("full_name") or ""), "Henry Wright")
+        jobs = profile.get("jobs") if isinstance(profile.get("jobs"), list) else []
+        self.assertTrue(jobs)
+        fit_breakdown = jobs[0].get("fit_breakdown") if isinstance(jobs[0].get("fit_breakdown"), dict) else {}
+        nice = fit_breakdown.get("nice_to_have") if isinstance(fit_breakdown.get("nice_to_have"), dict) else {}
+        self.assertGreater(len(nice.get("expected") or []), 0)
+        culture_fit = fit_breakdown.get("culture_fit") if isinstance(fit_breakdown.get("culture_fit"), dict) else {}
+        self.assertGreater(len(culture_fit.get("alignment_highlights") or []), 0)
 
     def test_candidate_page_route_returns_html(self) -> None:
         status, body = self._request("GET", "/candidate/1")

@@ -225,6 +225,7 @@
       audit: false,
       profile: null,
       selectedResumeUrl: "",
+      selectedResumeProxyUrl: "",
     };
 
     const $ = (id) => document.getElementById(id);
@@ -350,6 +351,7 @@
       const fit = item.fit_breakdown || {};
       const must = fit.must_have || {};
       const nice = fit.nice_to_have || {};
+      const culture = fit.culture_fit || {};
       const risks = Array.isArray(fit.risk_flags) ? fit.risk_flags : [];
       const riskColor = risks.length ? "var(--warn)" : "var(--accent)";
       $("fit-grid").innerHTML = `
@@ -365,9 +367,23 @@
           </ul>
         </div>
         <div class="score-cell">
-          <div class="muted">Nice-to-have and risk flags</div>
-          <div style="margin-top:6px;">Matched nice-to-have: ${escapeHtml((Array.isArray(nice.matched) ? nice.matched.length : 0))}</div>
-          <div style="margin-top:6px;">Missing nice-to-have: ${escapeHtml((Array.isArray(nice.missing) ? nice.missing.length : 0))}</div>
+          <div class="muted">Nice-to-have and cultural fit</div>
+          <div style="margin-top:6px;">Matched nice-to-have:</div>
+          <ul>
+            ${(Array.isArray(nice.matched) ? nice.matched : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
+          </ul>
+          <div class="muted" style="margin-top:8px;">Missing nice-to-have:</div>
+          <ul>
+            ${(Array.isArray(nice.missing) ? nice.missing : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
+          </ul>
+          <div class="muted" style="margin-top:8px;">Culture alignment highlights:</div>
+          <ul>
+            ${(Array.isArray(culture.alignment_highlights) ? culture.alignment_highlights : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>no strong culture signals yet</li>"}
+          </ul>
+          <div class="muted" style="margin-top:8px;">Company values:</div>
+          <ul>
+            ${(Array.isArray(culture.company_values) ? culture.company_values : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>not captured yet</li>"}
+          </ul>
           <div style="margin-top:10px;color:${riskColor};"><b>Risk flags: ${escapeHtml(risks.length)}</b></div>
           <ul>
             ${risks.map((x) => `<li>${escapeHtml(x.message || x.type || "risk")}</li>`).join("") || "<li>no critical risks</li>"}
@@ -387,6 +403,7 @@
         frame.style.display = "none";
         select.innerHTML = `<option value="">No resume links</option>`;
         state.selectedResumeUrl = "";
+        state.selectedResumeProxyUrl = "";
         return;
       }
       empty.style.display = "none";
@@ -398,15 +415,18 @@
       try {
         const out = await api(`/api/candidates/${state.candidateId}/resume-preview?url=${encodeURIComponent(state.selectedResumeUrl)}`);
         if (out.available && out.url) {
-          frame.src = out.url;
+          state.selectedResumeProxyUrl = `/api/candidates/${state.candidateId}/resume-preview/content?url=${encodeURIComponent(out.url)}`;
+          frame.src = state.selectedResumeProxyUrl;
           frame.style.display = "block";
         } else {
           frame.style.display = "none";
           empty.style.display = "block";
+          state.selectedResumeProxyUrl = "";
         }
       } catch {
         frame.style.display = "none";
         empty.style.display = "block";
+        state.selectedResumeProxyUrl = "";
       }
     }
 
@@ -497,8 +517,8 @@
         renderResume().catch(() => null);
       });
       $("resume-open-btn").addEventListener("click", () => {
-        if (!state.selectedResumeUrl) return;
-        window.open(state.selectedResumeUrl, "_blank", "noopener,noreferrer");
+        if (!state.selectedResumeProxyUrl) return;
+        window.open(state.selectedResumeProxyUrl, "_blank", "noopener,noreferrer");
       });
     }
 

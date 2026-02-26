@@ -222,11 +222,18 @@ class CandidateProfileService:
             required = ["python", "aws", "docker", "ci/cd"]
         matched = required[: max(1, len(required) - 1)]
         missing = [item for item in required if item not in set(matched)]
+        nice_to_have = ["react", "node.js", "llm orchestration", "system design"]
+        company_culture_profile = {
+            "values": ["high ownership", "direct communication", "fast execution", "product thinking"],
+            "team_style": "small autonomous team working directly with Founder and CTO",
+            "decision_style": "pragmatic with high accountability",
+            "delivery_environment": "fast moving US AI startup",
+        }
         demo_linkedin_id = f"demo-profile-candidate-{job_id_int}"
         demo_candidate_id = self.db.upsert_candidate(
             {
                 "linkedin_id": demo_linkedin_id,
-                "full_name": "Demo Profile Candidate",
+                "full_name": "Henry Wright",
                 "headline": "Senior Fullstack Engineer",
                 "location": "Warsaw, Poland",
                 "languages": ["en"],
@@ -240,6 +247,8 @@ class CandidateProfileService:
             "core_profile": core_profile,
             "required_skills": required,
             "matched_skills": matched,
+            "nice_to_have_skills": nice_to_have,
+            "company_culture_profile": company_culture_profile,
             "components": {
                 "skills_match": round(float(len(matched)) / float(max(len(required), 1)), 3),
                 "seniority_match": 1.0,
@@ -310,7 +319,7 @@ class CandidateProfileService:
             extra_notes={
                 "interview_status": "scored",
                 "interview_total_score": 84.0,
-                "interview_session_id": "demo_session_profile",
+                "interview_session_id": None,
             },
         )
         conversation_id = self.db.get_or_create_conversation(
@@ -328,7 +337,7 @@ class CandidateProfileService:
         )
         session_state = {
             "session_id": f"pre-{conversation_id}",
-            "candidate_name": "Demo Profile Candidate",
+            "candidate_name": "Henry Wright",
             "job_title": str(chosen_job.get("title") or "Demo role"),
             "scope_summary": ", ".join(required),
             "core_profile_summary": ", ".join(required),
@@ -401,10 +410,19 @@ class CandidateProfileService:
         required_norm = {item.lower(): item for item in required_skills}
         matched_norm = {item.lower(): item for item in matched_skills}
         missing_must_have = [label for key, label in required_norm.items() if key not in matched_norm]
-        core_skills = [str(item).strip() for item in (core_profile.get("core_skills") or []) if str(item).strip()]
-        nice_to_have = [item for item in core_skills if item.lower() not in required_norm]
+        nice_raw = notes.get("nice_to_have_skills") if isinstance(notes.get("nice_to_have_skills"), list) else []
+        nice_to_have = [str(item).strip() for item in nice_raw if str(item).strip()]
+        if not nice_to_have:
+            core_skills = [str(item).strip() for item in (core_profile.get("core_skills") or []) if str(item).strip()]
+            nice_to_have = [item for item in core_skills if item.lower() not in required_norm]
         missing_nice = [item for item in nice_to_have if item.lower() not in candidate_skills_norm]
         matched_nice = [item for item in nice_to_have if item.lower() in candidate_skills_norm]
+        culture_fit = self._build_culture_fit(
+            job=job,
+            candidate=candidate,
+            match=match,
+            scorecard=scorecard,
+        )
         risks: List[Dict[str, Any]] = []
         if missing_must_have:
             risks.append(
@@ -448,6 +466,7 @@ class CandidateProfileService:
                 "matched": matched_nice,
                 "missing": missing_nice,
             },
+            "culture_fit": culture_fit,
             "candidate_snapshot": {
                 "skills": candidate_skills,
                 "years_experience": candidate.get("years_experience"),
@@ -498,10 +517,11 @@ class CandidateProfileService:
 
         instruction = (
             "Generate a concise recruiter style fit explanation for one candidate in plain text.\n"
-            "Use 3 short paragraphs.\n"
+            "Use 4 short paragraphs.\n"
             "Paragraph 1: overall fit summary.\n"
             "Paragraph 2: must have and nice to have breakdown.\n"
-            "Paragraph 3: key risks and recommendation.\n"
+            "Paragraph 3: culture fit alignment and team environment match.\n"
+            "Paragraph 4: key risks and recommendation.\n"
             "Be specific to provided signals and avoid generic wording."
         )
         inbound_text = json.dumps(
@@ -544,6 +564,10 @@ class CandidateProfileService:
         matched = must.get("matched") if isinstance(must.get("matched"), list) else []
         missing = must.get("missing") if isinstance(must.get("missing"), list) else []
         risk_flags = fit_breakdown.get("risk_flags") if isinstance(fit_breakdown.get("risk_flags"), list) else []
+        culture_fit = fit_breakdown.get("culture_fit") if isinstance(fit_breakdown.get("culture_fit"), dict) else {}
+        cultural_highlights = (
+            culture_fit.get("alignment_highlights") if isinstance(culture_fit.get("alignment_highlights"), list) else []
+        )
         top_risks = [str((item or {}).get("message") or "").strip() for item in risk_flags if isinstance(item, dict)]
         top_risks = [item for item in top_risks if item]
         name = str(candidate.get("full_name") or "Candidate").strip() or "Candidate"
@@ -552,6 +576,7 @@ class CandidateProfileService:
             f"{name} currently sits at overall status {status} with score {overall_text} for {title}.\n"
             f"Must-have coverage is {len(matched)}/{max(len(required), 1)}; matched: {', '.join(matched[:6]) or 'none'}; "
             f"missing: {', '.join(missing[:6]) or 'none'}.\n"
+            f"Culture-fit highlights: {', '.join(str(item) for item in cultural_highlights[:4]) or 'no strong cultural insights yet'}.\n"
             f"Main risks: {', '.join(top_risks[:3]) or 'no critical risks detected from current data'}."
         )
 
@@ -633,6 +658,15 @@ class CandidateProfileService:
 
         for item in logs:
             details = item.get("details") if isinstance(item.get("details"), dict) else {}
+            operation = str(item.get("operation") or "").strip().lower()
+            status = str(item.get("status") or "").strip().lower()
+            error_text = str(details.get("error") or "")
+            if (
+                operation == "agent.interview.sync"
+                and status == "error"
+                and "INTERVIEW_SESSION_NOT_FOUND" in error_text
+            ):
+                continue
             out.append(
                 {
                     "kind": "operation_log",
@@ -650,6 +684,64 @@ class CandidateProfileService:
             reverse=True,
         )
         return out[:400]
+
+    def _build_culture_fit(
+        self,
+        *,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        match: Dict[str, Any],
+        scorecard: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        notes = match.get("verification_notes") if isinstance(match.get("verification_notes"), dict) else {}
+        raw_profile = notes.get("company_culture_profile") if isinstance(notes.get("company_culture_profile"), dict) else {}
+        jd_text = str(job.get("jd_text") or "").lower()
+        values = [str(x).strip() for x in (raw_profile.get("values") or []) if str(x).strip()]
+        if not values:
+            inferred = []
+            if any(token in jd_text for token in ("ownership", "autonomy", "owner", "self directed")):
+                inferred.append("high ownership")
+            if any(token in jd_text for token in ("fast", "move fast", "speed", "quickly")):
+                inferred.append("fast execution")
+            if any(token in jd_text for token in ("communication", "written", "stakeholder", "clarity")):
+                inferred.append("clear communication")
+            if any(token in jd_text for token in ("product", "customer", "impact")):
+                inferred.append("product thinking")
+            if any(token in jd_text for token in ("architecture", "scalable", "quality", "testing")):
+                inferred.append("engineering rigor")
+            values = inferred
+
+        candidate_skills = [str(item).strip().lower() for item in (candidate.get("skills") or []) if str(item).strip()]
+        communication_score = self._safe_float(((scorecard.get("communication") or {}).get("latest_score")), None)
+        interview_score = self._safe_float(((scorecard.get("interview_evaluation") or {}).get("latest_score")), None)
+        alignment: List[str] = []
+        concerns: List[str] = []
+        evidence: List[str] = []
+
+        if communication_score is not None and communication_score >= 75:
+            evidence.append(f"Communication score {communication_score:.1f} indicates clear async communication")
+            alignment.append("strong communication fit for distributed startup environment")
+        if interview_score is not None and interview_score >= 80:
+            evidence.append(f"Interview score {interview_score:.1f} supports decision quality and ownership")
+            alignment.append("demonstrates ownership and architecture judgement")
+        if any(skill in candidate_skills for skill in ("llm", "ai", "rag")):
+            alignment.append("brings direct AI product exposure relevant to agentic workflow roadmap")
+        if not alignment:
+            concerns.append("limited direct evidence for culture alignment from available dialogue")
+
+        style = str(raw_profile.get("team_style") or "").strip()
+        decision_style = str(raw_profile.get("decision_style") or "").strip()
+        if style:
+            evidence.append(f"Company team style: {style}")
+        if decision_style:
+            evidence.append(f"Decision style: {decision_style}")
+
+        return {
+            "company_values": values,
+            "alignment_highlights": alignment[:6],
+            "concerns": concerns[:4],
+            "evidence": evidence[:8],
+        }
 
     @staticmethod
     def _filter_logs_for_job(logs: List[Dict[str, Any]], job_id: int, conversation_ids: set[int]) -> List[Dict[str, Any]]:

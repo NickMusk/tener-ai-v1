@@ -323,6 +323,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
                         "candidate_profile": "GET /api/candidates/{candidate_id}/profile?job_id=...&audit=0|1",
                         "candidate_resume_preview": "GET /api/candidates/{candidate_id}/resume-preview?job_id=...&url=...",
+                        "candidate_resume_content": "GET /api/candidates/{candidate_id}/resume-preview/content?url=...",
                         "candidate_demo_profile": "POST /api/candidates/demo-profile",
                         "job_linkedin_routing": "GET /api/jobs/{job_id}/linkedin-routing",
                         "update_job_jd": "POST /api/jobs/{job_id}/jd",
@@ -429,6 +430,66 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 },
             )
             return
+
+        if parsed.path.startswith("/api/candidates/") and parsed.path.endswith("/resume-preview/content"):
+            candidate_id = self._extract_id(parsed.path, pattern=r"^/api/candidates/(\d+)/resume-preview/content$")
+            if candidate_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid candidate id"})
+                return
+            candidate = SERVICES["db"].get_candidate(candidate_id)
+            if not candidate:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "candidate not found"})
+                return
+            params = parse_qs(parsed.query or "")
+            selected_url = str((params.get("url") or [""])[0] or "").strip()
+            if not selected_url:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "url is required"})
+                return
+            links = SERVICES["candidate_profile"].list_candidate_resume_links(candidate_id=int(candidate_id))
+            if selected_url not in set(links):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "resume url is not linked to candidate"})
+                return
+            if not (selected_url.startswith("https://") or selected_url.startswith("http://")):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "unsupported resume url scheme"})
+                return
+            req = urlrequest.Request(
+                url=selected_url,
+                method="GET",
+                headers={"User-Agent": "TenerResumePreview/1.0", "Accept": "application/pdf,*/*"},
+            )
+            try:
+                with urlrequest.urlopen(req, timeout=20) as resp:
+                    data = resp.read((10 * 1024 * 1024) + 1)
+                    if len(data) > 10 * 1024 * 1024:
+                        self._json_response(HTTPStatus.BAD_REQUEST, {"error": "resume content too large"})
+                        return
+                    content_type = str(resp.headers.get("Content-Type") or "").strip().lower()
+                    if "pdf" not in content_type:
+                        content_type = "application/pdf"
+                    else:
+                        content_type = content_type.split(";")[0].strip() or "application/pdf"
+                    self._binary_response(
+                        status=HTTPStatus.OK,
+                        content_type=content_type,
+                        payload=data,
+                        extra_headers={
+                            "Content-Disposition": "inline; filename=\"resume.pdf\"",
+                            "Cache-Control": "no-store",
+                        },
+                    )
+                    return
+            except urlerror.HTTPError as exc:
+                self._json_response(
+                    HTTPStatus.BAD_GATEWAY,
+                    {"error": "resume fetch failed", "details": f"upstream_http_{int(exc.code)}"},
+                )
+                return
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.BAD_GATEWAY,
+                    {"error": "resume fetch failed", "details": str(exc)},
+                )
+                return
 
         if parsed.path == "/health":
             self._json_response(HTTPStatus.OK, {"status": "ok"})
@@ -1852,6 +1913,23 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(encoded)))
         self.end_headers()
         self.wfile.write(encoded)
+
+    def _binary_response(
+        self,
+        *,
+        status: HTTPStatus,
+        content_type: str,
+        payload: bytes,
+        extra_headers: Optional[Dict[str, str]] = None,
+    ) -> None:
+        self.send_response(status.value)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(payload)))
+        if extra_headers:
+            for key, value in extra_headers.items():
+                self.send_header(str(key), str(value))
+        self.end_headers()
+        self.wfile.write(payload)
 
     @staticmethod
     def _extract_id(path: str, pattern: str) -> Optional[int]:
