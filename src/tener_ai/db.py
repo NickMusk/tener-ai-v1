@@ -570,6 +570,113 @@ class Database:
         ).fetchone()
         return self._row_to_dict(row) if row else None
 
+    def list_candidate_matches(self, candidate_id: int) -> List[Dict[str, Any]]:
+        query = """
+        SELECT
+            m.id AS match_id,
+            m.job_id,
+            m.candidate_id,
+            m.score,
+            m.status,
+            m.verification_notes,
+            m.created_at AS match_created_at,
+            j.title AS job_title,
+            j.company AS job_company,
+            j.jd_text AS job_jd_text,
+            j.location AS job_location,
+            j.preferred_languages AS job_preferred_languages,
+            j.seniority AS job_seniority,
+            conv.id AS conversation_id,
+            conv.status AS conversation_status,
+            conv.external_chat_id,
+            conv.linkedin_account_id,
+            conv.last_message_at,
+            prs.session_id AS pre_resume_session_id,
+            prs.status AS pre_resume_status,
+            prs.next_followup_at AS pre_resume_next_followup_at,
+            prs.resume_links AS pre_resume_resume_links,
+            prs.state_json AS pre_resume_state_json,
+            (
+                SELECT msg.direction
+                FROM messages msg
+                WHERE msg.conversation_id = conv.id
+                ORDER BY msg.id DESC
+                LIMIT 1
+            ) AS last_message_direction,
+            (
+                SELECT msg.content
+                FROM messages msg
+                WHERE msg.conversation_id = conv.id
+                ORDER BY msg.id DESC
+                LIMIT 1
+            ) AS last_message_content,
+            (
+                SELECT msg.created_at
+                FROM messages msg
+                WHERE msg.conversation_id = conv.id
+                ORDER BY msg.id DESC
+                LIMIT 1
+            ) AS last_message_created_at
+        FROM candidate_job_matches m
+        JOIN jobs j ON j.id = m.job_id
+        LEFT JOIN conversations conv ON conv.id = (
+            SELECT c2.id
+            FROM conversations c2
+            WHERE c2.job_id = m.job_id
+              AND c2.candidate_id = m.candidate_id
+            ORDER BY c2.id DESC
+            LIMIT 1
+        )
+        LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+        WHERE m.candidate_id = ?
+        ORDER BY m.created_at DESC, m.id DESC
+        """
+        rows = self._conn.execute(query, (int(candidate_id),)).fetchall()
+        items = [self._row_to_dict(r) for r in rows]
+        assessments = self.list_candidate_assessments(candidate_id=candidate_id)
+        grouped: Dict[int, List[Dict[str, Any]]] = {}
+        for assessment in assessments:
+            job_id = int(assessment.get("job_id") or 0)
+            grouped.setdefault(job_id, []).append(assessment)
+        for item in items:
+            job_id = int(item.get("job_id") or 0)
+            candidate_assessments = list(grouped.get(job_id, []))
+            item["agent_assessments"] = candidate_assessments
+            item["agent_scorecard"] = self._build_agent_scorecard(
+                assessments=candidate_assessments,
+                candidate_row=item,
+            )
+            key, label = self._derive_candidate_current_status(item)
+            item["current_status_key"] = key
+            item["current_status_label"] = label
+        return items
+
+    def list_candidate_assessments(self, candidate_id: int, job_id: Optional[int] = None) -> List[Dict[str, Any]]:
+        base_query = """
+            SELECT
+                id,
+                job_id,
+                candidate_id,
+                agent_key,
+                agent_name,
+                stage_key,
+                score,
+                status,
+                reason,
+                instruction,
+                details,
+                updated_at
+            FROM candidate_agent_assessments
+        """
+        args: List[Any] = [int(candidate_id)]
+        where = "WHERE candidate_id = ?"
+        if job_id is not None:
+            where += " AND job_id = ?"
+            args.append(int(job_id))
+        query = f"{base_query} {where} ORDER BY updated_at DESC, id DESC"
+        rows = self._conn.execute(query, tuple(args)).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def create_conversation(self, job_id: int, candidate_id: int, channel: str = "linkedin") -> int:
         with self.transaction() as conn:
             cur = conn.execute(
@@ -805,6 +912,49 @@ class Database:
         rows = self._conn.execute(query, tuple(args)).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
+    def list_conversations_for_candidate(self, candidate_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(limit, 2000))
+        rows = self._conn.execute(
+            """
+            SELECT
+                conv.id AS conversation_id,
+                conv.job_id,
+                conv.candidate_id,
+                conv.channel,
+                conv.status AS conversation_status,
+                conv.external_chat_id,
+                conv.linkedin_account_id,
+                conv.last_message_at,
+                conv.created_at,
+                j.title AS job_title,
+                prs.session_id AS pre_resume_session_id,
+                prs.status AS pre_resume_status,
+                prs.next_followup_at AS pre_resume_next_followup_at,
+                (
+                    SELECT m.content
+                    FROM messages m
+                    WHERE m.conversation_id = conv.id
+                    ORDER BY m.id DESC
+                    LIMIT 1
+                ) AS last_message,
+                (
+                    SELECT m.direction
+                    FROM messages m
+                    WHERE m.conversation_id = conv.id
+                    ORDER BY m.id DESC
+                    LIMIT 1
+                ) AS last_message_direction
+            FROM conversations conv
+            LEFT JOIN jobs j ON j.id = conv.job_id
+            LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+            WHERE conv.candidate_id = ?
+            ORDER BY conv.last_message_at DESC, conv.id DESC
+            LIMIT ?
+            """,
+            (int(candidate_id), safe_limit),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def list_conversations_by_status(
         self,
         status: str,
@@ -876,6 +1026,29 @@ class Database:
         rows = self._conn.execute(
             "SELECT * FROM operation_logs ORDER BY id DESC LIMIT ?",
             (max(1, min(limit, 1000)),),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def list_logs_for_candidate(self, candidate_id: int, limit: int = 300) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 300), 2000))
+        rows = self._conn.execute(
+            """
+            SELECT *
+            FROM operation_logs
+            WHERE
+                (entity_type = 'candidate' AND entity_id = ?)
+                OR (
+                    entity_type = 'conversation'
+                    AND entity_id IN (
+                        SELECT CAST(id AS TEXT)
+                        FROM conversations
+                        WHERE candidate_id = ?
+                    )
+                )
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (str(int(candidate_id)), int(candidate_id), safe_limit),
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
@@ -1499,6 +1672,19 @@ class Database:
         rows = self._conn.execute(query, tuple(args)).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
+    def list_pre_resume_sessions_for_candidate(self, candidate_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            """
+            SELECT *
+            FROM pre_resume_sessions
+            WHERE candidate_id = ?
+            ORDER BY updated_at DESC, session_id DESC
+            LIMIT ?
+            """,
+            (int(candidate_id), max(1, min(int(limit or 200), 2000))),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def insert_pre_resume_event(
         self,
         session_id: str,
@@ -1551,6 +1737,46 @@ class Database:
                 LIMIT ?
                 """,
                 (safe_limit,),
+            ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def list_pre_resume_events_for_candidate(
+        self,
+        candidate_id: int,
+        *,
+        job_id: Optional[int] = None,
+        limit: int = 300,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 300), 2000))
+        if job_id is None:
+            rows = self._conn.execute(
+                """
+                SELECT
+                    e.*,
+                    s.job_id,
+                    s.candidate_id
+                FROM pre_resume_events e
+                JOIN pre_resume_sessions s ON s.session_id = e.session_id
+                WHERE s.candidate_id = ?
+                ORDER BY e.id DESC
+                LIMIT ?
+                """,
+                (int(candidate_id), safe_limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT
+                    e.*,
+                    s.job_id,
+                    s.candidate_id
+                FROM pre_resume_events e
+                JOIN pre_resume_sessions s ON s.session_id = e.session_id
+                WHERE s.candidate_id = ? AND s.job_id = ?
+                ORDER BY e.id DESC
+                LIMIT ?
+                """,
+                (int(candidate_id), int(job_id), safe_limit),
             ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
@@ -1825,6 +2051,17 @@ class Database:
                             first["reason"] = f"{reason} {suffix}".strip() if reason else suffix
 
         return scorecard
+
+    def build_agent_scorecard(
+        self,
+        *,
+        assessments: List[Dict[str, Any]],
+        candidate_row: Dict[str, Any],
+    ) -> Dict[str, Dict[str, Any]]:
+        return self._build_agent_scorecard(assessments=assessments, candidate_row=candidate_row)
+
+    def derive_candidate_current_status(self, item: Dict[str, Any]) -> tuple[str, str]:
+        return self._derive_candidate_current_status(item)
 
     def _migrate_schema(self) -> None:
         job_columns = self._table_columns("jobs")

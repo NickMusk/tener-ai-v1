@@ -368,6 +368,8 @@
       text-align: left;
       vertical-align: top;
     }
+    #candidates-tbody tr.candidate-row { cursor: pointer; }
+    #candidates-tbody tr.candidate-row:hover { background: rgba(66, 153, 225, 0.10); }
 
     th {
       color: var(--text-secondary);
@@ -662,6 +664,7 @@
             <option value="review">Overall: review</option>
             <option value="blocked">Overall: blocked</option>
           </select>
+          <button id="demo-candidate-profile-btn">Demo profile</button>
           <button id="cands-refresh-btn">Reload</button>
         </div>
       </div>
@@ -1136,6 +1139,16 @@
     function selectedJobId() {
       const fromPipeline = $("job-select") ? $("job-select").value : "";
       return Number(fromPipeline || state.jobId || 0) || null;
+    }
+
+    function openCandidateProfile(candidateId, jobId = null) {
+      const safeCandidateId = Number(candidateId || 0) || null;
+      if (!safeCandidateId) return;
+      const params = new URLSearchParams();
+      const safeJobId = Number(jobId || 0) || null;
+      if (safeJobId) params.set("job_id", String(safeJobId));
+      const query = params.toString();
+      window.location.href = `/candidate/${safeCandidateId}${query ? `?${query}` : ''}`;
     }
 
     function normalizeAgentJobId(value) {
@@ -2189,9 +2202,10 @@
           const rawStatus = escapeHtml(x.status || '-');
           const preResumeStatus = escapeHtml(x.pre_resume_status || '-');
           const scorecard = x.agent_scorecard || {};
+          const candidateId = Number(x.candidate_id || 0) || 0;
           return `
-            <tr>
-              <td class="mono">${x.candidate_id}</td>
+            <tr class="candidate-row" data-candidate-id="${candidateId}" data-job-id="${Number(jobId || 0)}" title="Open candidate profile">
+              <td class="mono">${candidateId}</td>
               <td>${escapeHtml(x.full_name || '-')}</td>
               <td>
                 <div>${currentStatus}</div>
@@ -2209,6 +2223,19 @@
       } catch (e) {
         body.innerHTML = `<tr><td colspan="9" class="muted">Failed: ${escapeHtml(e.message)}</td></tr>`;
       }
+    }
+
+    async function createDemoCandidateProfile() {
+      const jobId = selectedJobId();
+      const payload = jobId ? { job_id: jobId } : {};
+      const out = await api('/api/candidates/demo-profile', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      const candidateId = Number(out.candidate_id || 0) || null;
+      const nextJobId = Number(out.job_id || jobId || 0) || null;
+      if (!candidateId) throw new Error('Invalid demo candidate response');
+      openCandidateProfile(candidateId, nextJobId);
     }
 
     async function fullRefresh() {
@@ -2235,6 +2262,15 @@
       $("refresh-btn").addEventListener('click', () => fullRefresh());
       $("logs-refresh-btn").addEventListener('click', () => refreshLogs());
       $("cands-refresh-btn").addEventListener('click', () => refreshCandidates());
+      $("demo-candidate-profile-btn").addEventListener('click', () => createDemoCandidateProfile().catch(e => alert(e.message)));
+      $("candidates-tbody").addEventListener('click', (event) => {
+        const row = event.target.closest("tr[data-candidate-id]");
+        if (!row) return;
+        const candidateId = Number(row.dataset.candidateId || 0) || null;
+        const jobId = Number(row.dataset.jobId || 0) || selectedJobId();
+        if (!candidateId) return;
+        openCandidateProfile(candidateId, jobId);
+      });
       $("cands-overall-filter").addEventListener('change', () => {
         const value = String($("cands-overall-filter").value || "all").toLowerCase();
         setCandidatesOverallFilter(value);

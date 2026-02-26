@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Candidate Profile</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --card: #171a21;
+      --card-2: #1d222b;
+      --text: #e8edf4;
+      --muted: #97a1b1;
+      --accent: #3ddc97;
+      --border: #2a3140;
+      --warn: #ffcc66;
+      --danger: #ff7b7b;
+      --pill: #233147;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 700px at 20% -20%, #1d2536 0%, var(--bg) 45%);
+      color: var(--text);
+      font-family: ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+    .wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 44px; }
+    .top {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    .btn {
+      border: 1px solid var(--border);
+      background: #202737;
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 13px;
+    }
+    .btn.primary { background: #1b3d2f; border-color: #2d7b57; }
+    .card {
+      background: linear-gradient(180deg, var(--card), var(--card-2));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 12px;
+    }
+    .muted { color: var(--muted); }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .metric {
+      background: #131924;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .metric .value { font-size: 22px; font-weight: 700; margin-top: 3px; }
+    .pill {
+      display: inline-block;
+      font-size: 11px;
+      padding: 3px 7px;
+      border-radius: 999px;
+      border: 1px solid #36517e;
+      background: var(--pill);
+    }
+    .jobs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .job-btn {
+      border: 1px solid var(--border);
+      background: #121827;
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 10px;
+      text-align: left;
+      min-width: 190px;
+      cursor: pointer;
+    }
+    .job-btn.active { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(61,220,151,.35) inset; }
+    .score-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .score-cell {
+      background: #141c2b;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .fit-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+    ul { margin: 8px 0 0; padding-left: 18px; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td {
+      padding: 8px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      font-size: 13px;
+    }
+    th { color: var(--muted); font-weight: 600; text-align: left; }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      background: #10151f;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      font-size: 12px;
+      max-height: 260px;
+      overflow: auto;
+    }
+    iframe {
+      width: 100%;
+      min-height: 480px;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: white;
+    }
+    @media (max-width: 900px) {
+      .grid, .score-row, .fit-grid { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 640px) {
+      .grid, .score-row, .fit-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <div class="muted mono" id="candidate-path">Candidate</div>
+        <h2 style="margin:6px 0 0;" id="candidate-name">Candidate Profile</h2>
+      </div>
+      <div class="actions">
+        <a class="btn" href="/dashboard">Back to dashboard</a>
+        <button class="btn" id="refresh-btn">Refresh</button>
+        <button class="btn" id="audit-btn">Audit: off</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="grid" id="summary-grid"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div><b>Jobs</b> <span class="muted">(click to switch context)</span></div>
+        <div class="muted mono" id="jobs-meta"></div>
+      </div>
+      <div class="jobs" id="jobs-list" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div><b>Scores</b></div>
+        <div class="muted mono" id="score-meta"></div>
+      </div>
+      <div class="score-row" id="score-row" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
+      <b>Fit Summary</b>
+      <pre id="fit-explanation" style="margin-top:8px;"></pre>
+      <div class="fit-grid" id="fit-grid" style="margin-top:10px;"></div>
+    </div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
+        <b>Resume</b>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <select id="resume-select" class="btn" style="max-width:400px;"></select>
+          <button class="btn" id="resume-open-btn">Open</button>
+        </div>
+      </div>
+      <div id="resume-empty" class="muted" style="margin-top:10px;">No resume links yet</div>
+      <iframe id="resume-frame" style="display:none;margin-top:10px;"></iframe>
+    </div>
+
+    <div class="card">
+      <b>Signals Timeline</b>
+      <div class="muted" style="margin:4px 0 8px;">Human-readable reasons and raw signals for each stage</div>
+      <div style="overflow:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Kind</th>
+              <th>Status/Score</th>
+              <th>Why</th>
+              <th>Signals</th>
+            </tr>
+          </thead>
+          <tbody id="signals-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card" id="audit-card" style="display:none;">
+      <b>Audit Raw Data</b>
+      <pre id="audit-json" style="margin-top:8px;"></pre>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      candidateId: null,
+      selectedJobId: null,
+      audit: false,
+      profile: null,
+      selectedResumeUrl: "",
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    function escapeHtml(raw) {
+      return String(raw || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;");
+    }
+
+    function parseCandidateId() {
+      const m = String(window.location.pathname || "").match(/^\/candidate\/(\d+)$/);
+      return m ? Number(m[1]) : null;
+    }
+
+    function parseQuery() {
+      const params = new URLSearchParams(window.location.search || "");
+      const jobRaw = params.get("job_id");
+      const auditRaw = params.get("audit");
+      return {
+        jobId: jobRaw ? Number(jobRaw) : null,
+        audit: auditRaw === "1" || String(auditRaw || "").toLowerCase() === "true",
+      };
+    }
+
+    function setQuery() {
+      const params = new URLSearchParams(window.location.search || "");
+      if (state.selectedJobId) params.set("job_id", String(state.selectedJobId));
+      else params.delete("job_id");
+      if (state.audit) params.set("audit", "1");
+      else params.delete("audit");
+      const next = `${window.location.pathname}${params.toString() ? `?${params}` : ""}`;
+      window.history.replaceState({}, "", next);
+    }
+
+    async function api(path, opts = {}) {
+      const res = await fetch(path, {
+        ...opts,
+        headers: { "Content-Type": "application/json", ...(opts.headers || {}) },
+      });
+      const text = await res.text();
+      let data = {};
+      if (text) {
+        try { data = JSON.parse(text); } catch { data = { raw_text: text }; }
+      }
+      if (!res.ok) {
+        const msg = String(data.error || data.details || data.raw_text || `${res.status}`).trim();
+        throw new Error(msg);
+      }
+      return data;
+    }
+
+    function formatScore(value) {
+      return (typeof value === "number" && Number.isFinite(value)) ? value.toFixed(1) : "N/A";
+    }
+
+    function selectedJobPayload() {
+      const jobs = Array.isArray(state.profile?.jobs) ? state.profile.jobs : [];
+      return jobs.find((x) => Number((x.job || {}).id) === Number(state.selectedJobId)) || jobs[0] || null;
+    }
+
+    function renderSummary() {
+      const candidate = state.profile?.candidate || {};
+      $("candidate-name").textContent = candidate.full_name || `Candidate #${state.candidateId}`;
+      $("candidate-path").textContent = `Candidate #${state.candidateId}`;
+      const summary = state.profile?.summary || {};
+      $("summary-grid").innerHTML = `
+        <div class="metric"><div class="muted">Location</div><div class="value" style="font-size:16px;">${escapeHtml(candidate.location || "N/A")}</div></div>
+        <div class="metric"><div class="muted">Experience</div><div class="value">${escapeHtml(candidate.years_experience ?? "N/A")}</div></div>
+        <div class="metric"><div class="muted">Jobs</div><div class="value">${escapeHtml(summary.jobs_total ?? 0)}</div></div>
+        <div class="metric"><div class="muted">Resumes</div><div class="value">${escapeHtml(summary.resume_links_total ?? 0)}</div></div>
+      `;
+    }
+
+    function renderJobs() {
+      const jobs = Array.isArray(state.profile?.jobs) ? state.profile.jobs : [];
+      $("jobs-meta").textContent = `${jobs.length} linked jobs`;
+      $("jobs-list").innerHTML = jobs.map((item) => {
+        const job = item.job || {};
+        const overall = item.overall_scoring || {};
+        const active = Number(job.id) === Number(state.selectedJobId) ? "active" : "";
+        const status = String(overall.overall_status || "review");
+        return `
+          <button class="job-btn ${active}" data-job-id="${Number(job.id || 0)}">
+            <div><b>#${Number(job.id || 0)} ${escapeHtml(job.title || "-")}</b></div>
+            <div class="muted" style="margin-top:4px;">${escapeHtml(job.company || "No company")}</div>
+            <div style="margin-top:6px;">
+              <span class="pill">${escapeHtml(status)}</span>
+              <span class="mono" style="margin-left:6px;">${escapeHtml(formatScore(overall.overall_score))}</span>
+            </div>
+          </button>
+        `;
+      }).join("");
+    }
+
+    function renderScores() {
+      const item = selectedJobPayload();
+      if (!item) {
+        $("score-row").innerHTML = `<div class="muted">No job selected</div>`;
+        $("score-meta").textContent = "";
+        return;
+      }
+      const scorecard = item.scorecard || {};
+      const overall = item.overall_scoring || {};
+      const source = scorecard.sourcing_vetting || {};
+      const comm = scorecard.communication || {};
+      const interview = scorecard.interview_evaluation || {};
+      $("score-meta").textContent = `status: ${overall.overall_status || "review"} | generated: ${escapeHtml(state.profile?.generated_at || "-")}`;
+      $("score-row").innerHTML = `
+        <div class="score-cell"><div class="muted">Sourcing/Vetting</div><div style="font-size:24px;font-weight:700;">${escapeHtml(formatScore(source.latest_score))}</div><div class="muted mono">${escapeHtml(source.latest_status || "not_started")}</div></div>
+        <div class="score-cell"><div class="muted">Communication</div><div style="font-size:24px;font-weight:700;">${escapeHtml(formatScore(comm.latest_score))}</div><div class="muted mono">${escapeHtml(comm.latest_status || "not_started")}</div></div>
+        <div class="score-cell"><div class="muted">Interview</div><div style="font-size:24px;font-weight:700;">${escapeHtml(formatScore(interview.latest_score))}</div><div class="muted mono">${escapeHtml(interview.latest_status || "not_started")}</div></div>
+        <div class="score-cell"><div class="muted">Overall</div><div style="font-size:24px;font-weight:700;">${escapeHtml(formatScore(overall.overall_score))}</div><div class="muted mono">${escapeHtml(overall.overall_status || "review")}</div></div>
+      `;
+    }
+
+    function renderFit() {
+      const item = selectedJobPayload();
+      if (!item) return;
+      const explanation = item.fit_explanation || {};
+      $("fit-explanation").textContent = String(explanation.text || "No explanation yet");
+      const fit = item.fit_breakdown || {};
+      const must = fit.must_have || {};
+      const nice = fit.nice_to_have || {};
+      const risks = Array.isArray(fit.risk_flags) ? fit.risk_flags : [];
+      const riskColor = risks.length ? "var(--warn)" : "var(--accent)";
+      $("fit-grid").innerHTML = `
+        <div class="score-cell">
+          <div class="muted">Must-have skills</div>
+          <div class="mono" style="margin-top:4px;">match ratio: ${escapeHtml(formatScore((must.match_ratio || 0) * 100))}%</div>
+          <ul>
+            ${(Array.isArray(must.matched) ? must.matched : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
+          </ul>
+          <div class="muted" style="margin-top:8px;">Missing:</div>
+          <ul>
+            ${(Array.isArray(must.missing) ? must.missing : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
+          </ul>
+        </div>
+        <div class="score-cell">
+          <div class="muted">Nice-to-have and risk flags</div>
+          <div style="margin-top:6px;">Matched nice-to-have: ${escapeHtml((Array.isArray(nice.matched) ? nice.matched.length : 0))}</div>
+          <div style="margin-top:6px;">Missing nice-to-have: ${escapeHtml((Array.isArray(nice.missing) ? nice.missing.length : 0))}</div>
+          <div style="margin-top:10px;color:${riskColor};"><b>Risk flags: ${escapeHtml(risks.length)}</b></div>
+          <ul>
+            ${risks.map((x) => `<li>${escapeHtml(x.message || x.type || "risk")}</li>`).join("") || "<li>no critical risks</li>"}
+          </ul>
+        </div>
+      `;
+    }
+
+    async function renderResume() {
+      const item = selectedJobPayload();
+      const resumes = item?.resumes?.links || [];
+      const select = $("resume-select");
+      const frame = $("resume-frame");
+      const empty = $("resume-empty");
+      if (!resumes.length) {
+        empty.style.display = "block";
+        frame.style.display = "none";
+        select.innerHTML = `<option value="">No resume links</option>`;
+        state.selectedResumeUrl = "";
+        return;
+      }
+      empty.style.display = "none";
+      if (!state.selectedResumeUrl || !resumes.includes(state.selectedResumeUrl)) {
+        state.selectedResumeUrl = resumes[0];
+      }
+      select.innerHTML = resumes.map((url) => `<option value="${encodeURIComponent(url)}">${escapeHtml(url)}</option>`).join("");
+      select.value = encodeURIComponent(state.selectedResumeUrl);
+      try {
+        const out = await api(`/api/candidates/${state.candidateId}/resume-preview?url=${encodeURIComponent(state.selectedResumeUrl)}`);
+        if (out.available && out.url) {
+          frame.src = out.url;
+          frame.style.display = "block";
+        } else {
+          frame.style.display = "none";
+          empty.style.display = "block";
+        }
+      } catch {
+        frame.style.display = "none";
+        empty.style.display = "block";
+      }
+    }
+
+    function renderSignals() {
+      const item = selectedJobPayload();
+      const signals = Array.isArray(item?.signals_timeline) ? item.signals_timeline : [];
+      const body = $("signals-body");
+      if (!signals.length) {
+        body.innerHTML = `<tr><td colspan="5" class="muted">No signals yet</td></tr>`;
+        return;
+      }
+      body.innerHTML = signals.map((signal) => {
+        const kind = String(signal.kind || "-");
+        const created = String(signal.created_at || "-").replace("T", " ").slice(0, 19);
+        const score = signal.score;
+        const status = signal.status || signal.state_status || "-";
+        const scoreText = (typeof score === "number" && Number.isFinite(score)) ? `${score.toFixed(1)} | ${status}` : `${status}`;
+        const reason = signal.reason || signal.operation || signal.event_type || "-";
+        const details = signal.signals || {};
+        return `
+          <tr>
+            <td class="mono">${escapeHtml(created || "-")}</td>
+            <td>${escapeHtml(kind)}</td>
+            <td class="mono">${escapeHtml(scoreText)}</td>
+            <td>${escapeHtml(reason)}</td>
+            <td><pre>${escapeHtml(JSON.stringify(details, null, 2))}</pre></td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function renderAudit() {
+      const card = $("audit-card");
+      const json = $("audit-json");
+      const hasAudit = Boolean(state.profile?.audit) && state.audit;
+      card.style.display = hasAudit ? "block" : "none";
+      if (hasAudit) json.textContent = JSON.stringify(state.profile.audit, null, 2);
+    }
+
+    function renderAll() {
+      renderSummary();
+      renderJobs();
+      renderScores();
+      renderFit();
+      renderSignals();
+      renderAudit();
+      renderResume().catch(() => null);
+      $("audit-btn").textContent = `Audit: ${state.audit ? "on" : "off"}`;
+    }
+
+    async function loadProfile() {
+      if (!state.candidateId) throw new Error("invalid candidate id");
+      const qp = new URLSearchParams();
+      if (state.selectedJobId) qp.set("job_id", String(state.selectedJobId));
+      qp.set("audit", state.audit ? "1" : "0");
+      qp.set("explain", "1");
+      const out = await api(`/api/candidates/${state.candidateId}/profile?${qp.toString()}`);
+      state.profile = out;
+      const jobs = Array.isArray(out.jobs) ? out.jobs : [];
+      const first = jobs[0] || null;
+      if (!state.selectedJobId) state.selectedJobId = Number(out.selected_job_id || (first?.job?.id || 0)) || null;
+      if (state.selectedJobId && !jobs.find((x) => Number((x.job || {}).id) === Number(state.selectedJobId))) {
+        state.selectedJobId = Number(out.selected_job_id || (first?.job?.id || 0)) || null;
+      }
+      setQuery();
+      renderAll();
+    }
+
+    function bindEvents() {
+      $("refresh-btn").addEventListener("click", () => loadProfile().catch(showError));
+      $("audit-btn").addEventListener("click", () => {
+        state.audit = !state.audit;
+        loadProfile().catch(showError);
+      });
+      $("jobs-list").addEventListener("click", (event) => {
+        const target = event.target.closest("[data-job-id]");
+        if (!target) return;
+        const jobId = Number(target.dataset.jobId || 0) || null;
+        if (!jobId || jobId === state.selectedJobId) return;
+        state.selectedJobId = jobId;
+        state.selectedResumeUrl = "";
+        setQuery();
+        renderAll();
+      });
+      $("resume-select").addEventListener("change", (event) => {
+        const value = decodeURIComponent(String(event.target.value || "").trim());
+        state.selectedResumeUrl = value;
+        renderResume().catch(() => null);
+      });
+      $("resume-open-btn").addEventListener("click", () => {
+        if (!state.selectedResumeUrl) return;
+        window.open(state.selectedResumeUrl, "_blank", "noopener,noreferrer");
+      });
+    }
+
+    function showError(err) {
+      const text = String(err?.message || err || "unknown error");
+      document.body.innerHTML = `<div class="wrap"><div class="card"><b>Failed to load candidate profile</b><pre style="margin-top:10px;">${escapeHtml(text)}</pre><a class="btn" href="/dashboard" style="margin-top:10px;display:inline-block;">Back to dashboard</a></div></div>`;
+    }
+
+    const init = () => {
+      const candidateId = parseCandidateId();
+      const query = parseQuery();
+      state.candidateId = candidateId;
+      state.selectedJobId = query.jobId;
+      state.audit = query.audit;
+      bindEvents();
+      loadProfile().catch(showError);
+    };
+
+    init();
+  </script>
+</body>
+</html>

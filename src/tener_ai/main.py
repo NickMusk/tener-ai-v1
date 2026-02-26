@@ -13,6 +13,7 @@ from urllib import error as urlerror, request as urlrequest
 from urllib.parse import parse_qs, urlparse
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
+from .candidate_profile import CandidateProfileService
 from .candidate_scoring import CandidateScoringPolicy
 from .db import Database
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
@@ -257,6 +258,12 @@ def build_services() -> Dict[str, Any]:
             "interview_invite": instructions.get("interview_invite"),
         },
     )
+    candidate_profile = CandidateProfileService(
+        db=db,
+        matching_engine=matching_engine,
+        scoring_policy=scoring_formula,
+        llm_responder=llm_responder,
+    )
 
     services = {
         "db": db,
@@ -267,6 +274,7 @@ def build_services() -> Dict[str, Any]:
         "linkedin_accounts": linkedin_account_service,
         "matching_engine": matching_engine,
         "pre_resume": pre_resume_service,
+        "candidate_profile": candidate_profile,
         "workflow": workflow,
         "interview_api_base": default_interview_api_base(),
     }
@@ -291,6 +299,15 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
             return
 
+        candidate_page_match = re.match(r"^/candidate/(\d+)$", parsed.path)
+        if candidate_page_match:
+            candidate_page = project_root() / "src" / "tener_ai" / "static" / "candidate_profile.html"
+            if not candidate_page.exists():
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "candidate profile page not found"})
+                return
+            self._html_response(HTTPStatus.OK, candidate_page.read_text(encoding="utf-8"))
+            return
+
         if parsed.path == "/api":
             self._json_response(
                 HTTPStatus.OK,
@@ -304,6 +321,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "get_job": "GET /api/jobs/{job_id}",
                         "job_progress": "GET /api/jobs/{job_id}/progress",
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
+                        "candidate_profile": "GET /api/candidates/{candidate_id}/profile?job_id=...&audit=0|1",
+                        "candidate_resume_preview": "GET /api/candidates/{candidate_id}/resume-preview?job_id=...&url=...",
+                        "candidate_demo_profile": "POST /api/candidates/demo-profile",
                         "job_linkedin_routing": "GET /api/jobs/{job_id}/linkedin-routing",
                         "update_job_jd": "POST /api/jobs/{job_id}/jd",
                         "update_job_linkedin_routing": "POST /api/jobs/{job_id}/linkedin-routing",
@@ -344,6 +364,68 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "logs": "GET /api/logs?limit=100",
                         "reload_rules": "POST /api/rules/reload",
                     },
+                },
+            )
+            return
+
+        if parsed.path.startswith("/api/candidates/") and parsed.path.endswith("/profile"):
+            candidate_id = self._extract_id(parsed.path, pattern=r"^/api/candidates/(\d+)/profile$")
+            if candidate_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid candidate id"})
+                return
+            params = parse_qs(parsed.query or "")
+            job_id_raw = (params.get("job_id") or [None])[0]
+            job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
+            include_audit = bool(self._safe_bool((params.get("audit") or [None])[0], False))
+            explain_raw = self._safe_bool((params.get("explain") or [None])[0], True)
+            include_explanation = True if explain_raw is None else bool(explain_raw)
+            try:
+                payload = SERVICES["candidate_profile"].build_candidate_profile(
+                    candidate_id=int(candidate_id),
+                    selected_job_id=job_id,
+                    include_audit=include_audit,
+                    include_explanation=include_explanation,
+                )
+            except ValueError:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "candidate not found"})
+                return
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "candidate profile failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, payload)
+            return
+
+        if parsed.path.startswith("/api/candidates/") and parsed.path.endswith("/resume-preview"):
+            candidate_id = self._extract_id(parsed.path, pattern=r"^/api/candidates/(\d+)/resume-preview$")
+            if candidate_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid candidate id"})
+                return
+            candidate = SERVICES["db"].get_candidate(candidate_id)
+            if not candidate:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "candidate not found"})
+                return
+            params = parse_qs(parsed.query or "")
+            requested_url = str((params.get("url") or [""])[0] or "").strip()
+            links = SERVICES["candidate_profile"].list_candidate_resume_links(candidate_id=int(candidate_id))
+            allowed = set(links)
+            selected_url = requested_url or (links[0] if links else "")
+            if selected_url and selected_url not in allowed:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "resume url is not linked to candidate"})
+                return
+            if selected_url and not (selected_url.startswith("https://") or selected_url.startswith("http://")):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "unsupported resume url scheme"})
+                return
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "candidate_id": int(candidate_id),
+                    "candidate_name": candidate.get("full_name"),
+                    "available": bool(selected_url),
+                    "url": selected_url or None,
+                    "links": links,
                 },
             )
             return
@@ -616,6 +698,28 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 details={"label": label, "callback_url": callback_url},
             )
             self._json_response(HTTPStatus.OK, out)
+            return
+
+        if parsed.path == "/api/candidates/demo-profile":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            job_id = self._safe_int(body.get("job_id"), None)
+            try:
+                out = SERVICES["candidate_profile"].create_demo_profile(job_id=job_id)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "candidate demo profile failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.CREATED, out)
             return
 
         match_sync = re.match(r"^/api/linkedin/accounts/(\d+)/sync$", parsed.path)
