@@ -4,217 +4,617 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Candidate Profile</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
   <style>
-    :root {
-      --bg: #0f1115;
-      --card: #171a21;
-      --card-2: #1d222b;
-      --text: #e8edf4;
-      --muted: #97a1b1;
-      --accent: #3ddc97;
-      --border: #2a3140;
-      --warn: #ffcc66;
-      --danger: #ff7b7b;
-      --pill: #233147;
-    }
-    * { box-sizing: border-box; }
-    body {
+    * {
       margin: 0;
-      background: radial-gradient(1200px 700px at 20% -20%, #1d2536 0%, var(--bg) 45%);
-      color: var(--text);
-      font-family: ui-sans-serif, -apple-system, Segoe UI, Roboto, sans-serif;
+      padding: 0;
+      box-sizing: border-box;
     }
-    .wrap { max-width: 1200px; margin: 0 auto; padding: 20px 16px 44px; }
-    .top {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 14px;
+
+    :root {
+      --bg-dark: #0a0e14;
+      --bg-card: #141921;
+      --bg-hover: #1a1f2a;
+      --accent-green: #00ff87;
+      --accent-green-dim: rgba(0, 255, 135, 0.10);
+      --accent-green-glow: rgba(0, 255, 135, 0.28);
+      --accent-blue: #00bfff;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-tertiary: #6e7681;
+      --border-color: #30363d;
+      --danger: #ff6b81;
+      --warning: #ffc857;
     }
-    .actions { display: flex; gap: 8px; flex-wrap: wrap; }
-    .btn {
-      border: 1px solid var(--border);
-      background: #202737;
-      color: var(--text);
-      padding: 8px 12px;
-      border-radius: 10px;
-      cursor: pointer;
-      text-decoration: none;
-      font-size: 13px;
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      line-height: 1.6;
     }
-    .btn.primary { background: #1b3d2f; border-color: #2d7b57; }
-    .card {
-      background: linear-gradient(180deg, var(--card), var(--card-2));
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 14px;
-      margin-bottom: 12px;
+
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at 78% 16%, rgba(0, 191, 255, 0.10) 0%, transparent 48%);
+      pointer-events: none;
+      z-index: 0;
     }
-    .muted { color: var(--muted); }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .grid {
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .header {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: 1fr auto auto;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .back-link {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-weight: 500;
+      transition: color 0.25s ease;
+      width: fit-content;
+    }
+
+    .back-link:hover { color: var(--accent-green); }
+
+    .admin-pill {
+      justify-self: center;
+      border: 1px solid rgba(0, 255, 135, 0.42);
+      border-radius: 999px;
+      background: rgba(0, 255, 135, 0.08);
+      color: var(--accent-green);
+      font-size: 12px;
+      font-weight: 700;
+      padding: 6px 12px;
+      letter-spacing: 0.03em;
+    }
+
+    .header-actions {
+      display: flex;
+      justify-self: end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      font-weight: 700;
+      font-family: 'DM Sans', sans-serif;
+      cursor: pointer;
+      color: var(--text-primary);
+      background: var(--bg-card);
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn:hover { border-color: var(--accent-green); }
+
+    .btn.primary {
+      background: linear-gradient(135deg, var(--accent-green), #22e3a1);
+      color: #06110b;
+      border-color: rgba(0, 255, 135, 0.45);
+      box-shadow: 0 6px 24px var(--accent-green-glow);
+    }
+
+    .btn.danger {
+      border-color: rgba(255, 107, 129, 0.52);
+      color: #ffcdd6;
+      background: rgba(255, 107, 129, 0.08);
+    }
+
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 18px;
+    }
+
+    .jobs-strip {
+      margin-bottom: 16px;
+      display: grid;
       gap: 10px;
     }
-    .metric {
-      background: #131924;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px;
+
+    .jobs-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
     }
-    .metric .value { font-size: 22px; font-weight: 700; margin-top: 3px; }
-    .pill {
-      display: inline-block;
-      font-size: 11px;
-      padding: 3px 7px;
-      border-radius: 999px;
-      border: 1px solid #36517e;
-      background: var(--pill);
+
+    .jobs-title {
+      font-size: 14px;
+      color: var(--text-secondary);
     }
+
+    .jobs-meta {
+      color: var(--text-tertiary);
+      font-size: 12px;
+      font-family: 'Space Mono', monospace;
+    }
+
     .jobs {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
     }
+
     .job-btn {
-      border: 1px solid var(--border);
-      background: #121827;
-      color: var(--text);
+      border: 1px solid var(--border-color);
+      background: #0f141d;
+      color: var(--text-primary);
       border-radius: 10px;
       padding: 8px 10px;
       text-align: left;
-      min-width: 190px;
+      min-width: 220px;
       cursor: pointer;
+      font-family: 'DM Sans', sans-serif;
+      transition: all 0.2s ease;
     }
-    .job-btn.active { border-color: var(--accent); box-shadow: 0 0 0 1px rgba(61,220,151,.35) inset; }
-    .score-row {
+
+    .job-btn:hover { border-color: var(--accent-blue); }
+
+    .job-btn.active {
+      border-color: var(--accent-green);
+      box-shadow: 0 0 0 1px var(--accent-green-glow) inset;
+      background: linear-gradient(135deg, rgba(0, 255, 135, 0.08), rgba(0, 191, 255, 0.08));
+    }
+
+    .job-title { font-weight: 700; font-size: 14px; }
+    .job-sub { color: var(--text-secondary); font-size: 12px; margin-top: 2px; }
+
+    .pill {
+      display: inline-flex;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border: 1px solid #275f46;
+      color: var(--accent-green);
+      background: rgba(0, 255, 135, 0.10);
+      margin-top: 6px;
+    }
+
+    .layout {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px;
+      grid-template-columns: 320px 1fr;
+      gap: 16px;
+      align-items: start;
     }
-    .score-cell {
-      background: #141c2b;
-      border: 1px solid var(--border);
-      border-radius: 10px;
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      position: sticky;
+      top: 16px;
+    }
+
+    .profile-card {
+      text-align: center;
+      padding-top: 22px;
+      padding-bottom: 22px;
+    }
+
+    .avatar {
+      width: 96px;
+      height: 96px;
+      border-radius: 50%;
+      margin: 0 auto 14px;
+      background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
+      box-shadow: 0 8px 26px var(--accent-green-glow);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 36px;
+      font-weight: 700;
+      color: #07130d;
+    }
+
+    .profile-name { font-size: 28px; font-weight: 700; margin-bottom: 2px; }
+    .profile-title { color: var(--text-secondary); margin-bottom: 6px; }
+    .profile-meta { color: var(--text-tertiary); font-size: 13px; }
+
+    .card-title {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: var(--accent-green);
+    }
+
+    .status-card .card-title,
+    .score-card .card-title { font-size: 18px; margin-bottom: 10px; color: var(--text-primary); }
+
+    .status-select {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background: #0f141d;
+      color: var(--text-primary);
+      margin-bottom: 10px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+    }
+
+    .status-btn {
+      width: 100%;
+      margin-bottom: 8px;
       padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--border-color);
+      background: #0f141d;
+      color: var(--text-primary);
+      font-weight: 700;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      font-family: 'DM Sans', sans-serif;
     }
+
+    .status-btn:hover { border-color: var(--accent-green); }
+
+    .overall-score {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .overall-score .number {
+      font-family: 'Space Mono', monospace;
+      font-size: 52px;
+      line-height: 1;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 4px;
+    }
+
+    .overall-score .label {
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .score-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .score-item-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+      font-size: 12px;
+      color: var(--text-secondary);
+    }
+
+    .score-item-value {
+      color: var(--accent-green);
+      font-family: 'Space Mono', monospace;
+      font-weight: 700;
+    }
+
+    .score-bar {
+      height: 6px;
+      border-radius: 999px;
+      background: var(--bg-hover);
+      overflow: hidden;
+    }
+
+    .score-fill {
+      height: 100%;
+      width: 0;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent-green), var(--accent-blue));
+      transition: width 0.35s ease;
+    }
+
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .notes-area {
+      width: 100%;
+      background: #0d121a;
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--warning);
+      border-radius: 10px;
+      padding: 12px;
+      color: var(--text-primary);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 14px;
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    .timeline {
+      border: 1px solid var(--border-color);
+      background: #0b1119;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .timeline-item {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(48, 54, 61, 0.72);
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .timeline-item:last-child { border-bottom: none; }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      margin-top: 6px;
+      background: var(--accent-green);
+      box-shadow: 0 0 12px var(--accent-green-glow);
+    }
+
+    .timeline-meta {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      margin-bottom: 2px;
+      font-family: 'Space Mono', monospace;
+    }
+
+    .timeline-text {
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .timeline-details {
+      margin-top: 6px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .analysis-box {
+      padding: 14px;
+      border: 1px solid var(--border-color);
+      border-left: 3px solid var(--accent-green);
+      border-radius: 10px;
+      background: #0d121a;
+      margin-bottom: 10px;
+    }
+
+    .analysis-sub {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+      font-weight: 700;
+    }
+
+    .fit-explanation {
+      white-space: pre-wrap;
+      color: var(--text-primary);
+      font-size: 14px;
+      line-height: 1.8;
+    }
+
     .fit-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
+      margin-top: 10px;
     }
-    ul { margin: 8px 0 0; padding-left: 18px; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td {
-      padding: 8px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: top;
-      font-size: 13px;
+
+    .fit-cell {
+      background: #0d121a;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px;
     }
-    th { color: var(--muted); font-weight: 600; text-align: left; }
-    pre {
+
+    .fit-title { color: var(--text-secondary); font-size: 13px; margin-bottom: 8px; font-weight: 700; }
+
+    .fit-list {
       margin: 0;
-      white-space: pre-wrap;
-      background: #10151f;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 10px;
-      font-size: 12px;
-      max-height: 260px;
-      overflow: auto;
+      padding-left: 18px;
+      display: grid;
+      gap: 5px;
+      font-size: 13px;
+      color: var(--text-primary);
     }
+
+    .fit-risk { color: var(--warning); }
+
+    .resume-controls {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+
+    .resume-select {
+      border: 1px solid var(--border-color);
+      background: #0f141d;
+      color: var(--text-primary);
+      border-radius: 10px;
+      padding: 10px 12px;
+      min-width: 280px;
+      max-width: 100%;
+      font-family: 'DM Sans', sans-serif;
+    }
+
     iframe {
       width: 100%;
       min-height: 480px;
-      border: 1px solid var(--border);
+      border: 1px solid var(--border-color);
       border-radius: 10px;
-      background: white;
+      background: #fff;
     }
-    @media (max-width: 900px) {
-      .grid, .score-row, .fit-grid { grid-template-columns: 1fr 1fr; }
+
+    .muted { color: var(--text-secondary); }
+    .mono { font-family: 'Space Mono', monospace; }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      background: #0d121a;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px;
+      font-size: 12px;
+      color: var(--text-primary);
+      max-height: 340px;
+      overflow: auto;
     }
-    @media (max-width: 640px) {
-      .grid, .score-row, .fit-grid { grid-template-columns: 1fr; }
+
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; }
+      .fit-grid { grid-template-columns: 1fr; }
+      .header { grid-template-columns: 1fr; }
+      .admin-pill, .header-actions { justify-self: start; }
+    }
+
+    @media (max-width: 700px) {
+      .container { padding: 14px; }
+      .profile-name { font-size: 24px; }
+      .overall-score .number { font-size: 44px; }
+      .resume-select { min-width: 100%; }
+      .btn { width: 100%; text-align: center; }
+      .header-actions { width: 100%; }
     }
   </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="top">
-      <div>
-        <div class="muted mono" id="candidate-path">Candidate</div>
-        <h2 style="margin:6px 0 0;" id="candidate-name">Candidate Profile</h2>
+  <div class="container">
+    <header class="header">
+      <a class="back-link" href="/dashboard">← Back to Dashboard</a>
+      <div class="admin-pill">🟢 Admin View</div>
+      <div class="header-actions">
+        <button class="btn" id="refresh-btn">📄 Export Data</button>
+        <button class="btn primary" id="schedule-btn">📅 Schedule Interview</button>
+        <button class="btn danger" id="audit-btn">✕ Audit: off</button>
       </div>
-      <div class="actions">
-        <a class="btn" href="/dashboard">Back to dashboard</a>
-        <button class="btn" id="refresh-btn">Refresh</button>
-        <button class="btn" id="audit-btn">Audit: off</button>
+    </header>
+
+    <section class="panel jobs-strip">
+      <div class="jobs-head">
+        <div class="jobs-title">Candidate is linked to multiple jobs, switch context below</div>
+        <div class="jobs-meta mono" id="jobs-meta">0 linked jobs</div>
       </div>
-    </div>
+      <div class="jobs" id="jobs-list"></div>
+    </section>
 
-    <div class="card">
-      <div class="grid" id="summary-grid"></div>
-    </div>
+    <div class="layout">
+      <aside class="sidebar">
+        <section class="panel profile-card">
+          <div class="avatar" id="candidate-avatar">NA</div>
+          <div class="profile-name" id="candidate-name">Candidate</div>
+          <div class="profile-title" id="candidate-title">Profile</div>
+          <div class="profile-meta" id="candidate-location">Location</div>
+          <div class="profile-meta mono" id="candidate-path" style="margin-top:8px;">Candidate</div>
+        </section>
 
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-        <div><b>Jobs</b> <span class="muted">(click to switch context)</span></div>
-        <div class="muted mono" id="jobs-meta"></div>
-      </div>
-      <div class="jobs" id="jobs-list" style="margin-top:10px;"></div>
-    </div>
+        <section class="panel status-card">
+          <h3 class="card-title">Status & Actions</h3>
+          <select class="status-select" id="status-select">
+            <option value="review">Review</option>
+            <option value="pipeline">Pipeline</option>
+            <option value="shortlist">Shortlist</option>
+            <option value="blocked">Blocked</option>
+          </select>
+          <button class="status-btn" id="action-hired-btn">Move to Hired</button>
+          <button class="status-btn" id="action-reinterview-btn">Request Re Interview</button>
+          <button class="status-btn" id="action-send-client-btn">Send to Client</button>
+        </section>
 
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-        <div><b>Scores</b></div>
-        <div class="muted mono" id="score-meta"></div>
-      </div>
-      <div class="score-row" id="score-row" style="margin-top:10px;"></div>
-    </div>
+        <section class="panel score-card">
+          <h3 class="card-title">Overall Match Score</h3>
+          <div class="overall-score">
+            <div class="number" id="overall-score-big">N/A</div>
+            <div class="label">Overall Candidate Score</div>
+          </div>
+          <div class="score-list">
+            <div>
+              <div class="score-item-head"><span>Technical Skills</span><span class="score-item-value" id="score-tech">N/A</span></div>
+              <div class="score-bar"><div class="score-fill" id="bar-tech"></div></div>
+            </div>
+            <div>
+              <div class="score-item-head"><span>Communication</span><span class="score-item-value" id="score-soft">N/A</span></div>
+              <div class="score-bar"><div class="score-fill" id="bar-soft"></div></div>
+            </div>
+            <div>
+              <div class="score-item-head"><span>Culture Fit</span><span class="score-item-value" id="score-culture">N/A</span></div>
+              <div class="score-bar"><div class="score-fill" id="bar-culture"></div></div>
+            </div>
+          </div>
+          <div id="score-meta" class="muted mono" style="margin-top:10px;font-size:11px;">status: review</div>
+        </section>
+      </aside>
 
-    <div class="card">
-      <b>Fit Summary</b>
-      <pre id="fit-explanation" style="margin-top:8px;"></pre>
-      <div class="fit-grid" id="fit-grid" style="margin-top:10px;"></div>
-    </div>
+      <main class="content">
+        <section class="panel">
+          <h3 class="card-title">Internal Notes</h3>
+          <div class="analysis-sub">ADMIN NOTES (NOT VISIBLE TO CLIENT)</div>
+          <textarea id="internal-notes" class="notes-area" placeholder="Candidate notes will appear here"></textarea>
+        </section>
 
-    <div class="card">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;">
-        <b>Resume</b>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <select id="resume-select" class="btn" style="max-width:400px;"></select>
-          <button class="btn" id="resume-open-btn">Open</button>
-        </div>
-      </div>
-      <div id="resume-empty" class="muted" style="margin-top:10px;">No resume links yet</div>
-      <iframe id="resume-frame" style="display:none;margin-top:10px;"></iframe>
-    </div>
+        <section class="panel">
+          <h3 class="card-title">Candidate Timeline</h3>
+          <div class="timeline" id="signals-timeline-list"></div>
+        </section>
 
-    <div class="card">
-      <b>Signals Timeline</b>
-      <div class="muted" style="margin:4px 0 8px;">Human-readable reasons and raw signals for each stage</div>
-      <div style="overflow:auto;">
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Kind</th>
-              <th>Status/Score</th>
-              <th>Why</th>
-              <th>Signals</th>
-            </tr>
-          </thead>
-          <tbody id="signals-body"></tbody>
-        </table>
-      </div>
-    </div>
+        <section class="panel">
+          <h3 class="card-title">Culture Fit Analysis</h3>
+          <div class="analysis-box">
+            <div class="analysis-sub">WHY THIS CANDIDATE MAY FIT</div>
+            <div id="fit-explanation" class="fit-explanation"></div>
+          </div>
+          <div class="fit-grid" id="fit-grid"></div>
+        </section>
 
-    <div class="card" id="audit-card" style="display:none;">
-      <b>Audit Raw Data</b>
-      <pre id="audit-json" style="margin-top:8px;"></pre>
+        <section class="panel">
+          <h3 class="card-title">Resume</h3>
+          <div class="resume-controls">
+            <select id="resume-select" class="resume-select"></select>
+            <button class="btn" id="resume-open-btn">Open</button>
+          </div>
+          <div id="resume-empty" class="muted" style="margin-bottom:8px;">No resume links yet</div>
+          <iframe id="resume-frame" style="display:none;"></iframe>
+        </section>
+
+        <section class="panel" id="audit-card" style="display:none;">
+          <h3 class="card-title">Audit Raw Data</h3>
+          <pre id="audit-json"></pre>
+        </section>
+      </main>
     </div>
   </div>
 
@@ -283,22 +683,38 @@
       return (typeof value === "number" && Number.isFinite(value)) ? value.toFixed(1) : "N/A";
     }
 
+    function clampScore(value) {
+      const parsed = Number(value);
+      if (!Number.isFinite(parsed)) return null;
+      return Math.max(0, Math.min(100, parsed));
+    }
+
     function selectedJobPayload() {
       const jobs = Array.isArray(state.profile?.jobs) ? state.profile.jobs : [];
       return jobs.find((x) => Number((x.job || {}).id) === Number(state.selectedJobId)) || jobs[0] || null;
     }
 
+    function initials(name) {
+      const parts = String(name || "").trim().split(/\s+/).filter(Boolean);
+      if (!parts.length) return "NA";
+      return parts.slice(0, 2).map((x) => x[0]?.toUpperCase() || "").join("") || "NA";
+    }
+
     function renderSummary() {
       const candidate = state.profile?.candidate || {};
-      $("candidate-name").textContent = candidate.full_name || `Candidate #${state.candidateId}`;
-      $("candidate-path").textContent = `Candidate #${state.candidateId}`;
-      const summary = state.profile?.summary || {};
-      $("summary-grid").innerHTML = `
-        <div class="metric"><div class="muted">Location</div><div class="value" style="font-size:16px;">${escapeHtml(candidate.location || "N/A")}</div></div>
-        <div class="metric"><div class="muted">Experience</div><div class="value">${escapeHtml(candidate.years_experience ?? "N/A")}</div></div>
-        <div class="metric"><div class="muted">Jobs</div><div class="value">${escapeHtml(summary.jobs_total ?? 0)}</div></div>
-        <div class="metric"><div class="muted">Resumes</div><div class="value">${escapeHtml(summary.resume_links_total ?? 0)}</div></div>
-      `;
+      const item = selectedJobPayload();
+      const job = item?.job || {};
+      const labelName = candidate.full_name || `Candidate #${state.candidateId}`;
+      const labelTitle = candidate.headline || job.title || "Candidate";
+      const location = candidate.location || "Location not specified";
+      const years = candidate.years_experience;
+      const exp = (typeof years === "number" && Number.isFinite(years)) ? `${years} years` : "experience n/a";
+      const linkedin = candidate.linkedin_id ? ` · ${candidate.linkedin_id}` : "";
+      $("candidate-name").textContent = labelName;
+      $("candidate-title").textContent = labelTitle;
+      $("candidate-location").textContent = `📍 ${location} (${exp})`;
+      $("candidate-path").textContent = `candidate #${state.candidateId}${linkedin}`;
+      $("candidate-avatar").textContent = initials(labelName);
     }
 
     function renderJobs() {
@@ -311,36 +727,52 @@
         const status = String(overall.overall_status || "review");
         return `
           <button class="job-btn ${active}" data-job-id="${Number(job.id || 0)}">
-            <div><b>#${Number(job.id || 0)} ${escapeHtml(job.title || "-")}</b></div>
-            <div class="muted" style="margin-top:4px;">${escapeHtml(job.company || "No company")}</div>
-            <div style="margin-top:6px;">
-              <span class="pill">${escapeHtml(status)}</span>
-              <span class="mono" style="margin-left:6px;">${escapeHtml(formatScore(overall.overall_score))}</span>
-            </div>
+            <div class="job-title">#${Number(job.id || 0)} ${escapeHtml(job.title || "-")}</div>
+            <div class="job-sub">${escapeHtml(job.company || "No company")}</div>
+            <div class="pill">${escapeHtml(status)} · ${escapeHtml(formatScore(overall.overall_score))}</div>
           </button>
         `;
       }).join("");
     }
 
+    function setProgress(idLabel, idBar, score) {
+      const normalized = clampScore(score);
+      const label = normalized === null ? "N/A" : normalized.toFixed(1);
+      $(idLabel).textContent = label;
+      $(idBar).style.width = normalized === null ? "0%" : `${normalized}%`;
+    }
+
     function renderScores() {
       const item = selectedJobPayload();
       if (!item) {
-        $("score-row").innerHTML = `<div class="muted">No job selected</div>`;
-        $("score-meta").textContent = "";
+        $("overall-score-big").textContent = "N/A";
+        $("score-meta").textContent = "status: review";
+        setProgress("score-tech", "bar-tech", null);
+        setProgress("score-soft", "bar-soft", null);
+        setProgress("score-culture", "bar-culture", null);
         return;
       }
+
       const scorecard = item.scorecard || {};
       const overall = item.overall_scoring || {};
       const source = scorecard.sourcing_vetting || {};
       const comm = scorecard.communication || {};
       const interview = scorecard.interview_evaluation || {};
-      $("score-meta").textContent = `status: ${overall.overall_status || "review"} | generated: ${escapeHtml(state.profile?.generated_at || "-")}`;
-      $("score-row").innerHTML = `
-        <div class="score-cell"><div class="muted">Sourcing/Vetting</div><div style="font-size:24px;font-weight:700;">${escapeHtml(formatScore(source.latest_score))}</div><div class="muted mono">${escapeHtml(source.latest_status || "not_started")}</div></div>
-        <div class="score-cell"><div class="muted">Communication</div><div style="font-size:24px;font-weight:700;">${escapeHtml(formatScore(comm.latest_score))}</div><div class="muted mono">${escapeHtml(comm.latest_status || "not_started")}</div></div>
-        <div class="score-cell"><div class="muted">Interview</div><div style="font-size:24px;font-weight:700;">${escapeHtml(formatScore(interview.latest_score))}</div><div class="muted mono">${escapeHtml(interview.latest_status || "not_started")}</div></div>
-        <div class="score-cell"><div class="muted">Overall</div><div style="font-size:24px;font-weight:700;">${escapeHtml(formatScore(overall.overall_score))}</div><div class="muted mono">${escapeHtml(overall.overall_status || "review")}</div></div>
-      `;
+      const cultureFit = ((interview.signals || {}).culture_fit_score);
+
+      $("overall-score-big").textContent = formatScore(overall.overall_score);
+      $("score-meta").textContent = `status: ${overall.overall_status || "review"} | generated: ${String(state.profile?.generated_at || "-").replace("T", " ").slice(0, 19)}`;
+      setProgress("score-tech", "bar-tech", source.latest_score);
+      setProgress("score-soft", "bar-soft", comm.latest_score);
+      setProgress("score-culture", "bar-culture", cultureFit);
+
+      const statusSelect = $("status-select");
+      if (statusSelect) {
+        const current = String(overall.overall_status || "review");
+        if ([...statusSelect.options].some((x) => x.value === current)) {
+          statusSelect.value = current;
+        }
+      }
     }
 
     function renderFit() {
@@ -348,48 +780,111 @@
       if (!item) return;
       const explanation = item.fit_explanation || {};
       $("fit-explanation").textContent = String(explanation.text || "No explanation yet");
+
       const fit = item.fit_breakdown || {};
       const must = fit.must_have || {};
       const nice = fit.nice_to_have || {};
       const culture = fit.culture_fit || {};
       const risks = Array.isArray(fit.risk_flags) ? fit.risk_flags : [];
-      const riskColor = risks.length ? "var(--warn)" : "var(--accent)";
+      const riskClass = risks.length ? "fit-risk" : "";
+
       $("fit-grid").innerHTML = `
-        <div class="score-cell">
-          <div class="muted">Must-have skills</div>
-          <div class="mono" style="margin-top:4px;">match ratio: ${escapeHtml(formatScore((must.match_ratio || 0) * 100))}%</div>
-          <ul>
+        <div class="fit-cell">
+          <div class="fit-title">Must Have Coverage (${escapeHtml(formatScore((must.match_ratio || 0) * 100))}%)</div>
+          <div class="muted" style="font-size:12px;margin-bottom:6px;">Matched</div>
+          <ul class="fit-list">
             ${(Array.isArray(must.matched) ? must.matched : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
           </ul>
-          <div class="muted" style="margin-top:8px;">Missing:</div>
-          <ul>
+          <div class="muted" style="font-size:12px;margin:8px 0 6px;">Missing</div>
+          <ul class="fit-list">
             ${(Array.isArray(must.missing) ? must.missing : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
           </ul>
         </div>
-        <div class="score-cell">
-          <div class="muted">Nice-to-have and cultural fit</div>
-          <div style="margin-top:6px;">Matched nice-to-have:</div>
-          <ul>
+        <div class="fit-cell">
+          <div class="fit-title">Nice To Have + Cultural Signals</div>
+          <div class="muted" style="font-size:12px;margin-bottom:6px;">Nice to have matched</div>
+          <ul class="fit-list">
             ${(Array.isArray(nice.matched) ? nice.matched : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
           </ul>
-          <div class="muted" style="margin-top:8px;">Missing nice-to-have:</div>
-          <ul>
-            ${(Array.isArray(nice.missing) ? nice.missing : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
-          </ul>
-          <div class="muted" style="margin-top:8px;">Culture alignment highlights:</div>
-          <ul>
+          <div class="muted" style="font-size:12px;margin:8px 0 6px;">Cultural alignment</div>
+          <ul class="fit-list">
             ${(Array.isArray(culture.alignment_highlights) ? culture.alignment_highlights : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>no strong culture signals yet</li>"}
           </ul>
-          <div class="muted" style="margin-top:8px;">Company values:</div>
-          <ul>
-            ${(Array.isArray(culture.company_values) ? culture.company_values : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>not captured yet</li>"}
-          </ul>
-          <div style="margin-top:10px;color:${riskColor};"><b>Risk flags: ${escapeHtml(risks.length)}</b></div>
-          <ul>
+          <div class="muted" style="font-size:12px;margin:8px 0 6px;">Risks</div>
+          <ul class="fit-list ${riskClass}">
             ${risks.map((x) => `<li>${escapeHtml(x.message || x.type || "risk")}</li>`).join("") || "<li>no critical risks</li>"}
           </ul>
         </div>
       `;
+
+      const internal = $("internal-notes");
+      if (internal) {
+        const lines = [];
+        const overall = item.overall_scoring || {};
+        lines.push(`Overall: ${overall.overall_status || "review"} (${formatScore(overall.overall_score)})`);
+        const highlights = Array.isArray(culture.alignment_highlights) ? culture.alignment_highlights : [];
+        if (highlights.length) lines.push(`Culture highlights: ${highlights.slice(0, 2).join('; ')}`);
+        const risk = risks[0]?.message;
+        if (risk) lines.push(`Primary risk: ${risk}`);
+        internal.value = lines.join('\n');
+      }
+    }
+
+    function formatTimelineTime(raw) {
+      const dt = new Date(String(raw || ""));
+      if (Number.isNaN(dt.getTime())) return "unknown time";
+      const now = new Date();
+      const diffMs = Math.max(0, now.getTime() - dt.getTime());
+      const hours = Math.floor(diffMs / (1000 * 60 * 60));
+      const days = Math.floor(hours / 24);
+      const mins = dt.getMinutes().toString().padStart(2, "0");
+      const hh = dt.getHours().toString().padStart(2, "0");
+      if (days > 0) return `${days}d ago • ${hh}:${mins}`;
+      if (hours > 0) return `${hours}h ago • ${hh}:${mins}`;
+      const minutes = Math.floor(diffMs / (1000 * 60));
+      return `${Math.max(1, minutes)}m ago • ${hh}:${mins}`;
+    }
+
+    function timelineLabel(signal) {
+      if (signal.kind === "assessment_signal") {
+        const agent = signal.agent_name || signal.agent_key || "agent";
+        const score = (typeof signal.score === "number" && Number.isFinite(signal.score)) ? ` (${signal.score.toFixed(1)})` : "";
+        return `${agent}: ${signal.reason || signal.status || "updated"}${score}`;
+      }
+      if (signal.kind === "pre_resume_event") {
+        return `Pre resume: ${signal.event_type || "event"}${signal.intent ? ` (${signal.intent})` : ""}`;
+      }
+      if (signal.kind === "operation_log") {
+        return `${signal.operation || "operation"} [${signal.status || "-"}]`;
+      }
+      return signal.kind || "signal";
+    }
+
+    function renderSignals() {
+      const item = selectedJobPayload();
+      const signals = Array.isArray(item?.signals_timeline) ? item.signals_timeline : [];
+      const box = $("signals-timeline-list");
+      if (!signals.length) {
+        box.innerHTML = `<div class="timeline-item"><div class="dot"></div><div class="timeline-text muted">No signals yet</div></div>`;
+        return;
+      }
+
+      box.innerHTML = signals.map((signal) => {
+        const meta = formatTimelineTime(signal.created_at);
+        const text = timelineLabel(signal);
+        const detailsObj = signal.signals && typeof signal.signals === "object" ? signal.signals : {};
+        const detailsText = Object.keys(detailsObj).length ? JSON.stringify(detailsObj, null, 2) : "";
+        return `
+          <div class="timeline-item">
+            <div class="dot"></div>
+            <div>
+              <div class="timeline-meta">${escapeHtml(meta)}</div>
+              <div class="timeline-text">${escapeHtml(text)}</div>
+              ${detailsText ? `<div class="timeline-details">${escapeHtml(detailsText)}</div>` : ""}
+            </div>
+          </div>
+        `;
+      }).join("");
     }
 
     async function renderResume() {
@@ -430,34 +925,6 @@
       }
     }
 
-    function renderSignals() {
-      const item = selectedJobPayload();
-      const signals = Array.isArray(item?.signals_timeline) ? item.signals_timeline : [];
-      const body = $("signals-body");
-      if (!signals.length) {
-        body.innerHTML = `<tr><td colspan="5" class="muted">No signals yet</td></tr>`;
-        return;
-      }
-      body.innerHTML = signals.map((signal) => {
-        const kind = String(signal.kind || "-");
-        const created = String(signal.created_at || "-").replace("T", " ").slice(0, 19);
-        const score = signal.score;
-        const status = signal.status || signal.state_status || "-";
-        const scoreText = (typeof score === "number" && Number.isFinite(score)) ? `${score.toFixed(1)} | ${status}` : `${status}`;
-        const reason = signal.reason || signal.operation || signal.event_type || "-";
-        const details = signal.signals || {};
-        return `
-          <tr>
-            <td class="mono">${escapeHtml(created || "-")}</td>
-            <td>${escapeHtml(kind)}</td>
-            <td class="mono">${escapeHtml(scoreText)}</td>
-            <td>${escapeHtml(reason)}</td>
-            <td><pre>${escapeHtml(JSON.stringify(details, null, 2))}</pre></td>
-          </tr>
-        `;
-      }).join("");
-    }
-
     function renderAudit() {
       const card = $("audit-card");
       const json = $("audit-json");
@@ -474,7 +941,7 @@
       renderSignals();
       renderAudit();
       renderResume().catch(() => null);
-      $("audit-btn").textContent = `Audit: ${state.audit ? "on" : "off"}`;
+      $("audit-btn").textContent = `✕ Audit: ${state.audit ? "on" : "off"}`;
     }
 
     async function loadProfile() {
@@ -501,6 +968,12 @@
         state.audit = !state.audit;
         loadProfile().catch(showError);
       });
+      $("schedule-btn").addEventListener("click", () => {
+        alert("Schedule action can be wired to interview system next");
+      });
+      $("action-hired-btn").addEventListener("click", () => alert("Action placeholder: Move to Hired"));
+      $("action-reinterview-btn").addEventListener("click", () => alert("Action placeholder: Request Re Interview"));
+      $("action-send-client-btn").addEventListener("click", () => alert("Action placeholder: Send to Client"));
       $("jobs-list").addEventListener("click", (event) => {
         const target = event.target.closest("[data-job-id]");
         if (!target) return;
@@ -524,7 +997,7 @@
 
     function showError(err) {
       const text = String(err?.message || err || "unknown error");
-      document.body.innerHTML = `<div class="wrap"><div class="card"><b>Failed to load candidate profile</b><pre style="margin-top:10px;">${escapeHtml(text)}</pre><a class="btn" href="/dashboard" style="margin-top:10px;display:inline-block;">Back to dashboard</a></div></div>`;
+      document.body.innerHTML = `<div class="container"><section class="panel"><h2 style="margin-bottom:8px;">Failed to load candidate profile</h2><pre>${escapeHtml(text)}</pre><a class="btn" href="/dashboard" style="margin-top:10px;display:inline-block;">Back to dashboard</a></section></div>`;
     }
 
     const init = () => {
