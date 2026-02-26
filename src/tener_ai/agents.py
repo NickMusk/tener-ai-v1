@@ -15,17 +15,17 @@ class SourcingAgent:
         self.instruction = instruction
 
     def find_candidates(self, job: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
-        limit = max(1, min(int(limit or 1), 100))
+        limit = max(1, min(int(limit or 1), 200))
         queries = self._build_queries(job)
-        per_query_limit = max(3, min(limit, 25))
+        per_query_limit = max(10, min(limit, 50))
 
         seen: set[str] = set()
         collected: List[Dict[str, Any]] = []
 
+        # Pass 1: broad query set with a larger per-query window.
         for query in queries:
             if len(collected) >= limit:
                 break
-
             profiles = self.linkedin_provider.search_profiles(query=query, limit=per_query_limit)
             for profile in profiles:
                 key = self._candidate_key(profile)
@@ -35,6 +35,22 @@ class SourcingAgent:
                 collected.append(profile)
                 if len(collected) >= limit:
                     break
+
+        # Pass 2: if still below target, rerun with wider windows to reduce duplicate-heavy tops.
+        if len(collected) < limit:
+            expanded_limit = min(100, max(per_query_limit + 25, int(limit)))
+            for query in queries:
+                if len(collected) >= limit:
+                    break
+                profiles = self.linkedin_provider.search_profiles(query=query, limit=expanded_limit)
+                for profile in profiles:
+                    key = self._candidate_key(profile)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    collected.append(profile)
+                    if len(collected) >= limit:
+                        break
 
         return collected[:limit]
 
@@ -97,15 +113,24 @@ class SourcingAgent:
         title = str(job.get("title") or "").strip()
         jd_text = str(job.get("jd_text") or "").strip()
         location = str(job.get("location") or "").strip()
-        keywords = self._extract_keywords(jd_text, max_items=8)
+        keywords = self._extract_keywords(jd_text, max_items=14)
 
         candidates = [
             title,
             f"{title} {location}".strip(),
             f"{title} {' '.join(keywords[:4])}".strip(),
             " ".join(keywords[:5]).strip(),
+            " ".join(keywords[5:10]).strip(),
+            f"{title} {' '.join(keywords[4:8])}".strip(),
+            f"{title} {location} {' '.join(keywords[:6])}".strip(),
             f"{title} {jd_text[:220]}".strip(),
         ]
+        for idx in range(0, min(len(keywords), 10), 2):
+            chunk = " ".join(keywords[idx : idx + 4]).strip()
+            if chunk:
+                candidates.append(f"{title} {chunk}".strip())
+                if location:
+                    candidates.append(f"{title} {location} {chunk}".strip())
         queries: List[str] = []
         seen: set[str] = set()
         for item in candidates:

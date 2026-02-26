@@ -346,9 +346,29 @@ class WorkflowService:
         }
 
     def outreach_candidates(self, job_id: int, candidate_ids: List[int], test_mode: bool | None = None) -> Dict[str, Any]:
-        if self._managed_linkedin_available():
-            return self._outreach_candidates_managed(job_id=job_id, candidate_ids=candidate_ids, test_mode=test_mode)
-        return self._outreach_candidates_direct(job_id=job_id, candidate_ids=candidate_ids, test_mode=test_mode)
+        try:
+            if self._managed_linkedin_available():
+                return self._outreach_candidates_managed(job_id=job_id, candidate_ids=candidate_ids, test_mode=test_mode)
+            return self._outreach_candidates_direct(job_id=job_id, candidate_ids=candidate_ids, test_mode=test_mode)
+        except Exception as exc:
+            self.db.log_operation(
+                operation="agent.outreach.execute",
+                status="error",
+                entity_type="job",
+                entity_id=str(job_id),
+                details={"error": str(exc), "candidate_ids_count": len(candidate_ids or [])},
+            )
+            return {
+                "job_id": job_id,
+                "items": [],
+                "conversation_ids": [],
+                "sent": 0,
+                "pending_connection": 0,
+                "failed": len(candidate_ids or []),
+                "total": 0,
+                "error": str(exc),
+                "instruction": self.stage_instructions.get("outreach", ""),
+            }
 
     def _outreach_candidates_managed(self, job_id: int, candidate_ids: List[int], test_mode: bool | None = None) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
@@ -498,27 +518,42 @@ class WorkflowService:
 
         sent = 0
         pending_connection = 0
+        dispatch_error = None
         if self.managed_linkedin_dispatch_inline and queued_action_ids:
-            dispatched = self.dispatch_outbound_actions(limit=len(queued_action_ids), action_ids=queued_action_ids, job_id=job_id)
-            sent = int(dispatched.get("sent") or 0)
-            pending_connection = int(dispatched.get("pending_connection") or 0)
-            failed += int(dispatched.get("failed") or 0)
-            by_action_id = {
-                int(item.get("action_id") or 0): item
-                for item in (dispatched.get("items") or [])
-                if isinstance(item, dict) and int(item.get("action_id") or 0) > 0
-            }
+            try:
+                dispatched = self.dispatch_outbound_actions(limit=len(queued_action_ids), action_ids=queued_action_ids, job_id=job_id)
+            except Exception as exc:
+                dispatch_error = str(exc)
+                self.db.log_operation(
+                    operation="agent.outreach.dispatch_inline",
+                    status="error",
+                    entity_type="job",
+                    entity_id=str(job_id),
+                    details={"error": dispatch_error, "queued_action_ids": queued_action_ids[:20]},
+                )
+            else:
+                sent = int(dispatched.get("sent") or 0)
+                pending_connection = int(dispatched.get("pending_connection") or 0)
+                failed += int(dispatched.get("failed") or 0)
+                by_action_id = {
+                    int(item.get("action_id") or 0): item
+                    for item in (dispatched.get("items") or [])
+                    if isinstance(item, dict) and int(item.get("action_id") or 0) > 0
+                }
+                for item in out_items:
+                    action_id = int(item.get("action_id") or 0)
+                    result = by_action_id.get(action_id)
+                    if not result:
+                        continue
+                    item["delivery_status"] = result.get("delivery_status") or item.get("delivery_status")
+                    item["delivery"] = result.get("delivery")
+                    item["connect_request"] = result.get("connect_request")
+                    item["external_chat_id"] = result.get("external_chat_id")
+                    item["chat_binding"] = result.get("chat_binding")
+                    item["linkedin_account_id"] = result.get("linkedin_account_id")
+        if dispatch_error:
             for item in out_items:
-                action_id = int(item.get("action_id") or 0)
-                result = by_action_id.get(action_id)
-                if not result:
-                    continue
-                item["delivery_status"] = result.get("delivery_status") or item.get("delivery_status")
-                item["delivery"] = result.get("delivery")
-                item["connect_request"] = result.get("connect_request")
-                item["external_chat_id"] = result.get("external_chat_id")
-                item["chat_binding"] = result.get("chat_binding")
-                item["linkedin_account_id"] = result.get("linkedin_account_id")
+                item["dispatch_error"] = dispatch_error
         return {
             "job_id": job_id,
             "items": out_items,
@@ -527,6 +562,7 @@ class WorkflowService:
             "pending_connection": pending_connection,
             "failed": failed,
             "queued": len(queued_action_ids),
+            "dispatch_error": dispatch_error,
             "test_filter_skipped": test_filter_skipped,
             "test_job_forced_only_active": forced_only,
             "test_mode_requested": test_mode,
@@ -2885,7 +2921,33 @@ class WorkflowService:
             if not self.db.claim_outbound_action(action_id):
                 continue
             processed += 1
-            result = self._dispatch_single_outbound_action(row=row)
+            try:
+                result = self._dispatch_single_outbound_action(row=row)
+            except Exception as exc:
+                failed += 1
+                self.db.complete_outbound_action(
+                    action_id=action_id,
+                    status="failed",
+                    result={"reason": "dispatch_single_exception"},
+                    error=str(exc),
+                )
+                self.db.log_operation(
+                    operation="agent.outreach.dispatch",
+                    status="error",
+                    entity_type="outbound_action",
+                    entity_id=str(action_id),
+                    details={"error": str(exc), "job_id": row.get("job_id"), "candidate_id": row.get("candidate_id")},
+                )
+                items.append(
+                    {
+                        "action_id": action_id,
+                        "conversation_id": int(row.get("conversation_id") or 0),
+                        "candidate_id": int(row.get("candidate_id") or 0),
+                        "delivery_status": "failed",
+                        "error": str(exc),
+                    }
+                )
+                continue
             status = str(result.get("delivery_status") or "").strip().lower()
             if status == "sent":
                 sent += 1

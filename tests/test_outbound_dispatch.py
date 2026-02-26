@@ -44,6 +44,17 @@ class _ManagedStubProvider:
         return {"sent": True, "provider": "unipile", "request_id": f"req-{self.account_ref}"}
 
 
+class _ExplodingManagedStubProvider:
+    def __init__(self, *, error_text: str) -> None:
+        self.error_text = error_text
+
+    def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+        raise RuntimeError(self.error_text)
+
+    def send_connection_request(self, candidate_profile: Dict[str, Any], message: str | None = None) -> Dict[str, Any]:
+        raise RuntimeError(self.error_text)
+
+
 class OutboundDispatchTests(unittest.TestCase):
     def _create_workflow(
         self,
@@ -297,6 +308,54 @@ class OutboundDispatchTests(unittest.TestCase):
             )
             self.assertEqual(int(day_counter["connect_sent"]), 1)
             self.assertEqual(int(week_counter["connect_sent"]), 1)
+
+    def test_dispatch_handles_single_action_exception_without_crashing_batch(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_dispatch_exception.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+            db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-explode",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="x1")
+            queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            action_id = int(queued["items"][0]["action_id"])
+            workflow._dispatch_single_outbound_action = (  # type: ignore[method-assign]
+                lambda row: (_ for _ in ()).throw(RuntimeError("bad parameter or other API misuse"))
+            )
+
+            dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
+            self.assertEqual(dispatched["processed"], 1)
+            self.assertEqual(dispatched["failed"], 1)
+            self.assertEqual(dispatched["sent"], 0)
+            self.assertEqual(dispatched["pending_connection"], 0)
+
+            action = db.get_outbound_action(action_id)
+            self.assertEqual(action["status"], "failed")
+            self.assertIn("bad parameter", str(action.get("last_error") or ""))
+
+    def test_outreach_inline_dispatch_error_does_not_fail_entire_step(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_inline_dispatch_error.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=True)
+
+            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="x2")
+            workflow.dispatch_outbound_actions = (  # type: ignore[method-assign]
+                lambda **kwargs: (_ for _ in ()).throw(RuntimeError("bad parameter or other API misuse"))
+            )
+
+            out = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            self.assertEqual(out["job_id"], job_id)
+            self.assertEqual(out["total"], 1)
+            self.assertEqual(out["sent"], 0)
+            self.assertEqual(out["pending_connection"], 0)
+            self.assertEqual(out["failed"], 0)
+            self.assertIn("bad parameter", str(out.get("dispatch_error") or ""))
+            self.assertEqual(str(out["items"][0].get("delivery_status") or ""), "queued")
 
 
 if __name__ == "__main__":
