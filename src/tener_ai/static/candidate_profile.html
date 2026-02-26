@@ -758,7 +758,8 @@
       const overall = item.overall_scoring || {};
       const source = scorecard.sourcing_vetting || {};
       const comm = scorecard.communication || {};
-      const interview = scorecard.interview_evaluation || {};
+      const commStage = String(comm.latest_stage || "").toLowerCase();
+      const commScore = commStage === "dialogue" ? comm.latest_score : null;
       const culture = (item.fit_breakdown || {}).culture_fit || {};
       const alignmentCount = Array.isArray(culture.alignment_highlights) ? culture.alignment_highlights.length : 0;
       const concernCount = Array.isArray(culture.concerns) ? culture.concerns.length : 0;
@@ -767,7 +768,7 @@
       $("overall-score-big").textContent = formatScore(overall.overall_score);
       $("score-meta").textContent = `status: ${overall.overall_status || "review"} | generated: ${String(state.profile?.generated_at || "-").replace("T", " ").slice(0, 19)}`;
       setProgress("score-tech", "bar-tech", source.latest_score);
-      setProgress("score-soft", "bar-soft", comm.latest_score);
+      setProgress("score-soft", "bar-soft", commScore);
       setProgress("score-culture", "bar-culture", cultureFit);
 
       const statusSelect = $("status-select");

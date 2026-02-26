@@ -2050,6 +2050,19 @@ class Database:
                             suffix = "Score loaded from candidate verification notes."
                             first["reason"] = f"{reason} {suffix}".strip() if reason else suffix
 
+        communication = scorecard.get("communication")
+        if isinstance(communication, dict):
+            communication_stage = str(communication.get("latest_stage") or "").strip().lower()
+            if communication_stage != "dialogue":
+                communication["latest_score"] = None
+
+        interview = scorecard.get("interview_evaluation")
+        if isinstance(interview, dict):
+            interview_stage = str(interview.get("latest_stage") or "").strip().lower()
+            interview_status = str(interview.get("latest_status") or "").strip().lower()
+            if interview_stage != "interview_results" or interview_status != "scored":
+                interview["latest_score"] = None
+
         return scorecard
 
     def build_agent_scorecard(

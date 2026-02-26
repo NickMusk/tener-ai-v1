@@ -93,6 +93,66 @@ class AgentAssessmentsTests(unittest.TestCase):
             self.assertEqual(scorecard["communication"].get("latest_stage"), "dialogue")
             self.assertEqual(scorecard["interview_evaluation"].get("latest_status"), "not_started")
 
+    def test_scores_are_na_before_candidate_dialogue_starts(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "agent_assessments_pre_dialogue.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(_Provider()),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=PreResumeCommunicationService(
+                    templates_path=str(root / "config" / "outreach_templates.json")
+                ),
+                agent_evaluation_playbook=AgentEvaluationPlaybook(
+                    str(root / "config" / "agent_evaluation_instructions.json")
+                ),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+                stage_instructions={"pre_resume": "request cv and track status"},
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python and AWS",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile = {
+                "linkedin_id": "ln-agent-pre-dialogue",
+                "unipile_profile_id": "ln-agent-pre-dialogue",
+                "attendee_provider_id": "ln-agent-pre-dialogue",
+                "full_name": "Pre Dialogue Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python", "aws"],
+                "years_experience": 5,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.82, "status": "verified", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+
+            workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            rows = db.list_candidates_for_job(job_id)
+            self.assertEqual(len(rows), 1)
+            scorecard = rows[0].get("agent_scorecard") or {}
+
+            communication = scorecard.get("communication") or {}
+            interview = scorecard.get("interview_evaluation") or {}
+            self.assertEqual(str(communication.get("latest_stage") or ""), "outreach")
+            self.assertIsNone(communication.get("latest_score"))
+            self.assertIsNone(interview.get("latest_score"))
+
     def test_communication_score_varies_with_candidate_message_quality(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as td:
