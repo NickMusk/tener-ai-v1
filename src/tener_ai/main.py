@@ -35,6 +35,7 @@ from .db_parity import DEFAULT_PARITY_TABLES, build_parity_report
 from .db_dual import DualWriteDatabase, PostgresMirrorWriter
 from .db_pg import PostgresMigrationRunner
 from .db_read_pg import PostgresReadDatabase
+from .db_runtime_pg import PostgresRuntimeDatabase
 from .emulator import EmulatorProjectStore
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
 from .interview_client import InterviewAPIClient
@@ -92,6 +93,8 @@ def apply_agent_instructions(services: Dict[str, Any]) -> None:
 def build_services() -> Dict[str, Any]:
     root = project_root()
     db_backend = str(os.environ.get("TENER_DB_BACKEND", "sqlite") or "sqlite").strip().lower()
+    if db_backend not in {"sqlite", "dual", "postgres"}:
+        db_backend = "sqlite"
     local_db_path = str(root / "runtime" / "tener_v1.sqlite3")
     default_db_path = "/var/data/tener_v1.sqlite3" if os.environ.get("RENDER") else local_db_path
     configured_db_path = os.environ.get("TENER_DB_PATH", default_db_path)
@@ -146,16 +149,24 @@ def build_services() -> Dict[str, Any]:
     except ValueError:
         forced_test_score = 0.99
 
-    try:
-        sqlite_db = Database(db_path=db_path)
-    except Exception:
-        if db_path != local_db_path:
-            sqlite_db = Database(db_path=local_db_path)
-        else:
-            raise
-    sqlite_db.init_schema()
-    db: Any = sqlite_db
-    if db_backend in {"postgres", "dual"}:
+    sqlite_db: Optional[Database] = None
+    db: Any
+    if db_backend in {"sqlite", "dual"}:
+        try:
+            sqlite_db = Database(db_path=db_path)
+        except Exception:
+            if db_path != local_db_path:
+                sqlite_db = Database(db_path=local_db_path)
+            else:
+                raise
+        sqlite_db.init_schema()
+
+    if db_backend == "postgres":
+        db = PostgresRuntimeDatabase(postgres_dsn)
+        db_runtime_mode = "postgres_primary"
+    elif db_backend == "dual":
+        if sqlite_db is None:
+            raise RuntimeError("sqlite primary is required for dual backend")
         dual_strict = env_bool("TENER_DB_DUAL_STRICT", False)
         db = DualWriteDatabase(
             primary=sqlite_db,
@@ -163,53 +174,65 @@ def build_services() -> Dict[str, Any]:
             strict=dual_strict,
         )
         db_runtime_mode = "sqlite_primary_postgres_mirror"
+    else:
+        if sqlite_db is None:
+            raise RuntimeError("sqlite backend initialization failed")
+        db = sqlite_db
 
     db_read_source_raw = str(os.environ.get("TENER_DB_READ_SOURCE", "auto") or "auto").strip().lower()
     if db_read_source_raw not in {"sqlite", "postgres", "auto"}:
         db_read_source_raw = "auto"
-    db_read_source = db_read_source_raw
-    if db_read_source == "auto":
-        db_read_source = "postgres" if db_backend in {"postgres", "dual"} else "sqlite"
-    db_read_status: Dict[str, Any] = {
-        "status": "ok",
-        "source": db_read_source,
-        "requested_source": db_read_source_raw,
-        "reason": "default",
-    }
     read_db: Any = db
-    if db_read_source == "postgres":
-        if not postgres_dsn:
-            db_read_status = {
-                "status": "degraded",
-                "source": "sqlite",
-                "requested_source": db_read_source_raw,
-                "reason": "postgres_read_requested_without_dsn",
-            }
-        else:
-            try:
-                read_db = PostgresReadDatabase(postgres_dsn)
-                db_read_status = {
-                    "status": "ok",
-                    "source": "postgres",
-                    "requested_source": db_read_source_raw,
-                    "reason": "postgres_read_enabled",
-                }
-            except Exception as exc:
-                if env_bool("TENER_DB_READ_STRICT", False):
-                    raise
+    if db_backend == "postgres":
+        db_read_status = {
+            "status": "ok",
+            "source": "postgres",
+            "requested_source": db_read_source_raw,
+            "reason": "postgres_primary_runtime",
+        }
+    else:
+        db_read_source = db_read_source_raw
+        if db_read_source == "auto":
+            db_read_source = "postgres" if db_backend == "dual" else "sqlite"
+        db_read_status = {
+            "status": "ok",
+            "source": db_read_source,
+            "requested_source": db_read_source_raw,
+            "reason": "default",
+        }
+        if db_read_source == "postgres":
+            if not postgres_dsn:
                 db_read_status = {
                     "status": "degraded",
                     "source": "sqlite",
                     "requested_source": db_read_source_raw,
-                    "reason": f"postgres_read_init_failed:{exc}",
+                    "reason": "postgres_read_requested_without_dsn",
                 }
-    else:
-        db_read_status = {
-            "status": "ok",
-            "source": "sqlite",
-            "requested_source": db_read_source_raw,
-            "reason": "sqlite_read_enabled",
-        }
+            else:
+                try:
+                    read_db = PostgresReadDatabase(postgres_dsn)
+                    db_read_status = {
+                        "status": "ok",
+                        "source": "postgres",
+                        "requested_source": db_read_source_raw,
+                        "reason": "postgres_read_enabled",
+                    }
+                except Exception as exc:
+                    if env_bool("TENER_DB_READ_STRICT", False):
+                        raise
+                    db_read_status = {
+                        "status": "degraded",
+                        "source": "sqlite",
+                        "requested_source": db_read_source_raw,
+                        "reason": f"postgres_read_init_failed:{exc}",
+                    }
+        else:
+            db_read_status = {
+                "status": "ok",
+                "source": "sqlite",
+                "requested_source": db_read_source_raw,
+                "reason": "sqlite_read_enabled",
+            }
 
     instructions = AgentInstructions(path=instructions_path)
     evaluation_playbook = AgentEvaluationPlaybook(path=evaluation_playbook_path)
@@ -239,7 +262,7 @@ def build_services() -> Dict[str, Any]:
         connect_url_template=os.environ.get("TENER_UNIPILE_CONNECT_URL_TEMPLATE", ""),
         callback_url=os.environ.get("TENER_LINKEDIN_CONNECT_CALLBACK_URL", ""),
         accounts_path=os.environ.get("UNIPILE_ACCOUNTS_PATH", "/api/v1/accounts"),
-        hosted_connect_path=os.environ.get("UNIPILE_HOSTED_LINKEDIN_CONNECT_PATH", "/api/v1/hosted/accounts/linkedin"),
+        hosted_connect_path=os.environ.get("UNIPILE_HOSTED_LINKEDIN_CONNECT_PATH", "/api/v1/hosted/accounts/link"),
         disconnect_path_template=os.environ.get("UNIPILE_DISCONNECT_PATH_TEMPLATE", "/api/v1/accounts/{account_id}"),
     )
 
@@ -436,7 +459,7 @@ def build_services() -> Dict[str, Any]:
     services = {
         "db": db,
         "read_db": read_db,
-        "db_primary_path": sqlite_db.db_path,
+        "db_primary_path": sqlite_db.db_path if sqlite_db is not None else "",
         "postgres_dsn": postgres_dsn,
         "db_backend": db_backend,
         "db_runtime_mode": db_runtime_mode,
@@ -2993,7 +3016,22 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _switch_read_source(*, source: str, postgres_dsn: str = "", reason: str = "manual_switch") -> Dict[str, Any]:
         normalized = str(source or "").strip().lower()
+        db_runtime_mode = str(SERVICES.get("db_runtime_mode") or "").strip().lower()
         if normalized == "sqlite":
+            if db_runtime_mode == "postgres_primary":
+                out = {
+                    "status": "skipped",
+                    "reason": "sqlite_read_not_available_in_postgres_primary",
+                    "source": "postgres",
+                }
+                SERVICES["read_db"] = SERVICES.get("db")
+                SERVICES["db_read_status"] = {
+                    "status": "ok",
+                    "source": "postgres",
+                    "requested_source": "runtime",
+                    "reason": reason,
+                }
+                return out
             SERVICES["read_db"] = SERVICES["db"]
             SERVICES["db_read_status"] = {
                 "status": "ok",
@@ -3011,7 +3049,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         dsn = str(postgres_dsn or SERVICES.get("postgres_dsn") or os.environ.get("TENER_DB_DSN", "") or "").strip()
         if not dsn:
             raise RuntimeError("postgres_dsn_missing")
-        SERVICES["read_db"] = PostgresReadDatabase(dsn)
+        if db_runtime_mode == "postgres_primary":
+            SERVICES["read_db"] = SERVICES.get("db")
+        else:
+            SERVICES["read_db"] = PostgresReadDatabase(dsn)
         SERVICES["postgres_dsn"] = dsn
         SERVICES["db_read_status"] = {
             "status": "ok",

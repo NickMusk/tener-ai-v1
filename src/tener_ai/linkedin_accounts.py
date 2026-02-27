@@ -34,7 +34,7 @@ class LinkedInAccountService:
         connect_url_template: str = "",
         callback_url: str = "",
         accounts_path: str = "/api/v1/accounts",
-        hosted_connect_path: str = "/api/v1/hosted/accounts/linkedin",
+        hosted_connect_path: str = "/api/v1/hosted/accounts/link",
         disconnect_path_template: str = "/api/v1/accounts/{account_id}",
     ) -> None:
         self.db = db
@@ -48,7 +48,7 @@ class LinkedInAccountService:
         self.callback_url = str(callback_url or "").strip()
         self.accounts_path = str(accounts_path or "/api/v1/accounts").strip() or "/api/v1/accounts"
         self.hosted_connect_path = (
-            str(hosted_connect_path or "/api/v1/hosted/accounts/linkedin").strip() or "/api/v1/hosted/accounts/linkedin"
+            str(hosted_connect_path or "/api/v1/hosted/accounts/link").strip() or "/api/v1/hosted/accounts/link"
         )
         self.disconnect_path_template = (
             str(disconnect_path_template or "/api/v1/accounts/{account_id}").strip() or "/api/v1/accounts/{account_id}"
@@ -284,6 +284,7 @@ class LinkedInAccountService:
     def _hosted_connect_endpoints(self) -> List[str]:
         candidates = [
             self.hosted_connect_path,
+            "/api/v1/hosted/accounts/link",
             "/api/v1/hosted/accounts/linkedin",
             "/api/v1/hosted/authentication/linkedin",
             "/api/v1/hosted/auth/linkedin",
@@ -299,29 +300,39 @@ class LinkedInAccountService:
         return out
 
     def _hosted_connect_payloads(self, *, state: str, callback_url: str, label: str) -> List[Dict[str, Any]]:
+        callback_with_state = self._append_query_param(callback_url, "state", state)
+        expires_on = (datetime.now(UTC) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
         payloads: List[Dict[str, Any]] = [
+            {
+                "type": "create",
+                "providers": ["LINKEDIN"],
+                "api_url": self.base_url,
+                "expiresOn": expires_on,
+                "success_redirect_url": callback_with_state,
+                "failure_redirect_url": callback_with_state,
+            },
             {
                 "provider": "LINKEDIN",
                 "type": "create",
                 "state": state,
-                "redirect_url": callback_url,
+                "redirect_url": callback_with_state,
             },
             {
                 "provider": "linkedin",
                 "state": state,
-                "success_redirect_url": callback_url,
-                "failure_redirect_url": callback_url,
+                "success_redirect_url": callback_with_state,
+                "failure_redirect_url": callback_with_state,
             },
             {
                 "provider": "linkedin",
                 "state": state,
-                "redirect_uri": callback_url,
+                "redirect_uri": callback_with_state,
             },
             {
                 "provider": "LINKEDIN",
                 "state": state,
-                "redirect_url": callback_url,
-                "redirect_uri": callback_url,
+                "redirect_url": callback_with_state,
+                "redirect_uri": callback_with_state,
             },
         ]
         if label:
@@ -342,6 +353,35 @@ class LinkedInAccountService:
             if isinstance(candidate, str) and candidate.strip():
                 return candidate.strip()
         return ""
+
+    @staticmethod
+    def _append_query_param(url: str, key: str, value: str) -> str:
+        base = str(url or "").strip()
+        if not base:
+            return base
+        parsed = parse.urlparse(base)
+        query = parse.parse_qsl(parsed.query, keep_blank_values=True)
+        replaced = False
+        out_query: List[tuple[str, str]] = []
+        for k, v in query:
+            if k == key:
+                out_query.append((key, value))
+                replaced = True
+            else:
+                out_query.append((k, v))
+        if not replaced:
+            out_query.append((key, value))
+        new_query = parse.urlencode(out_query, doseq=True)
+        return parse.urlunparse(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment,
+            )
+        )
 
     def _fetch_remote_accounts(self) -> List[Dict[str, Any]]:
         endpoint = self._build_url(self.accounts_path)

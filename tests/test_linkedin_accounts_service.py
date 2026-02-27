@@ -49,6 +49,32 @@ class _StubHostedConnectFallbackService(LinkedInAccountService):
         return {"url": "https://hosted.unipile.test/connect/abc"}
 
 
+class _StubHostedLinkContractService(LinkedInAccountService):
+    def __init__(self, db: Database) -> None:
+        super().__init__(
+            db=db,
+            api_key="unipile-key",
+            base_url="https://api20.unipile.com:15017",
+            state_secret="test-secret",
+            hosted_connect_path="/api/v1/hosted/accounts/link",
+        )
+        self.calls = []
+
+    def _request_json(self, method, url, payload, *, auth_mode="default"):  # type: ignore[override]
+        self.calls.append((method, url, payload, auth_mode))
+        payload = payload or {}
+        if str(payload.get("type") or "") != "create":
+            raise RuntimeError("missing_type")
+        if payload.get("providers") != ["LINKEDIN"]:
+            raise RuntimeError("missing_providers")
+        if str(payload.get("api_url") or "") != "https://api20.unipile.com:15017":
+            raise RuntimeError("missing_api_url")
+        success_url = str(payload.get("success_redirect_url") or "")
+        if "state=" not in success_url:
+            raise RuntimeError("state_not_propagated")
+        return {"object": "HostedAuthUrl", "url": "https://account.unipile.com/hosted-link"}
+
+
 class LinkedInAccountsServiceTests(unittest.TestCase):
     def test_start_connect_and_callback_connects_account(self) -> None:
         with TemporaryDirectory() as td:
@@ -162,6 +188,21 @@ class LinkedInAccountsServiceTests(unittest.TestCase):
             bearer_only_headers = service._headers_json(auth_mode="bearer_only")
             self.assertEqual(bearer_only_headers.get("Authorization"), "Bearer k-test")
             self.assertIsNone(bearer_only_headers.get("X-API-KEY"))
+
+    def test_start_connect_uses_hosted_link_contract_and_state_in_redirect(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "linkedin_accounts_hosted_contract.sqlite3"))
+            db.init_schema()
+            service = _StubHostedLinkContractService(db)
+            out = service.start_connect(
+                callback_url="https://tener.test/api/linkedin/accounts/connect/callback",
+                label="Recruiter Contract",
+            )
+            self.assertEqual(out.get("connect_url"), "https://account.unipile.com/hosted-link")
+            self.assertGreaterEqual(len(service.calls), 1)
+            first_call = service.calls[0]
+            self.assertIn("/api/v1/hosted/accounts/link", str(first_call[1]))
+            self.assertEqual(first_call[3], "api_key_only")
 
 
 if __name__ == "__main__":
