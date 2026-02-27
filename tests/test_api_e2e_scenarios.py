@@ -675,7 +675,7 @@ class ApiE2EScenariosTests(unittest.TestCase):
         status, created = self._request(
             "POST",
             "/api/jobs",
-            {"title": "Followup runner test", "jd_text": "Senior Backend Engineer Python AWS"},
+            {"title": "Followup runner job", "jd_text": "Senior Backend Engineer Python AWS"},
         )
         self.assertEqual(status, 201)
         job_id = int(created["job_id"])

@@ -1162,7 +1162,6 @@
         <strong>What Actually Happened</strong><br>
         Hired: ${safeText(hired?.name || reveal.hiredCandidateId)}<br>
         Outcome: ${safeText(reveal.hiredOutcome)}<br>
-        Cost: ${safeText(reveal.actualCost, 'n/a')}<br>
         Time: ${safeText(reveal.actualTime, 'n/a')}
       `;
 
@@ -1170,7 +1169,6 @@
         <strong>What Tener Would Have Done</strong><br>
         Recommended: ${safeText(topPick?.name || reveal.tenerTopPick)}<br>
         Outcome: ${safeText(reveal.tenerOutcome)}<br>
-        Cost: ${safeText(reveal.tenerCost, 'n/a')}<br>
         Time: ${safeText(reveal.tenerTime, 'n/a')}
       `;
     }

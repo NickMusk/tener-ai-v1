@@ -7,6 +7,9 @@ name = "tener-ai-v1"
 version = "0.1.0"
 description = "Tener AI V1 workflow backend"
 requires-python = ">=3.9"
+dependencies = [
+  "psycopg[binary]>=3.1.18,<4",
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
