@@ -44,6 +44,7 @@ from .linkedin_provider import build_linkedin_provider
 from .matching import MatchingEngine
 from .outreach_policy import LinkedInOutreachPolicy
 from .pre_resume_service import PreResumeCommunicationService
+from .signals import JobSignalsLiveViewService, MonitoringService, SignalIngestionService
 from .workflow import WorkflowService
 
 
@@ -428,6 +429,9 @@ def build_services() -> Dict[str, Any]:
         company_profiles_path=emulator_company_profiles_path,
     )
     auth_service = AuthService.from_env(root=root)
+    signals_ingestion = SignalIngestionService(db=db)
+    signals_live = JobSignalsLiveViewService(db=db)
+    monitoring = MonitoringService(db=db)
 
     services = {
         "db": db,
@@ -453,6 +457,9 @@ def build_services() -> Dict[str, Any]:
         "matching_engine": matching_engine,
         "pre_resume": pre_resume_service,
         "candidate_profile": candidate_profile,
+        "signals_ingestion": signals_ingestion,
+        "signals_live": signals_live,
+        "monitoring": monitoring,
         "emulator_store": emulator_store,
         "company_culture": company_culture_service,
         "workflow": workflow,
@@ -477,6 +484,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             dashboard = project_root() / "src" / "tener_ai" / "static" / "emulator_dashboard.html"
             if not dashboard.exists():
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "emulator dashboard file not found"})
+                return
+            self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
+            return
+
+        if parsed.path == "/dashboard/signals-live":
+            dashboard = project_root() / "src" / "tener_ai" / "static" / "signals_live_dashboard.html"
+            if not dashboard.exists():
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "signals live dashboard file not found"})
                 return
             self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
             return
@@ -515,6 +530,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "candidate_resume_preview": "GET /api/candidates/{candidate_id}/resume-preview?job_id=...&url=...",
                         "candidate_resume_content": "GET /api/candidates/{candidate_id}/resume-preview/content?url=...",
                         "candidate_demo_profile": "POST /api/candidates/demo-profile",
+                        "job_signals_live": "GET /api/jobs/{job_id}/signals/live?refresh=1&limit=200&signals_limit=5000",
+                        "job_signals_ingest": "POST /api/jobs/{job_id}/signals/ingest",
+                        "monitoring_status": "GET /api/monitoring/status?limit_jobs=20",
                         "emulator_status": "GET /api/emulator",
                         "emulator_projects": "GET /api/emulator/projects",
                         "emulator_project": "GET /api/emulator/projects/{project_id}",
@@ -774,6 +792,20 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, payload)
             return
 
+        if parsed.path == "/api/monitoring/status":
+            if not self._require_admin_access():
+                return
+            monitoring = SERVICES.get("monitoring")
+            if monitoring is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "monitoring service unavailable"})
+                return
+            params = parse_qs(parsed.query or "")
+            limit_jobs = self._safe_int((params.get("limit_jobs") or ["20"])[0], 20) or 20
+            report = monitoring.build_status(limit_jobs=limit_jobs)
+            status_code = HTTPStatus.OK if str(report.get("status") or "ok") == "ok" else HTTPStatus.MULTI_STATUS
+            self._json_response(status_code, report)
+            return
+
         if parsed.path == "/api/instructions":
             self._json_response(HTTPStatus.OK, SERVICES["instructions"].to_dict())
             return
@@ -1008,6 +1040,56 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if scoring_formula is not None:
                 rows = [scoring_formula.decorate_candidate_row(row) for row in rows]
             self._json_response(HTTPStatus.OK, {"job_id": job_id, "items": rows})
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/signals/live"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/signals/live$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            ingestion_service = SERVICES.get("signals_ingestion")
+            live_service = SERVICES.get("signals_live")
+            if ingestion_service is None or live_service is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "signals services unavailable"})
+                return
+            params = parse_qs(parsed.query or "")
+            refresh = bool(self._safe_bool((params.get("refresh") or ["1"])[0], True))
+            limit = self._safe_int((params.get("limit") or ["200"])[0], 200) or 200
+            signals_limit = self._safe_int((params.get("signals_limit") or ["5000"])[0], 5000) or 5000
+            ingest_result = None
+            if refresh:
+                try:
+                    ingest_result = ingestion_service.ingest_job(
+                        job_id=job_id,
+                        limit_candidates=limit,
+                    )
+                except ValueError:
+                    self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                    return
+                except Exception as exc:
+                    self._json_response(
+                        HTTPStatus.INTERNAL_SERVER_ERROR,
+                        {"error": "signals ingestion failed", "details": str(exc)},
+                    )
+                    return
+            try:
+                view = live_service.build_job_view(
+                    job_id=job_id,
+                    limit_candidates=limit,
+                    limit_signals=signals_limit,
+                )
+            except ValueError:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "signals live view failed", "details": str(exc)},
+                )
+                return
+            if ingest_result is not None:
+                view["ingestion"] = ingest_result
+            self._json_response(HTTPStatus.OK, view)
             return
 
         if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/linkedin-routing"):
@@ -1923,6 +2005,36 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     "interview_assessment": interview_assessment,
                 },
             )
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/signals/ingest"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/signals/ingest$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            ingestion_service = SERVICES.get("signals_ingestion")
+            if ingestion_service is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "signals ingestion service unavailable"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                body = {}
+            limit_candidates = self._safe_int(body.get("limit_candidates"), 500) or 500
+            try:
+                out = ingestion_service.ingest_job(
+                    job_id=job_id,
+                    limit_candidates=max(1, min(limit_candidates, 5000)),
+                )
+            except ValueError:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "signals ingestion failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, out)
             return
 
         if parsed.path == "/api/workflows/execute":
@@ -3016,7 +3128,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _is_public_path(*, method: str, path: str) -> bool:
         normalized = str(path or "").strip()
-        if normalized in {"/", "/dashboard", "/dashboard/emulator", "/health", "/api"}:
+        if normalized in {"/", "/dashboard", "/dashboard/emulator", "/dashboard/signals-live", "/health", "/api"}:
             return True
         if normalized.startswith("/candidate/"):
             return True

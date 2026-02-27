@@ -196,6 +196,34 @@ class Database:
             FOREIGN KEY(job_id) REFERENCES jobs(id),
             FOREIGN KEY(candidate_id) REFERENCES candidates(id)
         );
+        CREATE INDEX IF NOT EXISTS idx_candidate_agent_assessments_job_candidate
+            ON candidate_agent_assessments(job_id, candidate_id, updated_at DESC);
+
+        CREATE TABLE IF NOT EXISTS candidate_signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            signal_key TEXT NOT NULL UNIQUE,
+            job_id INTEGER NOT NULL,
+            candidate_id INTEGER NOT NULL,
+            conversation_id INTEGER,
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            signal_type TEXT NOT NULL,
+            signal_category TEXT,
+            title TEXT NOT NULL,
+            detail TEXT,
+            impact_score REAL,
+            confidence REAL,
+            signal_meta TEXT,
+            observed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(job_id) REFERENCES jobs(id),
+            FOREIGN KEY(candidate_id) REFERENCES candidates(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_candidate_signals_job_observed
+            ON candidate_signals(job_id, observed_at DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_candidate_signals_candidate_observed
+            ON candidate_signals(candidate_id, observed_at DESC, id DESC);
 
         CREATE TABLE IF NOT EXISTS linkedin_accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2039,6 +2067,160 @@ class Database:
                 ),
             )
 
+    def upsert_candidate_signal(
+        self,
+        *,
+        job_id: int,
+        candidate_id: int,
+        source_type: str,
+        source_id: str,
+        signal_type: str,
+        signal_category: Optional[str],
+        title: str,
+        detail: Optional[str] = None,
+        impact_score: Optional[float] = None,
+        confidence: Optional[float] = None,
+        conversation_id: Optional[int] = None,
+        observed_at: Optional[str] = None,
+        signal_meta: Optional[Dict[str, Any]] = None,
+        signal_key: Optional[str] = None,
+    ) -> int:
+        now = utc_now_iso()
+        normalized_observed = str(observed_at or now)
+        resolved_key = str(
+            signal_key
+            or f"{int(job_id)}:{int(candidate_id)}:{str(source_type).strip().lower()}:{str(source_id).strip().lower()}"
+        ).strip()
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO candidate_signals (
+                    signal_key,
+                    job_id,
+                    candidate_id,
+                    conversation_id,
+                    source_type,
+                    source_id,
+                    signal_type,
+                    signal_category,
+                    title,
+                    detail,
+                    impact_score,
+                    confidence,
+                    signal_meta,
+                    observed_at,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(signal_key)
+                DO UPDATE SET
+                    conversation_id = excluded.conversation_id,
+                    signal_type = excluded.signal_type,
+                    signal_category = excluded.signal_category,
+                    title = excluded.title,
+                    detail = excluded.detail,
+                    impact_score = excluded.impact_score,
+                    confidence = excluded.confidence,
+                    signal_meta = excluded.signal_meta,
+                    observed_at = excluded.observed_at,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    resolved_key,
+                    int(job_id),
+                    int(candidate_id),
+                    int(conversation_id) if conversation_id is not None else None,
+                    str(source_type or "").strip().lower() or "unknown",
+                    str(source_id or "").strip() or "unknown",
+                    str(signal_type or "").strip().lower() or "unknown",
+                    str(signal_category or "").strip().lower() or None,
+                    str(title or "").strip() or "Signal",
+                    str(detail or "").strip() or None,
+                    None if impact_score is None else float(impact_score),
+                    None if confidence is None else float(confidence),
+                    json.dumps(signal_meta or {}),
+                    normalized_observed,
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT id FROM candidate_signals WHERE signal_key = ? LIMIT 1",
+                (resolved_key,),
+            ).fetchone()
+            return int(row["id"] if row else 0)
+
+    def list_candidate_signals(
+        self,
+        *,
+        candidate_id: int,
+        job_id: Optional[int] = None,
+        limit: int = 500,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 500), 5000))
+        if job_id is None:
+            rows = self._conn.execute(
+                """
+                SELECT *
+                FROM candidate_signals
+                WHERE candidate_id = ?
+                ORDER BY observed_at DESC, id DESC
+                LIMIT ?
+                """,
+                (int(candidate_id), safe_limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT *
+                FROM candidate_signals
+                WHERE candidate_id = ? AND job_id = ?
+                ORDER BY observed_at DESC, id DESC
+                LIMIT ?
+                """,
+                (int(candidate_id), int(job_id), safe_limit),
+            ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def list_job_signals(
+        self,
+        *,
+        job_id: int,
+        limit: int = 2000,
+        candidate_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 2000), 10000))
+        if candidate_id is None:
+            rows = self._conn.execute(
+                """
+                SELECT
+                    s.*,
+                    c.full_name AS candidate_name
+                FROM candidate_signals s
+                LEFT JOIN candidates c ON c.id = s.candidate_id
+                WHERE s.job_id = ?
+                ORDER BY s.observed_at DESC, s.id DESC
+                LIMIT ?
+                """,
+                (int(job_id), safe_limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT
+                    s.*,
+                    c.full_name AS candidate_name
+                FROM candidate_signals s
+                LEFT JOIN candidates c ON c.id = s.candidate_id
+                WHERE s.job_id = ? AND s.candidate_id = ?
+                ORDER BY s.observed_at DESC, s.id DESC
+                LIMIT ?
+                """,
+                (int(job_id), int(candidate_id), safe_limit),
+            ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def _list_candidate_assessments_grouped(self, job_id: int) -> Dict[int, List[Dict[str, Any]]]:
         rows = self._conn.execute(
             """
@@ -2253,6 +2435,35 @@ class Database:
                 )
                 """
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS candidate_signals (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    signal_key TEXT NOT NULL UNIQUE,
+                    job_id INTEGER NOT NULL,
+                    candidate_id INTEGER NOT NULL,
+                    conversation_id INTEGER,
+                    source_type TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    signal_type TEXT NOT NULL,
+                    signal_category TEXT,
+                    title TEXT NOT NULL,
+                    detail TEXT,
+                    impact_score REAL,
+                    confidence REAL,
+                    signal_meta TEXT,
+                    observed_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_candidate_signals_job_observed ON candidate_signals(job_id, observed_at DESC, id DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_candidate_signals_candidate_observed ON candidate_signals(candidate_id, observed_at DESC, id DESC)"
+            )
 
         columns = self._table_columns("conversations")
         if "external_chat_id" not in columns:
@@ -2296,6 +2507,7 @@ class Database:
             "search_queries_json",
             "company_culture_profile",
             "job_company_culture_profile",
+            "signal_meta",
         ):
             if field in item and item[field]:
                 try:

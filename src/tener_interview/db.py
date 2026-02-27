@@ -14,6 +14,14 @@ def utc_now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _require_psycopg() -> Any:
+    try:
+        import psycopg  # type: ignore
+    except Exception as exc:
+        raise RuntimeError("psycopg is required for postgres interview database backend") from exc
+    return psycopg
+
+
 class InterviewDatabase:
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
@@ -521,4 +529,554 @@ class InterviewDatabase:
                     item[field] = json.loads(item[field])
                 except json.JSONDecodeError:
                     pass
+        return item
+
+
+class InterviewPostgresDatabase:
+    def __init__(self, dsn: str) -> None:
+        self.dsn = str(dsn or "").strip()
+        if not self.dsn:
+            raise ValueError("postgres dsn is required for interview postgres backend")
+        self._psycopg = _require_psycopg()
+
+    @contextmanager
+    def _connect(self) -> Iterable[Any]:
+        with self._psycopg.connect(self.dsn) as conn:
+            try:
+                yield conn
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+
+    @property
+    def db_path(self) -> str:
+        return ""
+
+    def init_schema(self) -> None:
+        schema = """
+        CREATE TABLE IF NOT EXISTS interview_sessions (
+            id BIGSERIAL PRIMARY KEY,
+            session_id TEXT UNIQUE NOT NULL,
+            job_id BIGINT NOT NULL,
+            candidate_id BIGINT NOT NULL,
+            candidate_name TEXT,
+            conversation_id BIGINT,
+            provider TEXT NOT NULL,
+            provider_assessment_id TEXT,
+            provider_invitation_id TEXT,
+            provider_candidate_id TEXT,
+            status TEXT NOT NULL,
+            language TEXT,
+            entry_token_hash TEXT UNIQUE NOT NULL,
+            entry_token_expires_at TIMESTAMPTZ NOT NULL,
+            provider_interview_url TEXT,
+            started_at TIMESTAMPTZ,
+            completed_at TIMESTAMPTZ,
+            scored_at TIMESTAMPTZ,
+            last_sync_at TIMESTAMPTZ,
+            last_error_code TEXT,
+            last_error_message TEXT,
+            created_at TIMESTAMPTZ NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_interview_sessions_job_status
+            ON interview_sessions(job_id, status);
+        CREATE INDEX IF NOT EXISTS idx_interview_sessions_candidate
+            ON interview_sessions(candidate_id);
+        CREATE INDEX IF NOT EXISTS idx_interview_sessions_provider
+            ON interview_sessions(provider, provider_invitation_id);
+
+        CREATE TABLE IF NOT EXISTS interview_results (
+            id BIGSERIAL PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            provider_result_id TEXT,
+            result_version INTEGER NOT NULL DEFAULT 1,
+            technical_score DOUBLE PRECISION,
+            soft_skills_score DOUBLE PRECISION,
+            culture_fit_score DOUBLE PRECISION,
+            total_score DOUBLE PRECISION,
+            score_confidence DOUBLE PRECISION,
+            pass_recommendation TEXT,
+            normalized_json JSONB NOT NULL,
+            raw_payload JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL,
+            UNIQUE(session_id, result_version)
+        );
+
+        CREATE TABLE IF NOT EXISTS interview_events (
+            id BIGSERIAL PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            event_type TEXT NOT NULL,
+            source TEXT NOT NULL,
+            payload JSONB,
+            created_at TIMESTAMPTZ NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS candidate_interview_summary (
+            job_id BIGINT NOT NULL,
+            candidate_id BIGINT NOT NULL,
+            candidate_name TEXT,
+            session_id TEXT NOT NULL,
+            interview_status TEXT NOT NULL,
+            technical_score DOUBLE PRECISION,
+            soft_skills_score DOUBLE PRECISION,
+            culture_fit_score DOUBLE PRECISION,
+            total_score DOUBLE PRECISION,
+            score_confidence DOUBLE PRECISION,
+            updated_at TIMESTAMPTZ NOT NULL,
+            PRIMARY KEY(job_id, candidate_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS idempotency_keys (
+            route TEXT NOT NULL,
+            idempotency_key TEXT NOT NULL,
+            payload_hash TEXT NOT NULL,
+            status_code INTEGER NOT NULL,
+            response_json JSONB NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL,
+            PRIMARY KEY(route, idempotency_key)
+        );
+
+        CREATE TABLE IF NOT EXISTS job_step_progress (
+            job_id BIGINT NOT NULL,
+            step TEXT NOT NULL,
+            status TEXT NOT NULL,
+            output_json JSONB,
+            updated_at TIMESTAMPTZ NOT NULL,
+            PRIMARY KEY(job_id, step)
+        );
+
+        CREATE TABLE IF NOT EXISTS job_interview_assessments (
+            job_id BIGINT PRIMARY KEY,
+            provider TEXT NOT NULL,
+            provider_assessment_id TEXT NOT NULL,
+            assessment_name TEXT,
+            generation_hash TEXT,
+            generated_questions_json JSONB,
+            meta_json JSONB,
+            created_at TIMESTAMPTZ NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL
+        );
+        """
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(schema)
+
+    def insert_session(self, item: Dict[str, Any]) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO interview_sessions (
+                        session_id, job_id, candidate_id, candidate_name, conversation_id,
+                        provider, provider_assessment_id, provider_invitation_id, provider_candidate_id,
+                        status, language, entry_token_hash, entry_token_expires_at,
+                        provider_interview_url, started_at, completed_at, scored_at,
+                        last_sync_at, last_error_code, last_error_message,
+                        created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        item["session_id"],
+                        item["job_id"],
+                        item["candidate_id"],
+                        item.get("candidate_name"),
+                        item.get("conversation_id"),
+                        item["provider"],
+                        item.get("provider_assessment_id"),
+                        item.get("provider_invitation_id"),
+                        item.get("provider_candidate_id"),
+                        item["status"],
+                        item.get("language"),
+                        item["entry_token_hash"],
+                        item["entry_token_expires_at"],
+                        item.get("provider_interview_url"),
+                        item.get("started_at"),
+                        item.get("completed_at"),
+                        item.get("scored_at"),
+                        item.get("last_sync_at"),
+                        item.get("last_error_code"),
+                        item.get("last_error_message"),
+                        item["created_at"],
+                        item["updated_at"],
+                    ),
+                )
+
+    def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute("SELECT * FROM interview_sessions WHERE session_id = %s", (session_id,))
+                row = cur.fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def get_session_by_token_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute("SELECT * FROM interview_sessions WHERE entry_token_hash = %s", (token_hash,))
+                row = cur.fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def list_sessions(
+        self,
+        limit: int = 100,
+        status: Optional[str] = None,
+        job_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(limit, 1000))
+        where: List[str] = []
+        params: List[Any] = []
+        if status:
+            where.append("status = %s")
+            params.append(status)
+        if job_id is not None:
+            where.append("job_id = %s")
+            params.append(int(job_id))
+        where_sql = f"WHERE {' AND '.join(where)}" if where else ""
+        params.append(safe_limit)
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    f"""
+                    SELECT *
+                    FROM interview_sessions
+                    {where_sql}
+                    ORDER BY id DESC
+                    LIMIT %s
+                    """,
+                    tuple(params),
+                )
+                rows = cur.fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
+    def get_latest_session_for_candidate(self, job_id: int, candidate_id: int) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM interview_sessions
+                    WHERE job_id = %s AND candidate_id = %s
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (int(job_id), int(candidate_id)),
+                )
+                row = cur.fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def update_session(self, session_id: str, fields: Dict[str, Any]) -> None:
+        if not fields:
+            return
+        keys = sorted(fields.keys())
+        set_sql = ", ".join([f"{k} = %s" for k in keys])
+        values = [fields[k] for k in keys]
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f"UPDATE interview_sessions SET {set_sql} WHERE session_id = %s",
+                    (*values, session_id),
+                )
+
+    def insert_event(
+        self,
+        session_id: str,
+        event_type: str,
+        source: str,
+        payload: Optional[Dict[str, Any]] = None,
+    ) -> int:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO interview_events (session_id, event_type, source, payload, created_at)
+                    VALUES (%s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        session_id,
+                        event_type,
+                        source,
+                        self._psycopg.types.json.Json(payload or {}),
+                        utc_now_iso(),
+                    ),
+                )
+                row = cur.fetchone()
+        return int(row[0] if row else 0)
+
+    def insert_result(
+        self,
+        session_id: str,
+        provider_result_id: Optional[str],
+        scores: Dict[str, Any],
+        normalized: Dict[str, Any],
+        raw_payload: Dict[str, Any],
+    ) -> int:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT COALESCE(MAX(result_version), 0) AS max_v FROM interview_results WHERE session_id = %s",
+                    (session_id,),
+                )
+                row = cur.fetchone()
+                max_v = int(row[0] if row and row[0] is not None else 0)
+                version = max_v + 1
+                cur.execute(
+                    """
+                    INSERT INTO interview_results (
+                        session_id, provider_result_id, result_version,
+                        technical_score, soft_skills_score, culture_fit_score, total_score,
+                        score_confidence, pass_recommendation, normalized_json, raw_payload, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    RETURNING id
+                    """,
+                    (
+                        session_id,
+                        provider_result_id,
+                        version,
+                        scores.get("technical_score"),
+                        scores.get("soft_skills_score"),
+                        scores.get("culture_fit_score"),
+                        scores.get("total_score"),
+                        scores.get("score_confidence"),
+                        scores.get("pass_recommendation"),
+                        self._psycopg.types.json.Json(normalized),
+                        self._psycopg.types.json.Json(raw_payload),
+                        utc_now_iso(),
+                    ),
+                )
+                inserted = cur.fetchone()
+        return int(inserted[0] if inserted else 0)
+
+    def get_latest_result(self, session_id: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM interview_results
+                    WHERE session_id = %s
+                    ORDER BY result_version DESC
+                    LIMIT 1
+                    """,
+                    (session_id,),
+                )
+                row = cur.fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def upsert_candidate_summary(
+        self,
+        job_id: int,
+        candidate_id: int,
+        candidate_name: Optional[str],
+        session_id: str,
+        interview_status: str,
+        technical_score: Optional[float],
+        soft_skills_score: Optional[float],
+        culture_fit_score: Optional[float],
+        total_score: Optional[float],
+        score_confidence: Optional[float],
+    ) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO candidate_interview_summary (
+                        job_id, candidate_id, candidate_name, session_id, interview_status,
+                        technical_score, soft_skills_score, culture_fit_score,
+                        total_score, score_confidence, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(job_id, candidate_id)
+                    DO UPDATE SET
+                        candidate_name = EXCLUDED.candidate_name,
+                        session_id = EXCLUDED.session_id,
+                        interview_status = EXCLUDED.interview_status,
+                        technical_score = EXCLUDED.technical_score,
+                        soft_skills_score = EXCLUDED.soft_skills_score,
+                        culture_fit_score = EXCLUDED.culture_fit_score,
+                        total_score = EXCLUDED.total_score,
+                        score_confidence = EXCLUDED.score_confidence,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        int(job_id),
+                        int(candidate_id),
+                        candidate_name,
+                        session_id,
+                        interview_status,
+                        technical_score,
+                        soft_skills_score,
+                        culture_fit_score,
+                        total_score,
+                        score_confidence,
+                        utc_now_iso(),
+                    ),
+                )
+
+    def list_leaderboard(self, job_id: int, limit: int = 50) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(limit, 500))
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        job_id,
+                        candidate_id,
+                        candidate_name,
+                        session_id,
+                        interview_status,
+                        technical_score,
+                        soft_skills_score,
+                        culture_fit_score,
+                        total_score,
+                        score_confidence,
+                        updated_at
+                    FROM candidate_interview_summary
+                    WHERE job_id = %s
+                    ORDER BY
+                        CASE
+                            WHEN technical_score IS NOT NULL AND soft_skills_score IS NOT NULL THEN 1
+                            WHEN technical_score IS NOT NULL OR soft_skills_score IS NOT NULL THEN 2
+                            ELSE 3
+                        END ASC,
+                        COALESCE(total_score, -1.0) DESC,
+                        candidate_id ASC
+                    LIMIT %s
+                    """,
+                    (int(job_id), safe_limit),
+                )
+                rows = cur.fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
+    def get_idempotency_record(self, route: str, key: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT route, idempotency_key, payload_hash, status_code, response_json, created_at
+                    FROM idempotency_keys
+                    WHERE route = %s AND idempotency_key = %s
+                    """,
+                    (route, key),
+                )
+                row = cur.fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def put_idempotency_record(
+        self,
+        route: str,
+        key: str,
+        payload_hash: str,
+        status_code: int,
+        response: Dict[str, Any],
+    ) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO idempotency_keys (
+                        route, idempotency_key, payload_hash, status_code, response_json, created_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s)
+                    """,
+                    (
+                        route,
+                        key,
+                        payload_hash,
+                        int(status_code),
+                        self._psycopg.types.json.Json(response),
+                        utc_now_iso(),
+                    ),
+                )
+
+    def upsert_job_step_progress(
+        self,
+        job_id: int,
+        status: str,
+        output: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO job_step_progress (job_id, step, status, output_json, updated_at)
+                    VALUES (%s, 'interview', %s, %s, %s)
+                    ON CONFLICT(job_id, step)
+                    DO UPDATE SET
+                        status = excluded.status,
+                        output_json = excluded.output_json,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        int(job_id),
+                        status,
+                        self._psycopg.types.json.Json(output or {}),
+                        utc_now_iso(),
+                    ),
+                )
+
+    def get_job_assessment(self, job_id: int) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM job_interview_assessments
+                    WHERE job_id = %s
+                    LIMIT 1
+                    """,
+                    (int(job_id),),
+                )
+                row = cur.fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def upsert_job_assessment(
+        self,
+        *,
+        job_id: int,
+        provider: str,
+        provider_assessment_id: str,
+        assessment_name: Optional[str],
+        generation_hash: Optional[str],
+        generated_questions: Optional[List[Dict[str, Any]]],
+        meta: Optional[Dict[str, Any]],
+    ) -> None:
+        now = utc_now_iso()
+        with self._connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO job_interview_assessments (
+                        job_id, provider, provider_assessment_id, assessment_name,
+                        generation_hash, generated_questions_json, meta_json, created_at, updated_at
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(job_id)
+                    DO UPDATE SET
+                        provider = excluded.provider,
+                        provider_assessment_id = excluded.provider_assessment_id,
+                        assessment_name = excluded.assessment_name,
+                        generation_hash = excluded.generation_hash,
+                        generated_questions_json = excluded.generated_questions_json,
+                        meta_json = excluded.meta_json,
+                        updated_at = excluded.updated_at
+                    """,
+                    (
+                        int(job_id),
+                        str(provider),
+                        str(provider_assessment_id),
+                        assessment_name,
+                        generation_hash,
+                        self._psycopg.types.json.Json(generated_questions or []),
+                        self._psycopg.types.json.Json(meta or {}),
+                        now,
+                        now,
+                    ),
+                )
+
+    @staticmethod
+    def _row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
+        item = dict(row)
+        for key, value in list(item.items()):
+            if isinstance(value, datetime):
+                item[key] = value.isoformat()
         return item

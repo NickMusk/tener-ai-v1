@@ -22,6 +22,7 @@ class PostgresMigrationSpecTests(unittest.TestCase):
             "job_culture_profiles",
             "candidates",
             "candidate_job_matches",
+            "candidate_signals",
             "conversations",
             "messages",
             "operation_logs",
@@ -36,6 +37,12 @@ class PostgresMigrationSpecTests(unittest.TestCase):
             "linkedin_account_daily_counters",
             "linkedin_account_weekly_counters",
             "job_linkedin_account_assignments",
+            "interview_sessions",
+            "interview_results",
+            "interview_events",
+            "candidate_interview_summary",
+            "idempotency_keys",
+            "job_interview_assessments",
         }
         missing = sorted(expected_runtime_tables - tables)
         self.assertFalse(missing, f"Missing runtime tables in postgres migrations: {missing}")

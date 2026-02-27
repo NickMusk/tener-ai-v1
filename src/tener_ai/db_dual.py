@@ -408,6 +408,50 @@ class PostgresMirrorWriter:
                     ),
                 )
 
+    def upsert_candidate_signal(self, row: Dict[str, Any]) -> None:
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO candidate_signals (
+                        id, signal_key, job_id, candidate_id, conversation_id, source_type, source_id,
+                        signal_type, signal_category, title, detail, impact_score, confidence,
+                        signal_meta, observed_at, created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(signal_key) DO UPDATE SET
+                        conversation_id = EXCLUDED.conversation_id,
+                        signal_type = EXCLUDED.signal_type,
+                        signal_category = EXCLUDED.signal_category,
+                        title = EXCLUDED.title,
+                        detail = EXCLUDED.detail,
+                        impact_score = EXCLUDED.impact_score,
+                        confidence = EXCLUDED.confidence,
+                        signal_meta = EXCLUDED.signal_meta,
+                        observed_at = EXCLUDED.observed_at,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        int(row.get("id") or 0),
+                        row.get("signal_key"),
+                        int(row.get("job_id") or 0),
+                        int(row.get("candidate_id") or 0),
+                        row.get("conversation_id"),
+                        row.get("source_type") or "unknown",
+                        row.get("source_id") or "unknown",
+                        row.get("signal_type") or "unknown",
+                        row.get("signal_category"),
+                        row.get("title") or "Signal",
+                        row.get("detail"),
+                        row.get("impact_score"),
+                        row.get("confidence"),
+                        self._json(row.get("signal_meta") or {}),
+                        row.get("observed_at") or utc_now_iso(),
+                        row.get("created_at") or utc_now_iso(),
+                        row.get("updated_at") or utc_now_iso(),
+                    ),
+                )
+
 
 class DualWriteDatabase:
     """Proxy that writes to SQLite primary and mirrors selected writes to Postgres."""
@@ -635,11 +679,21 @@ class DualWriteDatabase:
                 lambda: self._mirror.upsert_candidate_agent_assessment(row),
             )
 
+    def upsert_candidate_signal(self, *args: Any, **kwargs: Any) -> int:
+        signal_id = int(self._primary.upsert_candidate_signal(*args, **kwargs))
+        row = self._select_by_id("candidate_signals", signal_id)
+        if isinstance(row, dict):
+            self._mirror_call(
+                "upsert_candidate_signal",
+                lambda: self._mirror.upsert_candidate_signal(row),
+            )
+        return signal_id
+
     def _select_by_id(self, table_name: str, row_id: int) -> Optional[Dict[str, Any]]:
         conn = getattr(self._primary, "_conn", None)
         if conn is None:
             return None
-        if table_name not in {"messages", "pre_resume_events"}:
+        if table_name not in {"messages", "pre_resume_events", "candidate_signals"}:
             return None
         row = conn.execute(f"SELECT * FROM {table_name} WHERE id = ?", (int(row_id),)).fetchone()
         if row is None:

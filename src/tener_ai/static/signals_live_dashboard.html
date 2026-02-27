@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tener Live Signals</title>
+  <style>
+    :root {
+      --bg: #f7f8fa;
+      --card: #ffffff;
+      --text: #111827;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --accent: #0f766e;
+      --accent-soft: #ccfbf1;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, -apple-system, "Segoe UI", sans-serif;
+      background: radial-gradient(circle at 20% 10%, #eff6ff, var(--bg) 45%);
+      color: var(--text);
+    }
+    main { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      margin-bottom: 14px;
+    }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    h1 { font-size: 26px; margin: 0 0 8px; }
+    .muted { color: var(--muted); font-size: 13px; }
+    select, button {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      padding: 9px 12px;
+      font-size: 14px;
+    }
+    button { background: var(--accent); color: #fff; border-color: var(--accent); cursor: pointer; }
+    button.secondary { background: #fff; color: var(--text); border-color: var(--line); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; vertical-align: top; }
+    th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+    .chip {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: #115e59;
+      font-size: 11px;
+      margin-right: 4px;
+      margin-bottom: 4px;
+    }
+    .delta-up { color: #047857; font-weight: 700; }
+    .delta-down { color: #b91c1c; font-weight: 700; }
+    .timeline-item {
+      border-bottom: 1px solid var(--line);
+      padding: 8px 0;
+    }
+    .timeline-item:last-child { border-bottom: none; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <div class="row" style="justify-content:space-between;">
+        <div>
+          <h1>Live Signals View</h1>
+          <div class="muted">Production data only: assessments, pre-resume events, operation logs, and screening state.</div>
+        </div>
+        <a href="/dashboard"><button class="secondary">Back to Dashboard</button></a>
+      </div>
+      <div class="row" style="margin-top:12px;">
+        <select id="job-select"></select>
+        <button id="refresh-btn">Refresh & Reingest</button>
+        <span id="status" class="muted">Loading jobs...</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="row" style="justify-content:space-between;">
+        <strong>Ranking</strong>
+        <span id="summary" class="muted"></span>
+      </div>
+      <div style="overflow:auto; margin-top:8px;">
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Candidate</th>
+              <th>Base</th>
+              <th>Live</th>
+              <th>Delta</th>
+              <th>Signals</th>
+              <th>Top Signals</th>
+            </tr>
+          </thead>
+          <tbody id="ranking-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <strong>Recent Timeline</strong>
+      <div id="timeline" style="margin-top:8px;"></div>
+    </section>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    async function api(path, init) {
+      const res = await fetch(path, {
+        ...init,
+        headers: { "Content-Type": "application/json", ...(init && init.headers ? init.headers : {}) },
+      });
+      const text = await res.text();
+      const body = text ? JSON.parse(text) : {};
+      if (!res.ok) throw new Error(body.error || `HTTP ${res.status}`);
+      return body;
+    }
+
+    function option(label, value) {
+      const el = document.createElement("option");
+      el.value = String(value);
+      el.textContent = label;
+      return el;
+    }
+
+    async function loadJobs() {
+      const out = await api("/api/jobs?limit=200");
+      const jobs = Array.isArray(out.items) ? out.items : [];
+      const select = $("job-select");
+      select.innerHTML = "";
+      if (!jobs.length) {
+        select.appendChild(option("No jobs", ""));
+        return;
+      }
+      for (const job of jobs) {
+        select.appendChild(option(`#${job.id} ${job.title || "Untitled job"}`, job.id));
+      }
+    }
+
+    function renderRanking(items) {
+      const body = $("ranking-body");
+      body.innerHTML = "";
+      for (const row of items) {
+        const tr = document.createElement("tr");
+        const delta = Number(row.rank_delta || 0);
+        const deltaClass = delta > 0 ? "delta-up" : delta < 0 ? "delta-down" : "";
+        const chips = (Array.isArray(row.top_signals) ? row.top_signals : []).map((x) => {
+          const impact = Number(x.impact_score || 0);
+          const sign = impact > 0 ? "+" : "";
+          return `<span class="chip">${(x.signal_category || "other")} ${sign}${impact.toFixed(2)}: ${x.title || "signal"}</span>`;
+        }).join("");
+        tr.innerHTML = `
+          <td class="mono">${row.rank || "-"}</td>
+          <td>${row.candidate_name || row.candidate_id}<div class="muted">${row.status || ""}</div></td>
+          <td class="mono">${Number(row.base_score || 0).toFixed(1)}</td>
+          <td class="mono"><strong>${Number(row.live_score || 0).toFixed(1)}</strong></td>
+          <td class="mono ${deltaClass}">${delta > 0 ? "+" : ""}${delta}</td>
+          <td class="mono">${row.signal_count || 0}</td>
+          <td>${chips || '<span class="muted">no strong signals yet</span>'}</td>
+        `;
+        body.appendChild(tr);
+      }
+      if (!items.length) {
+        body.innerHTML = `<tr><td colspan="7" class="muted">No candidates in this job.</td></tr>`;
+      }
+    }
+
+    function renderTimeline(items) {
+      const root = $("timeline");
+      root.innerHTML = "";
+      const sliced = (Array.isArray(items) ? items : []).slice(0, 80);
+      for (const item of sliced) {
+        const el = document.createElement("div");
+        el.className = "timeline-item";
+        const when = item.observed_at || "-";
+        const impact = Number(item.impact_score || 0);
+        const sign = impact > 0 ? "+" : "";
+        el.innerHTML = `
+          <div class="muted mono">${when}</div>
+          <div><strong>${item.candidate_name || item.candidate_id || "candidate"}</strong> · ${(item.signal_category || "other")} · ${item.title || "signal"} (${sign}${impact.toFixed(2)})</div>
+          <div class="muted">${item.detail || ""}</div>
+        `;
+        root.appendChild(el);
+      }
+      if (!sliced.length) {
+        root.innerHTML = `<div class="muted">No signals available for selected job.</div>`;
+      }
+    }
+
+    async function refreshView() {
+      const jobId = $("job-select").value;
+      if (!jobId) return;
+      $("status").textContent = "Loading live signals...";
+      try {
+        const out = await api(`/api/jobs/${encodeURIComponent(jobId)}/signals/live?refresh=1&limit=300&signals_limit=7000`);
+        renderRanking(Array.isArray(out.ranking) ? out.ranking : []);
+        renderTimeline(Array.isArray(out.timeline) ? out.timeline : []);
+        const ingestion = out.ingestion || {};
+        $("summary").textContent = `Candidates: ${out.candidates_total || 0} · Signals: ${out.signals_total || 0} · Upserted now: ${ingestion.signals_upserted || 0}`;
+        $("status").textContent = `Updated at ${out.generated_at || "-"}`;
+      } catch (err) {
+        $("status").textContent = `Error: ${err.message || String(err)}`;
+      }
+    }
+
+    async function boot() {
+      await loadJobs();
+      $("status").textContent = "Select job and refresh.";
+      $("job-select").addEventListener("change", () => refreshView().catch(() => {}));
+      $("refresh-btn").addEventListener("click", () => refreshView().catch(() => {}));
+      if ($("job-select").value) await refreshView();
+    }
+
+    boot().catch((err) => { $("status").textContent = `Boot error: ${err.message || String(err)}`; });
+  </script>
+</body>
+</html>
+

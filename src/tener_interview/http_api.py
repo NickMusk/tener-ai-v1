@@ -10,7 +10,7 @@ from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
 from .config import InterviewModuleConfig
-from .db import InterviewDatabase
+from .db import InterviewDatabase, InterviewPostgresDatabase
 from .providers import HireflixConfig, HireflixHTTPAdapter, HireflixMockAdapter
 from .question_generation import InterviewQuestionGenerator
 from .scoring import InterviewScoringEngine
@@ -27,7 +27,12 @@ def project_root() -> Path:
 
 def build_services() -> Dict[str, Any]:
     config = InterviewModuleConfig.from_env()
-    db = InterviewDatabase(db_path=config.db_path)
+    if config.db_backend == "postgres":
+        if not config.db_dsn:
+            raise RuntimeError("TENER_INTERVIEW_DB_DSN (or TENER_DB_DSN) is required for postgres interview backend")
+        db = InterviewPostgresDatabase(dsn=config.db_dsn)
+    else:
+        db = InterviewDatabase(db_path=config.db_path)
     db.init_schema()
     if config.source_api_base:
         source_db = SourceAPIClient(
@@ -141,6 +146,7 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
                     },
                     "provider": SERVICES.get("provider_name"),
                     "provider_error": SERVICES.get("provider_error") or None,
+                    "db_backend": SERVICES["config"].db_backend,
                     "source_db": SERVICES["source_db"].status(),
                     "transcription_scoring_criteria_path": SERVICES["config"].transcription_scoring_criteria_path,
                     "total_score_formula_path": SERVICES["config"].total_score_formula_path,

@@ -131,6 +131,11 @@ class EmulatorApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("Emulator Mode", text)
 
+    def test_dashboard_signals_live_page_serves(self) -> None:
+        status, _body, text = self._request("GET", "/dashboard/signals-live")
+        self.assertEqual(status, 200)
+        self.assertIn("Live Signals View", text)
+
     def test_emulator_status_and_list_endpoints(self) -> None:
         status, payload, _ = self._request("GET", "/api/emulator")
         self.assertEqual(status, 200)
