@@ -29,6 +29,26 @@ class _StubSyncService(LinkedInAccountService):
         ]
 
 
+class _StubHostedConnectFallbackService(LinkedInAccountService):
+    def __init__(self, db: Database) -> None:
+        super().__init__(
+            db=db,
+            api_key="unipile-key",
+            state_secret="test-secret",
+            hosted_connect_path="/api/v1/hosted/accounts/linkedin",
+        )
+        self.calls = []
+
+    def _request_json(self, method, url, payload, *, auth_mode="default"):  # type: ignore[override]
+        self.calls.append((method, url, payload, auth_mode))
+        if auth_mode != "api_key_only":
+            raise RuntimeError(
+                "Unipile HTTP error 401: "
+                '{"status":401,"type":"errors/invalid_credentials","detail":"This authentication link doesn\'t exist or is no longer active."}'
+            )
+        return {"url": "https://hosted.unipile.test/connect/abc"}
+
+
 class LinkedInAccountsServiceTests(unittest.TestCase):
     def test_start_connect_and_callback_connects_account(self) -> None:
         with TemporaryDirectory() as td:
@@ -105,6 +125,43 @@ class LinkedInAccountsServiceTests(unittest.TestCase):
             row = db.get_linkedin_account(account_id)
             self.assertIsNotNone(row)
             self.assertEqual(str((row or {}).get("status")), "disconnected")
+
+    def test_start_connect_hosted_fallback_uses_api_key_only_mode(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "linkedin_accounts_hosted_fallback.sqlite3"))
+            db.init_schema()
+            service = _StubHostedConnectFallbackService(db)
+            out = service.start_connect(
+                callback_url="https://tener.test/api/linkedin/accounts/connect/callback",
+                label="Recruiter 2",
+            )
+            self.assertEqual(out.get("provider"), "unipile")
+            self.assertEqual(out.get("connect_url"), "https://hosted.unipile.test/connect/abc")
+            self.assertGreaterEqual(len(service.calls), 1)
+            first_call = service.calls[0]
+            self.assertEqual(first_call[3], "api_key_only")
+
+    def test_headers_modes(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "linkedin_accounts_headers.sqlite3"))
+            db.init_schema()
+            service = LinkedInAccountService(
+                db=db,
+                api_key="k-test",
+                connect_url_template="https://unipile.test/connect?state={state}&redirect_uri={redirect_uri}",
+                state_secret="test-secret",
+            )
+            default_headers = service._headers_json()
+            self.assertEqual(default_headers.get("Authorization"), "Bearer k-test")
+            self.assertEqual(default_headers.get("X-API-KEY"), "k-test")
+
+            api_key_only_headers = service._headers_json(auth_mode="api_key_only")
+            self.assertIsNone(api_key_only_headers.get("Authorization"))
+            self.assertEqual(api_key_only_headers.get("X-API-KEY"), "k-test")
+
+            bearer_only_headers = service._headers_json(auth_mode="bearer_only")
+            self.assertEqual(bearer_only_headers.get("Authorization"), "Bearer k-test")
+            self.assertIsNone(bearer_only_headers.get("X-API-KEY"))
 
 
 if __name__ == "__main__":
