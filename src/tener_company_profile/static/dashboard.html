@@ -395,6 +395,7 @@
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const LAST_RESULT_KEY = "tener_company_profile_last_result_v1";
 
     function setStatus(text, tone = "muted") {
       const el = $("status-line");
@@ -501,6 +502,31 @@
       $("raw-json").textContent = JSON.stringify(payload, null, 2);
     }
 
+    function saveLastResult(payload) {
+      try {
+        localStorage.setItem(LAST_RESULT_KEY, JSON.stringify(payload || {}));
+      } catch (_) {
+      }
+    }
+
+    function loadLastResult() {
+      try {
+        const raw = localStorage.getItem(LAST_RESULT_KEY);
+        if (!raw) {
+          return false;
+        }
+        const payload = JSON.parse(raw);
+        if (!payload || typeof payload !== "object") {
+          return false;
+        }
+        renderRuntime(payload?.runtime || {});
+        renderResult(payload);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
     async function loadHealth() {
       try {
         const health = await api("/health");
@@ -531,6 +557,7 @@
         });
         renderRuntime(payload?.runtime || {});
         renderResult(payload);
+        saveLastResult(payload);
         const warningCount = (payload?.result?.warnings || []).length;
         if (warningCount > 0) {
           setStatus(`Generated with ${warningCount} warnings.`, "warn");
@@ -550,6 +577,9 @@
     });
     $("run-btn").addEventListener("click", runGeneration);
 
+    if (loadLastResult()) {
+      setStatus("Loaded last generated result.", "muted");
+    }
     loadHealth();
   </script>
 </body>
