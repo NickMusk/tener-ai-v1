@@ -1019,6 +1019,38 @@
       $("metric-outreached").textContent = outreached;
     }
 
+    function _metricValue(id) {
+      const raw = Number(($(id) || {}).textContent || 0);
+      return Number.isFinite(raw) && raw > 0 ? raw : 0;
+    }
+
+    function applyCandidateMetricsFallback(items) {
+      const rows = Array.isArray(items) ? items : [];
+      if (!rows.length) return;
+
+      const searchedFromCandidates = rows.length;
+      const verifiedFromCandidates = rows.filter((row) => String(row.status || "").toLowerCase() === "verified").length;
+      const outreachedFromCandidates = rows.filter((row) => {
+        const key = String(row.current_status_key || "").toLowerCase();
+        const conversationStatus = String(row.conversation_status || "").toLowerCase();
+        return key === "outreached" || conversationStatus === "active" || conversationStatus === "waiting_connection";
+      }).length;
+
+      const merged = {
+        searched: Math.max(_metricValue("metric-searched"), searchedFromCandidates),
+        verified: Math.max(_metricValue("metric-verified"), verifiedFromCandidates),
+        outreached: Math.max(_metricValue("metric-outreached"), outreachedFromCandidates),
+      };
+      setMetrics(merged);
+
+      if (String($("step-source-meta").textContent || "").includes("Profiles: 0")) {
+        $("step-source-meta").textContent = `Profiles: ${merged.searched}`;
+      }
+      if (String($("step-outreach-meta").textContent || "").includes("Total: 0") && merged.outreached > 0) {
+        $("step-outreach-meta").textContent = `Total: ${merged.outreached}, Sent: 0, Pending: 0, Failed: 0`;
+      }
+    }
+
     function applyAgentSystemNames() {
       const sourcingName = (state.agentSystem.sourcing_vetting || {}).name || "Reed AI (Talent Scout)";
       const communicationName = (state.agentSystem.communication || {}).name || "Casey AI (Hiring Coordinator)";
@@ -2221,6 +2253,7 @@
       try {
         const data = await api(`/api/jobs/${jobId}/candidates`);
         const items = data.items || [];
+        applyCandidateMetricsFallback(items);
         if (!items.length) {
           body.innerHTML = '<tr><td colspan="9" class="muted">No candidates yet</td></tr>';
           return;
