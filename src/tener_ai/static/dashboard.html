@@ -1030,6 +1030,9 @@
 
       const searchedFromCandidates = rows.length;
       const verifiedFromCandidates = rows.filter((row) => String(row.status || "").toLowerCase() === "verified").length;
+      const needsResumeFromCandidates = rows.filter((row) => String(row.status || "").toLowerCase() === "needs_resume").length;
+      const rejectedFromCandidates = rows.filter((row) => String(row.status || "").toLowerCase() === "rejected").length;
+      const addedFromCandidates = rows.filter((row) => String(row.status || "").toLowerCase() !== "rejected").length;
       const outreachedFromCandidates = rows.filter((row) => {
         const key = String(row.current_status_key || "").toLowerCase();
         const conversationStatus = String(row.conversation_status || "").toLowerCase();
@@ -1045,6 +1048,16 @@
 
       if (String($("step-source-meta").textContent || "").includes("Profiles: 0")) {
         $("step-source-meta").textContent = `Profiles: ${merged.searched}`;
+      }
+      if (String($("step-enrich-meta").textContent || "").includes("Profiles: 0")) {
+        $("step-enrich-meta").textContent = `Profiles: ${merged.searched}, Failed: 0`;
+      }
+      if (String($("step-verify-meta").textContent || "").includes("Verified: 0")) {
+        $("step-verify-meta").textContent =
+          `Verified: ${verifiedFromCandidates}, Needs resume: ${needsResumeFromCandidates}, Rejected: ${rejectedFromCandidates}`;
+      }
+      if (String($("step-add-meta").textContent || "").includes("Added: 0")) {
+        $("step-add-meta").textContent = `Added: ${addedFromCandidates}`;
       }
       if (String($("step-outreach-meta").textContent || "").includes("Total: 0") && merged.outreached > 0) {
         $("step-outreach-meta").textContent = `Total: ${merged.outreached}, Sent: 0, Pending: 0, Failed: 0`;
