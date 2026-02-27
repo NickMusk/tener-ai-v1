@@ -1777,6 +1777,22 @@ class WorkflowService:
 
             language = str((state or {}).get("language") or (candidate.get("languages") or ["en"])[0]).lower()
             delivery = self._send_auto_reply(candidate=candidate, message=outbound, conversation=conversation)
+            external_chat_id = str(delivery.get("chat_id") or "").strip()
+            chat_binding = None
+            if external_chat_id:
+                chat_binding = self.db.set_conversation_external_chat_id(
+                    conversation_id=conversation_id,
+                    external_chat_id=external_chat_id,
+                )
+                binding_status = str((chat_binding or {}).get("status") or "")
+                if binding_status not in {"set", "rebound_same_candidate"}:
+                    self.db.log_operation(
+                        operation="agent.pre_resume.followup.chat_binding",
+                        status="partial",
+                        entity_type="conversation",
+                        entity_id=str(conversation_id),
+                        details={"candidate_id": candidate_id, "chat_binding": chat_binding},
+                    )
             outbound_id = self.db.add_message(
                 conversation_id=conversation_id,
                 direction="outbound",
@@ -1787,6 +1803,8 @@ class WorkflowService:
                     "auto": True,
                     "session_id": session_id,
                     "delivery": delivery,
+                    "external_chat_id": external_chat_id or None,
+                    "chat_binding": chat_binding,
                 },
             )
             self.db.log_operation(
