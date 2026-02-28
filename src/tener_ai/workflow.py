@@ -111,7 +111,7 @@ class WorkflowService:
         raw_keywords = str(
             os.environ.get(
                 "TENER_TEST_JOB_KEYWORDS",
-                "test,testing,smoke,sandbox,debug,verify,staging,qa,check,probe,demo,тест",
+                "test,smoke,sandbox,debug,verify,staging,check,probe,demo,тест",
             )
         )
         self.test_job_keywords = [x.strip().lower() for x in raw_keywords.split(",") if x.strip()]
@@ -4338,8 +4338,8 @@ class WorkflowService:
         if not self.test_job_keywords:
             return False
         title = str(job.get("title") or "").strip().lower()
-        jd_text = str(job.get("jd_text") or "").strip().lower()
-        text = f"{title}\n{jd_text}"
+        company = str(job.get("company") or "").strip().lower()
+        text = f"{title}\n{company}"
         return any(keyword in text for keyword in self.test_job_keywords)
 
     @staticmethod

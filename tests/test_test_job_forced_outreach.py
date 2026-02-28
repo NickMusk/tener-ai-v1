@@ -36,7 +36,59 @@ class _Provider:
         return {"provider": "stub", "connected": True}
 
 
+class _SourceProvider(_Provider):
+    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        return [
+            {
+                "linkedin_id": "regular-manual-qa",
+                "unipile_profile_id": "regular-manual-qa",
+                "attendee_provider_id": "regular-manual-qa",
+                "full_name": "Regular QA Candidate",
+                "headline": "Manual QA Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["qa"],
+                "years_experience": 4,
+                "raw": {},
+            }
+        ]
+
+
 class TestJobForcedOutreachTests(unittest.TestCase):
+    def test_manual_qa_job_does_not_auto_enable_forced_only_mode(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "manual_qa_not_test_job.sqlite3"))
+            db.init_schema()
+            ids_file = Path(td) / "forced_ids.txt"
+            ids_file.write_text(f"{FORCED_TEST_ID}\n", encoding="utf-8")
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = _SourceProvider()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                forced_test_ids_path=str(ids_file),
+            )
+
+            job_id = db.insert_job(
+                title="Manual QA Engineer",
+                jd_text="Manual testing, API testing, regression suites, bug triage.",
+                company="Tener.ai",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="middle",
+            )
+
+            out = workflow.source_candidates(job_id=job_id, limit=5, test_mode=None)
+            self.assertFalse(out.get("test_mode_active"))
+            self.assertEqual(out.get("total"), 2)
+            ids = {str(item.get("linkedin_id") or "") for item in (out.get("profiles") or [])}
+            self.assertIn("regular-manual-qa", ids)
+
     def test_test_job_outreach_sends_only_to_forced_candidates(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as td:

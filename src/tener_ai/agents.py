@@ -21,12 +21,17 @@ class SourcingAgent:
 
         seen: set[str] = set()
         collected: List[Dict[str, Any]] = []
+        search_errors: List[str] = []
 
         # Pass 1: broad query set with a larger per-query window.
         for query in queries:
             if len(collected) >= limit:
                 break
-            profiles = self.linkedin_provider.search_profiles(query=query, limit=per_query_limit)
+            try:
+                profiles = self.linkedin_provider.search_profiles(query=query, limit=per_query_limit)
+            except Exception as exc:
+                search_errors.append(f"query={query[:120]} error={exc}")
+                continue
             for profile in profiles:
                 key = self._candidate_key(profile)
                 if key in seen:
@@ -42,7 +47,11 @@ class SourcingAgent:
             for query in queries:
                 if len(collected) >= limit:
                     break
-                profiles = self.linkedin_provider.search_profiles(query=query, limit=expanded_limit)
+                try:
+                    profiles = self.linkedin_provider.search_profiles(query=query, limit=expanded_limit)
+                except Exception as exc:
+                    search_errors.append(f"query={query[:120]} error={exc}")
+                    continue
                 for profile in profiles:
                     key = self._candidate_key(profile)
                     if key in seen:
@@ -52,6 +61,8 @@ class SourcingAgent:
                     if len(collected) >= limit:
                         break
 
+        if not collected and search_errors:
+            raise RuntimeError("; ".join(search_errors[:5]))
         return collected[:limit]
 
     def send_outreach(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
