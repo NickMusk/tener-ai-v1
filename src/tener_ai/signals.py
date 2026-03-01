@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from .signal_rules import SignalRulesEngine
+
 
 UTC = timezone.utc
 
@@ -40,8 +42,9 @@ def _clamp(value: float, min_value: float, max_value: float) -> float:
 
 
 class SignalIngestionService:
-    def __init__(self, db: Any) -> None:
+    def __init__(self, db: Any, rules_engine: Optional[SignalRulesEngine] = None) -> None:
         self.db = db
+        self.rules = rules_engine or SignalRulesEngine()
 
     def ingest_job(self, *, job_id: int, limit_candidates: int = 500, limit_per_candidate: int = 300) -> Dict[str, Any]:
         job = self.db.get_job(int(job_id))
@@ -96,6 +99,64 @@ class SignalIngestionService:
             "generated_at": utc_now_iso(),
         }
 
+    def _upsert_signal(
+        self,
+        *,
+        job_id: int,
+        candidate_id: int,
+        source_type: str,
+        source_id: str,
+        signal_type: str,
+        signal_category: Optional[str],
+        title: str,
+        detail: Optional[str],
+        impact_score: Optional[float],
+        confidence: Optional[float],
+        conversation_id: Optional[int],
+        observed_at: Optional[str],
+        signal_meta: Optional[Dict[str, Any]],
+    ) -> int:
+        raw_meta = dict(signal_meta or {})
+        payload = {
+            "job_id": int(job_id),
+            "candidate_id": int(candidate_id),
+            "source_type": source_type,
+            "source_id": source_id,
+            "signal_type": signal_type,
+            "signal_category": signal_category,
+            "title": title,
+            "detail": detail,
+            "impact_score": impact_score,
+            "confidence": confidence,
+            "signal_meta": raw_meta,
+        }
+        normalized = self.rules.classify_signal(payload)
+        raw_meta["signal_role"] = normalized.get("role")
+        raw_meta["detector"] = normalized.get("detector")
+        raw_meta["score_weight"] = normalized.get("score_weight")
+        raw_meta["signal_rule_id"] = normalized.get("rule_id")
+        raw_meta["signal_rules_version"] = normalized.get("rules_version")
+        if normalized.get("signal_key"):
+            raw_meta["evaluative_signal_key"] = normalized.get("signal_key")
+        raw_meta["raw_impact_score"] = normalized.get("raw_impact_score")
+        if normalized.get("raw_confidence") is not None:
+            raw_meta["raw_confidence"] = normalized.get("raw_confidence")
+        return self.db.upsert_candidate_signal(
+            job_id=int(job_id),
+            candidate_id=int(candidate_id),
+            conversation_id=int(conversation_id) if conversation_id is not None else None,
+            source_type=source_type,
+            source_id=source_id,
+            signal_type=signal_type,
+            signal_category=signal_category,
+            title=title,
+            detail=detail,
+            impact_score=normalized.get("impact_score"),
+            confidence=normalized.get("confidence"),
+            observed_at=str(observed_at or utc_now_iso()),
+            signal_meta=raw_meta,
+        )
+
     def _ingest_assessment_signals(self, *, job_id: int, candidate_id: int, bucket: Dict[str, int]) -> int:
         rows = self.db.list_candidate_assessments(candidate_id=int(candidate_id), job_id=int(job_id))
         written = 0
@@ -119,9 +180,10 @@ class SignalIngestionService:
             detail = f"status={status or 'unknown'}; score={score_raw}" if score_raw is not None else f"status={status or 'unknown'}"
             source_id = str(assessment_id) if assessment_id > 0 else f"{agent_key}:{stage_key}"
 
-            self.db.upsert_candidate_signal(
+            self._upsert_signal(
                 job_id=int(job_id),
                 candidate_id=int(candidate_id),
+                conversation_id=None,
                 source_type="assessment",
                 source_id=source_id,
                 signal_type=stage_key,
@@ -182,7 +244,7 @@ class SignalIngestionService:
                 title = f"{title} ({intent})"
             detail = str(event.get("inbound_text") or event.get("outbound_text") or "").strip()[:240] or None
 
-            self.db.upsert_candidate_signal(
+            self._upsert_signal(
                 job_id=int(job_id),
                 candidate_id=int(candidate_id),
                 conversation_id=int(conversation_id) if conversation_id is not None else None,
@@ -258,7 +320,7 @@ class SignalIngestionService:
             title = f"{operation} [{status or 'unknown'}]"
             detail = str(details.get("reason") or details.get("error") or "").strip()[:260] or None
 
-            self.db.upsert_candidate_signal(
+            self._upsert_signal(
                 job_id=int(job_id),
                 candidate_id=int(candidate_id),
                 conversation_id=int(conversation_id) if conversation_id is not None else None,
@@ -320,7 +382,7 @@ class SignalIngestionService:
         title = f"Match status: {match_status or 'unknown'}"
         detail = f"screening score={round(score,2)}; interview_status={interview_status or 'n/a'}"
 
-        self.db.upsert_candidate_signal(
+        self._upsert_signal(
             job_id=int(job_id),
             candidate_id=int(candidate_id),
             conversation_id=int(conversation_id) if conversation_id is not None else None,
@@ -344,8 +406,9 @@ class SignalIngestionService:
 
 
 class JobSignalsLiveViewService:
-    def __init__(self, db: Any) -> None:
+    def __init__(self, db: Any, rules_engine: Optional[SignalRulesEngine] = None) -> None:
         self.db = db
+        self.rules = rules_engine or SignalRulesEngine()
 
     def build_job_view(self, *, job_id: int, limit_candidates: int = 200, limit_signals: int = 5000) -> Dict[str, Any]:
         job = self.db.get_job(int(job_id))
@@ -369,7 +432,8 @@ class JobSignalsLiveViewService:
                 "status": row.get("current_status_label") or row.get("status") or "unknown",
                 "base_score": round(base_score, 2),
                 "impact_total": 0.0,
-                "signal_count": 0,
+                "signal_count_total": 0,
+                "signal_count_evaluative": 0,
                 "top_signals": [],
             }
 
@@ -378,18 +442,24 @@ class JobSignalsLiveViewService:
             bucket = buckets.get(candidate_id)
             if bucket is None:
                 continue
-            impact = _safe_float(signal.get("impact_score"), 0.0)
-            bucket["impact_total"] = float(bucket.get("impact_total") or 0.0) + impact
-            bucket["signal_count"] = int(bucket.get("signal_count") or 0) + 1
+            normalized = self.rules.classify_signal(signal)
+            role = str(normalized.get("role") or "administrative").strip().lower() or "administrative"
+            impact = _safe_float(normalized.get("effective_impact"), 0.0)
+            bucket["signal_count_total"] = int(bucket.get("signal_count_total") or 0) + 1
+            if role == "evaluative":
+                bucket["impact_total"] = float(bucket.get("impact_total") or 0.0) + impact
+                bucket["signal_count_evaluative"] = int(bucket.get("signal_count_evaluative") or 0) + 1
 
             top_signals = bucket.get("top_signals")
-            if isinstance(top_signals, list) and len(top_signals) < 5:
+            if isinstance(top_signals, list) and role == "evaluative" and len(top_signals) < 5:
                 top_signals.append(
                     {
                         "title": signal.get("title"),
                         "detail": signal.get("detail"),
                         "impact_score": impact,
                         "signal_category": signal.get("signal_category"),
+                        "signal_key": normalized.get("signal_key"),
+                        "signal_role": role,
                         "observed_at": signal.get("observed_at"),
                     }
                 )
@@ -416,7 +486,8 @@ class JobSignalsLiveViewService:
                     "base_score": row["base_score"],
                     "live_score": round(live_score, 2),
                     "impact_points": round(impact_points, 2),
-                    "signal_count": int(row.get("signal_count") or 0),
+                    "signal_count": int(row.get("signal_count_evaluative") or 0),
+                    "signal_count_total": int(row.get("signal_count_total") or 0),
                     "top_signals": row.get("top_signals") if isinstance(row.get("top_signals"), list) else [],
                 }
             )
@@ -438,9 +509,16 @@ class JobSignalsLiveViewService:
 
         timeline: List[Dict[str, Any]] = []
         category_counts: Dict[str, int] = {}
+        role_counts: Dict[str, int] = {}
+        evaluative_total = 0
         for signal in signals[:1000]:
+            normalized = self.rules.classify_signal(signal)
             category = str(signal.get("signal_category") or "other").strip().lower() or "other"
             category_counts[category] = int(category_counts.get(category) or 0) + 1
+            role = str(normalized.get("role") or "administrative").strip().lower() or "administrative"
+            role_counts[role] = int(role_counts.get(role) or 0) + 1
+            if role == "evaluative":
+                evaluative_total += 1
             timeline.append(
                 {
                     "observed_at": signal.get("observed_at"),
@@ -449,9 +527,13 @@ class JobSignalsLiveViewService:
                     "source_type": signal.get("source_type"),
                     "signal_type": signal.get("signal_type"),
                     "signal_category": category,
+                    "signal_role": role,
+                    "detector": normalized.get("detector"),
+                    "signal_key": normalized.get("signal_key"),
                     "title": signal.get("title"),
                     "detail": signal.get("detail"),
-                    "impact_score": signal.get("impact_score"),
+                    "impact_score": normalized.get("impact_score"),
+                    "effective_impact": normalized.get("effective_impact"),
                 }
             )
 
@@ -461,9 +543,11 @@ class JobSignalsLiveViewService:
             "generated_at": utc_now_iso(),
             "candidates_total": len(selected_candidates),
             "signals_total": len(signals),
+            "evaluative_signals_total": evaluative_total,
             "ranking": ranking,
             "timeline": timeline,
             "category_counts": category_counts,
+            "role_counts": role_counts,
         }
 
 
@@ -525,4 +609,3 @@ class MonitoringService:
             "alerts": alerts,
             "items": items,
         }
-

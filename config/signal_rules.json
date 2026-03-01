@@ -1,0 +1,375 @@
+{
+  "version": "2026-02-28.v1",
+  "defaults": {
+    "role": "administrative",
+    "detector": "algorithmic",
+    "score_weight": 0.0,
+    "impact_range": [
+      -2.5,
+      2.5
+    ],
+    "confidence_range": [
+      0.3,
+      0.95
+    ]
+  },
+  "signal_catalog": [
+    "skills_match",
+    "domain_expertise",
+    "tenure_pattern",
+    "education_signal",
+    "linkedin_profile_depth",
+    "github_activity",
+    "portfolio_quality",
+    "reference_signal",
+    "communication_quality",
+    "question_category",
+    "responsiveness_timing",
+    "interview_technical_depth",
+    "interview_problem_solving",
+    "interview_ownership",
+    "interview_collaboration",
+    "culture_alignment",
+    "psychological_profile",
+    "salary_alignment",
+    "availability_risk"
+  ],
+  "rules": [
+    {
+      "id": "assessment_sourcing_vetting",
+      "when": {
+        "source_type": "assessment",
+        "meta.agent_key": "sourcing_vetting",
+        "signal_type": "vetting"
+      },
+      "role": "evaluative",
+      "detector": "hybrid",
+      "signal_key": "skills_match",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.5,
+        2.0
+      ],
+      "confidence_range": [
+        0.55,
+        0.95
+      ]
+    },
+    {
+      "id": "assessment_communication_dialogue",
+      "when": {
+        "source_type": "assessment",
+        "meta.agent_key": "communication",
+        "signal_type": "dialogue"
+      },
+      "role": "evaluative",
+      "detector": "hybrid",
+      "signal_key": "communication_quality",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.5,
+        1.5
+      ]
+    },
+    {
+      "id": "assessment_interview_results",
+      "when": {
+        "source_type": "assessment",
+        "meta.agent_key": "interview_evaluation",
+        "signal_type": "interview_results"
+      },
+      "role": "evaluative",
+      "detector": "hybrid",
+      "signal_key": "interview_technical_depth",
+      "score_weight": 1.0,
+      "impact_range": [
+        -2.0,
+        2.0
+      ]
+    },
+    {
+      "id": "assessment_culture_analyst",
+      "when": {
+        "source_type": "assessment",
+        "meta.agent_key": "culture_analyst"
+      },
+      "role": "evaluative",
+      "detector": "llm",
+      "signal_key": "culture_alignment",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.8,
+        1.8
+      ]
+    },
+    {
+      "id": "assessment_communication_outreach_admin",
+      "when": {
+        "source_type": "assessment",
+        "meta.agent_key": "communication",
+        "signal_type": "outreach"
+      },
+      "role": "administrative",
+      "detector": "algorithmic",
+      "signal_key": "outreach_delivery",
+      "score_weight": 0.0,
+      "impact_range": [
+        -1.0,
+        1.0
+      ]
+    },
+    {
+      "id": "pre_resume_resume_shared",
+      "when": {
+        "source_type": "pre_resume_event",
+        "meta.intent": "resume_shared"
+      },
+      "role": "evaluative",
+      "detector": "hybrid",
+      "signal_key": "portfolio_quality",
+      "score_weight": 1.0,
+      "impact_range": [
+        0.3,
+        1.4
+      ]
+    },
+    {
+      "id": "pre_resume_not_interested",
+      "when": {
+        "source_type": "pre_resume_event",
+        "meta.intent": "not_interested"
+      },
+      "role": "evaluative",
+      "detector": "algorithmic",
+      "signal_key": "availability_risk",
+      "score_weight": 1.0,
+      "impact_range": [
+        -2.0,
+        -0.5
+      ]
+    },
+    {
+      "id": "pre_resume_unreachable",
+      "when": {
+        "source_type": "pre_resume_event",
+        "meta.state_status": "unreachable"
+      },
+      "role": "evaluative",
+      "detector": "algorithmic",
+      "signal_key": "responsiveness_timing",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.8,
+        -0.5
+      ]
+    },
+    {
+      "id": "pre_resume_followup_admin",
+      "when": {
+        "source_type": "pre_resume_event",
+        "signal_type": [
+          "followup_sent",
+          "session_started"
+        ]
+      },
+      "role": "administrative",
+      "detector": "algorithmic",
+      "signal_key": "workflow_progress",
+      "score_weight": 0.0
+    },
+    {
+      "id": "pre_resume_inbound_default",
+      "when": {
+        "source_type": "pre_resume_event",
+        "signal_type": "inbound_processed"
+      },
+      "role": "evaluative",
+      "detector": "hybrid",
+      "signal_key": "question_category",
+      "score_weight": 1.0,
+      "impact_range": [
+        -0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "operation_log_governance_sync_error",
+      "when": {
+        "source_type": "operation_log",
+        "signal_type": "agent.interview.sync",
+        "meta.status": [
+          "error",
+          "failed"
+        ]
+      },
+      "role": "governance",
+      "detector": "algorithmic",
+      "signal_key": "data_reliability",
+      "score_weight": 0.0,
+      "confidence_range": [
+        0.4,
+        0.75
+      ]
+    },
+    {
+      "id": "operation_log_default_admin",
+      "when": {
+        "source_type": "operation_log"
+      },
+      "role": "administrative",
+      "detector": "algorithmic",
+      "signal_key": "pipeline_status",
+      "score_weight": 0.0
+    },
+    {
+      "id": "match_snapshot_governance",
+      "when": {
+        "source_type": "match_snapshot"
+      },
+      "role": "governance",
+      "detector": "algorithmic",
+      "signal_key": "screening_snapshot",
+      "score_weight": 0.0
+    },
+    {
+      "id": "direct_skills_match",
+      "when": {
+        "signal_type": "skills_match"
+      },
+      "role": "evaluative",
+      "detector": "hybrid",
+      "signal_key": "skills_match",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.5,
+        2.0
+      ]
+    },
+    {
+      "id": "direct_domain_expertise",
+      "when": {
+        "signal_type": "domain_expertise"
+      },
+      "role": "evaluative",
+      "detector": "hybrid",
+      "signal_key": "domain_expertise",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.5,
+        1.5
+      ]
+    },
+    {
+      "id": "direct_tenure_pattern",
+      "when": {
+        "signal_type": "tenure_pattern"
+      },
+      "role": "evaluative",
+      "detector": "algorithmic",
+      "signal_key": "tenure_pattern",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.2,
+        0.8
+      ]
+    },
+    {
+      "id": "direct_education_signal",
+      "when": {
+        "signal_type": "education_signal"
+      },
+      "role": "evaluative",
+      "detector": "algorithmic",
+      "signal_key": "education_signal",
+      "score_weight": 1.0,
+      "impact_range": [
+        -0.8,
+        0.6
+      ]
+    },
+    {
+      "id": "direct_linkedin_profile_depth",
+      "when": {
+        "signal_type": "linkedin_profile_depth"
+      },
+      "role": "evaluative",
+      "detector": "algorithmic",
+      "signal_key": "linkedin_profile_depth",
+      "score_weight": 1.0,
+      "impact_range": [
+        -0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "direct_github_activity",
+      "when": {
+        "signal_type": "github_activity"
+      },
+      "role": "evaluative",
+      "detector": "algorithmic",
+      "signal_key": "github_activity",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.0,
+        1.2
+      ]
+    },
+    {
+      "id": "direct_reference_signal",
+      "when": {
+        "signal_type": "reference_signal"
+      },
+      "role": "evaluative",
+      "detector": "algorithmic",
+      "signal_key": "reference_signal",
+      "score_weight": 1.0,
+      "impact_range": [
+        -0.8,
+        0.8
+      ]
+    },
+    {
+      "id": "direct_psychological_profile",
+      "when": {
+        "signal_type": "psychological_profile"
+      },
+      "role": "evaluative",
+      "detector": "hybrid",
+      "signal_key": "psychological_profile",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.2,
+        1.2
+      ]
+    },
+    {
+      "id": "direct_salary_alignment",
+      "when": {
+        "signal_type": "salary_alignment"
+      },
+      "role": "evaluative",
+      "detector": "algorithmic",
+      "signal_key": "salary_alignment",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.2,
+        0.8
+      ]
+    },
+    {
+      "id": "direct_availability_risk",
+      "when": {
+        "signal_type": "availability_risk"
+      },
+      "role": "evaluative",
+      "detector": "algorithmic",
+      "signal_key": "availability_risk",
+      "score_weight": 1.0,
+      "impact_range": [
+        -1.2,
+        0.5
+      ]
+    }
+  ]
+}

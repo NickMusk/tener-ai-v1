@@ -44,6 +44,7 @@ from .linkedin_provider import build_linkedin_provider
 from .matching import MatchingEngine
 from .outreach_policy import LinkedInOutreachPolicy
 from .pre_resume_service import PreResumeCommunicationService
+from .signal_rules import SignalRulesEngine
 from .signals import JobSignalsLiveViewService, MonitoringService, SignalIngestionService
 from .workflow import WorkflowService
 
@@ -429,8 +430,9 @@ def build_services() -> Dict[str, Any]:
         company_profiles_path=emulator_company_profiles_path,
     )
     auth_service = AuthService.from_env(root=root)
-    signals_ingestion = SignalIngestionService(db=db)
-    signals_live = JobSignalsLiveViewService(db=db)
+    signal_rules = SignalRulesEngine()
+    signals_ingestion = SignalIngestionService(db=db, rules_engine=signal_rules)
+    signals_live = JobSignalsLiveViewService(db=db, rules_engine=signal_rules)
     monitoring = MonitoringService(db=db)
 
     services = {

@@ -160,6 +160,11 @@ class SignalsPipelineTests(unittest.TestCase):
         self.assertIn("pre_resume_event", source_types)
         self.assertIn("operation_log", source_types)
         self.assertIn("match_snapshot", source_types)
+        for row in rows:
+            meta = row.get("signal_meta") if isinstance(row.get("signal_meta"), dict) else {}
+            self.assertIn("signal_role", meta)
+            self.assertIn("score_weight", meta)
+            self.assertIn("signal_rules_version", meta)
 
     def test_live_view_reflects_rank_shifts_after_ingestion(self) -> None:
         job_id = self._seed_job_with_candidates()
@@ -208,7 +213,101 @@ class SignalsPipelineTests(unittest.TestCase):
         reasons = {str(item.get("reason") or "") for item in alerts}
         self.assertIn("signals_missing", reasons)
 
+    def test_administrative_signal_does_not_change_live_score(self) -> None:
+        job_id = self.db.insert_job(
+            title="Signals admin-only job",
+            jd_text="Backend engineer",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="senior",
+        )
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "signals-admin-only",
+                "full_name": "Admin Only Candidate",
+                "headline": "Backend Engineer",
+                "location": "Warsaw",
+                "languages": ["en"],
+                "skills": ["python"],
+                "years_experience": 5,
+                "raw": {},
+            }
+        )
+        self.db.create_candidate_match(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            score=0.80,
+            status="verified",
+            verification_notes={},
+        )
+        self.db.upsert_candidate_signal(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            source_type="operation_log",
+            source_id="manual-admin-signal",
+            signal_type="agent.outreach.send",
+            signal_category="agent",
+            title="manual admin signal",
+            impact_score=2.0,
+            confidence=0.9,
+            signal_meta={"status": "ok"},
+            observed_at="2026-02-28T12:00:00+00:00",
+        )
+        view = JobSignalsLiveViewService(self.db).build_job_view(job_id=job_id, limit_candidates=10, limit_signals=100)
+        ranking = view.get("ranking") if isinstance(view.get("ranking"), list) else []
+        self.assertEqual(len(ranking), 1)
+        row = ranking[0]
+        self.assertEqual(float(row.get("base_score") or 0.0), float(row.get("live_score") or 0.0))
+        self.assertEqual(int(row.get("signal_count") or 0), 0)
+        self.assertEqual(int(row.get("signal_count_total") or 0), 1)
+
+    def test_evaluative_signal_changes_live_score(self) -> None:
+        job_id = self.db.insert_job(
+            title="Signals evaluative job",
+            jd_text="Backend engineer",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="senior",
+        )
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "signals-evaluative",
+                "full_name": "Evaluative Candidate",
+                "headline": "Backend Engineer",
+                "location": "Kyiv",
+                "languages": ["en"],
+                "skills": ["python", "aws"],
+                "years_experience": 6,
+                "raw": {},
+            }
+        )
+        self.db.create_candidate_match(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            score=0.75,
+            status="verified",
+            verification_notes={},
+        )
+        self.db.upsert_candidate_signal(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            source_type="assessment",
+            source_id="manual-evaluative-signal",
+            signal_type="vetting",
+            signal_category="sourcing_vetting",
+            title="manual evaluative signal",
+            impact_score=1.5,
+            confidence=0.9,
+            signal_meta={"agent_key": "sourcing_vetting", "stage_key": "vetting"},
+            observed_at="2026-02-28T12:00:00+00:00",
+        )
+        view = JobSignalsLiveViewService(self.db).build_job_view(job_id=job_id, limit_candidates=10, limit_signals=100)
+        ranking = view.get("ranking") if isinstance(view.get("ranking"), list) else []
+        self.assertEqual(len(ranking), 1)
+        row = ranking[0]
+        self.assertGreater(float(row.get("live_score") or 0.0), float(row.get("base_score") or 0.0))
+        self.assertEqual(int(row.get("signal_count") or 0), 1)
+
 
 if __name__ == "__main__":
     unittest.main()
-
