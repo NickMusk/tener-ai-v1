@@ -15,6 +15,7 @@ from urllib import error as urlerror, request as urlrequest
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
+from .attachments import descriptors_to_text, extract_attachment_descriptors_from_values
 from .auth import AuthService
 from .candidate_profile import CandidateProfileService
 from .candidate_scoring import CandidateScoringPolicy
@@ -1914,6 +1915,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     external_chat_id=external_chat_id,
                     text=inbound_text,
                     sender_provider_id=sender_provider_id or None,
+                    provider_payload=body,
+                    provider_message_id=event_id or None,
+                    occurred_at=occurred_at or None,
                 )
             except Exception as exc:
                 SERVICES["db"].log_operation(
@@ -3215,70 +3219,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _pick_attachment_text(payload: Dict[str, Any], *paths: str) -> str:
-        fragments: List[str] = []
-        seen: set[str] = set()
+        values: List[Any] = []
         for path in paths:
             value = TenerRequestHandler._get_nested(payload, path)
-            TenerRequestHandler._collect_attachment_fragments(value, fragments, seen, limit=12)
-            if len(fragments) >= 12:
-                break
-        return "\n".join(fragments[:12]).strip()
-
-    @staticmethod
-    def _collect_attachment_fragments(value: Any, fragments: List[str], seen: set[str], limit: int = 12) -> None:
-        if len(fragments) >= limit:
-            return
-        if isinstance(value, dict):
-            name_keys = ("name", "filename", "file_name", "title")
-            url_keys = (
-                "url",
-                "link",
-                "href",
-                "download_url",
-                "downloadUrl",
-                "signed_url",
-                "signedUrl",
-                "public_url",
-                "publicUrl",
-                "file_url",
-                "fileUrl",
-            )
-            names: List[str] = []
-            urls: List[str] = []
-            for key in name_keys:
-                raw = value.get(key)
-                if isinstance(raw, str):
-                    cleaned = raw.strip()
-                    if cleaned:
-                        names.append(cleaned)
-            for key in url_keys:
-                raw = value.get(key)
-                if isinstance(raw, str):
-                    cleaned = raw.strip()
-                    if cleaned.startswith("http://") or cleaned.startswith("https://"):
-                        urls.append(cleaned)
-
-            for url in urls:
-                if len(fragments) >= limit:
-                    return
-                text = f"attached file {names[0]} {url}".strip() if names else f"attached file {url}"
-                token = text.lower()
-                if token in seen:
-                    continue
-                seen.add(token)
-                fragments.append(text)
-
-            for nested in value.values():
-                TenerRequestHandler._collect_attachment_fragments(nested, fragments, seen, limit=limit)
-                if len(fragments) >= limit:
-                    return
-            return
-
-        if isinstance(value, list):
-            for item in value:
-                TenerRequestHandler._collect_attachment_fragments(item, fragments, seen, limit=limit)
-                if len(fragments) >= limit:
-                    return
+            values.append(value)
+        descriptors = extract_attachment_descriptors_from_values(values, limit=12)
+        return descriptors_to_text(descriptors, limit=12)
 
     @staticmethod
     def _merge_inbound_text(text: str, attachment_text: str) -> str:

@@ -2,18 +2,28 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+import io
 import hashlib
 import os
 from pathlib import Path
 import re
+from urllib import request as urlrequest
+import zipfile
 from uuid import uuid4
 from typing import Any, Dict, List
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
-from .db import Database
+from .attachments import (
+    AttachmentDescriptor,
+    descriptors_to_text,
+    extract_attachment_descriptors_from_values,
+    extract_resume_urls,
+    is_resume_like_name_or_url,
+)
+from .db import Database, utc_now_iso
 from .instructions import AgentEvaluationPlaybook
 from .linkedin_provider import UnipileLinkedInProvider
-from .pre_resume_service import PreResumeCommunicationService
+from .pre_resume_service import PreResumeCommunicationService, parse_resume_links
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
 TERMINAL_PRE_RESUME_STATUSES = {"resume_received", "not_interested", "unreachable", "stalled"}
@@ -1144,7 +1154,12 @@ class WorkflowService:
         )
         return summary
 
-    def process_inbound_message(self, conversation_id: int, text: str) -> Dict[str, Any]:
+    def process_inbound_message(
+        self,
+        conversation_id: int,
+        text: str,
+        inbound_meta: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
         conversation = self.db.get_conversation(conversation_id)
         if not conversation:
             raise ValueError(f"Conversation {conversation_id} not found")
@@ -1168,12 +1183,22 @@ class WorkflowService:
                 break
         llm_history = self._build_llm_history(messages=messages, latest_inbound=text)
 
+        normalized_meta = self._normalize_inbound_meta(inbound_meta)
+        capture_meta = inbound_meta if isinstance(inbound_meta, dict) else normalized_meta
         inbound_id = self.db.add_message(
             conversation_id=conversation_id,
             direction="inbound",
             content=text,
             candidate_language=previous_lang,
-            meta={"type": "candidate_message"},
+            meta=normalized_meta,
+        )
+        self._capture_resume_assets_from_inbound(
+            job=job,
+            candidate=candidate,
+            conversation=conversation,
+            inbound_message_id=inbound_id,
+            inbound_text=text,
+            inbound_meta=capture_meta,
         )
         self.db.log_operation(
             operation="conversation.inbound.received",
@@ -1359,11 +1384,399 @@ class WorkflowService:
 
         return {"language": lang, "intent": intent, "reply": reply}
 
+    def _normalize_inbound_meta(self, inbound_meta: Dict[str, Any] | None) -> Dict[str, Any]:
+        out: Dict[str, Any] = {"type": "candidate_message"}
+        if not isinstance(inbound_meta, dict):
+            return out
+        for key in ("provider", "provider_message_id", "occurred_at", "event_type", "event_id"):
+            value = inbound_meta.get(key)
+            if isinstance(value, str) and value.strip():
+                out[key] = value.strip()
+        descriptors = self._extract_attachment_descriptors_from_inbound_meta(inbound_meta, limit=12)
+        if descriptors:
+            out["attachments"] = [item.to_dict() for item in descriptors]
+        return out
+
+    def _capture_resume_assets_from_inbound(
+        self,
+        *,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        conversation: Dict[str, Any],
+        inbound_message_id: int,
+        inbound_text: str,
+        inbound_meta: Dict[str, Any] | None,
+    ) -> None:
+        try:
+            job_id = int(job.get("id") or conversation.get("job_id") or 0)
+            candidate_id = int(candidate.get("id") or conversation.get("candidate_id") or 0)
+            conversation_id = int(conversation.get("id") or 0)
+            if job_id <= 0 or candidate_id <= 0 or conversation_id <= 0:
+                return
+
+            descriptors = self._extract_attachment_descriptors_from_inbound_meta(inbound_meta, limit=16)
+            links = parse_resume_links(inbound_text)
+            for url in extract_resume_urls(descriptors):
+                if url not in links:
+                    links.append(url)
+
+            if not links and not any(self._is_resume_like_descriptor(item) for item in descriptors):
+                return
+
+            provider = str((inbound_meta or {}).get("provider") or "linkedin").strip().lower() or "linkedin"
+            provider_message_id = str((inbound_meta or {}).get("provider_message_id") or "").strip() or None
+            observed_at = str((inbound_meta or {}).get("occurred_at") or "").strip() or utc_now_iso()
+
+            for idx, url in enumerate(links):
+                normalized_url = str(url or "").strip()
+                if not normalized_url:
+                    continue
+                source_id = f"link:{hashlib.sha1(normalized_url.encode('utf-8')).hexdigest()}"
+                self._store_resume_asset(
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    conversation_id=conversation_id,
+                    source_type="message_link",
+                    source_id=source_id,
+                    provider=provider,
+                    provider_message_id=provider_message_id,
+                    file_name=None,
+                    mime_type=None,
+                    file_size_bytes=None,
+                    remote_url=normalized_url,
+                    observed_at=observed_at,
+                    inbound_message_id=inbound_message_id,
+                    rank=idx,
+                )
+
+            rank_base = len(links)
+            for idx, descriptor in enumerate(descriptors):
+                if not self._is_resume_like_descriptor(descriptor):
+                    continue
+                name = str(descriptor.name or "").strip() or None
+                url = str(descriptor.url or "").strip() or None
+                source_identity = str(descriptor.provider_file_id or "").strip()
+                if not source_identity:
+                    source_identity = hashlib.sha1(
+                        f"{provider_message_id or ''}|{name or ''}|{url or ''}|{idx}".encode("utf-8")
+                    ).hexdigest()
+                source_id = f"attachment:{source_identity}"
+                self._store_resume_asset(
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    conversation_id=conversation_id,
+                    source_type="message_attachment",
+                    source_id=source_id,
+                    provider=provider,
+                    provider_message_id=provider_message_id,
+                    file_name=name,
+                    mime_type=str(descriptor.mime_type or "").strip().lower() or None,
+                    file_size_bytes=descriptor.size_bytes,
+                    remote_url=url,
+                    observed_at=observed_at,
+                    inbound_message_id=inbound_message_id,
+                    rank=rank_base + idx,
+                )
+        except Exception as exc:
+            self.db.log_operation(
+                operation="candidate.resume.capture",
+                status="error",
+                entity_type="message",
+                entity_id=str(inbound_message_id),
+                details={"error": str(exc)},
+            )
+
+    def _store_resume_asset(
+        self,
+        *,
+        job_id: int,
+        candidate_id: int,
+        conversation_id: int,
+        source_type: str,
+        source_id: str,
+        provider: str,
+        provider_message_id: str | None,
+        file_name: str | None,
+        mime_type: str | None,
+        file_size_bytes: int | None,
+        remote_url: str | None,
+        observed_at: str,
+        inbound_message_id: int,
+        rank: int,
+    ) -> None:
+        asset_key = self._resume_asset_key(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            source_type=source_type,
+            source_id=source_id,
+            remote_url=remote_url,
+            file_name=file_name,
+        )
+        status = "received"
+        storage_path: str | None = None
+        content_sha256: str | None = None
+        extracted_text: str | None = None
+        parsed_payload: Dict[str, Any] = {}
+        processing_error: str | None = None
+        resolved_mime = str(mime_type or "").strip().lower() or None
+        resolved_size = file_size_bytes
+
+        if remote_url and self._skip_remote_resume_fetch(remote_url):
+            status = "stored_unparsed"
+            processing_error = "remote_fetch_skipped_for_mock_url"
+        elif remote_url:
+            try:
+                payload, downloaded_mime = self._download_resume_payload(remote_url)
+                if not resolved_mime:
+                    resolved_mime = downloaded_mime
+                resolved_size = len(payload)
+                storage_path, content_sha256 = self._persist_resume_payload(
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    asset_key=asset_key,
+                    file_name=file_name,
+                    mime_type=resolved_mime,
+                    payload=payload,
+                )
+                extracted_text, extractor_hint, parse_error = self._extract_resume_text(
+                    payload=payload,
+                    file_name=file_name,
+                    mime_type=resolved_mime,
+                )
+                parsed_payload = {
+                    "extractor": extractor_hint,
+                    "text_length": len(extracted_text or ""),
+                    "parse_error": parse_error,
+                }
+                if extracted_text:
+                    status = "processed"
+                else:
+                    status = "stored_unparsed"
+                    processing_error = parse_error or "resume_text_not_extracted"
+            except Exception as exc:
+                status = "download_failed"
+                processing_error = str(exc)
+        else:
+            status = "received_no_url"
+            processing_error = "missing_remote_url"
+
+        resume_asset_id = self.db.upsert_resume_asset(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            conversation_id=conversation_id,
+            source_type=source_type,
+            source_id=source_id,
+            provider=provider,
+            provider_message_id=provider_message_id,
+            file_name=file_name,
+            mime_type=resolved_mime,
+            file_size_bytes=resolved_size,
+            remote_url=remote_url,
+            storage_path=storage_path,
+            content_sha256=content_sha256,
+            processing_status=status,
+            processing_error=processing_error,
+            extracted_text=extracted_text,
+            parsed_json=parsed_payload,
+            observed_at=observed_at,
+            asset_key=asset_key,
+        )
+
+        signal_type = "resume_parsed" if status == "processed" else "resume_received"
+        signal_title = "Resume parsed and stored" if status == "processed" else "Resume received"
+        signal_detail = f"status={status}; source_type={source_type}; source_id={source_id}"
+        if file_name:
+            signal_detail = f"{signal_detail}; file_name={file_name}"
+        self.db.upsert_candidate_signal(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            conversation_id=conversation_id,
+            source_type="resume_asset",
+            source_id=asset_key,
+            signal_type=signal_type,
+            signal_category="resume",
+            title=signal_title,
+            detail=signal_detail,
+            impact_score=2.0 if status == "processed" else (1.0 if "received" in status else 0.2),
+            confidence=0.9 if status == "processed" else 0.7,
+            observed_at=observed_at,
+            signal_meta={
+                "resume_asset_id": resume_asset_id,
+                "status": status,
+                "provider": provider,
+                "provider_message_id": provider_message_id,
+                "file_name": file_name,
+                "remote_url": remote_url,
+                "storage_path": storage_path,
+                "content_sha256": content_sha256,
+                "rank": int(rank),
+                "inbound_message_id": int(inbound_message_id),
+                "parse": parsed_payload,
+            },
+        )
+        self.db.log_operation(
+            operation="candidate.resume.asset",
+            status="ok" if status in {"processed", "stored_unparsed", "received_no_url", "received"} else "error",
+            entity_type="candidate",
+            entity_id=str(candidate_id),
+            details={
+                "job_id": job_id,
+                "conversation_id": conversation_id,
+                "resume_asset_id": resume_asset_id,
+                "asset_key": asset_key,
+                "status": status,
+                "source_type": source_type,
+                "source_id": source_id,
+                "error": processing_error,
+            },
+        )
+
+    @staticmethod
+    def _resume_asset_key(
+        *,
+        job_id: int,
+        candidate_id: int,
+        source_type: str,
+        source_id: str,
+        remote_url: str | None,
+        file_name: str | None,
+    ) -> str:
+        fingerprint = str(remote_url or "").strip().lower() or str(file_name or "").strip().lower() or source_id
+        digest = hashlib.sha256(fingerprint.encode("utf-8")).hexdigest()
+        return f"{int(job_id)}:{int(candidate_id)}:{str(source_type).strip().lower()}:{digest}"
+
+    @staticmethod
+    def _skip_remote_resume_fetch(remote_url: str) -> bool:
+        allow_mock_fetch = str(os.environ.get("TENER_RESUME_FETCH_MOCK_URLS") or "").strip().lower() in {"1", "true", "yes", "on"}
+        if allow_mock_fetch:
+            return False
+        lowered = str(remote_url or "").strip().lower()
+        return ".example.com/" in lowered or lowered.startswith("https://example.com/") or lowered.startswith("http://example.com/")
+
+    def _download_resume_payload(self, remote_url: str) -> tuple[bytes, str | None]:
+        max_bytes_raw = os.environ.get("TENER_RESUME_MAX_BYTES", str(10 * 1024 * 1024))
+        try:
+            max_bytes = max(128 * 1024, min(int(max_bytes_raw), 25 * 1024 * 1024))
+        except ValueError:
+            max_bytes = 10 * 1024 * 1024
+        req = urlrequest.Request(
+            url=remote_url,
+            method="GET",
+            headers={"User-Agent": "TenerResumeIngest/1.0", "Accept": "*/*"},
+        )
+        with urlrequest.urlopen(req, timeout=20) as resp:
+            payload = resp.read(max_bytes + 1)
+            if len(payload) > max_bytes:
+                raise RuntimeError("resume_content_too_large")
+            content_type = str(resp.headers.get("Content-Type") or "").strip().lower()
+            if ";" in content_type:
+                content_type = content_type.split(";", 1)[0].strip()
+            return payload, (content_type or None)
+
+    def _persist_resume_payload(
+        self,
+        *,
+        candidate_id: int,
+        job_id: int,
+        asset_key: str,
+        file_name: str | None,
+        mime_type: str | None,
+        payload: bytes,
+    ) -> tuple[str, str]:
+        digest = hashlib.sha256(payload).hexdigest()
+        root_raw = str(os.environ.get("TENER_RESUME_STORAGE_DIR") or "data/resumes").strip()
+        root = Path(root_raw)
+        if not root.is_absolute():
+            root = Path.cwd() / root
+        target_dir = root / f"job_{int(job_id)}" / f"candidate_{int(candidate_id)}"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        ext = self._guess_resume_extension(file_name=file_name, mime_type=mime_type)
+        file_path = target_dir / f"{asset_key}{ext}"
+        file_path.write_bytes(payload)
+        return str(file_path), digest
+
+    @staticmethod
+    def _guess_resume_extension(file_name: str | None, mime_type: str | None) -> str:
+        lower_name = str(file_name or "").strip().lower()
+        if "." in lower_name:
+            suffix = lower_name.rsplit(".", 1)[-1]
+            if suffix:
+                return f".{suffix}"
+        normalized_mime = str(mime_type or "").strip().lower()
+        mapping = {
+            "application/pdf": ".pdf",
+            "application/msword": ".doc",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+            "text/plain": ".txt",
+            "application/json": ".json",
+        }
+        return mapping.get(normalized_mime, ".bin")
+
+    def _extract_resume_text(
+        self,
+        *,
+        payload: bytes,
+        file_name: str | None,
+        mime_type: str | None,
+    ) -> tuple[str | None, str, str | None]:
+        lower_name = str(file_name or "").strip().lower()
+        suffix = f".{lower_name.rsplit('.', 1)[-1]}" if "." in lower_name else ""
+        normalized_mime = str(mime_type or "").strip().lower()
+
+        if normalized_mime.startswith("text/") or suffix in {".txt", ".md", ".csv", ".json"}:
+            text = payload.decode("utf-8", errors="ignore").strip()
+            return (text[:40000] if text else None), "plain_text", None
+
+        if suffix == ".docx" or normalized_mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            try:
+                with zipfile.ZipFile(io.BytesIO(payload)) as archive:
+                    xml = archive.read("word/document.xml").decode("utf-8", errors="ignore")
+                text = re.sub(r"<[^>]+>", " ", xml)
+                text = re.sub(r"\s+", " ", text).strip()
+                return (text[:40000] if text else None), "docx_xml", None
+            except Exception as exc:
+                return None, "docx_xml", f"docx_parse_failed:{exc}"
+
+        if suffix == ".pdf" or normalized_mime == "application/pdf":
+            return None, "pdf_placeholder", "pdf_text_extraction_unavailable"
+
+        return None, "unsupported", "unsupported_resume_format"
+
+    @staticmethod
+    def _is_resume_like_descriptor(descriptor: AttachmentDescriptor) -> bool:
+        name = str(descriptor.name or "").strip()
+        url = str(descriptor.url or "").strip()
+        mime = str(descriptor.mime_type or "").strip().lower()
+        if is_resume_like_name_or_url(name) or is_resume_like_name_or_url(url):
+            return True
+        if "pdf" in mime or "msword" in mime or "wordprocessingml" in mime:
+            return True
+        return False
+
+    @staticmethod
+    def _extract_attachment_descriptors_from_inbound_meta(
+        inbound_meta: Dict[str, Any] | None,
+        limit: int = 12,
+    ) -> List[AttachmentDescriptor]:
+        if not isinstance(inbound_meta, dict):
+            return []
+        values: List[Any] = []
+        if isinstance(inbound_meta.get("attachments"), list):
+            values.append(inbound_meta.get("attachments"))
+        raw = inbound_meta.get("raw")
+        if isinstance(raw, dict):
+            values.append(raw)
+        values.append(inbound_meta)
+        return extract_attachment_descriptors_from_values(values, limit=limit)
+
     def process_provider_inbound_message(
         self,
         external_chat_id: str,
         text: str,
         sender_provider_id: str | None = None,
+        provider_payload: Dict[str, Any] | None = None,
+        provider_message_id: str | None = None,
+        occurred_at: str | None = None,
     ) -> Dict[str, Any]:
         conversation = self.db.get_conversation_by_external_chat_id(external_chat_id) if external_chat_id else None
         if not conversation and sender_provider_id:
@@ -1372,7 +1785,18 @@ class WorkflowService:
                 conversation = self.db.get_latest_conversation_for_candidate(int(candidate["id"]))
         if not conversation:
             return {"processed": False, "reason": "conversation_not_found"}
-        result = self.process_inbound_message(conversation_id=int(conversation["id"]), text=text)
+        result = self.process_inbound_message(
+            conversation_id=int(conversation["id"]),
+            text=text,
+            inbound_meta={
+                "type": "candidate_message",
+                "provider": "unipile",
+                "provider_message_id": str(provider_message_id or "").strip() or None,
+                "occurred_at": str(occurred_at or "").strip() or None,
+                "attachments": self._extract_attachment_descriptors_from_provider_payload(provider_payload),
+                "raw": provider_payload if isinstance(provider_payload, dict) else None,
+            },
+        )
         return {
             "processed": True,
             "conversation_id": int(conversation["id"]),
@@ -1511,7 +1935,18 @@ class WorkflowService:
                     continue
 
                 try:
-                    result = self.process_inbound_message(conversation_id=conversation_id, text=text)
+                    result = self.process_inbound_message(
+                        conversation_id=conversation_id,
+                        text=text,
+                        inbound_meta={
+                            "type": "candidate_message",
+                            "provider": "unipile_poll",
+                            "provider_message_id": provider_message_id or None,
+                            "occurred_at": occurred_at or None,
+                            "attachments": message.get("attachments") if isinstance(message.get("attachments"), list) else None,
+                            "raw": message.get("raw") if isinstance(message.get("raw"), dict) else message,
+                        },
+                    )
                 except Exception as exc:
                     errors += 1
                     items.append(
@@ -4344,64 +4779,14 @@ class WorkflowService:
 
     @staticmethod
     def _extract_attachment_text_from_provider_message(message: Dict[str, Any], limit: int = 8) -> str:
-        fragments: List[str] = []
-        seen: set[str] = set()
         payload = message.get("raw") if isinstance(message.get("raw"), dict) else message
-        WorkflowService._collect_attachment_fragments(payload, fragments=fragments, seen=seen, limit=limit)
-        return "\n".join(fragments[:limit]).strip()
+        descriptors = extract_attachment_descriptors_from_values([payload], limit=limit)
+        return descriptors_to_text(descriptors, limit=limit)
 
     @staticmethod
-    def _collect_attachment_fragments(payload: Any, fragments: List[str], seen: set[str], limit: int = 8) -> None:
-        if len(fragments) >= limit:
-            return
-        if isinstance(payload, dict):
-            name_keys = ("name", "filename", "file_name", "title")
-            url_keys = (
-                "url",
-                "link",
-                "href",
-                "download_url",
-                "downloadUrl",
-                "signed_url",
-                "signedUrl",
-                "public_url",
-                "publicUrl",
-                "file_url",
-                "fileUrl",
-            )
-            names: List[str] = []
-            urls: List[str] = []
-            for key in name_keys:
-                raw = payload.get(key)
-                if isinstance(raw, str):
-                    cleaned = raw.strip()
-                    if cleaned:
-                        names.append(cleaned)
-            for key in url_keys:
-                raw = payload.get(key)
-                if isinstance(raw, str):
-                    cleaned = raw.strip()
-                    if cleaned.startswith("http://") or cleaned.startswith("https://"):
-                        urls.append(cleaned)
-            for url in urls:
-                if len(fragments) >= limit:
-                    return
-                text = f"attached file {names[0]} {url}".strip() if names else f"attached file {url}"
-                token = text.lower()
-                if token in seen:
-                    continue
-                seen.add(token)
-                fragments.append(text)
-            for nested in payload.values():
-                WorkflowService._collect_attachment_fragments(nested, fragments=fragments, seen=seen, limit=limit)
-                if len(fragments) >= limit:
-                    return
-            return
-        if isinstance(payload, list):
-            for item in payload:
-                WorkflowService._collect_attachment_fragments(item, fragments=fragments, seen=seen, limit=limit)
-                if len(fragments) >= limit:
-                    return
+    def _extract_attachment_descriptors_from_provider_payload(payload: Any, limit: int = 12) -> List[Dict[str, Any]]:
+        descriptors = extract_attachment_descriptors_from_values([payload], limit=limit)
+        return [entry.to_dict() for entry in descriptors]
 
     @staticmethod
     def _is_inbound_provider_message(message: Dict[str, Any], candidate: Dict[str, Any] | None) -> bool:

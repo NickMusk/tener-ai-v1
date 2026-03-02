@@ -452,6 +452,61 @@ class PostgresMirrorWriter:
                     ),
                 )
 
+    def upsert_resume_asset(self, row: Dict[str, Any]) -> None:
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO resume_assets (
+                        id, asset_key, job_id, candidate_id, conversation_id, source_type, source_id,
+                        provider, provider_message_id, file_name, mime_type, file_size_bytes, remote_url,
+                        storage_path, content_sha256, processing_status, processing_error, extracted_text,
+                        parsed_json, observed_at, created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(asset_key) DO UPDATE SET
+                        conversation_id = EXCLUDED.conversation_id,
+                        provider = EXCLUDED.provider,
+                        provider_message_id = EXCLUDED.provider_message_id,
+                        file_name = EXCLUDED.file_name,
+                        mime_type = EXCLUDED.mime_type,
+                        file_size_bytes = EXCLUDED.file_size_bytes,
+                        remote_url = EXCLUDED.remote_url,
+                        storage_path = EXCLUDED.storage_path,
+                        content_sha256 = EXCLUDED.content_sha256,
+                        processing_status = EXCLUDED.processing_status,
+                        processing_error = EXCLUDED.processing_error,
+                        extracted_text = EXCLUDED.extracted_text,
+                        parsed_json = EXCLUDED.parsed_json,
+                        observed_at = EXCLUDED.observed_at,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        int(row.get("id") or 0),
+                        row.get("asset_key"),
+                        int(row.get("job_id") or 0),
+                        int(row.get("candidate_id") or 0),
+                        row.get("conversation_id"),
+                        row.get("source_type") or "unknown",
+                        row.get("source_id") or "unknown",
+                        row.get("provider"),
+                        row.get("provider_message_id"),
+                        row.get("file_name"),
+                        row.get("mime_type"),
+                        row.get("file_size_bytes"),
+                        row.get("remote_url"),
+                        row.get("storage_path"),
+                        row.get("content_sha256"),
+                        row.get("processing_status") or "pending",
+                        row.get("processing_error"),
+                        row.get("extracted_text"),
+                        self._json(row.get("parsed_json") or {}),
+                        row.get("observed_at") or utc_now_iso(),
+                        row.get("created_at") or utc_now_iso(),
+                        row.get("updated_at") or utc_now_iso(),
+                    ),
+                )
+
 
 class DualWriteDatabase:
     """Proxy that writes to SQLite primary and mirrors selected writes to Postgres."""
@@ -689,11 +744,21 @@ class DualWriteDatabase:
             )
         return signal_id
 
+    def upsert_resume_asset(self, *args: Any, **kwargs: Any) -> int:
+        asset_id = int(self._primary.upsert_resume_asset(*args, **kwargs))
+        row = self._select_by_id("resume_assets", asset_id)
+        if isinstance(row, dict):
+            self._mirror_call(
+                "upsert_resume_asset",
+                lambda: self._mirror.upsert_resume_asset(row),
+            )
+        return asset_id
+
     def _select_by_id(self, table_name: str, row_id: int) -> Optional[Dict[str, Any]]:
         conn = getattr(self._primary, "_conn", None)
         if conn is None:
             return None
-        if table_name not in {"messages", "pre_resume_events", "candidate_signals"}:
+        if table_name not in {"messages", "pre_resume_events", "candidate_signals", "resume_assets"}:
             return None
         row = conn.execute(f"SELECT * FROM {table_name} WHERE id = ?", (int(row_id),)).fetchone()
         if row is None:

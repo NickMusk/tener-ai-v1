@@ -225,6 +225,39 @@ class Database:
         CREATE INDEX IF NOT EXISTS idx_candidate_signals_candidate_observed
             ON candidate_signals(candidate_id, observed_at DESC, id DESC);
 
+        CREATE TABLE IF NOT EXISTS resume_assets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            asset_key TEXT NOT NULL UNIQUE,
+            job_id INTEGER NOT NULL,
+            candidate_id INTEGER NOT NULL,
+            conversation_id INTEGER,
+            source_type TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            provider TEXT,
+            provider_message_id TEXT,
+            file_name TEXT,
+            mime_type TEXT,
+            file_size_bytes INTEGER,
+            remote_url TEXT,
+            storage_path TEXT,
+            content_sha256 TEXT,
+            processing_status TEXT NOT NULL,
+            processing_error TEXT,
+            extracted_text TEXT,
+            parsed_json TEXT,
+            observed_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(job_id) REFERENCES jobs(id),
+            FOREIGN KEY(candidate_id) REFERENCES candidates(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_resume_assets_job_observed
+            ON resume_assets(job_id, observed_at DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_resume_assets_candidate_observed
+            ON resume_assets(candidate_id, observed_at DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_resume_assets_processing
+            ON resume_assets(processing_status, updated_at DESC, id DESC);
+
         CREATE TABLE IF NOT EXISTS linkedin_accounts (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             provider TEXT NOT NULL,
@@ -2151,6 +2184,180 @@ class Database:
             ).fetchone()
             return int(row["id"] if row else 0)
 
+    def upsert_resume_asset(
+        self,
+        *,
+        job_id: int,
+        candidate_id: int,
+        source_type: str,
+        source_id: str,
+        processing_status: str,
+        conversation_id: Optional[int] = None,
+        provider: Optional[str] = None,
+        provider_message_id: Optional[str] = None,
+        file_name: Optional[str] = None,
+        mime_type: Optional[str] = None,
+        file_size_bytes: Optional[int] = None,
+        remote_url: Optional[str] = None,
+        storage_path: Optional[str] = None,
+        content_sha256: Optional[str] = None,
+        processing_error: Optional[str] = None,
+        extracted_text: Optional[str] = None,
+        parsed_json: Optional[Dict[str, Any]] = None,
+        observed_at: Optional[str] = None,
+        asset_key: Optional[str] = None,
+    ) -> int:
+        now = utc_now_iso()
+        normalized_observed = str(observed_at or now)
+        resolved_key = str(
+            asset_key
+            or f"{int(job_id)}:{int(candidate_id)}:{str(source_type or '').strip().lower()}:{str(source_id or '').strip().lower()}"
+        ).strip()
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                INSERT INTO resume_assets (
+                    asset_key,
+                    job_id,
+                    candidate_id,
+                    conversation_id,
+                    source_type,
+                    source_id,
+                    provider,
+                    provider_message_id,
+                    file_name,
+                    mime_type,
+                    file_size_bytes,
+                    remote_url,
+                    storage_path,
+                    content_sha256,
+                    processing_status,
+                    processing_error,
+                    extracted_text,
+                    parsed_json,
+                    observed_at,
+                    created_at,
+                    updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(asset_key)
+                DO UPDATE SET
+                    conversation_id = excluded.conversation_id,
+                    provider = excluded.provider,
+                    provider_message_id = excluded.provider_message_id,
+                    file_name = excluded.file_name,
+                    mime_type = excluded.mime_type,
+                    file_size_bytes = excluded.file_size_bytes,
+                    remote_url = excluded.remote_url,
+                    storage_path = excluded.storage_path,
+                    content_sha256 = excluded.content_sha256,
+                    processing_status = excluded.processing_status,
+                    processing_error = excluded.processing_error,
+                    extracted_text = excluded.extracted_text,
+                    parsed_json = excluded.parsed_json,
+                    observed_at = excluded.observed_at,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    resolved_key,
+                    int(job_id),
+                    int(candidate_id),
+                    int(conversation_id) if conversation_id is not None else None,
+                    str(source_type or "").strip().lower() or "unknown",
+                    str(source_id or "").strip() or "unknown",
+                    str(provider or "").strip().lower() or None,
+                    str(provider_message_id or "").strip() or None,
+                    str(file_name or "").strip() or None,
+                    str(mime_type or "").strip().lower() or None,
+                    int(file_size_bytes) if file_size_bytes is not None else None,
+                    str(remote_url or "").strip() or None,
+                    str(storage_path or "").strip() or None,
+                    str(content_sha256 or "").strip().lower() or None,
+                    str(processing_status or "").strip().lower() or "pending",
+                    str(processing_error or "").strip() or None,
+                    str(extracted_text or "").strip() or None,
+                    json.dumps(parsed_json or {}),
+                    normalized_observed,
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT id FROM resume_assets WHERE asset_key = ? LIMIT 1",
+                (resolved_key,),
+            ).fetchone()
+            return int(row["id"] if row else 0)
+
+    def list_resume_assets_for_candidate(
+        self,
+        *,
+        candidate_id: int,
+        job_id: Optional[int] = None,
+        limit: int = 300,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 300), 5000))
+        if job_id is None:
+            rows = self._conn.execute(
+                """
+                SELECT *
+                FROM resume_assets
+                WHERE candidate_id = ?
+                ORDER BY observed_at DESC, id DESC
+                LIMIT ?
+                """,
+                (int(candidate_id), safe_limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT *
+                FROM resume_assets
+                WHERE candidate_id = ? AND job_id = ?
+                ORDER BY observed_at DESC, id DESC
+                LIMIT ?
+                """,
+                (int(candidate_id), int(job_id), safe_limit),
+            ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def list_resume_assets_for_job(
+        self,
+        *,
+        job_id: int,
+        candidate_id: Optional[int] = None,
+        limit: int = 3000,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 3000), 10000))
+        if candidate_id is None:
+            rows = self._conn.execute(
+                """
+                SELECT
+                    a.*,
+                    c.full_name AS candidate_name
+                FROM resume_assets a
+                LEFT JOIN candidates c ON c.id = a.candidate_id
+                WHERE a.job_id = ?
+                ORDER BY a.observed_at DESC, a.id DESC
+                LIMIT ?
+                """,
+                (int(job_id), safe_limit),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                """
+                SELECT
+                    a.*,
+                    c.full_name AS candidate_name
+                FROM resume_assets a
+                LEFT JOIN candidates c ON c.id = a.candidate_id
+                WHERE a.job_id = ? AND a.candidate_id = ?
+                ORDER BY a.observed_at DESC, a.id DESC
+                LIMIT ?
+                """,
+                (int(job_id), int(candidate_id), safe_limit),
+            ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def list_candidate_signals(
         self,
         *,
@@ -2464,6 +2671,43 @@ class Database:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_candidate_signals_candidate_observed ON candidate_signals(candidate_id, observed_at DESC, id DESC)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS resume_assets (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    asset_key TEXT NOT NULL UNIQUE,
+                    job_id INTEGER NOT NULL,
+                    candidate_id INTEGER NOT NULL,
+                    conversation_id INTEGER,
+                    source_type TEXT NOT NULL,
+                    source_id TEXT NOT NULL,
+                    provider TEXT,
+                    provider_message_id TEXT,
+                    file_name TEXT,
+                    mime_type TEXT,
+                    file_size_bytes INTEGER,
+                    remote_url TEXT,
+                    storage_path TEXT,
+                    content_sha256 TEXT,
+                    processing_status TEXT NOT NULL,
+                    processing_error TEXT,
+                    extracted_text TEXT,
+                    parsed_json TEXT,
+                    observed_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_resume_assets_job_observed ON resume_assets(job_id, observed_at DESC, id DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_resume_assets_candidate_observed ON resume_assets(candidate_id, observed_at DESC, id DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_resume_assets_processing ON resume_assets(processing_status, updated_at DESC, id DESC)"
+            )
 
         columns = self._table_columns("conversations")
         if "external_chat_id" not in columns:
@@ -2508,6 +2752,7 @@ class Database:
             "company_culture_profile",
             "job_company_culture_profile",
             "signal_meta",
+            "parsed_json",
         ):
             if field in item and item[field]:
                 try:

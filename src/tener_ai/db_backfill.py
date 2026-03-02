@@ -26,6 +26,7 @@ TABLE_ORDER: List[str] = [
     "candidates",
     "candidate_job_matches",
     "candidate_signals",
+    "resume_assets",
     "conversations",
     "messages",
     "job_step_progress",
@@ -64,6 +65,7 @@ JSON_COLUMN_NAMES = {
     "resume_links",
     "state_json",
     "signal_meta",
+    "parsed_json",
 }
 
 BOOL_COLUMN_NAMES = {

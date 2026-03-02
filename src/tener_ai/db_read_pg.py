@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
+from contextlib import contextmanager
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from .db import Database
 
@@ -22,9 +24,49 @@ class PostgresReadDatabase:
         if not self.dsn:
             raise ValueError("postgres dsn is required")
         self._psycopg = _require_psycopg()
+        self._pool = self._build_pool()
 
-    def _connect(self) -> Any:
-        return self._psycopg.connect(self.dsn)
+    def _build_pool(self) -> Any:
+        try:
+            from psycopg_pool import ConnectionPool  # type: ignore
+        except Exception:
+            return None
+
+        min_size_raw = os.environ.get("TENER_DB_POOL_MIN", "1")
+        max_size_raw = os.environ.get("TENER_DB_POOL_MAX", "10")
+        timeout_raw = os.environ.get("TENER_DB_POOL_TIMEOUT_SECONDS", "15")
+        try:
+            min_size = max(1, int(min_size_raw))
+        except ValueError:
+            min_size = 1
+        try:
+            max_size = max(min_size, int(max_size_raw))
+        except ValueError:
+            max_size = max(min_size, 10)
+        try:
+            timeout_seconds = max(1.0, float(timeout_raw))
+        except ValueError:
+            timeout_seconds = 15.0
+
+        try:
+            return ConnectionPool(
+                conninfo=self.dsn,
+                min_size=min_size,
+                max_size=max_size,
+                timeout=timeout_seconds,
+                open=True,
+            )
+        except Exception:
+            return None
+
+    @contextmanager
+    def _connect(self) -> Iterator[Any]:
+        if self._pool is not None:
+            with self._pool.connection() as conn:
+                yield conn
+            return
+        with self._psycopg.connect(self.dsn) as conn:
+            yield conn
 
     def list_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 100), 1000))

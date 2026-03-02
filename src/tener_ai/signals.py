@@ -57,7 +57,7 @@ class SignalIngestionService:
 
         written = 0
         candidates_processed = 0
-        by_source = {"assessment": 0, "pre_resume_event": 0, "operation_log": 0, "match_snapshot": 0}
+        by_source = {"assessment": 0, "pre_resume_event": 0, "operation_log": 0, "match_snapshot": 0, "resume_asset": 0}
 
         for row in selected:
             candidate_id = int(row.get("candidate_id") or 0)
@@ -75,6 +75,13 @@ class SignalIngestionService:
                 bucket=by_source,
             )
             written += self._ingest_operation_signals(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                conversation_id=conversation_id,
+                limit=limit_per_candidate,
+                bucket=by_source,
+            )
+            written += self._ingest_resume_asset_signals(
                 job_id=job_id,
                 candidate_id=candidate_id,
                 conversation_id=conversation_id,
@@ -403,6 +410,59 @@ class SignalIngestionService:
         )
         bucket["match_snapshot"] = int(bucket.get("match_snapshot") or 0) + 1
         return 1
+
+    def _ingest_resume_asset_signals(
+        self,
+        *,
+        job_id: int,
+        candidate_id: int,
+        conversation_id: Any,
+        limit: int,
+        bucket: Dict[str, int],
+    ) -> int:
+        rows = self.db.list_resume_assets_for_candidate(
+            candidate_id=int(candidate_id),
+            job_id=int(job_id),
+            limit=max(1, min(int(limit or 300), 2000)),
+        )
+        written = 0
+        for row in rows:
+            status = str(row.get("processing_status") or "").strip().lower()
+            source_id = str(row.get("asset_key") or row.get("id") or "").strip()
+            if not source_id:
+                continue
+            signal_type = "resume_parsed" if status == "processed" else "resume_received"
+            title = "Resume parsed and stored" if status == "processed" else "Resume received"
+            detail = f"status={status or 'unknown'}"
+            file_name = str(row.get("file_name") or "").strip()
+            if file_name:
+                detail = f"{detail}; file_name={file_name}"
+            self._upsert_signal(
+                job_id=int(job_id),
+                candidate_id=int(candidate_id),
+                conversation_id=int(conversation_id) if conversation_id is not None else None,
+                source_type="resume_asset",
+                source_id=source_id,
+                signal_type=signal_type,
+                signal_category="resume",
+                title=title,
+                detail=detail,
+                impact_score=2.0 if status == "processed" else (1.0 if "received" in status else 0.2),
+                confidence=0.9 if status == "processed" else 0.7,
+                observed_at=str(row.get("observed_at") or utc_now_iso()),
+                signal_meta={
+                    "resume_asset_id": row.get("id"),
+                    "provider": row.get("provider"),
+                    "provider_message_id": row.get("provider_message_id"),
+                    "remote_url": row.get("remote_url"),
+                    "storage_path": row.get("storage_path"),
+                    "content_sha256": row.get("content_sha256"),
+                    "processing_status": status,
+                },
+            )
+            written += 1
+            bucket["resume_asset"] = int(bucket.get("resume_asset") or 0) + 1
+        return written
 
 
 class JobSignalsLiveViewService:
