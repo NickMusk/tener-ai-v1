@@ -1157,16 +1157,19 @@
 
       const hired = state.candidatesById.get(reveal.hiredCandidateId || '');
       const topPick = state.candidatesById.get(reveal.tenerTopPick || '');
+      const isLifeSciencesDemo = safeText(state.project?.id, '') === 'biotech-blindspot-2024';
+      const actualTitle = isLifeSciencesDemo ? 'Hired Candidate' : 'What Actually Happened';
+      const tenerTitle = isLifeSciencesDemo ? 'Top Recommendation' : 'What Tener Would Have Done';
 
       $('actual-col').innerHTML = `
-        <strong>What Actually Happened</strong><br>
+        <strong>${actualTitle}</strong><br>
         Hired: ${safeText(hired?.name || reveal.hiredCandidateId)}<br>
         Outcome: ${safeText(reveal.hiredOutcome)}<br>
         Time: ${safeText(reveal.actualTime, 'n/a')}
       `;
 
       $('tener-col').innerHTML = `
-        <strong>What Tener Would Have Done</strong><br>
+        <strong>${tenerTitle}</strong><br>
         Recommended: ${safeText(topPick?.name || reveal.tenerTopPick)}<br>
         Outcome: ${safeText(reveal.tenerOutcome)}<br>
         Time: ${safeText(reveal.tenerTime, 'n/a')}
