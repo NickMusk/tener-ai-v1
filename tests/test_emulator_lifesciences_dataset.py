@@ -57,6 +57,26 @@ class EmulatorLifeSciencesDatasetTests(unittest.TestCase):
         self.assertTrue(any(str(event.get("signalCategory")) == "career_trajectory" for event in signal_events))
         self.assertTrue(any(str(event.get("signalCategory")) == "interview" for event in events if event.get("type") in {"signal_detected", "interview_complete", "score_update"}))
 
+    def test_first_100_lifesciences_candidates_have_real_names(self) -> None:
+        store = self._build_store()
+        project = store.get_project("biotech-blindspot-2024")
+        self.assertIsNotNone(project)
+        assert project is not None
+
+        candidates = project.get("candidates") or []
+        self.assertGreaterEqual(len(candidates), 100)
+
+        first_hundred = candidates[:100]
+        self.assertEqual(len(first_hundred), 100)
+        for candidate in first_hundred:
+            name = str(candidate.get("name") or "").strip()
+            self.assertTrue(name, "candidate name cannot be empty")
+            self.assertFalse(name.startswith("Candidate "), f"placeholder name found: {name}")
+            self.assertIn(" ", name, f"name must include first and last name: {name}")
+
+        all_names = [str(candidate.get("name") or "") for candidate in candidates]
+        self.assertFalse(any(name.startswith("Candidate ") for name in all_names))
+
     def test_invalid_lifesciences_signal_category_degrades_store(self) -> None:
         with TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
