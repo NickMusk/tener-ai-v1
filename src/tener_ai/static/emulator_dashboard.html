@@ -669,6 +669,10 @@
       return map[stage] || safeText(stage, 'Unknown');
     }
 
+    function isLifeSciencesProject(project) {
+      return safeText(project?.id, '') === 'biotech-blindspot-2024';
+    }
+
     async function api(path, opts = {}) {
       const res = await fetch(path, {
         headers: { 'Content-Type': 'application/json' },
@@ -733,10 +737,11 @@
       state.candidateOrder = [];
 
       const candidates = project.candidates || [];
+      const showFullPoolAtStart = isLifeSciencesProject(project);
       for (const candidate of candidates) {
         state.candidatesById.set(candidate.id, {
           ...candidate,
-          visible: false,
+          visible: showFullPoolAtStart,
           eliminated: false,
           stage: 'sourced',
           signalEvents: [...(candidate.signals || [])],
@@ -1157,7 +1162,7 @@
 
       const hired = state.candidatesById.get(reveal.hiredCandidateId || '');
       const topPick = state.candidatesById.get(reveal.tenerTopPick || '');
-      const isLifeSciencesDemo = safeText(state.project?.id, '') === 'biotech-blindspot-2024';
+      const isLifeSciencesDemo = isLifeSciencesProject(state.project);
       const actualTitle = isLifeSciencesDemo ? 'Hired Candidate' : 'What Actually Happened';
       const tenerTitle = isLifeSciencesDemo ? 'Top Recommendation' : 'What Tener Would Have Done';
 
