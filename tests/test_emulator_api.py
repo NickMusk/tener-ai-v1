@@ -165,7 +165,7 @@ class EmulatorApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(project.get("id"), "biotech-blindspot-2024")
         self.assertIn("Antibody Engineering", str(project.get("role") or ""))
-        self.assertEqual(int(((project.get("reveal") or {}).get("funnel") or {}).get("sourced") or 0), 200)
+        self.assertEqual(int(((project.get("reveal") or {}).get("funnel") or {}).get("sourced") or 0), 100)
 
     def test_company_profile_lookup_and_reload(self) -> None:
         status, payload, _ = self._request("GET", "/api/emulator/company-profiles")

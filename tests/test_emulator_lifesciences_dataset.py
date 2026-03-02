@@ -37,9 +37,9 @@ class EmulatorLifeSciencesDatasetTests(unittest.TestCase):
         reveal = project.get("reveal") or {}
         funnel = reveal.get("funnel") or {}
 
-        self.assertEqual(len(candidates), 200)
+        self.assertEqual(len(candidates), 100)
         self.assertGreaterEqual(len(events), 30)
-        self.assertEqual(int(funnel.get("sourced") or 0), 200)
+        self.assertEqual(int(funnel.get("sourced") or 0), 100)
         self.assertEqual(reveal.get("hiredCandidateId"), "cand-011")
         self.assertEqual(reveal.get("tenerTopPick"), "cand-003")
 
@@ -64,7 +64,7 @@ class EmulatorLifeSciencesDatasetTests(unittest.TestCase):
         assert project is not None
 
         candidates = project.get("candidates") or []
-        self.assertGreaterEqual(len(candidates), 100)
+        self.assertEqual(len(candidates), 100)
 
         first_hundred = candidates[:100]
         self.assertEqual(len(first_hundred), 100)
