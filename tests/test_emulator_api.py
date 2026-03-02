@@ -154,6 +154,19 @@ class EmulatorApiTests(unittest.TestCase):
         self.assertEqual(project.get("id"), first_id)
         self.assertIsInstance(project.get("events"), list)
 
+    def test_lifesciences_project_is_available_via_api(self) -> None:
+        status, payload, _ = self._request("GET", "/api/emulator/projects")
+        self.assertEqual(status, 200)
+        items = payload.get("items") or []
+        ids = {str(item.get("id") or "") for item in items}
+        self.assertIn("biotech-blindspot-2024", ids)
+
+        status, project, _ = self._request("GET", "/api/emulator/projects/biotech-blindspot-2024")
+        self.assertEqual(status, 200)
+        self.assertEqual(project.get("id"), "biotech-blindspot-2024")
+        self.assertIn("Antibody Engineering", str(project.get("role") or ""))
+        self.assertEqual(int(((project.get("reveal") or {}).get("funnel") or {}).get("sourced") or 0), 200)
+
     def test_company_profile_lookup_and_reload(self) -> None:
         status, payload, _ = self._request("GET", "/api/emulator/company-profiles")
         self.assertEqual(status, 200)
