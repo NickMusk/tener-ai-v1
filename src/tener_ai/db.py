@@ -265,6 +265,8 @@ class Database:
             provider_user_id TEXT,
             label TEXT,
             status TEXT NOT NULL,
+            daily_message_limit INTEGER,
+            daily_connect_limit INTEGER,
             metadata TEXT,
             connected_at TEXT,
             last_synced_at TEXT,
@@ -1761,6 +1763,35 @@ class Database:
             )
             return cur.rowcount > 0
 
+    def update_linkedin_account_limits(
+        self,
+        *,
+        account_id: int,
+        has_daily_message_limit: bool,
+        daily_message_limit: Optional[int],
+        has_daily_connect_limit: bool,
+        daily_connect_limit: Optional[int],
+    ) -> Optional[Dict[str, Any]]:
+        if not has_daily_message_limit and not has_daily_connect_limit:
+            return self.get_linkedin_account(account_id)
+        assignments: List[str] = []
+        params: List[Any] = []
+        if has_daily_message_limit:
+            assignments.append("daily_message_limit = ?")
+            params.append(int(daily_message_limit) if daily_message_limit is not None else None)
+        if has_daily_connect_limit:
+            assignments.append("daily_connect_limit = ?")
+            params.append(int(daily_connect_limit) if daily_connect_limit is not None else None)
+        assignments.append("updated_at = ?")
+        params.append(utc_now_iso())
+        params.append(int(account_id))
+        sql = f"UPDATE linkedin_accounts SET {', '.join(assignments)} WHERE id = ?"
+        with self.transaction() as conn:
+            cur = conn.execute(sql, tuple(params))
+            if cur.rowcount <= 0:
+                return None
+        return self.get_linkedin_account(account_id)
+
     def upsert_pre_resume_session(
         self,
         session_id: str,
@@ -2622,6 +2653,13 @@ class Database:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN linkedin_routing_mode TEXT")
                 conn.execute("UPDATE jobs SET linkedin_routing_mode = 'auto' WHERE linkedin_routing_mode IS NULL OR TRIM(linkedin_routing_mode) = ''")
+        linkedin_columns = self._table_columns("linkedin_accounts")
+        if "daily_message_limit" not in linkedin_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE linkedin_accounts ADD COLUMN daily_message_limit INTEGER")
+        if "daily_connect_limit" not in linkedin_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE linkedin_accounts ADD COLUMN daily_connect_limit INTEGER")
 
         with self.transaction() as conn:
             conn.execute(

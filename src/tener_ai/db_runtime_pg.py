@@ -1444,6 +1444,36 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 )
                 return int(cur.rowcount or 0) > 0
 
+    def update_linkedin_account_limits(
+        self,
+        *,
+        account_id: int,
+        has_daily_message_limit: bool,
+        daily_message_limit: Optional[int],
+        has_daily_connect_limit: bool,
+        daily_connect_limit: Optional[int],
+    ) -> Optional[Dict[str, Any]]:
+        if not has_daily_message_limit and not has_daily_connect_limit:
+            return self.get_linkedin_account(account_id)
+        assignments: List[str] = []
+        params: List[Any] = []
+        if has_daily_message_limit:
+            assignments.append("daily_message_limit = %s")
+            params.append(int(daily_message_limit) if daily_message_limit is not None else None)
+        if has_daily_connect_limit:
+            assignments.append("daily_connect_limit = %s")
+            params.append(int(daily_connect_limit) if daily_connect_limit is not None else None)
+        assignments.append("updated_at = %s")
+        params.append(utc_now_iso())
+        params.append(int(account_id))
+        sql = f"UPDATE linkedin_accounts SET {', '.join(assignments)} WHERE id = %s"
+        with self.transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, tuple(params))
+                if int(cur.rowcount or 0) <= 0:
+                    return None
+        return self.get_linkedin_account(account_id)
+
     def upsert_pre_resume_session(
         self,
         session_id: str,

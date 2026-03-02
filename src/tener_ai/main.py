@@ -40,6 +40,7 @@ from .emulator import EmulatorProjectStore
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
 from .interview_client import InterviewAPIClient
 from .linkedin_accounts import LinkedInAccountService
+from .linkedin_limits import resolve_account_limit_snapshot, validate_account_limits_payload
 from .llm_responder import CandidateLLMResponder
 from .linkedin_provider import build_linkedin_provider
 from .matching import MatchingEngine
@@ -575,6 +576,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "linkedin_accounts_list": "GET /api/linkedin/accounts?limit=200&status=connected",
                         "linkedin_connect_callback": "GET /api/linkedin/accounts/connect/callback?state=...",
                         "linkedin_connect_start": "POST /api/linkedin/accounts/connect/start",
+                        "linkedin_account_limits_update": "POST /api/linkedin/accounts/{account_id}/limits",
                         "linkedin_account_sync": "POST /api/linkedin/accounts/{account_id}/sync",
                         "linkedin_account_disconnect": "POST /api/linkedin/accounts/{account_id}/disconnect",
                         "add_manual_account": "POST /api/agent/accounts/manual",
@@ -918,6 +920,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             limit = self._safe_int((params.get("limit") or ["200"])[0], 200) or 200
             status = str((params.get("status") or [""])[0] or "").strip().lower() or None
             out = SERVICES["linkedin_accounts"].list_accounts(status=status, limit=limit)
+            policy = SERVICES["outreach_policy"].to_dict()
+            items = out.get("items") if isinstance(out.get("items"), list) else []
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                item.update(resolve_account_limit_snapshot(item, policy))
             self._json_response(HTTPStatus.OK, out)
             return
 
@@ -1614,6 +1622,44 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             )
             http_status = HTTPStatus.OK if status == "ok" else HTTPStatus.BAD_REQUEST
             self._json_response(http_status, out)
+            return
+
+        match_limits = re.match(r"^/api/linkedin/accounts/(\d+)/limits$", parsed.path)
+        if match_limits:
+            if not self._require_admin_access():
+                return
+            account_id = self._safe_int(match_limits.group(1), None)
+            if account_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid account id"})
+                return
+            body = payload or {}
+            try:
+                parsed_limits = validate_account_limits_payload(body)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            account = SERVICES["db"].update_linkedin_account_limits(
+                account_id=account_id,
+                has_daily_message_limit=bool(parsed_limits.get("has_daily_message_limit")),
+                daily_message_limit=parsed_limits.get("daily_message_limit"),
+                has_daily_connect_limit=bool(parsed_limits.get("has_daily_connect_limit")),
+                daily_connect_limit=parsed_limits.get("daily_connect_limit"),
+            )
+            if not isinstance(account, dict):
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "account_not_found"})
+                return
+            account.update(resolve_account_limit_snapshot(account, SERVICES["outreach_policy"].to_dict()))
+            SERVICES["db"].log_operation(
+                operation="linkedin.account.limits.updated",
+                status="ok",
+                entity_type="linkedin_account",
+                entity_id=str(account_id),
+                details={
+                    "daily_message_limit": account.get("daily_message_limit"),
+                    "daily_connect_limit": account.get("daily_connect_limit"),
+                },
+            )
+            self._json_response(HTTPStatus.OK, {"status": "ok", "account": account})
             return
 
         match_disconnect = re.match(r"^/api/linkedin/accounts/(\d+)/disconnect$", parsed.path)

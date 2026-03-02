@@ -507,6 +507,47 @@ class PostgresMirrorWriter:
                     ),
                 )
 
+    def upsert_linkedin_account(self, row: Dict[str, Any]) -> None:
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO linkedin_accounts (
+                        id, provider, provider_account_id, provider_user_id, label, status,
+                        daily_message_limit, daily_connect_limit, metadata, connected_at,
+                        last_synced_at, created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(id) DO UPDATE SET
+                        provider = EXCLUDED.provider,
+                        provider_account_id = EXCLUDED.provider_account_id,
+                        provider_user_id = EXCLUDED.provider_user_id,
+                        label = EXCLUDED.label,
+                        status = EXCLUDED.status,
+                        daily_message_limit = EXCLUDED.daily_message_limit,
+                        daily_connect_limit = EXCLUDED.daily_connect_limit,
+                        metadata = EXCLUDED.metadata,
+                        connected_at = EXCLUDED.connected_at,
+                        last_synced_at = EXCLUDED.last_synced_at,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        int(row.get("id") or 0),
+                        row.get("provider"),
+                        row.get("provider_account_id"),
+                        row.get("provider_user_id"),
+                        row.get("label"),
+                        row.get("status"),
+                        row.get("daily_message_limit"),
+                        row.get("daily_connect_limit"),
+                        self._json(row.get("metadata") or {}),
+                        row.get("connected_at"),
+                        row.get("last_synced_at"),
+                        row.get("created_at") or utc_now_iso(),
+                        row.get("updated_at") or utc_now_iso(),
+                    ),
+                )
+
 
 class DualWriteDatabase:
     """Proxy that writes to SQLite primary and mirrors selected writes to Postgres."""
@@ -649,6 +690,28 @@ class DualWriteDatabase:
             if isinstance(row, dict):
                 self._mirror_call("set_conversation_linkedin_account", lambda: self._mirror.upsert_conversation(row))
         return updated
+
+    def upsert_linkedin_account(self, *args: Any, **kwargs: Any) -> int:
+        account_id = int(self._primary.upsert_linkedin_account(*args, **kwargs))
+        row = self._primary.get_linkedin_account(account_id)
+        if isinstance(row, dict):
+            self._mirror_call("upsert_linkedin_account", lambda: self._mirror.upsert_linkedin_account(row))
+        return account_id
+
+    def update_linkedin_account_status(self, *args: Any, **kwargs: Any) -> bool:
+        updated = bool(self._primary.update_linkedin_account_status(*args, **kwargs))
+        if updated:
+            account_id = int(kwargs.get("account_id") if "account_id" in kwargs else args[0])
+            row = self._primary.get_linkedin_account(account_id)
+            if isinstance(row, dict):
+                self._mirror_call("update_linkedin_account_status", lambda: self._mirror.upsert_linkedin_account(row))
+        return updated
+
+    def update_linkedin_account_limits(self, *args: Any, **kwargs: Any) -> Optional[Dict[str, Any]]:
+        out = self._primary.update_linkedin_account_limits(*args, **kwargs)
+        if isinstance(out, dict):
+            self._mirror_call("update_linkedin_account_limits", lambda: self._mirror.upsert_linkedin_account(out))
+        return out
 
     def add_message(self, *args: Any, **kwargs: Any) -> int:
         message_id = int(self._primary.add_message(*args, **kwargs))

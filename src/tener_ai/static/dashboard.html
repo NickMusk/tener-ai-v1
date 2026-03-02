@@ -212,6 +212,13 @@
       font-family: 'DM Sans', sans-serif;
     }
 
+    .linkedin-limit-input {
+      min-width: 84px;
+      max-width: 96px;
+      padding: 6px 8px;
+      font-size: 13px;
+    }
+
     textarea { min-height: 84px; resize: vertical; }
 
     .steps {
@@ -781,13 +788,16 @@
                   <th>Label</th>
                   <th>Provider Account ID</th>
                   <th>Status</th>
+                  <th>Msg/day</th>
+                  <th>Connect/day</th>
+                  <th>Effective</th>
                   <th>Connected</th>
                   <th>Synced</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody id="linkedin-accounts-tbody">
-                <tr><td colspan="7" class="muted">No connected accounts yet</td></tr>
+                <tr><td colspan="10" class="muted">No connected accounts yet</td></tr>
               </tbody>
             </table>
           </div>
@@ -1737,23 +1747,34 @@
       if (!body) return;
       const accounts = state.linkedinAccounts || [];
       if (!accounts.length) {
-        body.innerHTML = '<tr><td colspan="7" class="muted">No connected accounts yet</td></tr>';
+        body.innerHTML = '<tr><td colspan="10" class="muted">No connected accounts yet</td></tr>';
       } else {
         body.innerHTML = accounts.map((row) => {
+          const accountId = Number(row.id || 0);
           const status = escapeHtml(row.status || "-");
           const connectedAt = escapeHtml((row.connected_at || "").replace("T", " ").slice(0, 19) || "-");
           const syncedAt = escapeHtml((row.last_synced_at || "").replace("T", " ").slice(0, 19) || "-");
+          const hasMessageLimit = row.daily_message_limit !== null && row.daily_message_limit !== undefined && String(row.daily_message_limit).trim() !== "";
+          const hasConnectLimit = row.daily_connect_limit !== null && row.daily_connect_limit !== undefined && String(row.daily_connect_limit).trim() !== "";
+          const messageLimit = hasMessageLimit ? String(Number(row.daily_message_limit)) : "";
+          const connectLimit = hasConnectLimit ? String(Number(row.daily_connect_limit)) : "";
+          const effectiveMsg = Number(row.effective_daily_message_limit || 0);
+          const effectiveConnect = Number(row.effective_daily_connect_limit || 0);
           return `
-            <tr>
-              <td class="mono">${Number(row.id || 0)}</td>
+            <tr data-linkedin-account-id="${accountId}">
+              <td class="mono">${accountId}</td>
               <td>${escapeHtml(row.label || "-")}</td>
               <td class="mono">${escapeHtml(row.provider_account_id || "-")}</td>
               <td>${status}</td>
+              <td><input class="linkedin-limit-input linkedin-message-limit" type="number" min="1" max="200" step="1" value="${escapeHtml(messageLimit)}" placeholder="policy"></td>
+              <td><input class="linkedin-limit-input linkedin-connect-limit" type="number" min="1" max="200" step="1" value="${escapeHtml(connectLimit)}" placeholder="policy"></td>
+              <td class="mono">${effectiveMsg}/${effectiveConnect}</td>
               <td class="mono">${connectedAt}</td>
               <td class="mono">${syncedAt}</td>
               <td>
-                <button class="linkedin-sync-btn" data-account-id="${Number(row.id || 0)}">Sync</button>
-                <button class="linkedin-disconnect-btn" data-account-id="${Number(row.id || 0)}">Disconnect</button>
+                <button class="linkedin-save-limits-btn" data-account-id="${accountId}">Save Limits</button>
+                <button class="linkedin-sync-btn" data-account-id="${accountId}">Sync</button>
+                <button class="linkedin-disconnect-btn" data-account-id="${accountId}">Disconnect</button>
               </td>
             </tr>
           `;
@@ -1761,6 +1782,18 @@
       }
       renderLinkedinJobRouting();
 
+      document.querySelectorAll(".linkedin-save-limits-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const accountId = Number(btn.dataset.accountId || "0");
+          if (!accountId) return;
+          try {
+            await saveLinkedinAccountLimits(accountId);
+            await refreshLinkedinAccounts();
+          } catch (e) {
+            alert(e.message);
+          }
+        });
+      });
       document.querySelectorAll(".linkedin-sync-btn").forEach((btn) => {
         btn.addEventListener("click", async () => {
           const accountId = Number(btn.dataset.accountId || "0");
@@ -1795,6 +1828,30 @@
       });
     }
 
+    async function saveLinkedinAccountLimits(accountId) {
+      const rowEl = document.querySelector(`tr[data-linkedin-account-id="${Number(accountId)}"]`);
+      if (!rowEl) throw new Error("Account row not found");
+      const messageInput = rowEl.querySelector(".linkedin-message-limit");
+      const connectInput = rowEl.querySelector(".linkedin-connect-limit");
+      const rawMessage = String((messageInput && messageInput.value) || "").trim();
+      const rawConnect = String((connectInput && connectInput.value) || "").trim();
+      const payload = {
+        daily_message_limit: rawMessage ? Number(rawMessage) : null,
+        daily_connect_limit: rawConnect ? Number(rawConnect) : null,
+      };
+      if (rawMessage && (!Number.isInteger(payload.daily_message_limit) || payload.daily_message_limit < 1 || payload.daily_message_limit > 200)) {
+        throw new Error("daily_message_limit must be an integer between 1 and 200");
+      }
+      if (rawConnect && (!Number.isInteger(payload.daily_connect_limit) || payload.daily_connect_limit < 1 || payload.daily_connect_limit > 200)) {
+        throw new Error("daily_connect_limit must be an integer between 1 and 200");
+      }
+      const out = await api(`/api/linkedin/accounts/${Number(accountId)}/limits`, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      snapshot("linkedin.account_limits.saved", out);
+    }
+
     async function refreshLinkedinAccounts() {
       if (!$("linkedin-accounts-tbody")) return;
       try {
@@ -1803,7 +1860,7 @@
         renderLinkedinAccounts();
         await refreshJobLinkedinRouting();
       } catch (e) {
-        $("linkedin-accounts-tbody").innerHTML = `<tr><td colspan="7" class="muted">Failed: ${escapeHtml(e.message)}</td></tr>`;
+        $("linkedin-accounts-tbody").innerHTML = `<tr><td colspan="10" class="muted">Failed: ${escapeHtml(e.message)}</td></tr>`;
         renderLinkedinJobRouting();
       }
     }

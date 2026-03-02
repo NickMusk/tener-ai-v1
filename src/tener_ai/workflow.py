@@ -22,6 +22,13 @@ from .attachments import (
 )
 from .db import Database, utc_now_iso
 from .instructions import AgentEvaluationPlaybook
+from .linkedin_limits import (
+    effective_daily_connect_limit,
+    effective_daily_message_limit,
+    policy_allowed_connects_today,
+    policy_daily_new_threads_cap,
+    policy_weekly_connect_cap,
+)
 from .linkedin_provider import UnipileLinkedInProvider
 from .pre_resume_service import PreResumeCommunicationService, parse_resume_links
 
@@ -3666,7 +3673,6 @@ class WorkflowService:
         if not rows:
             return None, routing_error or "no_connected_account"
         day = self._utc_day_key()
-        daily_cap = self._policy_daily_new_threads_cap()
         eligible: List[tuple[int, int, Dict[str, Any]]] = []
         for row in rows:
             account_id = int(row.get("id") or 0)
@@ -3674,6 +3680,7 @@ class WorkflowService:
                 continue
             counters = self.db.get_linkedin_account_daily_counter(account_id=account_id, day_utc=day)
             sent = int(counters.get("new_threads_sent") or 0)
+            daily_cap = effective_daily_message_limit(row, self.linkedin_outreach_policy)
             if sent >= daily_cap:
                 continue
             eligible.append((sent, account_id, row))
@@ -3710,8 +3717,8 @@ class WorkflowService:
         weekly = self.db.get_linkedin_account_weekly_counter(account_id=account_id, week_start_utc=week_start)
         daily_connect_sent = int(daily.get("connect_sent") or 0)
         weekly_connect_sent = int(weekly.get("connect_sent") or 0)
-        weekly_cap = self._policy_weekly_connect_cap()
-        allowed_today = self._policy_allowed_connects_today(account=account)
+        weekly_cap = policy_weekly_connect_cap(self.linkedin_outreach_policy)
+        allowed_today = effective_daily_connect_limit(account, self.linkedin_outreach_policy)
         return weekly_connect_sent < weekly_cap and daily_connect_sent < allowed_today
 
     def _increment_managed_account_counters(
@@ -3732,66 +3739,13 @@ class WorkflowService:
         )
 
     def _policy_daily_new_threads_cap(self) -> int:
-        outbound = (
-            self.linkedin_outreach_policy.get("outbound_messages")
-            if isinstance(self.linkedin_outreach_policy.get("outbound_messages"), dict)
-            else {}
-        )
-        per_account = outbound.get("daily_new_threads_per_account") if isinstance(outbound.get("daily_new_threads_per_account"), dict) else {}
-        raw = per_account.get("max")
-        try:
-            cap = int(raw)
-        except (TypeError, ValueError):
-            cap = 15
-        return max(1, min(cap, 200))
+        return policy_daily_new_threads_cap(self.linkedin_outreach_policy)
 
     def _policy_weekly_connect_cap(self) -> int:
-        connect = (
-            self.linkedin_outreach_policy.get("connect_invites")
-            if isinstance(self.linkedin_outreach_policy.get("connect_invites"), dict)
-            else {}
-        )
-        raw = connect.get("weekly_cap_per_account")
-        try:
-            cap = int(raw)
-        except (TypeError, ValueError):
-            cap = 100
-        return max(1, min(cap, 700))
+        return policy_weekly_connect_cap(self.linkedin_outreach_policy)
 
     def _policy_allowed_connects_today(self, account: Dict[str, Any]) -> int:
-        weekly_cap = self._policy_weekly_connect_cap()
-        connected_at = self._parse_iso_datetime(str(account.get("connected_at") or ""))
-        created_at = self._parse_iso_datetime(str(account.get("created_at") or ""))
-        anchor = connected_at or created_at or datetime.now(timezone.utc)
-        age_days = max(1, int((datetime.now(timezone.utc) - anchor).days) + 1)
-
-        warmup = self.linkedin_outreach_policy.get("warmup") if isinstance(self.linkedin_outreach_policy.get("warmup"), dict) else {}
-        invite_ramp = warmup.get("invite_ramp") if isinstance(warmup.get("invite_ramp"), list) else []
-        early_max = 3
-        increment_max = 2
-        if invite_ramp:
-            first = invite_ramp[0] if isinstance(invite_ramp[0], dict) else {}
-            first_range = first.get("invites_per_day") if isinstance(first.get("invites_per_day"), dict) else {}
-            try:
-                early_max = max(1, int(first_range.get("max")))
-            except (TypeError, ValueError):
-                early_max = 3
-            if len(invite_ramp) > 1 and isinstance(invite_ramp[1], dict):
-                second = invite_ramp[1]
-                inc = second.get("daily_increment") if isinstance(second.get("daily_increment"), dict) else {}
-                try:
-                    increment_max = max(1, int(inc.get("max")))
-                except (TypeError, ValueError):
-                    increment_max = 2
-
-        if age_days <= 2:
-            return 0
-        if age_days <= 7:
-            return early_max
-        if age_days <= 21:
-            value = early_max + ((age_days - 7) * increment_max)
-            return max(1, min(value, weekly_cap))
-        return max(1, min(weekly_cap // 7, weekly_cap))
+        return policy_allowed_connects_today(self.linkedin_outreach_policy, account)
 
     @staticmethod
     def _utc_day_key() -> str:
