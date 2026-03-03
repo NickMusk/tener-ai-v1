@@ -60,6 +60,12 @@ SIGNAL_CATEGORIES = {
     "rotational_readiness",
     "safety_certifications",
     "technical_skills_match",
+    "client_stakeholder_management",
+    "hse_compliance",
+    "operations_leadership",
+    "process_documentation",
+    "regional_experience",
+    "supply_chain_logistics",
 }
 
 
