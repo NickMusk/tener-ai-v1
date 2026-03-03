@@ -279,16 +279,18 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
         linkedin_id = str(profile.get("linkedin_id") or "").strip()
         if not linkedin_id:
             raise ValueError("linkedin_id is required")
+        linkedin_public_url = Database.extract_linkedin_public_url(profile)
         with self.transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO candidates (
-                        linkedin_id, full_name, headline, location, languages,
+                        linkedin_id, linkedin_public_url, full_name, headline, location, languages,
                         skills, years_experience, source, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT(linkedin_id) DO UPDATE SET
+                        linkedin_public_url = COALESCE(EXCLUDED.linkedin_public_url, candidates.linkedin_public_url),
                         full_name = EXCLUDED.full_name,
                         headline = EXCLUDED.headline,
                         location = EXCLUDED.location,
@@ -300,6 +302,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                     """,
                     (
                         linkedin_id,
+                        linkedin_public_url,
                         profile.get("full_name"),
                         profile.get("headline"),
                         profile.get("location"),

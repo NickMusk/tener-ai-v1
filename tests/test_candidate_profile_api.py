@@ -90,6 +90,7 @@ class CandidateProfileApiTests(unittest.TestCase):
         candidate_id = self.db.upsert_candidate(
             {
                 "linkedin_id": "cand-profile-api-1",
+                "linkedin_public_url": "https://www.linkedin.com/in/cand-profile-api-1",
                 "full_name": "Candidate Profile API",
                 "headline": "Backend Engineer",
                 "location": "Poland",
@@ -197,6 +198,7 @@ class CandidateProfileApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(int(payload["candidate"]["id"]), candidate_id)
         self.assertEqual(int(payload["selected_job_id"]), job_id)
+        self.assertEqual(payload["candidate"]["linkedin_public_url"], "https://www.linkedin.com/in/cand-profile-api-1")
         self.assertIn("audit", payload)
         jobs = payload.get("jobs")
         self.assertIsInstance(jobs, list)

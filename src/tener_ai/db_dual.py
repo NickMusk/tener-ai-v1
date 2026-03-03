@@ -125,11 +125,12 @@ class PostgresMirrorWriter:
                 cur.execute(
                     """
                     INSERT INTO candidates (
-                        id, linkedin_id, full_name, headline, location,
+                        id, linkedin_id, linkedin_public_url, full_name, headline, location,
                         languages, skills, years_experience, source, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT(linkedin_id) DO UPDATE SET
+                        linkedin_public_url = COALESCE(EXCLUDED.linkedin_public_url, candidates.linkedin_public_url),
                         full_name = EXCLUDED.full_name,
                         headline = EXCLUDED.headline,
                         location = EXCLUDED.location,
@@ -141,6 +142,7 @@ class PostgresMirrorWriter:
                     (
                         int(row.get("id") or 0),
                         row.get("linkedin_id"),
+                        row.get("linkedin_public_url"),
                         row.get("full_name"),
                         row.get("headline"),
                         row.get("location"),

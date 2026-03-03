@@ -71,6 +71,7 @@ class Database:
         CREATE TABLE IF NOT EXISTS candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             linkedin_id TEXT UNIQUE NOT NULL,
+            linkedin_public_url TEXT,
             full_name TEXT NOT NULL,
             headline TEXT,
             location TEXT,
@@ -597,6 +598,7 @@ class Database:
         return [self._row_to_dict(r) for r in rows]
 
     def upsert_candidate(self, profile: Dict[str, Any], source: str = "linkedin") -> int:
+        linkedin_public_url = self.extract_linkedin_public_url(profile)
         with self.transaction() as conn:
             existing = conn.execute(
                 "SELECT id FROM candidates WHERE linkedin_id = ?",
@@ -607,7 +609,7 @@ class Database:
                 conn.execute(
                     """
                     UPDATE candidates
-                    SET full_name = ?, headline = ?, location = ?, languages = ?, skills = ?, years_experience = ?, source = ?
+                    SET full_name = ?, headline = ?, location = ?, languages = ?, skills = ?, years_experience = ?, source = ?, linkedin_public_url = COALESCE(?, linkedin_public_url)
                     WHERE id = ?
                     """,
                     (
@@ -618,6 +620,7 @@ class Database:
                         json.dumps(profile.get("skills", [])),
                         profile.get("years_experience"),
                         source,
+                        linkedin_public_url,
                         candidate_id,
                     ),
                 )
@@ -626,11 +629,12 @@ class Database:
             cur = conn.execute(
                 """
                 INSERT INTO candidates
-                (linkedin_id, full_name, headline, location, languages, skills, years_experience, source, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (linkedin_id, linkedin_public_url, full_name, headline, location, languages, skills, years_experience, source, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     profile.get("linkedin_id"),
+                    linkedin_public_url,
                     profile.get("full_name"),
                     profile.get("headline"),
                     profile.get("location"),
@@ -686,6 +690,7 @@ class Database:
             m.verification_notes,
             c.id AS candidate_id,
             c.linkedin_id,
+            c.linkedin_public_url,
             c.full_name,
             c.headline,
             c.location,
@@ -2660,6 +2665,10 @@ class Database:
         if "daily_connect_limit" not in linkedin_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE linkedin_accounts ADD COLUMN daily_connect_limit INTEGER")
+        candidate_columns = self._table_columns("candidates")
+        if "linkedin_public_url" not in candidate_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE candidates ADD COLUMN linkedin_public_url TEXT")
 
         with self.transaction() as conn:
             conn.execute(
@@ -2766,6 +2775,88 @@ class Database:
         if normalized in {"auto", "manual"}:
             return normalized
         return "auto"
+
+    @classmethod
+    def extract_linkedin_public_url(cls, profile: Dict[str, Any]) -> Optional[str]:
+        if not isinstance(profile, dict):
+            return None
+
+        direct_keys = (
+            "linkedin_public_url",
+            "linkedin_url",
+            "profile_url",
+            "public_profile_url",
+            "url",
+        )
+        for key in direct_keys:
+            url = cls._normalize_linkedin_public_url(profile.get(key))
+            if url:
+                return url
+
+        public_identifier = str(profile.get("public_identifier") or "").strip()
+        if public_identifier:
+            url = cls._linkedin_url_from_public_identifier(public_identifier)
+            if url:
+                return url
+
+        raw = profile.get("raw")
+        if isinstance(raw, dict):
+            for bucket in cls._iter_nested_profile_dicts(raw):
+                for key in direct_keys:
+                    url = cls._normalize_linkedin_public_url(bucket.get(key))
+                    if url:
+                        return url
+                identifier = str(bucket.get("public_identifier") or "").strip()
+                if identifier:
+                    url = cls._linkedin_url_from_public_identifier(identifier)
+                    if url:
+                        return url
+        return None
+
+    @staticmethod
+    def _iter_nested_profile_dicts(root: Dict[str, Any]) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
+        stack: List[Dict[str, Any]] = [root]
+        seen: set[int] = set()
+        while stack:
+            item = stack.pop()
+            marker = id(item)
+            if marker in seen:
+                continue
+            seen.add(marker)
+            out.append(item)
+            for key in ("raw", "detail", "search", "data", "profile"):
+                nested = item.get(key)
+                if isinstance(nested, dict):
+                    stack.append(nested)
+        return out
+
+    @staticmethod
+    def _normalize_linkedin_public_url(value: Any) -> Optional[str]:
+        raw = str(value or "").strip()
+        if not raw:
+            return None
+        lowered = raw.lower()
+        if lowered.startswith("linkedin.com/") or lowered.startswith("www.linkedin.com/"):
+            raw = f"https://{raw.lstrip('/')}"
+        if not (raw.startswith("https://") or raw.startswith("http://")):
+            return None
+        if "linkedin.com/" not in raw.lower():
+            return None
+        return raw
+
+    @staticmethod
+    def _linkedin_url_from_public_identifier(public_identifier: str) -> Optional[str]:
+        ident = str(public_identifier or "").strip().strip("/")
+        if not ident:
+            return None
+        if ident.lower().startswith("in/"):
+            ident = ident[3:].strip("/")
+        if not ident:
+            return None
+        if any(ch.isspace() for ch in ident):
+            return None
+        return f"https://www.linkedin.com/in/{ident}"
 
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:

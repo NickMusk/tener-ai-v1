@@ -152,6 +152,7 @@ class PostgresReadDatabase:
                         m.verification_notes,
                         c.id AS candidate_id,
                         c.linkedin_id,
+                        c.linkedin_public_url,
                         c.full_name,
                         c.headline,
                         c.location,
