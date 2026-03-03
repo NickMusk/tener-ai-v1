@@ -231,6 +231,17 @@
     .profile-name { font-size: 28px; font-weight: 700; margin-bottom: 2px; }
     .profile-title { color: var(--text-secondary); margin-bottom: 6px; }
     .profile-meta { color: var(--text-tertiary); font-size: 13px; }
+    .profile-linkedin {
+      display: inline-block;
+      margin-top: 8px;
+      color: var(--accent-blue);
+      text-decoration: none;
+      border-bottom: 1px dotted rgba(0, 191, 255, 0.45);
+    }
+    .profile-linkedin:hover {
+      color: var(--accent-green);
+      border-bottom-color: rgba(0, 255, 135, 0.55);
+    }
 
     .card-title {
       font-size: 24px;
@@ -541,6 +552,7 @@
           <div class="profile-title" id="candidate-title">Profile</div>
           <div class="profile-meta" id="candidate-location">Location</div>
           <div class="profile-meta mono" id="candidate-path" style="margin-top:8px;">Candidate</div>
+          <a class="profile-linkedin mono" id="candidate-linkedin-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">LinkedIn</a>
         </section>
 
         <section class="panel status-card">
@@ -638,6 +650,24 @@
         .replaceAll(">", "&gt;");
     }
 
+    function normalizeLinkedinPublicUrl(raw) {
+      let value = String(raw || "").trim();
+      if (!value) return "";
+      if (!/^https?:\/\//i.test(value) && /^([a-z0-9-]+\.)*linkedin\.com\//i.test(value)) {
+        value = `https://${value.replace(/^\/+/, "")}`;
+      }
+      try {
+        const parsed = new URL(value);
+        const host = String(parsed.hostname || "").toLowerCase();
+        if ((parsed.protocol === "https:" || parsed.protocol === "http:") && host.includes("linkedin.com")) {
+          return parsed.toString();
+        }
+      } catch (_) {
+        return "";
+      }
+      return "";
+    }
+
     function parseCandidateId() {
       const m = String(window.location.pathname || "").match(/^\/candidate\/(\d+)$/);
       return m ? Number(m[1]) : null;
@@ -711,11 +741,22 @@
       const years = candidate.years_experience;
       const exp = (typeof years === "number" && Number.isFinite(years)) ? `${years} years` : "experience n/a";
       const linkedin = candidate.linkedin_id ? ` · ${candidate.linkedin_id}` : "";
+      const linkedinPublicUrl = normalizeLinkedinPublicUrl(candidate.linkedin_public_url);
+      const linkedinLinkEl = $("candidate-linkedin-link");
       $("candidate-name").textContent = labelName;
       $("candidate-title").textContent = labelTitle;
       $("candidate-location").textContent = `📍 ${location} (${exp})`;
       $("candidate-path").textContent = `candidate #${state.candidateId}${linkedin}`;
       $("candidate-avatar").textContent = initials(labelName);
+      if (linkedinLinkEl) {
+        if (linkedinPublicUrl) {
+          linkedinLinkEl.href = linkedinPublicUrl;
+          linkedinLinkEl.style.display = "inline-block";
+        } else {
+          linkedinLinkEl.removeAttribute("href");
+          linkedinLinkEl.style.display = "none";
+        }
+      }
     }
 
     function renderJobs() {

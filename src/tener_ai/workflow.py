@@ -1702,14 +1702,6 @@ class WorkflowService:
                 state=state,
                 instruction=self.stage_instructions.get("pre_resume", ""),
             )
-            self._record_communication_dialogue_assessment(
-                job_id=job_ref,
-                candidate_id=candidate_id,
-                mode="pre_resume",
-                intent="followup",
-                state=state if isinstance(state, dict) else None,
-                inbound_text=None,
-            )
             outbound = str(result.get("outbound") or "").strip()
             candidate = self.db.get_candidate(candidate_id)
             conversation = self.db.get_conversation(conversation_id)
@@ -1823,6 +1815,14 @@ class WorkflowService:
             if delivery.get("sent"):
                 sent += 1
                 status = "sent"
+                self._record_communication_dialogue_assessment(
+                    job_id=job_ref,
+                    candidate_id=candidate_id,
+                    mode="pre_resume",
+                    intent="followup",
+                    state=state if isinstance(state, dict) else None,
+                    inbound_text=None,
+                )
             else:
                 errors += 1
                 status = "delivery_error"

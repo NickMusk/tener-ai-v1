@@ -393,6 +393,15 @@
     }
     #candidates-tbody tr.candidate-row { cursor: pointer; }
     #candidates-tbody tr.candidate-row:hover { background: rgba(66, 153, 225, 0.10); }
+    .candidate-linkedin-link {
+      color: var(--accent-blue);
+      text-decoration: none;
+      border-bottom: 1px dotted rgba(0, 212, 255, 0.45);
+    }
+    .candidate-linkedin-link:hover {
+      color: var(--accent-green);
+      border-bottom-color: rgba(0, 255, 135, 0.55);
+    }
 
     th {
       color: var(--text-secondary);
@@ -749,6 +758,7 @@
             <div class="full button-row" style="justify-content:flex-start;">
               <button id="linkedin-save-token-btn">Save Token</button>
               <button id="linkedin-connect-btn">Connect LinkedIn</button>
+              <button id="linkedin-import-btn">Import from Unipile</button>
               <button id="linkedin-refresh-btn">Refresh Accounts</button>
             </div>
             <div class="full" style="margin-top:6px;border-top:1px solid var(--line);padding-top:8px;">
@@ -1113,6 +1123,24 @@
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
         .replaceAll('>', '&gt;');
+    }
+
+    function normalizeLinkedinPublicUrl(raw) {
+      let value = String(raw || "").trim();
+      if (!value) return "";
+      if (!/^https?:\/\//i.test(value) && /^([a-z0-9-]+\.)*linkedin\.com\//i.test(value)) {
+        value = `https://${value.replace(/^\/+/, "")}`;
+      }
+      try {
+        const parsed = new URL(value);
+        const host = String(parsed.hostname || "").toLowerCase();
+        if ((parsed.protocol === "https:" || parsed.protocol === "http:") && host.includes("linkedin.com")) {
+          return parsed.toString();
+        }
+      } catch (_) {
+        return "";
+      }
+      return "";
     }
 
     function shortText(value, limit = 90) {
@@ -1786,6 +1814,15 @@
       window.open(connectUrl, '_blank', 'noopener,noreferrer');
     }
 
+    async function importLinkedinAccountsFromUnipile() {
+      const out = await api('/api/linkedin/accounts/sync-all', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      snapshot('linkedin.accounts.imported', out);
+      await refreshLinkedinAccounts();
+    }
+
     function renderAgentAccounts() {
       const body = $("agent-accounts-tbody");
       const accounts = state.agentAccounts || [];
@@ -2240,10 +2277,14 @@
           const preResumeStatus = escapeHtml(x.pre_resume_status || '-');
           const scorecard = x.agent_scorecard || {};
           const candidateId = Number(x.candidate_id || 0) || 0;
+          const linkedinPublicUrl = normalizeLinkedinPublicUrl(x.linkedin_public_url);
+          const linkedinLink = linkedinPublicUrl
+            ? `<div class="muted" style="font-size:11px;margin-top:4px;"><a class="candidate-linkedin-link mono" href="${escapeHtml(linkedinPublicUrl)}" target="_blank" rel="noopener noreferrer">linkedin</a></div>`
+            : "";
           return `
             <tr class="candidate-row" data-candidate-id="${candidateId}" data-job-id="${Number(jobId || 0)}" title="Open candidate profile">
               <td class="mono">${candidateId}</td>
-              <td>${escapeHtml(x.full_name || '-')}</td>
+              <td><div>${escapeHtml(x.full_name || '-')}</div>${linkedinLink}</td>
               <td>
                 <div>${currentStatus}</div>
                 <div class="muted mono" style="font-size:11px;">raw:${rawStatus} • pre:${preResumeStatus}</div>
@@ -2301,6 +2342,7 @@
       $("cands-refresh-btn").addEventListener('click', () => refreshCandidates());
       $("demo-candidate-profile-btn").addEventListener('click', () => createDemoCandidateProfile().catch(e => alert(e.message)));
       $("candidates-tbody").addEventListener('click', (event) => {
+        if (event.target && event.target.closest && event.target.closest("a")) return;
         const row = event.target.closest("tr[data-candidate-id]");
         if (!row) return;
         const candidateId = Number(row.dataset.candidateId || 0) || null;
@@ -2320,6 +2362,7 @@
         saveLinkedinAdminToken();
         refreshLinkedinAccounts().catch(e => alert(e.message));
       });
+      $("linkedin-import-btn").addEventListener('click', () => importLinkedinAccountsFromUnipile().catch(e => alert(e.message)));
       $("linkedin-refresh-btn").addEventListener('click', () => refreshLinkedinAccounts().catch(e => alert(e.message)));
       $("linkedin-connect-btn").addEventListener('click', () => startLinkedinConnect().catch(e => alert(e.message)));
       $("linkedin-job-routing-mode").addEventListener('change', () => renderLinkedinJobRouting());
