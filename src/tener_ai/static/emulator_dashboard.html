@@ -673,6 +673,12 @@
       return safeText(project?.id, '') === 'biotech-blindspot-2024';
     }
 
+    function hideOutcomeComparisonForProject(project) {
+      const projectId = safeText(project?.id, '');
+      return projectId === 'nabors-drilling-engineer-2024'
+        || projectId === 'nabors-ops-manager-uae-2024';
+    }
+
     async function api(path, opts = {}) {
       const res = await fetch(path, {
         headers: { 'Content-Type': 'application/json' },
@@ -1163,8 +1169,18 @@
       const hired = state.candidatesById.get(reveal.hiredCandidateId || '');
       const topPick = state.candidatesById.get(reveal.tenerTopPick || '');
       const isLifeSciencesDemo = isLifeSciencesProject(state.project);
+      const hideOutcomeComparison = hideOutcomeComparisonForProject(state.project);
       const actualTitle = isLifeSciencesDemo ? 'Hired Candidate' : 'What Actually Happened';
       const tenerTitle = isLifeSciencesDemo ? 'Top Recommendation' : 'What Tener Would Have Done';
+      const compareRoot = panel.querySelector('.compare');
+      if (compareRoot) {
+        compareRoot.hidden = hideOutcomeComparison;
+      }
+      if (hideOutcomeComparison) {
+        $('actual-col').innerHTML = '';
+        $('tener-col').innerHTML = '';
+        return;
+      }
 
       $('actual-col').innerHTML = `
         <strong>${actualTitle}</strong><br>

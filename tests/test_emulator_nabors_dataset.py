@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 import unittest
 from pathlib import Path
 
@@ -29,6 +30,37 @@ class EmulatorNaborsDatasetTests(unittest.TestCase):
         reveal = project.get("reveal") or {}
         self.assertEqual(str(reveal.get("hiredCandidateId") or ""), "ahmed-al-hammadi")
         self.assertEqual(str(reveal.get("tenerTopPick") or ""), "rajesh-kumar-sharma")
+
+        categories = []
+        for candidate in project.get("candidates") or []:
+            for signal in candidate.get("signals") or []:
+                if signal.get("category"):
+                    categories.append(str(signal.get("category")))
+        for event in project.get("events") or []:
+            if event.get("signalCategory"):
+                categories.append(str(event.get("signalCategory")))
+        self.assertGreater(len(categories), 0)
+        resume_like = {
+            "cv_consistency",
+            "skills_match",
+            "skills_depth",
+            "domain_expertise",
+            "portfolio_quality",
+            "education_signal",
+            "technical_skills_match",
+            "safety_certifications",
+            "rig_type_experience",
+            "rotational_readiness",
+            "incident_safety_record",
+            "contract_tenure_pattern",
+            "education_credentials",
+            "linkedin_completeness",
+        }
+        resume_count = sum(1 for category in categories if category in resume_like)
+        self.assertGreaterEqual(resume_count / len(categories), 0.6)
+        count_by_category = Counter(categories)
+        comm_interview = int(count_by_category.get("communication", 0)) + int(count_by_category.get("interview", 0))
+        self.assertLess(comm_interview, resume_count)
 
 
 if __name__ == "__main__":
