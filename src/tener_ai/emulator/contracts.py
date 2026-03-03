@@ -52,6 +52,14 @@ SIGNAL_CATEGORIES = {
     "availability_risk",
     "leadership_signal",
     "collaboration_style",
+    "contract_tenure_pattern",
+    "education_credentials",
+    "incident_safety_record",
+    "linkedin_completeness",
+    "rig_type_experience",
+    "rotational_readiness",
+    "safety_certifications",
+    "technical_skills_match",
 }
 
 
