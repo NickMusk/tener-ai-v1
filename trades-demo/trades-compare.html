@@ -3,378 +3,61 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Tener.ai — Compare</title>
-<style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  :root {
-    --bg: #0A0A0A; --surface: #111111; --surface2: #1A1A1A; --surface3: #222222;
-    --border: #2A2A2A; --green: #00C853; --green-dim: #00C85333; --green-glow: #00C85366;
-    --yellow: #FFD600; --red: #FF5252; --blue: #448AFF;
-    --text: #E8E8E8; --text-dim: #888888; --text-muted: #555555;
-    --mono: 'JetBrains Mono', monospace; --sans: 'Space Grotesk', sans-serif;
-  }
-  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
-
-  .topbar {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 16px 32px; border-bottom: 1px solid var(--border);
-    background: var(--surface); position: sticky; top: 0; z-index: 100;
-  }
-  .logo { font-family: var(--mono); font-weight: 700; font-size: 20px; color: var(--green); letter-spacing: 2px; }
-  .logo span { color: var(--text-dim); font-weight: 400; font-size: 13px; letter-spacing: 0; margin-left: 12px; }
-  .nav-steps { display: flex; gap: 8px; align-items: center; }
-  .nav-step {
-    display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 20px;
-    font-size: 13px; font-weight: 500; color: var(--text-muted); background: transparent;
-    border: 1px solid transparent; text-decoration: none; transition: all 0.3s; cursor: pointer;
-  }
-  .nav-step.active { color: var(--green); background: var(--green-dim); border-color: var(--green); }
-  .nav-step.done { color: var(--text-dim); }
-  .nav-step:not(.active):hover { color: var(--text-dim); background: var(--surface2); }
-  .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
-  .nav-step.active .nav-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .nav-step.done .nav-dot { background: var(--green); }
-  .nav-arrow { color: var(--text-muted); font-size: 14px; margin: 0 2px; }
-
-  .main { max-width: 1100px; margin: 0 auto; padding: 32px 24px 80px; }
-
-  .page-header {
-    display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px;
-  }
-  .page-header h1 { font-size: 24px; font-weight: 700; }
-  .btn-back {
-    padding: 10px 20px; border-radius: 10px; border: 1px solid var(--border);
-    background: transparent; color: var(--text); font-family: var(--sans);
-    font-size: 13px; cursor: pointer; transition: all 0.2s; text-decoration: none;
-  }
-  .btn-back:hover { border-color: var(--green); color: var(--green); }
-
-  /* Comparison table */
-  .compare-table {
-    width: 100%; border-collapse: separate; border-spacing: 0;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-    overflow: hidden;
-  }
-
-  .compare-table th, .compare-table td {
-    padding: 14px 20px; text-align: left; border-bottom: 1px solid var(--border);
-    font-size: 13px; vertical-align: top;
-  }
-
-  .compare-table thead th {
-    background: var(--surface2); font-weight: 400;
-    position: sticky; top: 0; z-index: 10;
-  }
-
-  .col-label {
-    width: 200px; font-family: var(--mono); color: var(--text-muted);
-    font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase;
-    background: var(--surface2); border-right: 1px solid var(--border);
-  }
-
-  .col-cand { width: 30%; }
-
-  /* Candidate header cells */
-  .cand-header {
-    display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 8px 0;
-  }
-  .cand-header-avatar {
-    width: 48px; height: 48px; border-radius: 12px; display: flex;
-    align-items: center; justify-content: center; font-size: 18px; font-weight: 700;
-    font-family: var(--mono); color: #fff;
-  }
-  .cand-header-name { font-weight: 600; font-size: 15px; }
-  .cand-header-score {
-    font-family: var(--mono); font-weight: 700; font-size: 24px; color: var(--green);
-  }
-  .cand-header-label { font-size: 10px; color: var(--text-muted); font-family: var(--mono); letter-spacing: 1px; }
-
-  /* Cell content */
-  .cell-match { color: var(--green); }
-  .cell-partial { color: var(--yellow); }
-  .cell-miss { color: var(--red); }
-
-  .cell-icon { font-weight: 700; margin-right: 6px; }
-
-  .cell-bar {
-    display: flex; align-items: center; gap: 10px;
-  }
-  .cell-bar-track {
-    flex: 1; height: 8px; background: var(--surface3); border-radius: 4px; overflow: hidden;
-  }
-  .cell-bar-fill { height: 100%; border-radius: 4px; transition: width 1s ease; }
-  .cell-bar-fill.green { background: var(--green); }
-  .cell-bar-fill.yellow { background: var(--yellow); }
-  .cell-bar-value { font-family: var(--mono); font-size: 13px; font-weight: 600; min-width: 35px; text-align: right; }
-
-  /* Section dividers */
-  .section-row td {
-    background: var(--bg); padding: 10px 20px; border-bottom: 1px solid var(--border);
-  }
-  .section-row .section-title-cell {
-    font-family: var(--mono); font-size: 11px; color: var(--green);
-    letter-spacing: 2px; text-transform: uppercase;
-  }
-
-  /* Bottom recommendation */
-  .recommendation {
-    margin-top: 24px; background: var(--surface); border: 1px solid var(--green);
-    border-radius: 16px; padding: 24px; display: flex; align-items: flex-start; gap: 16px;
-  }
-  .rec-avatar {
-    width: 40px; height: 40px; border-radius: 10px;
-    background: linear-gradient(135deg, #4A148C, #CE93D8);
-    display: flex; align-items: center; justify-content: center;
-    font-family: var(--mono); font-weight: 700; font-size: 16px; color: #fff; flex-shrink: 0;
-  }
-  .rec-content h3 {
-    font-size: 14px; color: var(--green); font-family: var(--mono); margin-bottom: 8px;
-  }
-  .rec-content p {
-    font-size: 14px; color: var(--text-dim); line-height: 1.7;
-  }
-  .rec-content strong { color: var(--text); }
-
-  /* Action buttons */
-  .action-row {
-    display: flex; gap: 12px; justify-content: center; margin-top: 28px;
-  }
-  .btn-primary {
-    padding: 14px 32px; border-radius: 12px; border: none;
-    background: var(--green); color: #0A0A0A; font-family: var(--sans);
-    font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s;
-  }
-  .btn-primary:hover { background: #00E676; box-shadow: 0 0 20px var(--green-glow); }
-  .btn-secondary {
-    padding: 14px 32px; border-radius: 12px; border: 1px solid var(--border);
-    background: transparent; color: var(--text); font-family: var(--sans);
-    font-size: 15px; font-weight: 500; cursor: pointer; transition: all 0.2s;
-  }
-  .btn-secondary:hover { border-color: var(--green); color: var(--green); }
-
-  .winner { position: relative; }
-  .winner::after {
-    content: "★ RECOMMENDED";
-    position: absolute; top: -1px; left: 50%; transform: translateX(-50%);
-    background: var(--green); color: #0A0A0A; font-size: 10px; font-weight: 700;
-    font-family: var(--mono); padding: 3px 12px; border-radius: 0 0 8px 8px;
-    letter-spacing: 1px;
-  }
-</style>
+<title>Tener AI - Compare Candidates</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
-<div class="topbar">
-  <div class="logo">TENER.AI <span>Skilled Trades</span></div>
-  <div class="nav-steps">
-    <a class="nav-step done" href="trades-intake.html"><div class="nav-dot"></div> Intake</a>
-    <span class="nav-arrow">→</span>
-    <a class="nav-step done" href="trades-pipeline.html"><div class="nav-dot"></div> Pipeline</a>
-    <span class="nav-arrow">→</span>
-    <a class="nav-step done" href="trades-shortlist.html"><div class="nav-dot"></div> Shortlist</a>
-    <span class="nav-arrow">→</span>
-    <a class="nav-step active"><div class="nav-dot"></div> Compare</a>
-  </div>
-</div>
-
-<div class="main">
-  <div class="page-header">
-    <h1>Compare Top 3</h1>
-    <a href="trades-shortlist.html" class="btn-back">← Back to Shortlist</a>
-  </div>
-
-  <table class="compare-table">
-    <thead>
-      <tr>
-        <th class="col-label"></th>
-        <th class="col-cand winner">
-          <div class="cand-header">
-            <div class="cand-header-avatar" style="background:linear-gradient(135deg,#1B5E20,#00C853)">MJ</div>
-            <div class="cand-header-name">Marcus Johnson</div>
-            <div class="cand-header-score">96</div>
-            <div class="cand-header-label">SCORE</div>
-          </div>
-        </th>
-        <th class="col-cand">
-          <div class="cand-header">
-            <div class="cand-header-avatar" style="background:linear-gradient(135deg,#0D47A1,#448AFF)">DK</div>
-            <div class="cand-header-name">David Kowalski</div>
-            <div class="cand-header-score">94</div>
-            <div class="cand-header-label">SCORE</div>
-          </div>
-        </th>
-        <th class="col-cand">
-          <div class="cand-header">
-            <div class="cand-header-avatar" style="background:linear-gradient(135deg,#4A148C,#CE93D8)">JR</div>
-            <div class="cand-header-name">James Rivera</div>
-            <div class="cand-header-score">91</div>
-            <div class="cand-header-label">SCORE</div>
-          </div>
-        </th>
-      </tr>
-    </thead>
-    <tbody>
-      <!-- Section: Certifications -->
-      <tr class="section-row"><td class="section-title-cell" colspan="4">◆ CERTIFICATIONS</td></tr>
-      <tr>
-        <td class="col-label">OSHA 30</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Verified</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Verified</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Verified</td>
-      </tr>
-      <tr>
-        <td class="col-label">NFPA 70E</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Verified</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Verified</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Verified</td>
-      </tr>
-      <tr>
-        <td class="col-label">Journeyman License</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Virginia (direct)</td>
-        <td class="cell-partial"><span class="cell-icon">△</span> Maryland (reciprocal)</td>
-        <td class="cell-partial"><span class="cell-icon">△</span> N. Carolina (reciprocal)</td>
-      </tr>
-      <tr>
-        <td class="col-label">Additional Certs</td>
-        <td class="cell-match">EPA 608 Universal</td>
-        <td>First Aid / CPR</td>
-        <td class="cell-match">NCCER Electrical Lvl 4</td>
-      </tr>
-
-      <!-- Section: Experience -->
-      <tr class="section-row"><td class="section-title-cell" colspan="4">◆ EXPERIENCE</td></tr>
-      <tr>
-        <td class="col-label">Total Years</td>
-        <td>
-          <div class="cell-bar">
-            <div class="cell-bar-track"><div class="cell-bar-fill green" style="width:82%"></div></div>
-            <div class="cell-bar-value cell-match">14 yrs</div>
-          </div>
-        </td>
-        <td>
-          <div class="cell-bar">
-            <div class="cell-bar-track"><div class="cell-bar-fill green" style="width:65%"></div></div>
-            <div class="cell-bar-value cell-match">11 yrs</div>
-          </div>
-        </td>
-        <td>
-          <div class="cell-bar">
-            <div class="cell-bar-track"><div class="cell-bar-fill green" style="width:53%"></div></div>
-            <div class="cell-bar-value">9 yrs</div>
-          </div>
-        </td>
-      </tr>
-      <tr>
-        <td class="col-label">Data Center Experience</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> 5 years (Holder, QTS)</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> 3 years (AWS / Turner)</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> 2 years (Meta)</td>
-      </tr>
-      <tr>
-        <td class="col-label">MV Systems</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Switchgear, transformers</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Cable terminations</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Switchgear install</td>
-      </tr>
-      <tr>
-        <td class="col-label">Employer Quality</td>
-        <td class="cell-match">Holder Construction, QTS</td>
-        <td class="cell-match">Turner Construction</td>
-        <td class="cell-match">Rosendin Electric</td>
-      </tr>
-
-      <!-- Section: Logistics -->
-      <tr class="section-row"><td class="section-title-cell" colspan="4">◆ LOGISTICS</td></tr>
-      <tr>
-        <td class="col-label">Location</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Leesburg, VA (25mi)</td>
-        <td class="cell-partial"><span class="cell-icon">△</span> Frederick, MD (42mi)</td>
-        <td class="cell-partial"><span class="cell-icon">△</span> Raleigh, NC (travel)</td>
-      </tr>
-      <tr>
-        <td class="col-label">Per Diem Needed</td>
-        <td class="cell-match">No</td>
-        <td class="cell-match">No</td>
-        <td class="cell-partial">Yes ($95/day)</td>
-      </tr>
-      <tr>
-        <td class="col-label">Availability</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> March 15 (3 days early)</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> March 17 (1 day early)</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> March 18 (on time)</td>
-      </tr>
-      <tr>
-        <td class="col-label">Hourly Rate</td>
-        <td><span style="color:var(--green);font-family:var(--mono);font-weight:700">$46/hr</span></td>
-        <td><span style="color:var(--green);font-family:var(--mono);font-weight:700">$44/hr</span></td>
-        <td><span style="color:var(--yellow);font-family:var(--mono);font-weight:700">$48/hr</span></td>
-      </tr>
-      <tr>
-        <td class="col-label">Shift</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Day shift</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Day or night</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Day shift</td>
-      </tr>
-
-      <!-- Section: Reliability -->
-      <tr class="section-row"><td class="section-title-cell" colspan="4">◆ RELIABILITY & SAFETY</td></tr>
-      <tr>
-        <td class="col-label">Safety Record</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Clean</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Zero incidents</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> Clean</td>
-      </tr>
-      <tr>
-        <td class="col-label">Drug Test</td>
-        <td class="cell-match">Current (4 weeks)</td>
-        <td class="cell-match">Current (6 weeks)</td>
-        <td class="cell-match">Current (3 weeks)</td>
-      </tr>
-      <tr>
-        <td class="col-label">Avg Tenure</td>
-        <td>
-          <div class="cell-bar">
-            <div class="cell-bar-track"><div class="cell-bar-fill green" style="width:64%"></div></div>
-            <div class="cell-bar-value cell-match">3.2 yrs</div>
-          </div>
-        </td>
-        <td>
-          <div class="cell-bar">
-            <div class="cell-bar-track"><div class="cell-bar-fill green" style="width:56%"></div></div>
-            <div class="cell-bar-value">2.8 yrs</div>
-          </div>
-        </td>
-        <td>
-          <div class="cell-bar">
-            <div class="cell-bar-track"><div class="cell-bar-fill green" style="width:70%"></div></div>
-            <div class="cell-bar-value cell-match">3.5 yrs</div>
-          </div>
-        </td>
-      </tr>
-      <tr>
-        <td class="col-label">No-Show Risk</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> 4% (low)</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> 6% (low)</td>
-        <td class="cell-match"><span class="cell-icon">✓</span> 8% (low)</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <!-- AI Recommendation -->
-  <div class="recommendation">
-    <div class="rec-avatar">J</div>
-    <div class="rec-content">
-      <h3>◆ JORDAN AI RECOMMENDATION</h3>
-      <p>All three candidates are strong fits for the MV Electrician role. <strong>Marcus Johnson is the top pick</strong> based on the combination of direct VA license, most data center experience (5 years), local proximity (no per diem cost), and the best reliability score. <strong>David Kowalski</strong> is the budget play at $44/hr with solid AWS data center experience. <strong>James Rivera</strong> brings the highest NCCER certification level and Meta project pedigree but costs more at $48/hr plus $95/day per diem. For a 5 person crew, I'd recommend all three plus two from the remaining shortlist. Total estimated cost: $46.4/hr blended rate.</p>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div>
+      <div class="brand">Tener AI</div>
+      <div class="brand-sub">Skilled Trades Hiring</div>
     </div>
+    <span class="badge badge-ok">Decision Screen</span>
   </div>
+</header>
 
-  <div class="action-row">
-    <button class="btn-primary">Schedule All 3 Interviews</button>
-    <button class="btn-secondary">Export Comparison PDF</button>
-  </div>
-</div>
+<main class="main">
+  <section class="page-head">
+    <span class="page-kicker">Step 7 of 7</span>
+    <h1>Compare Top Candidates</h1>
+    <p>Final side-by-side view for hiring decision. Clear and simple for non-technical buyers.</p>
+  </section>
 
+  <nav class="step-nav">
+    <a class="step-link done" href="trades-intake.html">1. Intake</a>
+    <a class="step-link done" href="trades-sourcing.html">2. Indeed</a>
+    <a class="step-link done" href="trades-cv-analysis.html">3. CV Review</a>
+    <a class="step-link done" href="trades-reliability.html">4. Reliability</a>
+    <a class="step-link done" href="trades-sms-outreach.html">5. SMS Outreach</a>
+    <a class="step-link done" href="trades-shortlist.html">6. Shortlist</a>
+    <a class="step-link active" href="trades-compare.html">7. Compare</a>
+  </nav>
+
+  <section class="card">
+    <table class="table">
+      <thead>
+        <tr><th>Category</th><th>Marcus Johnson</th><th>David Kowalski</th><th>James Rivera</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Total Score</td><td>92</td><td>88</td><td>86</td></tr>
+        <tr><td>Source</td><td>Indeed</td><td>Indeed</td><td>Indeed</td></tr>
+        <tr><td>Rate</td><td>$46/hr</td><td>$44/hr</td><td>$48/hr</td></tr>
+        <tr><td>Data Center Experience</td><td>5 years</td><td>4 years</td><td>6 years</td></tr>
+        <tr><td>Reliability Score</td><td>94</td><td>90</td><td>87</td></tr>
+        <tr><td>Availability</td><td>Next week</td><td>Next week</td><td>10 days</td></tr>
+        <tr><td>Best For</td><td>Balanced quality + speed</td><td>Budget-sensitive hire</td><td>Complex project work</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="card" style="margin-top:14px;">
+    <div class="label">Recommended First Call</div>
+    <div class="value">Marcus Johnson</div>
+    <p class="sub">Best overall fit for this role: local, strong certifications, high reliability, and immediate availability.</p>
+  </section>
+
+  <a class="cta secondary" href="trades-shortlist.html">Back to Shortlist</a>
+</main>
 </body>
 </html>
