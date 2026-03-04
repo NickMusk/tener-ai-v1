@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tener.ai — Pipeline</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --bg: #0A0A0A; --surface: #111111; --surface2: #1A1A1A; --surface3: #222222;
+    --border: #2A2A2A; --green: #00C853; --green-dim: #00C85333; --green-glow: #00C85366;
+    --yellow: #FFD600; --red: #FF5252; --blue: #448AFF;
+    --text: #E8E8E8; --text-dim: #888888; --text-muted: #555555;
+    --mono: 'JetBrains Mono', monospace; --sans: 'Space Grotesk', sans-serif;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 16px 32px; border-bottom: 1px solid var(--border);
+    background: var(--surface); position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-family: var(--mono); font-weight: 700; font-size: 20px; color: var(--green); letter-spacing: 2px; }
+  .logo span { color: var(--text-dim); font-weight: 400; font-size: 13px; letter-spacing: 0; margin-left: 12px; }
+  .nav-steps { display: flex; gap: 8px; align-items: center; }
+  .nav-step {
+    display: flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 20px;
+    font-size: 13px; font-weight: 500; color: var(--text-muted); background: transparent;
+    border: 1px solid transparent; text-decoration: none; transition: all 0.3s; cursor: pointer;
+  }
+  .nav-step.active { color: var(--green); background: var(--green-dim); border-color: var(--green); }
+  .nav-step.done { color: var(--text-dim); }
+  .nav-step:not(.active):hover { color: var(--text-dim); background: var(--surface2); }
+  .nav-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
+  .nav-step.active .nav-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .nav-step.done .nav-dot { background: var(--green); }
+  .nav-arrow { color: var(--text-muted); font-size: 14px; margin: 0 2px; }
+
+  .main { max-width: 1200px; margin: 0 auto; padding: 32px 24px 80px; }
+
+  /* Job banner */
+  .job-banner {
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 24px; margin-bottom: 24px;
+  }
+  .job-banner-left { display: flex; align-items: center; gap: 16px; }
+  .job-icon {
+    width: 44px; height: 44px; border-radius: 10px;
+    background: var(--green-dim); border: 1px solid var(--green);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px;
+  }
+  .job-title-text { font-weight: 600; font-size: 16px; }
+  .job-meta { font-size: 13px; color: var(--text-dim); font-family: var(--mono); margin-top: 2px; }
+  .job-status {
+    padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600;
+    font-family: var(--mono); letter-spacing: 1px;
+  }
+  .job-status.running {
+    background: var(--green-dim); color: var(--green); border: 1px solid var(--green);
+    animation: statusPulse 2s infinite;
+  }
+  @keyframes statusPulse {
+    0%, 100% { box-shadow: 0 0 0 0 var(--green-glow); }
+    50% { box-shadow: 0 0 12px 4px var(--green-glow); }
+  }
+
+  /* Stats row */
+  .stats-row {
+    display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 28px;
+  }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 20px; text-align: center;
+  }
+  .stat-value {
+    font-family: var(--mono); font-size: 32px; font-weight: 700;
+    color: var(--green); transition: all 0.3s;
+  }
+  .stat-label { font-size: 12px; color: var(--text-dim); margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
+
+  /* Funnel */
+  .funnel-section { margin-bottom: 28px; }
+  .section-title {
+    font-family: var(--mono); font-size: 13px; color: var(--text-dim);
+    letter-spacing: 2px; text-transform: uppercase; margin-bottom: 12px;
+  }
+  .funnel-bar-track {
+    height: 40px; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; overflow: hidden; position: relative; margin-bottom: 8px;
+  }
+  .funnel-bar-fill {
+    height: 100%; border-radius: 7px;
+    transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex; align-items: center; padding-left: 12px;
+    font-family: var(--mono); font-size: 13px; font-weight: 600; color: #0A0A0A;
+  }
+  .funnel-labels {
+    display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim);
+  }
+
+  /* Agent activity feed */
+  .agents-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 28px;
+  }
+  .agent-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px 20px; transition: border-color 0.3s;
+  }
+  .agent-card.active-agent { border-color: var(--green); }
+  .agent-card-header {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  }
+  .agent-mini-avatar {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-weight: 700; font-size: 13px;
+  }
+  .agent-mini-avatar.reed { background: #1A237E; color: #82B1FF; }
+  .agent-mini-avatar.harper { background: #1B5E20; color: #69F0AE; }
+  .agent-mini-avatar.jordan { background: #4A148C; color: #CE93D8; }
+  .agent-mini-avatar.casey { background: #BF360C; color: #FFAB91; }
+  .agent-card-name { font-weight: 600; font-size: 14px; }
+  .agent-card-role { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+  .agent-card-status {
+    margin-left: auto; font-size: 11px; font-family: var(--mono); padding: 3px 10px;
+    border-radius: 10px;
+  }
+  .agent-card-status.working { background: var(--green-dim); color: var(--green); }
+  .agent-card-status.waiting { background: var(--surface2); color: var(--text-muted); }
+
+  .agent-log {
+    font-family: var(--mono); font-size: 12px; color: var(--text-dim);
+    line-height: 1.8; max-height: 120px; overflow-y: auto;
+  }
+  .agent-log .log-entry { opacity: 0; animation: logIn 0.3s ease forwards; }
+  @keyframes logIn { to { opacity: 1; } }
+  .log-time { color: var(--text-muted); }
+  .log-ok { color: var(--green); }
+  .log-warn { color: var(--yellow); }
+  .log-skip { color: var(--red); }
+
+  /* Candidate stream */
+  .candidate-stream {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden;
+  }
+  .stream-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface2);
+  }
+  .stream-header-title { font-family: var(--mono); font-size: 13px; color: var(--green); letter-spacing: 1px; }
+  .stream-body { max-height: 320px; overflow-y: auto; padding: 8px; }
+
+  .cand-row {
+    display: grid; grid-template-columns: 36px 1fr 120px 100px 80px;
+    align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px;
+    font-size: 13px; opacity: 0; transform: translateX(-10px);
+    animation: rowIn 0.4s ease forwards;
+    border-bottom: 1px solid var(--border);
+  }
+  .cand-row:last-child { border-bottom: none; }
+  @keyframes rowIn { to { opacity: 1; transform: translateX(0); } }
+
+  .cand-avatar {
+    width: 36px; height: 36px; border-radius: 8px; display: flex;
+    align-items: center; justify-content: center; font-size: 12px; font-weight: 700;
+    font-family: var(--mono);
+  }
+  .cand-name { font-weight: 500; }
+  .cand-trade { font-size: 11px; color: var(--text-dim); font-family: var(--mono); }
+  .cand-certs { display: flex; gap: 4px; flex-wrap: wrap; }
+  .cand-cert {
+    padding: 2px 8px; border-radius: 8px; font-size: 10px;
+    font-family: var(--mono); background: var(--green-dim); color: var(--green);
+  }
+  .cand-cert.missing { background: #FF525222; color: var(--red); }
+  .cand-location { font-size: 12px; color: var(--text-dim); }
+  .cand-score {
+    font-family: var(--mono); font-weight: 700; font-size: 16px; text-align: right;
+  }
+  .cand-score.high { color: var(--green); }
+  .cand-score.mid { color: var(--yellow); }
+  .cand-score.low { color: var(--red); }
+
+  .btn-next {
+    display: block; margin: 32px auto 0; padding: 14px 40px; border-radius: 12px;
+    border: 2px solid var(--green); background: transparent; color: var(--green);
+    font-family: var(--sans); font-size: 15px; font-weight: 600; cursor: pointer;
+    transition: all 0.3s; opacity: 0; animation: fadeUp 0.5s ease forwards;
+    animation-delay: 8s;
+  }
+  .btn-next:hover { background: var(--green); color: #0A0A0A; box-shadow: 0 0 20px var(--green-glow); }
+  @keyframes fadeUp { to { opacity: 1; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">TENER.AI <span>Skilled Trades</span></div>
+  <div class="nav-steps">
+    <a class="nav-step done" href="trades-intake.html"><div class="nav-dot"></div> Intake</a>
+    <span class="nav-arrow">→</span>
+    <a class="nav-step active"><div class="nav-dot"></div> Pipeline</a>
+    <span class="nav-arrow">→</span>
+    <a class="nav-step" href="trades-shortlist.html"><div class="nav-dot"></div> Shortlist</a>
+    <span class="nav-arrow">→</span>
+    <a class="nav-step" href="trades-compare.html"><div class="nav-dot"></div> Compare</a>
+  </div>
+</div>
+
+<div class="main">
+  <div class="job-banner">
+    <div class="job-banner-left">
+      <div class="job-icon">⚡</div>
+      <div>
+        <div class="job-title-text">Commercial Electrician — MV Specialist</div>
+        <div class="job-meta">Ashburn, VA · Data Center · 5 positions · $40–$48/hr</div>
+      </div>
+    </div>
+    <div class="job-status running">● AGENTS ACTIVE</div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat-card"><div class="stat-value" id="statSourced">0</div><div class="stat-label">Sourced</div></div>
+    <div class="stat-card"><div class="stat-value" id="statScreened">0</div><div class="stat-label">Screened</div></div>
+    <div class="stat-card"><div class="stat-value" id="statQualified">0</div><div class="stat-label">Qualified</div></div>
+    <div class="stat-card"><div class="stat-value" id="statContacted">0</div><div class="stat-label">Contacted</div></div>
+    <div class="stat-card"><div class="stat-value" id="statFinalists">0</div><div class="stat-label">Finalists</div></div>
+  </div>
+
+  <div class="funnel-section">
+    <div class="section-title">Pipeline Funnel</div>
+    <div class="funnel-bar-track">
+      <div class="funnel-bar-fill" id="funnelBar" style="width: 0%; background: linear-gradient(90deg, var(--green), #00E676);">
+        &nbsp;
+      </div>
+    </div>
+    <div class="funnel-labels">
+      <span>Sourced → Screened → Qualified → Contacted → Finalists</span>
+      <span id="funnelPct">0%</span>
+    </div>
+  </div>
+
+  <div class="agents-grid">
+    <div class="agent-card active-agent" id="cardReed">
+      <div class="agent-card-header">
+        <div class="agent-mini-avatar reed">R</div>
+        <div><div class="agent-card-name">Reed AI</div><div class="agent-card-role">CV_ANALYSIS · CERT_EXTRACTION</div></div>
+        <div class="agent-card-status working">● Working</div>
+      </div>
+      <div class="agent-log" id="logReed"></div>
+    </div>
+    <div class="agent-card" id="cardHarper">
+      <div class="agent-card-header">
+        <div class="agent-mini-avatar harper">H</div>
+        <div><div class="agent-card-name">Harper AI</div><div class="agent-card-role">SMS_OUTREACH · ENGAGEMENT</div></div>
+        <div class="agent-card-status waiting">Waiting</div>
+      </div>
+      <div class="agent-log" id="logHarper"></div>
+    </div>
+    <div class="agent-card" id="cardJordan">
+      <div class="agent-card-header">
+        <div class="agent-mini-avatar jordan">J</div>
+        <div><div class="agent-card-name">Jordan AI</div><div class="agent-card-role">RELIABILITY · SAFETY_CHECK</div></div>
+        <div class="agent-card-status waiting">Waiting</div>
+      </div>
+      <div class="agent-log" id="logJordan"></div>
+    </div>
+    <div class="agent-card" id="cardCasey">
+      <div class="agent-card-header">
+        <div class="agent-mini-avatar casey">C</div>
+        <div><div class="agent-card-name">Casey AI</div><div class="agent-card-role">MARKET_INTEL · RATE_BENCH</div></div>
+        <div class="agent-card-status waiting">Waiting</div>
+      </div>
+      <div class="agent-log" id="logCasey"></div>
+    </div>
+  </div>
+
+  <div class="candidate-stream">
+    <div class="stream-header">
+      <div class="stream-header-title">◆ LIVE CANDIDATE STREAM</div>
+      <div style="font-size:12px;color:var(--text-dim);font-family:var(--mono);">sorted by score</div>
+    </div>
+    <div class="stream-body" id="streamBody"></div>
+  </div>
+
+  <a href="trades-shortlist.html" class="btn-next">View Shortlist →</a>
+</div>
+
+<script>
+const candidates = [
+  { name:"Marcus Johnson", init:"MJ", trade:"Journeyman Electrician", certs:["OSHA 30","NFPA 70E","VA License"], loc:"Leesburg, VA (25mi)", score:96, color:"#1B5E20" },
+  { name:"David Kowalski", init:"DK", trade:"MV Electrician", certs:["OSHA 30","NFPA 70E","MD License"], loc:"Frederick, MD (42mi)", score:94, color:"#0D47A1" },
+  { name:"James Rivera", init:"JR", trade:"Commercial Electrician", certs:["OSHA 30","NFPA 70E","NC License"], loc:"Raleigh, NC (travel)", score:91, color:"#4A148C" },
+  { name:"Robert Williams", init:"RW", trade:"Journeyman Electrician", certs:["OSHA 30","VA License"], loc:"Manassas, VA (31mi)", score:89, color:"#BF360C" },
+  { name:"Andre Mitchell", init:"AM", trade:"MV Specialist", certs:["OSHA 30","NFPA 70E","DC License"], loc:"Washington, DC (28mi)", score:88, color:"#006064" },
+  { name:"Carlos Mendez", init:"CM", trade:"Electrician Foreman", certs:["OSHA 30","NFPA 70E","VA Master"], loc:"Sterling, VA (12mi)", score:87, color:"#33691E" },
+  { name:"Tommy Nguyen", init:"TN", trade:"Journeyman Electrician", certs:["OSHA 10","VA License"], loc:"Arlington, VA (30mi)", score:72, color:"#E65100" },
+  { name:"Brian O'Neill", init:"BO", trade:"Apprentice 4th yr", certs:["OSHA 30"], loc:"Baltimore, MD (55mi)", score:65, color:"#880E4F" },
+  { name:"Keith Patterson", init:"KP", trade:"Residential Electrician", certs:["OSHA 10"], loc:"Richmond, VA (95mi)", score:41, color:"#311B92" },
+  { name:"Steve Coleman", init:"SC", trade:"General Laborer", certs:[], loc:"Fairfax, VA (20mi)", score:22, color:"#424242" },
+];
+
+const reedLogs = [
+  {t:"00:01", msg:"Sourcing Indeed API: 'electrician medium voltage Virginia'", cls:""},
+  {t:"00:03", msg:"Found 47 profiles matching base criteria", cls:"log-ok"},
+  {t:"00:05", msg:"Expanding to MD, DC, NC reciprocal states...", cls:""},
+  {t:"00:08", msg:"+36 candidates from adjacent states", cls:"log-ok"},
+  {t:"00:12", msg:"Parsing CVs... extracting certifications...", cls:""},
+  {t:"00:18", msg:"OSHA 30 verified: 28/83 candidates", cls:"log-ok"},
+  {t:"00:22", msg:"NFPA 70E found: 14/83 candidates", cls:"log-warn"},
+  {t:"00:25", msg:"Filtering: no MV experience → 32 removed", cls:"log-skip"},
+  {t:"00:28", msg:"51 candidates passed initial screen", cls:"log-ok"},
+];
+
+const jordanLogs = [
+  {t:"00:30", msg:"Analyzing tenure patterns for 51 candidates...", cls:""},
+  {t:"00:35", msg:"7 candidates flagged: avg tenure < 6 months", cls:"log-warn"},
+  {t:"00:38", msg:"Safety record check: all clear on 44/51", cls:"log-ok"},
+  {t:"00:42", msg:"No-show risk model: 5 candidates > 40% risk", cls:"log-skip"},
+  {t:"00:45", msg:"28 candidates passed reliability screening", cls:"log-ok"},
+];
+
+const harperLogs = [
+  {t:"00:48", msg:"Composing SMS outreach for top 15 candidates", cls:""},
+  {t:"00:50", msg:"SMS sent to Marcus Johnson (+1***) ✓", cls:"log-ok"},
+  {t:"00:50", msg:"SMS sent to David Kowalski (+1***) ✓", cls:"log-ok"},
+  {t:"00:51", msg:"SMS sent to James Rivera (+1***) ✓", cls:"log-ok"},
+  {t:"00:53", msg:"Response received: Marcus Johnson → YES", cls:"log-ok"},
+  {t:"00:55", msg:"Response received: David Kowalski → YES", cls:"log-ok"},
+  {t:"00:58", msg:"7/15 responded. 5 confirmed interest.", cls:"log-ok"},
+];
+
+const caseyLogs = [
+  {t:"00:05", msg:"Benchmarking MV electrician rates: Ashburn, VA", cls:""},
+  {t:"00:08", msg:"Market rate: $42–$52/hr (median $46). Client at $40–$48 → competitive", cls:"log-ok"},
+  {t:"00:12", msg:"Competitor staffing agencies: Rosendin, Faith Technologies active in area", cls:"log-warn"},
+  {t:"00:15", msg:"Per diem $95 is above market avg ($85). Advantage.", cls:"log-ok"},
+];
+
+let statSourced=0, statScreened=0, statQualified=0, statContacted=0, statFinalists=0;
+const finalStats = [83, 51, 28, 15, 7];
+
+function animateStat(id, target, duration) {
+  const el = document.getElementById(id);
+  let start = parseInt(el.textContent);
+  const step = Math.max(1, Math.floor((target - start) / (duration / 50)));
+  const iv = setInterval(() => {
+    start = Math.min(start + step, target);
+    el.textContent = start;
+    if (start >= target) { el.textContent = target; clearInterval(iv); }
+  }, 50);
+}
+
+function addLog(logId, entry) {
+  const log = document.getElementById(logId);
+  const div = document.createElement('div');
+  div.className = 'log-entry ' + (entry.cls || '');
+  div.innerHTML = `<span class="log-time">[${entry.t}]</span> ${entry.msg}`;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+}
+
+function activateCard(cardId) {
+  document.getElementById(cardId).classList.add('active-agent');
+  document.getElementById(cardId).querySelector('.agent-card-status').className = 'agent-card-status working';
+  document.getElementById(cardId).querySelector('.agent-card-status').textContent = '● Working';
+}
+
+function addCandidateRow(c, delay) {
+  setTimeout(() => {
+    const body = document.getElementById('streamBody');
+    const scoreCls = c.score >= 85 ? 'high' : c.score >= 60 ? 'mid' : 'low';
+    const certsHtml = c.certs.length > 0
+      ? c.certs.map(cert => `<span class="cand-cert">${cert}</span>`).join('')
+      : '<span class="cand-cert missing">No certs</span>';
+    const row = document.createElement('div');
+    row.className = 'cand-row';
+    row.innerHTML = `
+      <div class="cand-avatar" style="background:${c.color};color:#fff">${c.init}</div>
+      <div><div class="cand-name">${c.name}</div><div class="cand-trade">${c.trade}</div></div>
+      <div class="cand-certs">${certsHtml}</div>
+      <div class="cand-location">${c.loc}</div>
+      <div class="cand-score ${scoreCls}">${c.score}</div>
+    `;
+    body.appendChild(row);
+    body.scrollTop = body.scrollHeight;
+  }, delay);
+}
+
+// Timeline animation
+function runTimeline() {
+  // Phase 1: Reed + Casey sourcing (0–3s)
+  let t = 0;
+  reedLogs.forEach((l, i) => {
+    setTimeout(() => addLog('logReed', l), t + i * 400);
+  });
+  caseyLogs.forEach((l, i) => {
+    setTimeout(() => { activateCard('cardCasey'); addLog('logCasey', l); }, t + 200 + i * 500);
+  });
+  setTimeout(() => animateStat('statSourced', 83, 1500), 800);
+
+  // Phase 2: Jordan screening (3.5s)
+  setTimeout(() => {
+    activateCard('cardJordan');
+    animateStat('statScreened', 51, 1200);
+    jordanLogs.forEach((l, i) => {
+      setTimeout(() => addLog('logJordan', l), i * 500);
+    });
+  }, 3800);
+
+  setTimeout(() => animateStat('statQualified', 28, 1000), 5500);
+
+  // Phase 3: Harper outreach (6s)
+  setTimeout(() => {
+    activateCard('cardHarper');
+    animateStat('statContacted', 15, 1000);
+    harperLogs.forEach((l, i) => {
+      setTimeout(() => addLog('logHarper', l), i * 400);
+    });
+  }, 6200);
+
+  setTimeout(() => animateStat('statFinalists', 7, 800), 7500);
+
+  // Funnel
+  setTimeout(() => { document.getElementById('funnelBar').style.width = '100%'; }, 500);
+  setTimeout(() => { document.getElementById('funnelBar').style.width = '61%'; }, 3800);
+  setTimeout(() => { document.getElementById('funnelBar').style.width = '34%'; }, 5500);
+  setTimeout(() => { document.getElementById('funnelBar').style.width = '18%'; }, 6200);
+  setTimeout(() => {
+    document.getElementById('funnelBar').style.width = '8.4%';
+    document.getElementById('funnelPct').textContent = '8.4% conversion';
+  }, 7500);
+
+  // Candidates appear
+  candidates.forEach((c, i) => addCandidateRow(c, 4000 + i * 500));
+}
+
+runTimeline();
+</script>
+</body>
+</html>

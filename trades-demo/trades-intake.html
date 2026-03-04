@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tener.ai — Job Intake</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #0A0A0A;
+    --surface: #111111;
+    --surface2: #1A1A1A;
+    --surface3: #222222;
+    --border: #2A2A2A;
+    --green: #00C853;
+    --green-dim: #00C85333;
+    --green-glow: #00C85366;
+    --text: #E8E8E8;
+    --text-dim: #888888;
+    --text-muted: #555555;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'Space Grotesk', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Top nav */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 32px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .logo {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 20px;
+    color: var(--green);
+    letter-spacing: 2px;
+  }
+  .logo span { color: var(--text-dim); font-weight: 400; font-size: 13px; letter-spacing: 0; margin-left: 12px; }
+  .nav-steps {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .nav-step {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    background: transparent;
+    border: 1px solid transparent;
+    text-decoration: none;
+    transition: all 0.3s;
+    cursor: pointer;
+  }
+  .nav-step.active {
+    color: var(--green);
+    background: var(--green-dim);
+    border-color: var(--green);
+  }
+  .nav-step:not(.active):hover {
+    color: var(--text-dim);
+    background: var(--surface2);
+  }
+  .nav-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--text-muted);
+  }
+  .nav-step.active .nav-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .nav-arrow { color: var(--text-muted); font-size: 14px; margin: 0 2px; }
+
+  /* Main layout */
+  .main {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 24px 120px;
+  }
+
+  /* Header */
+  .page-header {
+    margin-bottom: 32px;
+  }
+  .page-header h1 {
+    font-family: var(--sans);
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 8px;
+  }
+  .page-header p {
+    color: var(--text-dim);
+    font-size: 15px;
+    line-height: 1.5;
+  }
+
+  /* Chat area */
+  .chat-container {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  .chat-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+  }
+  .agent-avatar {
+    width: 40px; height: 40px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #00C853 0%, #00E676 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 16px;
+    color: #0A0A0A;
+  }
+  .agent-info .agent-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text);
+  }
+  .agent-info .agent-role {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-family: var(--mono);
+  }
+  .online-dot {
+    width: 8px; height: 8px;
+    background: var(--green);
+    border-radius: 50%;
+    margin-left: auto;
+    box-shadow: 0 0 8px var(--green-glow);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .chat-messages {
+    padding: 20px;
+    min-height: 400px;
+    max-height: 520px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .msg {
+    display: flex;
+    gap: 10px;
+    max-width: 85%;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: msgIn 0.4s ease forwards;
+  }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  @keyframes msgIn {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .msg-avatar {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--mono);
+  }
+  .msg:not(.user) .msg-avatar {
+    background: linear-gradient(135deg, #00C853, #00E676);
+    color: #0A0A0A;
+  }
+  .msg.user .msg-avatar {
+    background: var(--surface3);
+    color: var(--text-dim);
+  }
+
+  .msg-bubble {
+    padding: 12px 16px;
+    border-radius: 14px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .msg:not(.user) .msg-bubble {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-top-left-radius: 4px;
+  }
+  .msg.user .msg-bubble {
+    background: var(--green);
+    color: #0A0A0A;
+    border-top-right-radius: 4px;
+    font-weight: 500;
+  }
+
+  .msg-bubble .highlight {
+    color: var(--green);
+    font-weight: 600;
+  }
+
+  .msg:not(.user) .msg-bubble .highlight { color: #00E676; }
+
+  /* Quick replies */
+  .quick-replies {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 20px 16px;
+    opacity: 0;
+    animation: msgIn 0.4s ease forwards;
+  }
+  .quick-reply {
+    padding: 8px 16px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 13px;
+    font-family: var(--sans);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .quick-reply:hover {
+    border-color: var(--green);
+    background: var(--green-dim);
+    color: var(--green);
+  }
+
+  /* Generated JD card */
+  .jd-card {
+    background: var(--surface2);
+    border: 1px solid var(--green);
+    border-radius: 12px;
+    padding: 20px;
+    margin-top: 8px;
+  }
+  .jd-card h3 {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--green);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .jd-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .jd-row:last-child { border-bottom: none; }
+  .jd-label { color: var(--text-dim); font-family: var(--mono); }
+  .jd-value { color: var(--text); font-weight: 500; text-align: right; }
+  .jd-value.green { color: var(--green); }
+
+  .cert-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: flex-end;
+  }
+  .cert-tag {
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-family: var(--mono);
+    background: var(--green-dim);
+    color: var(--green);
+    border: 1px solid #00C85344;
+  }
+
+  /* Bottom action */
+  .chat-bottom {
+    padding: 16px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+  }
+  .chat-input {
+    flex: 1;
+    padding: 12px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .chat-input:focus { border-color: var(--green); }
+  .chat-input::placeholder { color: var(--text-muted); }
+
+  .btn-launch {
+    padding: 12px 28px;
+    border-radius: 12px;
+    border: none;
+    background: var(--green);
+    color: #0A0A0A;
+    font-family: var(--sans);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .btn-launch:hover {
+    background: #00E676;
+    box-shadow: 0 0 20px var(--green-glow);
+  }
+  .btn-launch:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  /* Typing indicator */
+  .typing {
+    display: flex;
+    gap: 4px;
+    padding: 12px 16px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    border-top-left-radius: 4px;
+    width: fit-content;
+  }
+  .typing-dot {
+    width: 6px; height: 6px;
+    background: var(--text-muted);
+    border-radius: 50%;
+    animation: typingBounce 1.2s infinite;
+  }
+  .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typingBounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">TENER.AI <span>Skilled Trades</span></div>
+  <div class="nav-steps">
+    <a class="nav-step active"><div class="nav-dot"></div> Intake</a>
+    <span class="nav-arrow">→</span>
+    <a class="nav-step" href="trades-pipeline.html"><div class="nav-dot"></div> Pipeline</a>
+    <span class="nav-arrow">→</span>
+    <a class="nav-step" href="trades-shortlist.html"><div class="nav-dot"></div> Shortlist</a>
+    <span class="nav-arrow">→</span>
+    <a class="nav-step" href="trades-compare.html"><div class="nav-dot"></div> Compare</a>
+  </div>
+</div>
+
+<div class="main">
+  <div class="page-header">
+    <h1>New Job Requisition</h1>
+    <p>Spencer AI will help you define the perfect job specification for your skilled trades role.</p>
+  </div>
+
+  <div class="chat-container">
+    <div class="chat-header">
+      <div class="agent-avatar">S</div>
+      <div class="agent-info">
+        <div class="agent-name">Spencer AI</div>
+        <div class="agent-role">JOB_SPECIFICATION_AGENT</div>
+      </div>
+      <div class="online-dot"></div>
+    </div>
+
+    <div class="chat-messages" id="chatMessages"></div>
+
+    <div class="quick-replies hidden" id="quickReplies"></div>
+
+    <div class="chat-bottom">
+      <input class="chat-input" id="chatInput" placeholder="Type your response..." disabled>
+      <button class="btn-launch" id="launchBtn" onclick="launchSearch()" disabled>Launch Search →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const chat = document.getElementById('chatMessages');
+const quickRepliesEl = document.getElementById('quickReplies');
+const launchBtn = document.getElementById('launchBtn');
+let step = 0;
+
+const conversation = [
+  {
+    agent: "Hey! I'm Spencer, your hiring specialist for skilled trades. Let's build your job spec. What role are you looking to fill?",
+    replies: ["Commercial Electrician", "Welder / Pipe Fitter", "HVAC Technician", "Heavy Equipment Operator"],
+    userResponse: "Commercial Electrician"
+  },
+  {
+    agent: "Got it, <span class='highlight'>Commercial Electrician</span>. What type of project site is this for?",
+    replies: ["Data Center (new build)", "Commercial Construction", "Industrial / Manufacturing", "Oil & Gas / Drilling"],
+    userResponse: "Data Center (new build)"
+  },
+  {
+    agent: "Data center builds are running hot right now. Where's the site located? This helps me benchmark rates and find local talent first.",
+    replies: ["Ashburn, Virginia", "Phoenix, Arizona", "Dallas, Texas", "Columbus, Ohio"],
+    userResponse: "Ashburn, Virginia"
+  },
+  {
+    agent: "Ashburn — that's the heart of Data Center Alley. High demand for electricians there. A couple of things I want to nail down. What <span class='highlight'>voltage class</span> does this role require? This is the #1 filter for data center electrical work.",
+    replies: ["Medium Voltage (5kV to 35kV)", "Low Voltage only (< 600V)", "Both MV and LV", "Not sure — help me decide"],
+    userResponse: "Medium Voltage (5kV to 35kV)"
+  },
+  {
+    agent: "Medium voltage narrows the pool significantly but those are the candidates you actually need. Do they need a <span class='highlight'>Virginia Journeyman Electrician License</span>? Or would you accept candidates with journeyman cards from reciprocal states?",
+    replies: ["Virginia license required", "Reciprocal states OK", "Master Electrician preferred", "Apprentice with MV experience OK"],
+    userResponse: "Reciprocal states OK"
+  },
+  {
+    agent: "Smart — that opens up Maryland, DC, and a bunch of others. What about <span class='highlight'>safety certifications</span>? For data center GCs, I typically see OSHA 30 as minimum. Confirm?",
+    replies: ["OSHA 30 required", "OSHA 10 is fine", "OSHA 30 + NFPA 70E", "Whatever the site requires"],
+    userResponse: "OSHA 30 + NFPA 70E"
+  },
+  {
+    agent: "OSHA 30 plus NFPA 70E — that tells me you're working with a GC that takes arc flash seriously. Good. Now the money question: what's the <span class='highlight'>hourly rate range</span> you're offering?",
+    replies: ["$40 — $48/hr", "$48 — $55/hr", "$55 — $65/hr", "Market rate — what do you see?"],
+    userResponse: "$40 — $48/hr"
+  },
+  {
+    agent: "At $40 to $48 in Ashburn you're competitive for journeymen. For MV specialists I'd push closer to $48 — the good ones know their value. How many people do you need and when?",
+    replies: ["5 electricians, ASAP", "8 electricians, 2 weeks", "3 electricians, next month", "10+ electricians, phased"],
+    userResponse: "5 electricians, 2 weeks"
+  },
+  {
+    agent: "5 MV electricians in 2 weeks — tight but doable if we start now. Last couple questions: <span class='highlight'>shift schedule</span>?",
+    replies: ["Day shift (7am — 5pm)", "Night shift (6pm — 4am)", "12hr rotating", "Flexible — GC decides"],
+    userResponse: "Day shift (7am — 5pm)"
+  },
+  {
+    agent: "And do you offer <span class='highlight'>per diem</span> for candidates willing to travel in? That opens up a much bigger pool.",
+    replies: ["$95/day per diem", "$75/day per diem", "Hotel provided", "Local candidates only"],
+    userResponse: "$95/day per diem"
+  }
+];
+
+const finalJD = {
+  agent: "Perfect. Here's the validated job specification I've built from our conversation:",
+  jd: true
+};
+
+function addMessage(html, isUser, delay) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      const wrapper = document.createElement('div');
+      wrapper.className = `msg ${isUser ? 'user' : ''}`;
+      wrapper.style.animationDelay = '0s';
+
+      const avatar = document.createElement('div');
+      avatar.className = 'msg-avatar';
+      avatar.textContent = isUser ? 'You' : 'S';
+
+      const bubble = document.createElement('div');
+      bubble.className = 'msg-bubble';
+      bubble.innerHTML = html;
+
+      wrapper.appendChild(avatar);
+      wrapper.appendChild(bubble);
+      chat.appendChild(wrapper);
+      chat.scrollTop = chat.scrollHeight;
+      resolve();
+    }, delay);
+  });
+}
+
+function showTyping() {
+  const t = document.createElement('div');
+  t.className = 'msg';
+  t.id = 'typingIndicator';
+  t.innerHTML = `<div class="msg-avatar">S</div><div class="typing"><div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div></div>`;
+  chat.appendChild(t);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function hideTyping() {
+  const t = document.getElementById('typingIndicator');
+  if (t) t.remove();
+}
+
+function showQuickReplies(replies, callback) {
+  quickRepliesEl.innerHTML = '';
+  quickRepliesEl.classList.remove('hidden');
+  replies.forEach(r => {
+    const btn = document.createElement('button');
+    btn.className = 'quick-reply';
+    btn.textContent = r;
+    btn.onclick = () => {
+      quickRepliesEl.classList.add('hidden');
+      callback(r);
+    };
+    quickRepliesEl.appendChild(btn);
+  });
+}
+
+async function runStep() {
+  if (step >= conversation.length) {
+    // Final JD
+    showTyping();
+    setTimeout(async () => {
+      hideTyping();
+      await addMessage(finalJD.agent, false, 0);
+      // JD card
+      const jdHtml = `<div class="jd-card">
+        <h3>◆ VALIDATED JOB SPECIFICATION</h3>
+        <div class="jd-row"><span class="jd-label">role</span><span class="jd-value">Commercial Electrician</span></div>
+        <div class="jd-row"><span class="jd-label">project_type</span><span class="jd-value">Data Center (New Build)</span></div>
+        <div class="jd-row"><span class="jd-label">location</span><span class="jd-value">Ashburn, Virginia</span></div>
+        <div class="jd-row"><span class="jd-label">voltage_class</span><span class="jd-value green">Medium Voltage (5kV — 35kV)</span></div>
+        <div class="jd-row"><span class="jd-label">license</span><span class="jd-value">Journeyman (VA or reciprocal)</span></div>
+        <div class="jd-row"><span class="jd-label">certifications</span><span class="jd-value"><div class="cert-tags"><span class="cert-tag">OSHA 30</span><span class="cert-tag">NFPA 70E</span></div></span></div>
+        <div class="jd-row"><span class="jd-label">rate_range</span><span class="jd-value green">$40 — $48/hr</span></div>
+        <div class="jd-row"><span class="jd-label">headcount</span><span class="jd-value">5</span></div>
+        <div class="jd-row"><span class="jd-label">start_date</span><span class="jd-value">March 18, 2026</span></div>
+        <div class="jd-row"><span class="jd-label">schedule</span><span class="jd-value">Day shift (7am — 5pm)</span></div>
+        <div class="jd-row"><span class="jd-label">per_diem</span><span class="jd-value green">$95/day</span></div>
+        <div class="jd-row"><span class="jd-label">status</span><span class="jd-value green">◉ READY TO LAUNCH</span></div>
+      </div>`;
+      await addMessage(jdHtml, false, 300);
+      launchBtn.disabled = false;
+      launchBtn.style.opacity = 1;
+    }, 1500);
+    return;
+  }
+
+  const s = conversation[step];
+  showTyping();
+  setTimeout(async () => {
+    hideTyping();
+    await addMessage(s.agent, false, 0);
+    showQuickReplies(s.replies, async (reply) => {
+      await addMessage(reply, true, 100);
+      step++;
+      setTimeout(runStep, 600);
+    });
+  }, step === 0 ? 800 : 1200);
+}
+
+function launchSearch() {
+  window.location.href = 'trades-pipeline.html';
+}
+
+// Start
+runStep();
+</script>
+</body>
+</html>
