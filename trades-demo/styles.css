@@ -314,6 +314,10 @@ a {
   align-items: center;
 }
 
+.intake-actions .cta {
+  margin-top: 0;
+}
+
 .btn-ghost {
   border: 1px solid var(--border);
   background: #fff;
