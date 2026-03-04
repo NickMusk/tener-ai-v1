@@ -21,7 +21,7 @@
   <section class="page-head">
     <span class="page-kicker">Step 2 of 7</span>
     <h1>Indeed Sourcing</h1>
-    <p>The job is posted on Indeed and resumes are coming in. This is the first proof point for the client.</p>
+    <p>The role is posted on Indeed and resumes are coming in.</p>
   </section>
 
   <nav class="step-nav">
@@ -38,11 +38,10 @@
     <div class="row" style="margin-bottom:10px;">
       <div>
         <strong>Job Posted on Indeed</strong>
-        <div class="sub">Posted today at 9:02 AM ET</div>
+        <div id="postedMeta" class="sub">Medium Voltage Electrician - Ashburn, VA - Posted today at 9:02 AM ET</div>
       </div>
       <span class="badge badge-indeed">Source: Indeed</span>
     </div>
-    <div class="note">This screen makes it explicit for prospects: candidates are sourced from Indeed, not from a closed internal list.</div>
   </section>
 
   <section class="grid-4" style="margin-top:14px;">
@@ -70,13 +69,29 @@
 
   <h2 class="section-title">Latest Resumes From Indeed</h2>
   <section class="card list">
-    <div class="row"><div><strong>Marcus Johnson</strong><div class="sub">Ashburn, VA · MV Electrician · 8 yrs</div></div><span class="badge badge-indeed">Indeed · 9:41 AM</span></div>
-    <div class="row"><div><strong>David Kowalski</strong><div class="sub">Reston, VA · Industrial Electrician · 6 yrs</div></div><span class="badge badge-indeed">Indeed · 9:44 AM</span></div>
-    <div class="row"><div><strong>James Rivera</strong><div class="sub">Baltimore, MD · Data Center Electrician · 9 yrs</div></div><span class="badge badge-indeed">Indeed · 9:47 AM</span></div>
-    <div class="row"><div><strong>Lisa Porter</strong><div class="sub">Richmond, VA · NCCER L3 · 7 yrs</div></div><span class="badge badge-indeed">Indeed · 9:52 AM</span></div>
+    <div class="row"><div><strong>Marcus Johnson</strong><div class="sub">Ashburn, VA - MV Electrician - 8 yrs</div></div><span class="badge badge-indeed">Indeed - 9:41 AM</span></div>
+    <div class="row"><div><strong>David Kowalski</strong><div class="sub">Reston, VA - Industrial Electrician - 6 yrs</div></div><span class="badge badge-indeed">Indeed - 9:44 AM</span></div>
+    <div class="row"><div><strong>James Rivera</strong><div class="sub">Baltimore, MD - Data Center Electrician - 9 yrs</div></div><span class="badge badge-indeed">Indeed - 9:47 AM</span></div>
+    <div class="row"><div><strong>Lisa Porter</strong><div class="sub">Richmond, VA - NCCER L3 - 7 yrs</div></div><span class="badge badge-indeed">Indeed - 9:52 AM</span></div>
   </section>
 
   <a class="cta" href="trades-cv-analysis.html">Run CV Analysis</a>
 </main>
+
+<script>
+(function () {
+  try {
+    const extractedRaw = localStorage.getItem('trades_jd_extracted');
+    if (!extractedRaw) return;
+    const extracted = JSON.parse(extractedRaw);
+    const role = extracted.role || 'Medium Voltage Electrician';
+    const location = extracted.location || 'Ashburn, VA';
+    const meta = role + ' - ' + location + ' - Posted today at 9:02 AM ET';
+    const postedMeta = document.getElementById('postedMeta');
+    if (postedMeta) postedMeta.textContent = meta;
+  } catch (e) {
+  }
+})();
+</script>
 </body>
 </html>
