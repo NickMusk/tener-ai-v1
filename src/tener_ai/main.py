@@ -462,6 +462,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "linkedin_accounts_list": "GET /api/linkedin/accounts?limit=200&status=connected",
                         "linkedin_connect_callback": "GET /api/linkedin/accounts/connect/callback?state=...",
                         "linkedin_connect_start": "POST /api/linkedin/accounts/connect/start",
+                        "linkedin_accounts_sync_all": "POST /api/linkedin/accounts/sync-all",
                         "linkedin_account_sync": "POST /api/linkedin/accounts/{account_id}/sync",
                         "linkedin_account_disconnect": "POST /api/linkedin/accounts/{account_id}/disconnect",
                         "add_manual_account": "POST /api/agent/accounts/manual",
@@ -930,6 +931,29 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 details={"label": label, "callback_url": callback_url},
             )
             self._json_response(HTTPStatus.OK, out)
+            return
+
+        if parsed.path == "/api/linkedin/accounts/sync-all":
+            if not self._require_admin_access():
+                return
+            try:
+                out = SERVICES["linkedin_accounts"].sync_accounts(account_id=None)
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "linkedin_accounts_sync_all_failed", "details": str(exc)},
+                )
+                return
+            status = str(out.get("status") or "").lower()
+            SERVICES["db"].log_operation(
+                operation="linkedin.accounts.sync_all",
+                status="ok" if status == "ok" else "error",
+                entity_type="linkedin_account",
+                entity_id="all",
+                details=out,
+            )
+            http_status = HTTPStatus.OK if status == "ok" else HTTPStatus.BAD_REQUEST
+            self._json_response(http_status, out)
             return
 
         if parsed.path == "/api/candidates/demo-profile":
