@@ -153,6 +153,51 @@ class OutreachOpsApiTests(unittest.TestCase):
         self.assertEqual(int((by_id.get(account_1) or {}).get("sent_24h") or 0), 1)
         self.assertEqual(int((by_id.get(account_2) or {}).get("failed_24h") or 0), 1)
 
+    def test_outreach_ops_counts_active_accounts_from_conversation_mapping(self) -> None:
+        account_id = self.db.upsert_linkedin_account(
+            provider="unipile",
+            provider_account_id="acc-ops-active",
+            status="connected",
+            connected_at=utc_now_iso(),
+        )
+        job_id = self.db.insert_job(
+            title="Manual QA Engineer",
+            jd_text="Need QA experience.",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="junior",
+        )
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "ops-ln-active",
+                "full_name": "Ops Candidate Active",
+                "headline": "QA",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["qa"],
+                "years_experience": 4,
+                "raw": {},
+            },
+            source="linkedin",
+        )
+        conversation_id = self.db.create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+        self.db.set_conversation_linkedin_account(conversation_id=conversation_id, account_id=account_id)
+        self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+        self.db.upsert_pre_resume_session(
+            session_id="pre-ops-active",
+            conversation_id=conversation_id,
+            job_id=job_id,
+            candidate_id=candidate_id,
+            state={"status": "awaiting_reply", "language": "en"},
+            instruction="",
+        )
+
+        status, payload = self._request("GET", "/api/outreach/ops?stale_minutes=45")
+        self.assertEqual(status, 200)
+        summary = payload.get("summary") or {}
+        self.assertEqual(int(summary.get("active_accounts") or 0), 1)
+        self.assertEqual(int(summary.get("active_conversations") or 0), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

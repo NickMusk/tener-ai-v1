@@ -1078,6 +1078,7 @@ class Database:
             conv.channel,
             conv.status AS conversation_status,
             conv.external_chat_id,
+            conv.linkedin_account_id,
             conv.last_message_at,
             j.title AS job_title,
             c.full_name AS candidate_name,
