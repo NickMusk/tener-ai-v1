@@ -357,6 +357,97 @@ class OutboundDispatchTests(unittest.TestCase):
             self.assertIn("bad parameter", str(out.get("dispatch_error") or ""))
             self.assertEqual(str(out["items"][0].get("delivery_status") or ""), "queued")
 
+    def test_rebalance_targets_latest_auto_job_and_highest_score_candidate(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_rebalance.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-rebalance",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            provider = _ManagedStubProvider(account_ref="acc-rebalance")
+            workflow._build_managed_provider = lambda account_id: provider  # type: ignore[method-assign]
+
+            old_job_id = db.insert_job(
+                title="Older Auto Job",
+                jd_text="Need Python",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+                linkedin_routing_mode="auto",
+            )
+            manual_job_id = db.insert_job(
+                title="Manual Job",
+                jd_text="Need Python",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+                linkedin_routing_mode="manual",
+            )
+            new_job_id = db.insert_job(
+                title="Newest Auto Job",
+                jd_text="Need Python",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+                linkedin_routing_mode="auto",
+            )
+
+            def _add_candidate(job_id: int, suffix: str, score: float) -> int:
+                added = workflow.add_verified_candidates(
+                    job_id=job_id,
+                    verified_items=[
+                        {
+                            "profile": {
+                                "linkedin_id": f"ln-rebalance-{suffix}",
+                                "full_name": f"Rebalance Candidate {suffix}",
+                                "headline": "Backend Engineer",
+                                "location": "Remote",
+                                "languages": ["en"],
+                                "skills": ["python"],
+                                "years_experience": 6,
+                                "raw": {},
+                            },
+                            "score": score,
+                            "status": "verified",
+                            "notes": {},
+                        }
+                    ],
+                )
+                return int(added["added"][0]["candidate_id"])
+
+            old_candidate = _add_candidate(old_job_id, "old", 0.82)
+            manual_candidate = _add_candidate(manual_job_id, "manual", 0.95)
+            high_candidate = _add_candidate(new_job_id, "high", 0.91)
+            low_candidate = _add_candidate(new_job_id, "low", 0.63)
+
+            out = workflow.rebalance_outreach_capacity(
+                job_limit=1,
+                candidates_per_job=1,
+                recovery_per_job=1,
+                jobs_scan_limit=10,
+            )
+
+            self.assertEqual(out["status"], "ok")
+            self.assertEqual(out["jobs_selected"], 1)
+            self.assertEqual(int(out["jobs"][0]["job_id"]), new_job_id)
+            self.assertEqual(int(out["totals"]["new_threads_queued"]), 1)
+            self.assertEqual(int(out["totals"]["sent"]), 1)
+
+            high_match = db.get_candidate_match(new_job_id, high_candidate)
+            low_match = db.get_candidate_match(new_job_id, low_candidate)
+            old_match = db.get_candidate_match(old_job_id, old_candidate)
+            manual_match = db.get_candidate_match(manual_job_id, manual_candidate)
+            self.assertEqual(str((high_match or {}).get("status") or ""), "outreach_sent")
+            self.assertEqual(str((low_match or {}).get("status") or ""), "verified")
+            self.assertEqual(str((old_match or {}).get("status") or ""), "verified")
+            self.assertEqual(str((manual_match or {}).get("status") or ""), "verified")
+            self.assertEqual(len(provider.sent_messages), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

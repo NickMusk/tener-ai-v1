@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import io
@@ -3427,6 +3428,292 @@ class WorkflowService:
             "deferred": deferred,
             "items": items,
         }
+
+    def backfill_outreach_for_unassigned_conversations(
+        self,
+        *,
+        job_id: int | None = None,
+        limit: int = 200,
+    ) -> Dict[str, Any]:
+        safe_limit = max(1, min(int(limit or 200), 500))
+        rows = self.db.list_unassigned_outreach_conversations(limit=safe_limit, job_id=job_id)
+        queued_action_ids: List[int] = []
+        skipped = 0
+        items: List[Dict[str, Any]] = []
+
+        for row in rows:
+            conversation_id = int(row.get("conversation_id") or 0)
+            candidate_id = int(row.get("candidate_id") or 0)
+            row_job_id = int(row.get("job_id") or 0)
+            pre_resume_session_id = str(row.get("pre_resume_session_id") or "").strip() or None
+            message = str(row.get("last_outbound_message") or "").strip()
+            language = str(row.get("last_outbound_language") or "").strip().lower() or "en"
+            raw_meta = row.get("last_outbound_meta")
+            last_meta: Dict[str, Any] = {}
+            if isinstance(raw_meta, dict):
+                last_meta = raw_meta
+            elif isinstance(raw_meta, str):
+                try:
+                    parsed = json.loads(raw_meta)
+                    if isinstance(parsed, dict):
+                        last_meta = parsed
+                except json.JSONDecodeError:
+                    last_meta = {}
+
+            if not message:
+                skipped += 1
+                items.append(
+                    {
+                        "conversation_id": conversation_id,
+                        "candidate_id": candidate_id,
+                        "status": "skipped",
+                        "reason": "no_last_outbound_message",
+                    }
+                )
+                continue
+
+            delivery = last_meta.get("delivery") if isinstance(last_meta.get("delivery"), dict) else {}
+            connect_request = last_meta.get("connect_request") if isinstance(last_meta.get("connect_request"), dict) else {}
+            if bool(delivery.get("sent")) or bool(connect_request.get("sent")):
+                skipped += 1
+                items.append(
+                    {
+                        "conversation_id": conversation_id,
+                        "candidate_id": candidate_id,
+                        "status": "skipped",
+                        "reason": "invite_or_delivery_already_sent",
+                    }
+                )
+                continue
+
+            action_id = self.db.create_outbound_action(
+                job_id=row_job_id,
+                candidate_id=candidate_id,
+                conversation_id=conversation_id,
+                action_type="pre_resume_recovery",
+                payload={
+                    "message": message,
+                    "language": language,
+                    "request_resume": bool(last_meta.get("request_resume")),
+                    "screening_status": str(last_meta.get("screening_status") or ""),
+                    "pre_resume_session_id": pre_resume_session_id,
+                },
+                priority=0,
+            )
+            queued_action_ids.append(int(action_id))
+            items.append(
+                {
+                    "conversation_id": conversation_id,
+                    "candidate_id": candidate_id,
+                    "status": "queued",
+                    "action_id": int(action_id),
+                }
+            )
+
+        dispatch_result: Dict[str, Any] = {
+            "processed": 0,
+            "sent": 0,
+            "pending_connection": 0,
+            "failed": 0,
+            "deferred": 0,
+            "items": [],
+        }
+        if queued_action_ids:
+            dispatch_result = self.dispatch_outbound_actions(
+                limit=max(len(queued_action_ids), 1),
+                action_ids=queued_action_ids,
+                job_id=job_id,
+            )
+
+        return {
+            "status": "ok",
+            "job_id": int(job_id) if job_id is not None else None,
+            "candidates_total": len(rows),
+            "queued": len(queued_action_ids),
+            "skipped": skipped,
+            "dispatched": dispatch_result,
+            "items": items,
+        }
+
+    def queue_job_outreach_candidates(
+        self,
+        *,
+        job_id: int,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        safe_limit = max(1, min(int(limit or 50), 200))
+        rows = self.db.list_job_outreach_candidates(job_id=job_id, limit=max(safe_limit * 3, safe_limit))
+        candidate_ids: List[int] = []
+        preview_items: List[Dict[str, Any]] = []
+        for row in rows:
+            if str(row.get("current_status_key") or "").strip().lower() != "added":
+                continue
+            candidate_id = int(row.get("candidate_id") or 0)
+            if candidate_id <= 0:
+                continue
+            candidate_ids.append(candidate_id)
+            preview_items.append(
+                {
+                    "candidate_id": candidate_id,
+                    "candidate_name": row.get("full_name"),
+                    "job_id": int(row.get("job_id") or 0),
+                    "job_title": row.get("job_title"),
+                    "score": float(row.get("score") or 0.0),
+                }
+            )
+            if len(candidate_ids) >= safe_limit:
+                break
+
+        if not candidate_ids:
+            return {
+                "status": "ok",
+                "job_id": int(job_id),
+                "queued": 0,
+                "candidate_ids": [],
+                "action_ids": [],
+                "items": [],
+            }
+
+        out = self.outreach_candidates(job_id=job_id, candidate_ids=candidate_ids)
+        action_ids = [
+            int(item.get("action_id") or 0)
+            for item in (out.get("items") or [])
+            if isinstance(item, dict) and int(item.get("action_id") or 0) > 0
+        ]
+        return {
+            "status": "ok",
+            "job_id": int(job_id),
+            "queued": len(candidate_ids),
+            "candidate_ids": candidate_ids,
+            "action_ids": action_ids,
+            "items": preview_items,
+            "result": out,
+        }
+
+    def rebalance_outreach_capacity(
+        self,
+        *,
+        job_limit: int = 8,
+        candidates_per_job: int = 25,
+        recovery_per_job: int = 25,
+        jobs_scan_limit: int = 40,
+    ) -> Dict[str, Any]:
+        connected_accounts = self.db.list_linkedin_accounts(limit=20, status="connected")
+        if not connected_accounts:
+            return {
+                "status": "ok",
+                "reason": "no_connected_accounts",
+                "jobs_scanned": 0,
+                "jobs_selected": 0,
+                "jobs": [],
+            }
+
+        selected_jobs = self._list_recent_auto_jobs_with_open_outreach_backlog(
+            limit_jobs=job_limit,
+            scan_limit=jobs_scan_limit,
+        )
+        job_results: List[Dict[str, Any]] = []
+        totals = {
+            "new_threads_queued": 0,
+            "recovery_queued": 0,
+            "sent": 0,
+            "pending_connection": 0,
+            "failed": 0,
+            "deferred": 0,
+        }
+
+        for job in selected_jobs:
+            row_job_id = int(job.get("job_id") or 0)
+            if row_job_id <= 0:
+                continue
+            queued = self.queue_job_outreach_candidates(job_id=row_job_id, limit=candidates_per_job)
+            action_ids = [int(x) for x in (queued.get("action_ids") or []) if int(x) > 0]
+            dispatched: Dict[str, Any] = {
+                "processed": 0,
+                "sent": 0,
+                "pending_connection": 0,
+                "failed": 0,
+                "deferred": 0,
+                "items": [],
+            }
+            if action_ids:
+                dispatched = self.dispatch_outbound_actions(
+                    limit=max(len(action_ids), 1),
+                    action_ids=action_ids,
+                    job_id=row_job_id,
+                )
+            recovery = self.backfill_outreach_for_unassigned_conversations(
+                job_id=row_job_id,
+                limit=recovery_per_job,
+            )
+
+            totals["new_threads_queued"] += int(queued.get("queued") or 0)
+            totals["recovery_queued"] += int(recovery.get("queued") or 0)
+            totals["sent"] += int(dispatched.get("sent") or 0) + int((recovery.get("dispatched") or {}).get("sent") or 0)
+            totals["pending_connection"] += int(dispatched.get("pending_connection") or 0) + int(
+                (recovery.get("dispatched") or {}).get("pending_connection") or 0
+            )
+            totals["failed"] += int(dispatched.get("failed") or 0) + int((recovery.get("dispatched") or {}).get("failed") or 0)
+            totals["deferred"] += int(dispatched.get("deferred") or 0) + int(
+                (recovery.get("dispatched") or {}).get("deferred") or 0
+            )
+            job_results.append(
+                {
+                    "job_id": row_job_id,
+                    "job_title": job.get("job_title"),
+                    "new_thread_backlog": int(job.get("new_thread_backlog") or 0),
+                    "recovery_backlog": int(job.get("recovery_backlog") or 0),
+                    "new_threads": queued,
+                    "new_threads_dispatched": dispatched,
+                    "recovery": recovery,
+                }
+            )
+
+        return {
+            "status": "ok",
+            "reason": "rebalanced",
+            "jobs_scanned": len(selected_jobs),
+            "jobs_selected": len(job_results),
+            "jobs": job_results,
+            "totals": totals,
+        }
+
+    def _list_recent_auto_jobs_with_open_outreach_backlog(
+        self,
+        *,
+        limit_jobs: int,
+        scan_limit: int,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit_jobs or 1), 50))
+        safe_scan = max(safe_limit, min(int(scan_limit or 40), 200))
+        jobs = self.db.list_jobs(limit=safe_scan)
+        out: List[Dict[str, Any]] = []
+        for job in jobs:
+            job_id = int(job.get("id") or 0)
+            if job_id <= 0:
+                continue
+            routing_mode = str(job.get("linkedin_routing_mode") or "auto").strip().lower()
+            if routing_mode != "auto":
+                continue
+            new_thread_candidates = [
+                item
+                for item in self.db.list_job_outreach_candidates(job_id=job_id, limit=50)
+                if str(item.get("current_status_key") or "").strip().lower() == "added"
+            ]
+            recovery_candidates = self.db.list_unassigned_outreach_conversations(limit=50, job_id=job_id)
+            if not new_thread_candidates and not recovery_candidates:
+                continue
+            out.append(
+                {
+                    "job_id": job_id,
+                    "job_title": job.get("title"),
+                    "new_thread_backlog": len(new_thread_candidates),
+                    "recovery_backlog": len(recovery_candidates),
+                }
+            )
+            if len(out) >= safe_limit:
+                break
+        return out
 
     def _dispatch_single_outbound_action(self, row: Dict[str, Any]) -> Dict[str, Any]:
         action_id = int(row.get("id") or 0)

@@ -554,6 +554,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "add_step": "POST /api/steps/add",
                         "outreach_step": "POST /api/steps/outreach",
                         "outreach_dispatch_run": "POST /api/outreach/dispatch/run",
+                        "outreach_backfill_unassigned": "POST /api/outreach/backfill-unassigned",
                         "outreach_poll_connections": "POST /api/outreach/poll-connections",
                         "inbound_poll": "POST /api/inbound/poll",
                         "instructions": "GET /api/instructions",
@@ -935,20 +936,28 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             params = parse_qs(parsed.query or "")
             out = SERVICES["linkedin_accounts"].complete_connect_callback(query=params)
             status = str(out.get("status") or "").strip().lower()
+            auto_rebalance: Dict[str, Any] = {}
+            if status in {"connected", "already_completed"}:
+                auto_rebalance = self._run_outreach_capacity_rebalance(trigger="linkedin_connect_callback")
             SERVICES["db"].log_operation(
                 operation="linkedin.connect.callback",
                 status="ok" if status in {"connected", "already_completed"} else "error",
                 entity_type="linkedin_onboarding",
                 entity_id=str(out.get("session_id") or ""),
-                details={"result": out},
+                details={"result": out, "outreach_rebalance": auto_rebalance},
             )
             if status in {"connected", "already_completed"}:
+                totals = auto_rebalance.get("totals") if isinstance(auto_rebalance.get("totals"), dict) else {}
+                queued = int((totals.get("new_threads_queued") or 0) + (totals.get("recovery_queued") or 0))
+                dispatched_sent = int(totals.get("sent") or 0)
+                dispatched_pending = int(totals.get("pending_connection") or 0)
                 self._html_response(
                     HTTPStatus.OK,
-                    """
+                    f"""
                     <html><body style="font-family:Arial,sans-serif;padding:24px;">
                     <h2>LinkedIn account connected</h2>
                     <p>You can close this tab and return to Tener dashboard.</p>
+                    <p>Auto rebalance queued: {queued}, sent: {dispatched_sent}, pending connection: {dispatched_pending}</p>
                     </body></html>
                     """.strip(),
                 )
@@ -1618,6 +1627,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 entity_id="all",
                 details=out,
             )
+            if status == "ok":
+                out["outreach_rebalance"] = self._run_outreach_capacity_rebalance(trigger="linkedin_accounts_sync")
             http_status = HTTPStatus.OK if status == "ok" else HTTPStatus.BAD_REQUEST
             self._json_response(http_status, out)
             return
@@ -2395,6 +2406,30 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, result)
             return
 
+        if parsed.path == "/api/outreach/backfill-unassigned":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            limit = self._safe_int(body.get("limit"), 300) or 300
+            job_id_raw = body.get("job_id")
+            job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
+            try:
+                result = SERVICES["workflow"].backfill_outreach_for_unassigned_conversations(
+                    limit=max(1, min(int(limit), 500)),
+                    job_id=job_id,
+                )
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "outreach_backfill_unassigned_failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
         if parsed.path == "/api/outreach/poll-connections":
             body = payload or {}
             if not isinstance(body, dict):
@@ -3099,6 +3134,32 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         return parsed
 
     @classmethod
+    def _run_outreach_capacity_rebalance(
+        cls,
+        *,
+        trigger: str,
+        job_limit: int = 8,
+        candidates_per_job: int = 25,
+        recovery_per_job: int = 25,
+        jobs_scan_limit: int = 40,
+    ) -> Dict[str, Any]:
+        workflow = SERVICES.get("workflow")
+        if workflow is None:
+            return {"status": "error", "reason": "workflow_unavailable", "trigger": trigger}
+        try:
+            result = workflow.rebalance_outreach_capacity(
+                job_limit=job_limit,
+                candidates_per_job=candidates_per_job,
+                recovery_per_job=recovery_per_job,
+                jobs_scan_limit=jobs_scan_limit,
+            )
+        except Exception as exc:
+            return {"status": "error", "reason": "outreach_rebalance_failed", "details": str(exc), "trigger": trigger}
+        if "trigger" not in result:
+            result["trigger"] = trigger
+        return result
+
+    @classmethod
     def _build_outreach_ops_report(
         cls,
         *,
@@ -3132,6 +3193,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "waiting_connection": 0,
                 "awaiting_reply": 0,
                 "stuck_threads": 0,
+                "stuck_candidates": [],
                 "sent_1h": 0,
                 "sent_24h": 0,
                 "failed_1h": 0,
@@ -3156,6 +3218,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "waiting_connection": 0,
                 "awaiting_reply": 0,
                 "stuck_threads": 0,
+                "stuck_candidates": [],
                 "sent_1h": 0,
                 "sent_24h": 0,
                 "failed_1h": 0,
@@ -3173,6 +3236,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         recent_events: List[Dict[str, Any]] = []
         max_recent_events = 80
         conversation_account_map: Dict[int, int] = {}
+        backlog_stuck_items: List[Dict[str, Any]] = []
+        backlog_waiting_connection_items: List[Dict[str, Any]] = []
         for item in logs or []:
             operation = str(item.get("operation") or "").strip().lower()
             status = str(item.get("status") or "").strip().lower()
@@ -3231,6 +3296,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "agent.outreach.delivery_error",
                 "agent.outreach.dispatch",
                 "scheduler.outreach.dispatch",
+                "scheduler.outreach.rebalance",
             } and len(recent_events) < max_recent_events:
                 recent_events.append(
                     {
@@ -3255,32 +3321,72 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             account_id = int(row.get("linkedin_account_id") or 0)
             if account_id <= 0 and conversation_id > 0:
                 account_id = int(conversation_account_map.get(conversation_id) or 0)
-            if account_id <= 0:
-                continue
-            entry = _ensure_account(account_id)
-            entry["active_conversations"] += 1
             conversation_status = str(row.get("conversation_status") or "").strip().lower()
             pre_resume_status = str(row.get("pre_resume_status") or "").strip().lower()
             last_message_dt = cls._parse_iso_datetime(row.get("last_message_at"))
+            candidate_name = str(row.get("candidate_name") or "").strip() or f"Candidate {int(row.get('candidate_id') or 0)}"
+            queue_base = {
+                "conversation_id": conversation_id,
+                "candidate_id": int(row.get("candidate_id") or 0),
+                "candidate_name": candidate_name,
+                "job_id": int(row.get("job_id") or 0),
+                "job_title": str(row.get("job_title") or "").strip() or "-",
+                "linkedin_account_id": account_id or None,
+                "last_message_at": row.get("last_message_at"),
+            }
+            if account_id > 0:
+                entry = _ensure_account(account_id)
+                entry["active_conversations"] += 1
+            else:
+                entry = None
             if conversation_status == "waiting_connection":
-                entry["waiting_connection"] += 1
+                if entry is not None:
+                    entry["waiting_connection"] += 1
+                backlog_waiting_connection_items.append(
+                    {
+                        **queue_base,
+                        "queue_type": "waiting_connection",
+                        "status": "waiting_connection",
+                    }
+                )
             if pre_resume_status == "awaiting_reply":
-                entry["awaiting_reply"] += 1
+                if entry is not None:
+                    entry["awaiting_reply"] += 1
                 if last_message_dt and last_message_dt <= stale_cutoff:
-                    entry["stuck_threads"] += 1
+                    stuck_item = {
+                        **queue_base,
+                        "queue_type": "stuck_reply",
+                        "status": "awaiting_reply",
+                    }
+                    backlog_stuck_items.append(stuck_item)
+                    if entry is not None:
+                        entry["stuck_threads"] += 1
+                        if len(entry["stuck_candidates"]) < 10:
+                            entry["stuck_candidates"].append(stuck_item)
 
-        severity = {"ok": 0, "warning": 1, "critical": 2, "paused": 3}
+        severity = {"ok": 0, "warning": 1, "critical": 2, "paused": 0}
         rows: List[Dict[str, Any]] = []
         for row in account_map.values():
             account_status = str(row.get("status") or "").strip().lower()
-            health = "ok"
+            delivery_health = "ok"
+            backlog_health = "ok"
             if account_status not in {"connected", "active"}:
-                health = "paused"
-            elif int(row.get("stuck_threads") or 0) > 0 or int(row.get("failed_1h") or 0) >= 2:
-                health = "critical"
+                delivery_health = "paused"
+                backlog_health = "paused"
+            elif int(row.get("failed_1h") or 0) >= 2:
+                delivery_health = "critical"
             elif int(row.get("failed_24h") or 0) > 0:
+                delivery_health = "warning"
+            elif int(row.get("active_conversations") or 0) > 0 and not row.get("last_send_at"):
+                delivery_health = "warning"
+            if account_status in {"connected", "active"} and int(row.get("stuck_threads") or 0) > 0:
+                backlog_health = "warning"
+            health = delivery_health
+            if delivery_health != "critical" and backlog_health == "warning":
                 health = "warning"
             row["health"] = health
+            row["delivery_health"] = delivery_health
+            row["backlog_health"] = backlog_health
             row.pop("_last_send_dt", None)
             row.pop("_last_error_dt", None)
             rows.append(row)
@@ -3310,21 +3416,114 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         last_send_candidates = [str(item.get("last_send_at") or "") for item in rows if item.get("last_send_at")]
         last_send_at = max(last_send_candidates) if last_send_candidates else None
 
-        overall_health = "ok"
-        issues: List[str] = []
-        if stuck_threads_total > 0:
-            overall_health = "critical"
-            issues.append(f"{stuck_threads_total} stuck thread(s)")
+        delivery_health = "ok"
+        delivery_issues: List[str] = []
         if failed_1h_total >= 5:
-            overall_health = "critical"
-            issues.append(f"{failed_1h_total} failed send(s) in last hour")
-        if overall_health != "critical":
-            if failed_24h_total > 0:
-                overall_health = "warning"
-                issues.append(f"{failed_24h_total} failed send(s) in last 24h")
-            if active_conversations_total > 0 and not flow_detected_recently:
-                overall_health = "warning"
-                issues.append("no successful outreach activity in last 30 minutes")
+            delivery_health = "critical"
+            delivery_issues.append(f"{failed_1h_total} failed send(s) in last hour")
+        elif failed_24h_total > 0:
+            delivery_health = "warning"
+            delivery_issues.append(f"{failed_24h_total} failed send(s) in last 24h")
+        if active_conversations_total > 0 and not flow_detected_recently:
+            if delivery_health == "ok":
+                delivery_health = "warning"
+            delivery_issues.append("no successful outreach activity in last 30 minutes")
+
+        backlog_health = "ok"
+        backlog_issues: List[str] = []
+        if stuck_threads_total > 0:
+            backlog_health = "warning"
+            backlog_issues.append(f"{stuck_threads_total} stuck thread(s)")
+
+        overall_health = "critical" if delivery_health == "critical" else "warning" if (
+            delivery_health == "warning" or backlog_health == "warning"
+        ) else "ok"
+
+        backlog_rows: List[Dict[str, Any]] = []
+        backlog_summary = {
+            "new_threads": 0,
+            "unassigned_recovery": 0,
+            "waiting_connection": len(backlog_waiting_connection_items),
+            "stuck_replies": len(backlog_stuck_items),
+            "selected_jobs": 0,
+        }
+        backlog_jobs: List[Dict[str, Any]] = []
+        backlog_job_limit = 8
+        backlog_job_scan_limit = 40
+        backlog_items_per_job = 25
+        selected_jobs_payload: List[Dict[str, Any]] = []
+        if job_id:
+            job = db.get_job(int(job_id))
+            if job:
+                selected_jobs_payload = [job]
+        else:
+            selected_jobs_payload = db.list_jobs(limit=backlog_job_scan_limit)
+
+        for job in selected_jobs_payload:
+            row_job_id = int(job.get("id") or 0)
+            if row_job_id <= 0:
+                continue
+            routing_mode = str(job.get("linkedin_routing_mode") or "auto").strip().lower()
+            if job_id is None and routing_mode != "auto":
+                continue
+            new_thread_candidates = [
+                item
+                for item in db.list_job_outreach_candidates(job_id=row_job_id, limit=backlog_items_per_job * 2)
+                if str(item.get("current_status_key") or "").strip().lower() == "added"
+            ]
+            recovery_candidates = db.list_unassigned_outreach_conversations(
+                limit=backlog_items_per_job * 2,
+                job_id=row_job_id,
+            )
+            if job_id is None and not new_thread_candidates and not recovery_candidates:
+                continue
+            backlog_jobs.append(
+                {
+                    "job_id": row_job_id,
+                    "job_title": str(job.get("title") or "").strip() or "-",
+                    "new_thread_backlog": len(new_thread_candidates),
+                    "recovery_backlog": len(recovery_candidates),
+                }
+            )
+            for item in new_thread_candidates[:backlog_items_per_job]:
+                backlog_rows.append(
+                    {
+                        "queue_type": "new_thread",
+                        "job_id": row_job_id,
+                        "job_title": str(item.get("job_title") or "").strip() or "-",
+                        "candidate_id": int(item.get("candidate_id") or 0),
+                        "candidate_name": str(item.get("full_name") or "").strip() or f"Candidate {int(item.get('candidate_id') or 0)}",
+                        "conversation_id": int(item.get("conversation_id") or 0) or None,
+                        "status": "queued",
+                        "score": float(item.get("score") or 0.0),
+                        "last_message_at": item.get("last_message_created_at") or item.get("last_message_at"),
+                        "linkedin_account_id": int(item.get("linkedin_account_id") or 0) or None,
+                    }
+                )
+            for item in recovery_candidates[:backlog_items_per_job]:
+                backlog_rows.append(
+                    {
+                        "queue_type": "unassigned_recovery",
+                        "job_id": row_job_id,
+                        "job_title": str(item.get("job_title") or "").strip() or "-",
+                        "candidate_id": int(item.get("candidate_id") or 0),
+                        "candidate_name": str(item.get("candidate_name") or "").strip()
+                        or f"Candidate {int(item.get('candidate_id') or 0)}",
+                        "conversation_id": int(item.get("conversation_id") or 0) or None,
+                        "status": "unassigned_recovery",
+                        "score": None,
+                        "last_message_at": item.get("last_message_at"),
+                        "linkedin_account_id": None,
+                    }
+                )
+            backlog_summary["new_threads"] += len(new_thread_candidates)
+            backlog_summary["unassigned_recovery"] += len(recovery_candidates)
+            if len(backlog_jobs) >= backlog_job_limit:
+                break
+
+        backlog_summary["selected_jobs"] = len(backlog_jobs)
+        backlog_rows.extend(backlog_waiting_connection_items[:50])
+        backlog_rows.extend(backlog_stuck_items[:50])
 
         return {
             "status": "ok",
@@ -3338,7 +3537,11 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             },
             "summary": {
                 "health": overall_health,
-                "issues": issues,
+                "delivery_health": delivery_health,
+                "backlog_health": backlog_health,
+                "issues": delivery_issues + backlog_issues,
+                "delivery_issues": delivery_issues,
+                "backlog_issues": backlog_issues,
                 "accounts_total": len(rows),
                 "connected_accounts": connected_accounts_total,
                 "active_accounts": active_accounts_total,
@@ -3354,6 +3557,11 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "last_successful_send_at": last_send_at,
             },
             "accounts": rows,
+            "backlog": {
+                "summary": backlog_summary,
+                "jobs": backlog_jobs,
+                "items": backlog_rows[:200],
+            },
             "events": recent_events,
         }
 
@@ -3748,6 +3956,47 @@ def run() -> None:
 
         threading.Thread(target=_outbound_dispatch_loop, daemon=True, name="outbound-dispatch-scheduler").start()
         print(f"Outbound dispatch scheduler enabled: every {dispatch_interval_seconds}s")
+
+    if env_bool("TENER_OUTREACH_REBALANCE_SCHEDULER_ENABLED", True):
+        rebalance_interval_seconds = max(30, int(os.environ.get("TENER_OUTREACH_REBALANCE_INTERVAL_SECONDS", "90")))
+        rebalance_job_limit = max(1, int(os.environ.get("TENER_OUTREACH_REBALANCE_JOB_LIMIT", "8")))
+        rebalance_candidates_per_job = max(1, int(os.environ.get("TENER_OUTREACH_REBALANCE_CANDIDATES_PER_JOB", "25")))
+        rebalance_recovery_per_job = max(1, int(os.environ.get("TENER_OUTREACH_REBALANCE_RECOVERY_PER_JOB", "25")))
+        rebalance_scan_limit = max(rebalance_job_limit, int(os.environ.get("TENER_OUTREACH_REBALANCE_SCAN_LIMIT", "40")))
+        if scheduler_stop is None:
+            scheduler_stop = threading.Event()
+
+        def _outreach_rebalance_loop() -> None:
+            while not scheduler_stop.is_set():
+                try:
+                    result = TenerRequestHandler._run_outreach_capacity_rebalance(
+                        trigger="scheduler_outreach_rebalance",
+                        job_limit=rebalance_job_limit,
+                        candidates_per_job=rebalance_candidates_per_job,
+                        recovery_per_job=rebalance_recovery_per_job,
+                        jobs_scan_limit=rebalance_scan_limit,
+                    )
+                    totals = result.get("totals") if isinstance(result.get("totals"), dict) else {}
+                    if int(totals.get("new_threads_queued") or 0) > 0 or int(totals.get("recovery_queued") or 0) > 0:
+                        SERVICES["db"].log_operation(
+                            operation="scheduler.outreach.rebalance",
+                            status="ok",
+                            entity_type="scheduler",
+                            entity_id="outreach_rebalance",
+                            details=result,
+                        )
+                except Exception as exc:
+                    SERVICES["db"].log_operation(
+                        operation="scheduler.outreach.rebalance",
+                        status="error",
+                        entity_type="scheduler",
+                        entity_id="outreach_rebalance",
+                        details={"error": str(exc)},
+                    )
+                scheduler_stop.wait(rebalance_interval_seconds)
+
+        threading.Thread(target=_outreach_rebalance_loop, daemon=True, name="outreach-rebalance-scheduler").start()
+        print(f"Outreach rebalance scheduler enabled: every {rebalance_interval_seconds}s")
 
     if env_bool("TENER_INTERVIEW_SCHEDULER_ENABLED", True):
         interview_interval_seconds = max(30, int(os.environ.get("TENER_INTERVIEW_SCHEDULER_INTERVAL_SECONDS", "180")))
