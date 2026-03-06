@@ -188,6 +188,94 @@
       color: var(--accent-green);
     }
 
+    .ops-metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(120px, 1fr));
+      gap: 8px;
+    }
+
+    .ops-mini-card {
+      border: 1px solid var(--border-color);
+      background: #101620;
+      border-radius: 10px;
+      padding: 9px 10px;
+    }
+
+    .ops-mini-card .label {
+      font-size: 11px;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--text-secondary);
+    }
+
+    .ops-mini-card .value {
+      margin-top: 5px;
+      font-family: 'Space Mono', monospace;
+      font-size: 17px;
+      color: var(--text-primary);
+    }
+
+    .health-pill {
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      padding: 2px 9px;
+      font-size: 11px;
+      font-family: 'Space Mono', monospace;
+      text-transform: uppercase;
+      letter-spacing: .06em;
+      color: var(--text-secondary);
+    }
+
+    .health-pill.ok {
+      color: var(--ok);
+      border-color: rgba(16, 185, 129, 0.5);
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .health-pill.warning {
+      color: var(--warn);
+      border-color: rgba(245, 158, 11, 0.5);
+      background: rgba(245, 158, 11, 0.12);
+    }
+
+    .health-pill.critical {
+      color: var(--err);
+      border-color: rgba(239, 68, 68, 0.5);
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    .health-pill.paused {
+      color: var(--text-secondary);
+    }
+
+    .ops-issues {
+      margin-top: 8px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+
+    .ops-events {
+      max-height: 280px;
+      overflow: auto;
+      display: grid;
+      gap: 8px;
+    }
+
+    .ops-event-row {
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 8px 10px;
+      background: #101620;
+    }
+
+    .ops-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(120px, 1fr));
+      gap: 10px;
+    }
+
     .controls {
       display: grid;
       grid-template-columns: 1fr;
@@ -525,6 +613,8 @@
       .form-grid { grid-template-columns: 1fr; }
       .form-grid .full { grid-column: span 1; }
       .grid-3 { grid-template-columns: 1fr; }
+      .ops-metrics-grid { grid-template-columns: 1fr 1fr; }
+      .ops-summary-grid { grid-template-columns: 1fr 1fr; }
       .header { grid-template-columns: 1fr; }
       .button-row { justify-content: flex-start; }
     }
@@ -569,6 +659,7 @@
       <div class="view-tabs">
         <button id="view-tab-pipeline" class="view-tab active">Pipeline</button>
         <button id="view-tab-agent" class="view-tab">Communication Agent</button>
+        <button id="view-tab-ops" class="view-tab">Outreach Ops</button>
       </div>
     </section>
 
@@ -750,6 +841,39 @@
         </div>
       </section>
 
+      <section class="card">
+        <div class="panel-title">
+          <span>Outreach Health (All LinkedIn Accounts)</span>
+          <div class="panel-actions">
+            <span id="casey-health-pill" class="health-pill">unknown</span>
+            <button id="casey-health-refresh-btn">Refresh</button>
+          </div>
+        </div>
+        <div class="ops-metrics-grid">
+          <div class="ops-mini-card">
+            <div class="label">Sent 1h</div>
+            <div class="value" id="casey-health-sent-1h">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Sent 24h</div>
+            <div class="value" id="casey-health-sent-24h">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Failed 1h</div>
+            <div class="value" id="casey-health-failed-1h">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Stuck</div>
+            <div class="value" id="casey-health-stuck">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Last Success</div>
+            <div class="value" id="casey-health-last-success">-</div>
+          </div>
+        </div>
+        <div id="casey-health-issues" class="ops-issues">Waiting for data...</div>
+      </section>
+
       <section class="agent-layout">
         <div class="card">
           <div class="panel-title"><span>LinkedIn Accounts (Unipile)</span><span class="mono">/api/linkedin/accounts</span></div>
@@ -879,6 +1003,79 @@
       </section>
     </section>
 
+    <section id="view-ops" class="view-section">
+      <section class="card">
+        <div class="panel-title">
+          <span>Outreach Ops Overview</span>
+          <div class="panel-actions">
+            <select id="ops-job-select">
+              <option value="all">All jobs</option>
+            </select>
+            <input id="ops-stale-minutes" type="number" min="10" max="1440" value="45" style="width:120px;" title="Stale threshold (minutes)">
+            <button id="ops-refresh-btn">Reload</button>
+          </div>
+        </div>
+        <div class="ops-summary-grid" style="margin-top:8px;">
+          <div class="ops-mini-card">
+            <div class="label">Health</div>
+            <div class="value"><span id="ops-summary-health" class="health-pill">unknown</span></div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Active Accounts</div>
+            <div class="value" id="ops-summary-active-accounts">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Sent 1h</div>
+            <div class="value" id="ops-summary-sent-1h">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Failed 1h</div>
+            <div class="value" id="ops-summary-failed-1h">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Stuck Threads</div>
+            <div class="value" id="ops-summary-stuck">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Last Success</div>
+            <div class="value" id="ops-summary-last-success">-</div>
+          </div>
+        </div>
+        <div id="ops-summary-issues" class="ops-issues">No issues detected.</div>
+      </section>
+
+      <section class="card">
+        <div class="panel-title"><span>Per-Account Delivery Status</span><span class="mono">GET /api/outreach/ops</span></div>
+        <div style="overflow:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Account</th>
+                <th>Health</th>
+                <th>Status</th>
+                <th>Active</th>
+                <th>Sent 1h/24h</th>
+                <th>Failed 1h/24h</th>
+                <th>Stuck</th>
+                <th>Last Success</th>
+                <th>Last Error</th>
+              </tr>
+            </thead>
+            <tbody id="ops-accounts-tbody">
+              <tr><td colspan="9" class="muted">No data yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="panel-title"><span>Recent Outreach Events</span><span class="mono">from operation logs</span></div>
+        <div id="ops-events-box" class="ops-events">
+          <div class="muted">No events yet</div>
+        </div>
+      </section>
+    </section>
+
     <section class="card dashboard-footer-link">
       <span>Explore replay and production signal analytics in dedicated dashboards.</span>
       <a href="/dashboard/emulator">Open Emulator</a>
@@ -949,6 +1146,7 @@
 
     const SELECTED_JOB_STORAGE_KEY = "tener.selectedJobId";
     const AGENT_SELECTED_JOB_STORAGE_KEY = "tener.agentSelectedJobId";
+    const OPS_SELECTED_JOB_STORAGE_KEY = "tener.opsSelectedJobId";
     const TEST_MODE_STORAGE_KEY = "tener.testMode";
     const CANDS_OVERALL_FILTER_STORAGE_KEY = "tener.candidatesOverallFilter";
     const LINKEDIN_ADMIN_TOKEN_STORAGE_KEY = "tener.linkedinAdminToken";
@@ -957,6 +1155,7 @@
     const state = {
       jobId: null,
       agentJobId: null,
+      opsJobId: null,
       jobs: [],
       testMode: true,
       candidatesOverallFilter: "all",
@@ -973,6 +1172,7 @@
       outreachItems: [],
       agentAccounts: [],
       linkedinAccounts: [],
+      outreachOps: null,
       jobLinkedinRouting: null,
       linkedinAdminToken: "",
       agentConversationId: null,
@@ -1283,6 +1483,37 @@
       return normalizeAgentJobId(fromAgent || state.agentJobId || "");
     }
 
+    function normalizeOpsJobId(value) {
+      return normalizeAgentJobId(value);
+    }
+
+    function selectedOpsJobId() {
+      const fromOps = $("ops-job-select") ? $("ops-job-select").value : "";
+      return normalizeOpsJobId(fromOps || state.opsJobId || "");
+    }
+
+    function formatTimestampCompact(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "-";
+      const dt = new Date(raw);
+      if (!Number.isFinite(dt.getTime())) return "-";
+      const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(dt.getUTCDate()).padStart(2, "0");
+      const hh = String(dt.getUTCHours()).padStart(2, "0");
+      const mi = String(dt.getUTCMinutes()).padStart(2, "0");
+      return `${mm}-${dd} ${hh}:${mi}Z`;
+    }
+
+    function applyHealthPill(el, health) {
+      if (!el) return;
+      const normalized = String(health || "unknown").trim().toLowerCase() || "unknown";
+      el.classList.remove("ok", "warning", "critical", "paused");
+      if (["ok", "warning", "critical", "paused"].includes(normalized)) {
+        el.classList.add(normalized);
+      }
+      el.textContent = normalized;
+    }
+
     function getJobById(jobId) {
       const safeId = Number(jobId || 0) || null;
       if (!safeId) return null;
@@ -1449,11 +1680,20 @@
     }
 
     function setActiveView(view) {
-      state.activeView = view === "agent" ? "agent" : "pipeline";
+      if (view === "agent" || view === "ops") {
+        state.activeView = view;
+      } else {
+        state.activeView = "pipeline";
+      }
       $("view-tab-pipeline").classList.toggle("active", state.activeView === "pipeline");
       $("view-tab-agent").classList.toggle("active", state.activeView === "agent");
+      $("view-tab-ops").classList.toggle("active", state.activeView === "ops");
       $("view-pipeline").classList.toggle("active", state.activeView === "pipeline");
       $("view-agent").classList.toggle("active", state.activeView === "agent");
+      $("view-ops").classList.toggle("active", state.activeView === "ops");
+      if (state.activeView === "agent" || state.activeView === "ops") {
+        refreshOutreachOps().catch(() => {});
+      }
     }
 
     function setAgentJobMeta(job, allJobs = false) {
@@ -1477,8 +1717,10 @@
     function syncJobSelectors() {
       const pipelineValue = state.jobId ? String(state.jobId) : "";
       const agentValue = state.agentJobId ? String(state.agentJobId) : "all";
+      const opsValue = state.opsJobId ? String(state.opsJobId) : "all";
       if ($("job-select")) $("job-select").value = pipelineValue;
       if ($("agent-job-select")) $("agent-job-select").value = agentValue;
+      if ($("ops-job-select")) $("ops-job-select").value = opsValue;
     }
 
     async function onSelectedJobChanged(jobId) {
@@ -1523,6 +1765,17 @@
       await refreshAgentAccounts();
     }
 
+    async function onSelectedOpsJobChanged(jobId) {
+      state.opsJobId = normalizeOpsJobId(jobId);
+      if (state.opsJobId) {
+        localStorage.setItem(OPS_SELECTED_JOB_STORAGE_KEY, String(state.opsJobId));
+      } else {
+        localStorage.setItem(OPS_SELECTED_JOB_STORAGE_KEY, "all");
+      }
+      syncJobSelectors();
+      await refreshOutreachOps();
+    }
+
     function openCreateModal() {
       $("create-job-modal").classList.add("open");
       $("create-job-modal").setAttribute("aria-hidden", "false");
@@ -1547,8 +1800,10 @@
       const data = await api('/api/jobs?limit=200');
       const pipelineSelect = $("job-select");
       const agentSelect = $("agent-job-select");
+      const opsSelect = $("ops-job-select");
       if (pipelineSelect) pipelineSelect.innerHTML = '';
       if (agentSelect) agentSelect.innerHTML = '';
+      if (opsSelect) opsSelect.innerHTML = '';
       state.jobs = Array.isArray(data.items) ? data.items : [];
 
       if (!state.jobs.length) {
@@ -1557,12 +1812,15 @@
         opt.textContent = 'No jobs yet';
         if (pipelineSelect) pipelineSelect.appendChild(opt.cloneNode(true));
         if (agentSelect) agentSelect.appendChild(opt.cloneNode(true));
+        if (opsSelect) opsSelect.appendChild(opt.cloneNode(true));
         state.jobId = null;
         state.agentJobId = null;
+        state.opsJobId = null;
         $("job-label").textContent = 'none';
         $("job-meta").textContent = 'Create a job from modal window to start manual pipeline.';
         setAgentJobMeta(null);
         await refreshAgentAccounts();
+        await refreshOutreachOps();
         return;
       }
 
@@ -1583,6 +1841,16 @@
       if (preferredAgentJobId && !state.jobs.some((x) => Number(x.id) === Number(preferredAgentJobId))) {
         preferredAgentJobId = preferredJobId;
       }
+      const rememberedOpsRaw = localStorage.getItem(OPS_SELECTED_JOB_STORAGE_KEY);
+      const rememberedOpsJobId = rememberedOpsRaw === null ? null : normalizeOpsJobId(rememberedOpsRaw);
+      let preferredOpsJobId = state.opsJobId && state.jobs.some((x) => Number(x.id) === Number(state.opsJobId))
+        ? Number(state.opsJobId)
+        : rememberedOpsRaw !== null
+          ? (rememberedOpsRaw === "all" ? null : rememberedOpsJobId)
+          : null;
+      if (preferredOpsJobId && !state.jobs.some((x) => Number(x.id) === Number(preferredOpsJobId))) {
+        preferredOpsJobId = null;
+      }
 
       if (agentSelect) {
         const allOpt = document.createElement('option');
@@ -1590,6 +1858,13 @@
         allOpt.textContent = 'All jobs';
         if (preferredAgentJobId === null) allOpt.selected = true;
         agentSelect.appendChild(allOpt);
+      }
+      if (opsSelect) {
+        const allOpt = document.createElement('option');
+        allOpt.value = 'all';
+        allOpt.textContent = 'All jobs';
+        if (preferredOpsJobId === null) allOpt.selected = true;
+        opsSelect.appendChild(allOpt);
       }
 
       state.jobs.forEach((job) => {
@@ -1606,10 +1881,16 @@
           if (Number(job.id) === preferredAgentJobId) opt.selected = true;
           agentSelect.appendChild(opt);
         }
+        if (opsSelect) {
+          const clone = opt.cloneNode(true);
+          if (Number(job.id) === preferredOpsJobId) clone.selected = true;
+          opsSelect.appendChild(clone);
+        }
       });
 
       state.jobId = preferredJobId;
       state.agentJobId = preferredAgentJobId;
+      state.opsJobId = preferredOpsJobId;
       syncJobSelectors();
       const selected = getJobById(state.jobId);
       syncJobMeta(selected || null);
@@ -1887,6 +2168,7 @@
         state.linkedinAccounts = out.items || [];
         renderLinkedinAccounts();
         await refreshJobLinkedinRouting();
+        await refreshOutreachOps();
       } catch (e) {
         $("linkedin-accounts-tbody").innerHTML = `<tr><td colspan="10" class="muted">Failed: ${escapeHtml(e.message)}</td></tr>`;
         renderLinkedinJobRouting();
@@ -1924,6 +2206,124 @@
       });
       snapshot('linkedin.accounts.imported', out);
       await refreshLinkedinAccounts();
+      await refreshOutreachOps();
+    }
+
+    function renderCaseyOutreachHealth() {
+      const summary = (state.outreachOps || {}).summary || {};
+      applyHealthPill($("casey-health-pill"), summary.health || "unknown");
+      $("casey-health-sent-1h").textContent = String(Number(summary.sent_1h || 0));
+      $("casey-health-sent-24h").textContent = String(Number(summary.sent_24h || 0));
+      $("casey-health-failed-1h").textContent = String(Number(summary.failed_1h || 0));
+      $("casey-health-stuck").textContent = String(Number(summary.stuck_threads || 0));
+      $("casey-health-last-success").textContent = formatTimestampCompact(summary.last_successful_send_at);
+      const issues = Array.isArray(summary.issues) ? summary.issues : [];
+      $("casey-health-issues").textContent = issues.length
+        ? issues.slice(0, 3).join(" • ")
+        : "No blocking issues detected.";
+    }
+
+    function renderOutreachOpsSummary() {
+      const summary = (state.outreachOps || {}).summary || {};
+      const activeAccounts = Number(summary.active_accounts || 0);
+      const connectedAccounts = Number(summary.connected_accounts || 0);
+      const issues = Array.isArray(summary.issues) ? summary.issues : [];
+      applyHealthPill($("ops-summary-health"), summary.health || "unknown");
+      $("ops-summary-active-accounts").textContent = `${activeAccounts}/${connectedAccounts}`;
+      $("ops-summary-sent-1h").textContent = String(Number(summary.sent_1h || 0));
+      $("ops-summary-failed-1h").textContent = String(Number(summary.failed_1h || 0));
+      $("ops-summary-stuck").textContent = String(Number(summary.stuck_threads || 0));
+      $("ops-summary-last-success").textContent = formatTimestampCompact(summary.last_successful_send_at);
+      $("ops-summary-issues").textContent = issues.length ? issues.join(" • ") : "No issues detected.";
+    }
+
+    function renderOutreachOpsAccounts() {
+      const body = $("ops-accounts-tbody");
+      if (!body) return;
+      const rows = Array.isArray((state.outreachOps || {}).accounts) ? state.outreachOps.accounts : [];
+      if (!rows.length) {
+        body.innerHTML = '<tr><td colspan="9" class="muted">No LinkedIn account telemetry yet</td></tr>';
+        return;
+      }
+      body.innerHTML = rows.map((row) => {
+        const accountLabel = `#${Number(row.account_id || 0)} ${escapeHtml(row.label || "-")}`;
+        const provider = escapeHtml(row.provider_account_id || "-");
+        const status = escapeHtml(row.status || "-");
+        const health = String(row.health || "unknown").toLowerCase();
+        const sentPair = `${Number(row.sent_1h || 0)}/${Number(row.sent_24h || 0)}`;
+        const failedPair = `${Number(row.failed_1h || 0)}/${Number(row.failed_24h || 0)}`;
+        const active = Number(row.active_conversations || 0);
+        const stuck = Number(row.stuck_threads || 0);
+        const lastSuccess = formatTimestampCompact(row.last_send_at);
+        const lastError = escapeHtml(shortText(row.last_error || "-", 90));
+        return `
+          <tr>
+            <td><div>${accountLabel}</div><div class="muted mono" style="font-size:11px;">${provider}</div></td>
+            <td><span class="health-pill ${escapeHtml(health)}">${escapeHtml(health)}</span></td>
+            <td>${status}</td>
+            <td class="mono">${active}</td>
+            <td class="mono">${sentPair}</td>
+            <td class="mono">${failedPair}</td>
+            <td class="mono">${stuck}</td>
+            <td class="mono">${lastSuccess}</td>
+            <td class="mono">${lastError}</td>
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function renderOutreachOpsEvents() {
+      const box = $("ops-events-box");
+      if (!box) return;
+      const events = Array.isArray((state.outreachOps || {}).events) ? state.outreachOps.events : [];
+      if (!events.length) {
+        box.innerHTML = '<div class="muted">No outreach events yet</div>';
+        return;
+      }
+      box.innerHTML = events.slice(0, 40).map((item) => {
+        const accountLabel = Number(item.account_id || 0) > 0 ? `acc:${Number(item.account_id)}` : "acc:-";
+        const delivery = item.delivery_status ? ` • ${escapeHtml(String(item.delivery_status))}` : "";
+        const error = item.error ? `<div class="mono muted" style="margin-top:4px;">${escapeHtml(shortText(String(item.error), 140))}</div>` : "";
+        return `
+          <div class="ops-event-row">
+            <div><b>${escapeHtml(String(item.operation || "-"))}</b> <span class="mono muted">${escapeHtml(formatTimestampCompact(item.created_at))}</span></div>
+            <div class="muted">${escapeHtml(accountLabel)} • status:${escapeHtml(String(item.status || "-"))}${delivery}</div>
+            ${error}
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function refreshOutreachOps() {
+      const staleInput = $("ops-stale-minutes");
+      const staleMinutes = Math.max(10, Math.min(1440, Number((staleInput && staleInput.value) || 45) || 45));
+      if (staleInput) staleInput.value = String(staleMinutes);
+      const jobId = selectedOpsJobId();
+      const scopeQuery = jobId ? `&job_id=${encodeURIComponent(jobId)}` : "";
+      try {
+        const out = await api(`/api/outreach/ops?limit_logs=1000&limit_chats=800&stale_minutes=${staleMinutes}${scopeQuery}`);
+        state.outreachOps = out || {};
+      } catch (e) {
+        state.outreachOps = {
+          summary: {
+            health: "critical",
+            sent_1h: 0,
+            sent_24h: 0,
+            failed_1h: 0,
+            stuck_threads: 0,
+            last_successful_send_at: null,
+            issues: [String(e.message || "failed_to_load_outreach_ops")],
+            active_accounts: 0,
+            connected_accounts: 0,
+          },
+          accounts: [],
+          events: [],
+        };
+      }
+      renderCaseyOutreachHealth();
+      renderOutreachOpsSummary();
+      renderOutreachOpsAccounts();
+      renderOutreachOpsEvents();
     }
 
     function renderAgentAccounts() {
@@ -1982,6 +2382,9 @@
       } else {
         $("agent-chat-title").textContent = "No conversation selected";
         $("agent-chat-messages").innerHTML = '<div class="muted">Open any account to see dialogue.</div>';
+      }
+      if (state.activeView === "agent" || state.activeView === "ops") {
+        await refreshOutreachOps();
       }
     }
 
@@ -2217,6 +2620,7 @@
       }
       await refreshCandidates();
       await refreshLogs();
+      await refreshOutreachOps();
     }
 
     async function runOutreach() {
@@ -2286,6 +2690,7 @@
       await refreshCandidates();
       await refreshAgentAccounts();
       await refreshLogs();
+      await refreshOutreachOps();
     }
 
     async function runFull() {
@@ -2320,6 +2725,7 @@
       }
       await refreshCandidates();
       await refreshLogs();
+      await refreshOutreachOps();
     }
 
     async function refreshLogs() {
@@ -2430,6 +2836,7 @@
     function bindEvents() {
       $("view-tab-pipeline").addEventListener('click', () => setActiveView('pipeline'));
       $("view-tab-agent").addEventListener('click', () => setActiveView('agent'));
+      $("view-tab-ops").addEventListener('click', () => setActiveView('ops'));
       $("create-job-btn").addEventListener('click', () => createJob().catch(e => alert(e.message)));
       $("open-create-modal-btn").addEventListener('click', () => openCreateModal());
       $("close-create-modal-btn").addEventListener('click', () => closeCreateModal());
@@ -2462,6 +2869,8 @@
       });
       $("agent-save-jd-btn").addEventListener('click', () => saveAgentJd().catch(e => alert(e.message)));
       $("agent-refresh-accounts-btn").addEventListener('click', () => refreshAgentAccounts().catch(e => alert(e.message)));
+      $("casey-health-refresh-btn").addEventListener('click', () => refreshOutreachOps().catch(e => alert(e.message)));
+      $("ops-refresh-btn").addEventListener('click', () => refreshOutreachOps().catch(e => alert(e.message)));
       $("linkedin-save-token-btn").addEventListener('click', () => {
         saveLinkedinAdminToken();
         refreshLinkedinAccounts().catch(e => alert(e.message));
@@ -2492,6 +2901,9 @@
       $("agent-job-select").addEventListener('change', async (e) => {
         await onSelectedAgentJobChanged(e.target.value);
       });
+      $("ops-job-select").addEventListener('change', async (e) => {
+        await onSelectedOpsJobChanged(e.target.value);
+      });
       $("test-mode-toggle").addEventListener('change', () => {
         const enabled = isTestModeEnabled();
         state.testMode = enabled;
@@ -2506,12 +2918,21 @@
     bindEvents();
     resetCreateJobForm();
     state.linkedinAdminToken = localStorage.getItem(LINKEDIN_ADMIN_TOKEN_STORAGE_KEY) || "";
+    state.opsJobId = normalizeOpsJobId(localStorage.getItem(OPS_SELECTED_JOB_STORAGE_KEY) || "all");
     if ($("linkedin-admin-token")) $("linkedin-admin-token").value = state.linkedinAdminToken;
     setTestMode((localStorage.getItem(TEST_MODE_STORAGE_KEY) || "1") !== "0");
     setCandidatesOverallFilter(localStorage.getItem(CANDS_OVERALL_FILTER_STORAGE_KEY) || "all");
     renderSnapshotTabs();
     renderSelectedSnapshot();
     renderLinkedinJobRouting();
+    renderCaseyOutreachHealth();
+    renderOutreachOpsSummary();
+    renderOutreachOpsAccounts();
+    renderOutreachOpsEvents();
+    setInterval(() => {
+      if (state.activeView !== "agent" && state.activeView !== "ops") return;
+      refreshOutreachOps().catch(() => {});
+    }, 45000);
     fullRefresh();
   </script>
 </body>

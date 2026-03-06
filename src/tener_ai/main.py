@@ -6,7 +6,7 @@ import ipaddress
 import os
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -573,6 +573,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "interview_followups_run": "POST /api/interviews/followups/run",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "chats_overview": "GET /api/chats/overview?limit=200",
+                        "outreach_ops": "GET /api/outreach/ops?job_id=...&stale_minutes=45",
                         "linkedin_accounts_list": "GET /api/linkedin/accounts?limit=200&status=connected",
                         "linkedin_connect_callback": "GET /api/linkedin/accounts/connect/callback?state=...",
                         "linkedin_connect_start": "POST /api/linkedin/accounts/connect/start",
@@ -1177,6 +1178,29 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
             items = self._read_db().list_conversations_overview(limit=limit or 200, job_id=job_id)
             self._json_response(HTTPStatus.OK, {"items": items})
+            return
+
+        if parsed.path == "/api/outreach/ops":
+            params = parse_qs(parsed.query or "")
+            logs_limit = self._safe_int((params.get("limit_logs") or ["800"])[0], 800)
+            chats_limit = self._safe_int((params.get("limit_chats") or ["600"])[0], 600)
+            stale_minutes = self._safe_int((params.get("stale_minutes") or ["45"])[0], 45)
+            job_id_raw = (params.get("job_id") or [None])[0]
+            job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
+            if logs_limit is None:
+                logs_limit = 800
+            if chats_limit is None:
+                chats_limit = 600
+            if stale_minutes is None:
+                stale_minutes = 45
+            report = self._build_outreach_ops_report(
+                db=SERVICES["db"],
+                job_id=job_id,
+                logs_limit=max(100, min(int(logs_limit), 2000)),
+                chats_limit=max(100, min(int(chats_limit), 2000)),
+                stale_minutes=max(10, min(int(stale_minutes), 24 * 60)),
+            )
+            self._json_response(HTTPStatus.OK, report)
             return
 
         if parsed.path == "/api/logs":
@@ -3058,6 +3082,280 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         if text in {"0", "false", "no", "off"}:
             return False
         return default
+
+    @staticmethod
+    def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if text.endswith("Z"):
+            text = f"{text[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
+    @classmethod
+    def _build_outreach_ops_report(
+        cls,
+        *,
+        db: Any,
+        job_id: Optional[int],
+        logs_limit: int,
+        chats_limit: int,
+        stale_minutes: int,
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        last_hour = now - timedelta(hours=1)
+        last_day = now - timedelta(hours=24)
+        flow_window = now - timedelta(minutes=30)
+        stale_cutoff = now - timedelta(minutes=stale_minutes)
+
+        accounts = db.list_linkedin_accounts(limit=500)
+        conversations = db.list_conversations_overview(limit=chats_limit, job_id=job_id)
+        logs = db.list_logs(limit=logs_limit)
+
+        account_map: Dict[int, Dict[str, Any]] = {}
+        for row in accounts or []:
+            account_id = int(row.get("id") or 0)
+            if account_id <= 0:
+                continue
+            account_map[account_id] = {
+                "account_id": account_id,
+                "label": str(row.get("label") or "").strip() or f"Account {account_id}",
+                "provider_account_id": str(row.get("provider_account_id") or ""),
+                "status": str(row.get("status") or "unknown"),
+                "active_conversations": 0,
+                "waiting_connection": 0,
+                "awaiting_reply": 0,
+                "stuck_threads": 0,
+                "sent_1h": 0,
+                "sent_24h": 0,
+                "failed_1h": 0,
+                "failed_24h": 0,
+                "last_send_at": None,
+                "last_error_at": None,
+                "last_error": "",
+                "_last_send_dt": None,
+                "_last_error_dt": None,
+            }
+
+        def _ensure_account(account_id: int) -> Dict[str, Any]:
+            existing = account_map.get(account_id)
+            if existing is not None:
+                return existing
+            fallback = {
+                "account_id": account_id,
+                "label": f"Account {account_id}",
+                "provider_account_id": "",
+                "status": "unknown",
+                "active_conversations": 0,
+                "waiting_connection": 0,
+                "awaiting_reply": 0,
+                "stuck_threads": 0,
+                "sent_1h": 0,
+                "sent_24h": 0,
+                "failed_1h": 0,
+                "failed_24h": 0,
+                "last_send_at": None,
+                "last_error_at": None,
+                "last_error": "",
+                "_last_send_dt": None,
+                "_last_error_dt": None,
+            }
+            account_map[account_id] = fallback
+            return fallback
+
+        flow_detected_recently = False
+        recent_events: List[Dict[str, Any]] = []
+        max_recent_events = 80
+        conversation_account_map: Dict[int, int] = {}
+        for item in logs or []:
+            operation = str(item.get("operation") or "").strip().lower()
+            status = str(item.get("status") or "").strip().lower()
+            created_at = str(item.get("created_at") or "")
+            created_dt = cls._parse_iso_datetime(created_at)
+            details = item.get("details") if isinstance(item.get("details"), dict) else {}
+            account_id = int(details.get("linkedin_account_id") or 0)
+            if account_id <= 0 and str(item.get("entity_type") or "") == "linkedin_account":
+                account_id = cls._safe_int(item.get("entity_id"), 0) or 0
+            entry = _ensure_account(account_id) if account_id > 0 else None
+
+            if operation == "scheduler.outreach.dispatch" and status == "ok" and created_dt and created_dt >= flow_window:
+                flow_detected_recently = True
+
+            if operation == "agent.outreach.send":
+                delivery_status = str(details.get("delivery_status") or "").strip().lower()
+                is_send_ok = status == "ok" and delivery_status in {"sent", "pending_connection"}
+                is_send_failed = not is_send_ok
+                if str(item.get("entity_type") or "") == "conversation":
+                    conversation_id = cls._safe_int(item.get("entity_id"), 0) or 0
+                    if conversation_id > 0 and account_id > 0:
+                        conversation_account_map[int(conversation_id)] = int(account_id)
+                if is_send_ok and created_dt and created_dt >= flow_window:
+                    flow_detected_recently = True
+                if entry is not None and created_dt:
+                    if created_dt >= last_hour:
+                        if is_send_ok:
+                            entry["sent_1h"] += 1
+                        elif is_send_failed:
+                            entry["failed_1h"] += 1
+                    if created_dt >= last_day:
+                        if is_send_ok:
+                            entry["sent_24h"] += 1
+                        elif is_send_failed:
+                            entry["failed_24h"] += 1
+                    if is_send_ok:
+                        current_dt = entry.get("_last_send_dt")
+                        if current_dt is None or created_dt > current_dt:
+                            entry["_last_send_dt"] = created_dt
+                            entry["last_send_at"] = created_dt.isoformat()
+                    if is_send_failed:
+                        err_text = (
+                            str((details.get("delivery") or {}).get("error") or "").strip()
+                            or str((details.get("connect_request") or {}).get("error") or "").strip()
+                            or str(details.get("delivery_status") or "").strip()
+                            or "delivery_failed"
+                        )
+                        current_dt = entry.get("_last_error_dt")
+                        if current_dt is None or created_dt > current_dt:
+                            entry["_last_error_dt"] = created_dt
+                            entry["last_error_at"] = created_dt.isoformat()
+                            entry["last_error"] = err_text[:240]
+
+            if operation in {
+                "agent.outreach.send",
+                "agent.outreach.delivery_error",
+                "agent.outreach.dispatch",
+                "scheduler.outreach.dispatch",
+            } and len(recent_events) < max_recent_events:
+                recent_events.append(
+                    {
+                        "id": int(item.get("id") or 0),
+                        "created_at": created_at,
+                        "operation": operation,
+                        "status": status,
+                        "account_id": account_id or None,
+                        "entity_type": item.get("entity_type"),
+                        "entity_id": item.get("entity_id"),
+                        "delivery_status": details.get("delivery_status"),
+                        "error": (
+                            str((details.get("delivery") or {}).get("error") or "").strip()
+                            or str(details.get("error") or "").strip()
+                            or None
+                        ),
+                    }
+                )
+
+        for row in conversations or []:
+            conversation_id = int(row.get("conversation_id") or 0)
+            account_id = int(row.get("linkedin_account_id") or 0)
+            if account_id <= 0 and conversation_id > 0:
+                account_id = int(conversation_account_map.get(conversation_id) or 0)
+            if account_id <= 0:
+                continue
+            entry = _ensure_account(account_id)
+            entry["active_conversations"] += 1
+            conversation_status = str(row.get("conversation_status") or "").strip().lower()
+            pre_resume_status = str(row.get("pre_resume_status") or "").strip().lower()
+            last_message_dt = cls._parse_iso_datetime(row.get("last_message_at"))
+            if conversation_status == "waiting_connection":
+                entry["waiting_connection"] += 1
+            if pre_resume_status == "awaiting_reply":
+                entry["awaiting_reply"] += 1
+                if last_message_dt and last_message_dt <= stale_cutoff:
+                    entry["stuck_threads"] += 1
+
+        severity = {"ok": 0, "warning": 1, "critical": 2, "paused": 3}
+        rows: List[Dict[str, Any]] = []
+        for row in account_map.values():
+            account_status = str(row.get("status") or "").strip().lower()
+            health = "ok"
+            if account_status not in {"connected", "active"}:
+                health = "paused"
+            elif int(row.get("stuck_threads") or 0) > 0 or int(row.get("failed_1h") or 0) >= 2:
+                health = "critical"
+            elif int(row.get("failed_24h") or 0) > 0:
+                health = "warning"
+            row["health"] = health
+            row.pop("_last_send_dt", None)
+            row.pop("_last_error_dt", None)
+            rows.append(row)
+
+        rows.sort(
+            key=lambda item: (
+                -severity.get(str(item.get("health") or "ok"), 0),
+                -int(item.get("stuck_threads") or 0),
+                -int(item.get("failed_1h") or 0),
+                -int(item.get("sent_24h") or 0),
+                int(item.get("account_id") or 0),
+            )
+        )
+
+        sent_1h_total = sum(int(item.get("sent_1h") or 0) for item in rows)
+        sent_24h_total = sum(int(item.get("sent_24h") or 0) for item in rows)
+        failed_1h_total = sum(int(item.get("failed_1h") or 0) for item in rows)
+        failed_24h_total = sum(int(item.get("failed_24h") or 0) for item in rows)
+        stuck_threads_total = sum(int(item.get("stuck_threads") or 0) for item in rows)
+        waiting_connection_total = sum(int(item.get("waiting_connection") or 0) for item in rows)
+        awaiting_reply_total = sum(int(item.get("awaiting_reply") or 0) for item in rows)
+        active_conversations_total = sum(int(item.get("active_conversations") or 0) for item in rows)
+        active_accounts_total = sum(1 for item in rows if int(item.get("active_conversations") or 0) > 0)
+        connected_accounts_total = sum(
+            1 for item in rows if str(item.get("status") or "").strip().lower() in {"connected", "active"}
+        )
+        last_send_candidates = [str(item.get("last_send_at") or "") for item in rows if item.get("last_send_at")]
+        last_send_at = max(last_send_candidates) if last_send_candidates else None
+
+        overall_health = "ok"
+        issues: List[str] = []
+        if stuck_threads_total > 0:
+            overall_health = "critical"
+            issues.append(f"{stuck_threads_total} stuck thread(s)")
+        if failed_1h_total >= 5:
+            overall_health = "critical"
+            issues.append(f"{failed_1h_total} failed send(s) in last hour")
+        if overall_health != "critical":
+            if failed_24h_total > 0:
+                overall_health = "warning"
+                issues.append(f"{failed_24h_total} failed send(s) in last 24h")
+            if active_conversations_total > 0 and not flow_detected_recently:
+                overall_health = "warning"
+                issues.append("no successful outreach activity in last 30 minutes")
+
+        return {
+            "status": "ok",
+            "generated_at": now.isoformat(),
+            "job_id": int(job_id) if job_id else None,
+            "thresholds": {
+                "stale_minutes": stale_minutes,
+                "flow_window_minutes": 30,
+                "logs_limit": logs_limit,
+                "chats_limit": chats_limit,
+            },
+            "summary": {
+                "health": overall_health,
+                "issues": issues,
+                "accounts_total": len(rows),
+                "connected_accounts": connected_accounts_total,
+                "active_accounts": active_accounts_total,
+                "active_conversations": active_conversations_total,
+                "sent_1h": sent_1h_total,
+                "sent_24h": sent_24h_total,
+                "failed_1h": failed_1h_total,
+                "failed_24h": failed_24h_total,
+                "stuck_threads": stuck_threads_total,
+                "waiting_connection": waiting_connection_total,
+                "awaiting_reply": awaiting_reply_total,
+                "flow_detected_recently": flow_detected_recently,
+                "last_successful_send_at": last_send_at,
+            },
+            "accounts": rows,
+            "events": recent_events,
+        }
 
     @staticmethod
     def _read_db() -> Any:
