@@ -1068,7 +1068,7 @@
                 <th>Job</th>
                 <th>Score</th>
                 <th>Last Activity</th>
-                <th>Account</th>
+                <th>Account / Planned</th>
                 <th>Open</th>
               </tr>
             </thead>
@@ -2316,7 +2316,11 @@
         const jobTitle = escapeHtml(row.job_title || "-");
         const jobLabel = Number(row.job_id || 0) > 0 ? `#${Number(row.job_id || 0)} ${jobTitle}` : jobTitle;
         const lastActivity = formatTimestampCompact(row.last_message_at);
-        const accountLabel = Number(row.linkedin_account_id || 0) > 0 ? escapeHtml(outreachAccountLabel(row.linkedin_account_id)) : "-";
+        const accountLabel = row.likely_account_label
+          ? escapeHtml(String(row.likely_account_label))
+          : Number(row.linkedin_account_id || 0) > 0
+            ? escapeHtml(outreachAccountLabel(row.linkedin_account_id))
+            : "-";
         const conversationId = Number(row.conversation_id || 0);
         const openButton = conversationId > 0
           ? `<button class="ops-open-chat-btn" data-conversation-id="${conversationId}">Open</button>`

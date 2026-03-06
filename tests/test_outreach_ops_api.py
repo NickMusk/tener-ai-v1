@@ -214,6 +214,30 @@ class OutreachOpsApiTests(unittest.TestCase):
         self.assertEqual(int(summary.get("active_conversations") or 0), 1)
 
     def test_outreach_ops_lists_new_thread_backlog_for_latest_auto_jobs_only(self) -> None:
+        account_id = self.db.upsert_linkedin_account(
+            provider="unipile",
+            provider_account_id="acc-ops-planned",
+            status="connected",
+            connected_at=utc_now_iso(),
+            label="Planned Sender",
+        )
+        class _PreviewWorkflow:
+            def preview_linkedin_account_sequence_for_new_threads(self, *, job_id: int, slots: int) -> Dict[str, Any]:
+                return {
+                    "items": [
+                        {
+                            "account_id": account_id,
+                            "label": "Planned Sender",
+                            "provider_account_id": "acc-ops-planned",
+                            "daily_cap": 15,
+                            "projected_new_threads_sent": idx + 1,
+                        }
+                        for idx in range(int(slots or 0))
+                    ],
+                    "reason": "ok",
+                }
+
+        api_main.SERVICES["workflow"] = _PreviewWorkflow()
         old_job_id = self.db.insert_job(
             title="Old Auto Job",
             jd_text="Need QA experience.",
@@ -278,6 +302,8 @@ class OutreachOpsApiTests(unittest.TestCase):
         self.assertTrue(items)
         self.assertEqual(int(items[0].get("job_id") or 0), new_job_id)
         self.assertEqual(str(items[0].get("candidate_name") or ""), "Backlog Candidate high")
+        self.assertEqual(int(items[0].get("likely_account_id") or 0), account_id)
+        self.assertEqual(str(items[0].get("likely_account_label") or ""), "Planned Sender")
 
 
 if __name__ == "__main__":

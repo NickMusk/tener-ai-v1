@@ -3976,6 +3976,57 @@ class WorkflowService:
         eligible.sort(key=lambda item: (item[0], item[1]))
         return eligible[0][2], None
 
+    def preview_linkedin_account_sequence_for_new_threads(
+        self,
+        *,
+        job_id: int,
+        slots: int,
+    ) -> Dict[str, Any]:
+        safe_slots = max(0, min(int(slots or 0), 200))
+        rows, routing_error = self._connected_linkedin_accounts_for_job(job_id=job_id)
+        if not rows:
+            return {"items": [], "reason": routing_error or "no_connected_account"}
+        day = self._utc_day_key()
+        base_counts: Dict[int, int] = {}
+        caps: Dict[int, int] = {}
+        normalized_rows: Dict[int, Dict[str, Any]] = {}
+        for row in rows:
+            account_id = int(row.get("id") or 0)
+            if account_id <= 0:
+                continue
+            counters = self.db.get_linkedin_account_daily_counter(account_id=account_id, day_utc=day)
+            base_counts[account_id] = int(counters.get("new_threads_sent") or 0)
+            caps[account_id] = int(effective_daily_message_limit(row, self.linkedin_outreach_policy))
+            normalized_rows[account_id] = row
+
+        items: List[Dict[str, Any]] = []
+        projected_counts = dict(base_counts)
+        reason = "ok"
+        for _ in range(safe_slots):
+            eligible: List[tuple[int, int, Dict[str, Any]]] = []
+            for account_id, row in normalized_rows.items():
+                projected = int(projected_counts.get(account_id) or 0)
+                daily_cap = int(caps.get(account_id) or 0)
+                if projected >= daily_cap:
+                    continue
+                eligible.append((projected, account_id, row))
+            if not eligible:
+                reason = "daily_new_threads_budget_reached"
+                break
+            eligible.sort(key=lambda item: (item[0], item[1]))
+            projected, account_id, row = eligible[0]
+            projected_counts[account_id] = projected + 1
+            items.append(
+                {
+                    "account_id": account_id,
+                    "label": str(row.get("label") or "").strip() or f"Account {account_id}",
+                    "provider_account_id": str(row.get("provider_account_id") or ""),
+                    "daily_cap": int(caps.get(account_id) or 0),
+                    "projected_new_threads_sent": int(projected_counts[account_id]),
+                }
+            )
+        return {"items": items, "reason": reason}
+
     def _connected_linkedin_accounts_for_job(self, *, job_id: int) -> tuple[List[Dict[str, Any]], str | None]:
         job = self.db.get_job(job_id)
         routing_mode = str((job or {}).get("linkedin_routing_mode") or "auto").strip().lower()

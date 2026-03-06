@@ -3332,6 +3332,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "job_id": int(row.get("job_id") or 0),
                 "job_title": str(row.get("job_title") or "").strip() or "-",
                 "linkedin_account_id": account_id or None,
+                "likely_account_id": account_id or None,
+                "likely_account_label": _ensure_account(account_id).get("label") if account_id > 0 else None,
                 "last_message_at": row.get("last_message_at"),
             }
             if account_id > 0:
@@ -3459,6 +3461,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         else:
             selected_jobs_payload = db.list_jobs(limit=backlog_job_scan_limit)
 
+        workflow = SERVICES.get("workflow")
         for job in selected_jobs_payload:
             row_job_id = int(job.get("id") or 0)
             if row_job_id <= 0:
@@ -3485,8 +3488,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     "recovery_backlog": len(recovery_candidates),
                 }
             )
+            job_backlog_rows: List[Dict[str, Any]] = []
             for item in new_thread_candidates[:backlog_items_per_job]:
-                backlog_rows.append(
+                job_backlog_rows.append(
                     {
                         "queue_type": "new_thread",
                         "job_id": row_job_id,
@@ -3501,7 +3505,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     }
                 )
             for item in recovery_candidates[:backlog_items_per_job]:
-                backlog_rows.append(
+                job_backlog_rows.append(
                     {
                         "queue_type": "unassigned_recovery",
                         "job_id": row_job_id,
@@ -3516,6 +3520,18 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "linkedin_account_id": None,
                     }
                 )
+            predicted_accounts: List[Dict[str, Any]] = []
+            if workflow is not None and hasattr(workflow, "preview_linkedin_account_sequence_for_new_threads"):
+                preview = workflow.preview_linkedin_account_sequence_for_new_threads(
+                    job_id=row_job_id,
+                    slots=len(job_backlog_rows),
+                )
+                predicted_accounts = preview.get("items") if isinstance(preview.get("items"), list) else []
+            for idx, item in enumerate(job_backlog_rows):
+                predicted = predicted_accounts[idx] if idx < len(predicted_accounts) else {}
+                item["likely_account_id"] = int(predicted.get("account_id") or 0) or None
+                item["likely_account_label"] = str(predicted.get("label") or "").strip() or None
+                backlog_rows.append(item)
             backlog_summary["new_threads"] += len(new_thread_candidates)
             backlog_summary["unassigned_recovery"] += len(recovery_candidates)
             if len(backlog_jobs) >= backlog_job_limit:
