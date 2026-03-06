@@ -1017,12 +1017,28 @@
         </div>
         <div class="ops-summary-grid" style="margin-top:8px;">
           <div class="ops-mini-card">
-            <div class="label">Health</div>
-            <div class="value"><span id="ops-summary-health" class="health-pill">unknown</span></div>
+            <div class="label">Delivery</div>
+            <div class="value"><span id="ops-summary-delivery-health" class="health-pill">unknown</span></div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Backlog</div>
+            <div class="value"><span id="ops-summary-backlog-health" class="health-pill">unknown</span></div>
           </div>
           <div class="ops-mini-card">
             <div class="label">Active Accounts</div>
             <div class="value" id="ops-summary-active-accounts">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">New Threads Queue</div>
+            <div class="value" id="ops-summary-new-threads">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Waiting Connection</div>
+            <div class="value" id="ops-summary-waiting-connection">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Stuck Replies</div>
+            <div class="value" id="ops-summary-stuck">0</div>
           </div>
           <div class="ops-mini-card">
             <div class="label">Sent 1h</div>
@@ -1033,15 +1049,34 @@
             <div class="value" id="ops-summary-failed-1h">0</div>
           </div>
           <div class="ops-mini-card">
-            <div class="label">Stuck Threads</div>
-            <div class="value" id="ops-summary-stuck">0</div>
-          </div>
-          <div class="ops-mini-card">
             <div class="label">Last Success</div>
             <div class="value" id="ops-summary-last-success">-</div>
           </div>
         </div>
         <div id="ops-summary-issues" class="ops-issues">No issues detected.</div>
+      </section>
+
+      <section class="card">
+        <div class="panel-title"><span>Backlog Queue</span><span class="mono">latest auto jobs with open outreach backlog</span></div>
+        <div id="ops-backlog-summary" class="ops-issues">No backlog queued.</div>
+        <div style="overflow:auto;">
+          <table>
+            <thead>
+              <tr>
+                <th>Queue</th>
+                <th>Candidate</th>
+                <th>Job</th>
+                <th>Score</th>
+                <th>Last Activity</th>
+                <th>Account</th>
+                <th>Open</th>
+              </tr>
+            </thead>
+            <tbody id="ops-backlog-tbody">
+              <tr><td colspan="7" class="muted">No backlog queued</td></tr>
+            </tbody>
+          </table>
+        </div>
       </section>
 
       <section class="card">
@@ -1051,18 +1086,20 @@
             <thead>
               <tr>
                 <th>Account</th>
-                <th>Health</th>
+                <th>Delivery</th>
+                <th>Backlog</th>
                 <th>Status</th>
                 <th>Active</th>
                 <th>Sent 1h/24h</th>
                 <th>Failed 1h/24h</th>
                 <th>Stuck</th>
+                <th>Stuck Candidates</th>
                 <th>Last Success</th>
                 <th>Last Error</th>
               </tr>
             </thead>
             <tbody id="ops-accounts-tbody">
-              <tr><td colspan="9" class="muted">No data yet</td></tr>
+              <tr><td colspan="11" class="muted">No data yet</td></tr>
             </tbody>
           </table>
         </div>
@@ -2211,13 +2248,13 @@
 
     function renderCaseyOutreachHealth() {
       const summary = (state.outreachOps || {}).summary || {};
-      applyHealthPill($("casey-health-pill"), summary.health || "unknown");
+      applyHealthPill($("casey-health-pill"), summary.delivery_health || summary.health || "unknown");
       $("casey-health-sent-1h").textContent = String(Number(summary.sent_1h || 0));
       $("casey-health-sent-24h").textContent = String(Number(summary.sent_24h || 0));
       $("casey-health-failed-1h").textContent = String(Number(summary.failed_1h || 0));
       $("casey-health-stuck").textContent = String(Number(summary.stuck_threads || 0));
       $("casey-health-last-success").textContent = formatTimestampCompact(summary.last_successful_send_at);
-      const issues = Array.isArray(summary.issues) ? summary.issues : [];
+      const issues = Array.isArray(summary.delivery_issues) ? summary.delivery_issues : (Array.isArray(summary.issues) ? summary.issues : []);
       $("casey-health-issues").textContent = issues.length
         ? issues.slice(0, 3).join(" • ")
         : "No blocking issues detected.";
@@ -2225,16 +2262,87 @@
 
     function renderOutreachOpsSummary() {
       const summary = (state.outreachOps || {}).summary || {};
+      const backlogSummary = ((state.outreachOps || {}).backlog || {}).summary || {};
       const activeAccounts = Number(summary.active_accounts || 0);
       const connectedAccounts = Number(summary.connected_accounts || 0);
-      const issues = Array.isArray(summary.issues) ? summary.issues : [];
-      applyHealthPill($("ops-summary-health"), summary.health || "unknown");
+      const deliveryIssues = Array.isArray(summary.delivery_issues) ? summary.delivery_issues : [];
+      const backlogIssues = Array.isArray(summary.backlog_issues) ? summary.backlog_issues : [];
+      applyHealthPill($("ops-summary-delivery-health"), summary.delivery_health || summary.health || "unknown");
+      applyHealthPill($("ops-summary-backlog-health"), summary.backlog_health || "unknown");
       $("ops-summary-active-accounts").textContent = `${activeAccounts}/${connectedAccounts}`;
+      $("ops-summary-new-threads").textContent = String(Number(backlogSummary.new_threads || 0));
+      $("ops-summary-waiting-connection").textContent = String(Number(backlogSummary.waiting_connection || summary.waiting_connection || 0));
       $("ops-summary-sent-1h").textContent = String(Number(summary.sent_1h || 0));
       $("ops-summary-failed-1h").textContent = String(Number(summary.failed_1h || 0));
-      $("ops-summary-stuck").textContent = String(Number(summary.stuck_threads || 0));
+      $("ops-summary-stuck").textContent = String(Number(backlogSummary.stuck_replies || summary.stuck_threads || 0));
       $("ops-summary-last-success").textContent = formatTimestampCompact(summary.last_successful_send_at);
+      const issues = [].concat(deliveryIssues, backlogIssues).filter(Boolean);
       $("ops-summary-issues").textContent = issues.length ? issues.join(" • ") : "No issues detected.";
+    }
+
+    function outreachAccountLabel(accountId) {
+      const accounts = Array.isArray((state.outreachOps || {}).accounts) ? state.outreachOps.accounts : [];
+      const row = accounts.find((item) => Number(item.account_id || 0) === Number(accountId || 0));
+      if (!row) return "-";
+      return `#${Number(row.account_id || 0)} ${String(row.label || "-")}`;
+    }
+
+    function renderOutreachBacklog() {
+      const body = $("ops-backlog-tbody");
+      const summaryEl = $("ops-backlog-summary");
+      if (!body || !summaryEl) return;
+      const backlog = (state.outreachOps || {}).backlog || {};
+      const summary = backlog.summary || {};
+      const items = Array.isArray(backlog.items) ? backlog.items : [];
+      const selectedJobs = Number(summary.selected_jobs || 0);
+      const summaryParts = [
+        `${Number(summary.new_threads || 0)} new threads`,
+        `${Number(summary.unassigned_recovery || 0)} recovery`,
+        `${Number(summary.waiting_connection || 0)} waiting connection`,
+        `${Number(summary.stuck_replies || 0)} stuck replies`,
+      ];
+      if (selectedJobs > 0) {
+        summaryParts.push(`${selectedJobs} job(s) in scope`);
+      }
+      summaryEl.textContent = summaryParts.join(" • ");
+      if (!items.length) {
+        body.innerHTML = '<tr><td colspan="7" class="muted">No backlog queued</td></tr>';
+        return;
+      }
+      body.innerHTML = items.map((row) => {
+        const queueType = String(row.queue_type || "unknown").replace(/_/g, " ");
+        const score = row.score == null ? "-" : Number(row.score).toFixed(2);
+        const candidate = escapeHtml(row.candidate_name || `Candidate ${row.candidate_id || "-"}`);
+        const jobTitle = escapeHtml(row.job_title || "-");
+        const jobLabel = Number(row.job_id || 0) > 0 ? `#${Number(row.job_id || 0)} ${jobTitle}` : jobTitle;
+        const lastActivity = formatTimestampCompact(row.last_message_at);
+        const accountLabel = Number(row.linkedin_account_id || 0) > 0 ? escapeHtml(outreachAccountLabel(row.linkedin_account_id)) : "-";
+        const conversationId = Number(row.conversation_id || 0);
+        const openButton = conversationId > 0
+          ? `<button class="ops-open-chat-btn" data-conversation-id="${conversationId}">Open</button>`
+          : '<span class="muted">-</span>';
+        return `
+          <tr>
+            <td>${escapeHtml(queueType)}</td>
+            <td>${candidate}</td>
+            <td>${jobLabel}</td>
+            <td class="mono">${escapeHtml(score)}</td>
+            <td class="mono">${escapeHtml(lastActivity)}</td>
+            <td>${accountLabel}</td>
+            <td>${openButton}</td>
+          </tr>
+        `;
+      }).join("");
+      document.querySelectorAll(".ops-open-chat-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const conversationId = Number(btn.dataset.conversationId || "0");
+          if (!conversationId) return;
+          state.agentConversationId = conversationId;
+          setActiveView("agent");
+          await refreshAgentWorkspace();
+          await openAgentConversation(conversationId);
+        });
+      });
     }
 
     function renderOutreachOpsAccounts() {
@@ -2242,34 +2350,57 @@
       if (!body) return;
       const rows = Array.isArray((state.outreachOps || {}).accounts) ? state.outreachOps.accounts : [];
       if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="9" class="muted">No LinkedIn account telemetry yet</td></tr>';
+        body.innerHTML = '<tr><td colspan="11" class="muted">No LinkedIn account telemetry yet</td></tr>';
         return;
       }
       body.innerHTML = rows.map((row) => {
         const accountLabel = `#${Number(row.account_id || 0)} ${escapeHtml(row.label || "-")}`;
         const provider = escapeHtml(row.provider_account_id || "-");
         const status = escapeHtml(row.status || "-");
-        const health = String(row.health || "unknown").toLowerCase();
+        const deliveryHealth = String(row.delivery_health || row.health || "unknown").toLowerCase();
+        const backlogHealth = String(row.backlog_health || "unknown").toLowerCase();
         const sentPair = `${Number(row.sent_1h || 0)}/${Number(row.sent_24h || 0)}`;
         const failedPair = `${Number(row.failed_1h || 0)}/${Number(row.failed_24h || 0)}`;
         const active = Number(row.active_conversations || 0);
         const stuck = Number(row.stuck_threads || 0);
         const lastSuccess = formatTimestampCompact(row.last_send_at);
         const lastError = escapeHtml(shortText(row.last_error || "-", 90));
+        const stuckCandidates = Array.isArray(row.stuck_candidates) ? row.stuck_candidates : [];
+        const stuckMarkup = stuckCandidates.length
+          ? stuckCandidates.slice(0, 3).map((item) => {
+              const conversationId = Number(item.conversation_id || 0);
+              const label = escapeHtml(item.candidate_name || `Candidate ${item.candidate_id || "-"}`);
+              return conversationId > 0
+                ? `<button class="ops-open-chat-inline" data-conversation-id="${conversationId}">${label}</button>`
+                : `<span>${label}</span>`;
+            }).join('<span class="muted"> • </span>')
+          : '<span class="muted">-</span>';
         return `
           <tr>
             <td><div>${accountLabel}</div><div class="muted mono" style="font-size:11px;">${provider}</div></td>
-            <td><span class="health-pill ${escapeHtml(health)}">${escapeHtml(health)}</span></td>
+            <td><span class="health-pill ${escapeHtml(deliveryHealth)}">${escapeHtml(deliveryHealth)}</span></td>
+            <td><span class="health-pill ${escapeHtml(backlogHealth)}">${escapeHtml(backlogHealth)}</span></td>
             <td>${status}</td>
             <td class="mono">${active}</td>
             <td class="mono">${sentPair}</td>
             <td class="mono">${failedPair}</td>
             <td class="mono">${stuck}</td>
+            <td>${stuckMarkup}</td>
             <td class="mono">${lastSuccess}</td>
             <td class="mono">${lastError}</td>
           </tr>
         `;
       }).join("");
+      document.querySelectorAll(".ops-open-chat-inline").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const conversationId = Number(btn.dataset.conversationId || "0");
+          if (!conversationId) return;
+          state.agentConversationId = conversationId;
+          setActiveView("agent");
+          await refreshAgentWorkspace();
+          await openAgentConversation(conversationId);
+        });
+      });
     }
 
     function renderOutreachOpsEvents() {
@@ -2307,21 +2438,27 @@
         state.outreachOps = {
           summary: {
             health: "critical",
+            delivery_health: "critical",
+            backlog_health: "warning",
             sent_1h: 0,
             sent_24h: 0,
             failed_1h: 0,
             stuck_threads: 0,
             last_successful_send_at: null,
             issues: [String(e.message || "failed_to_load_outreach_ops")],
+            delivery_issues: [String(e.message || "failed_to_load_outreach_ops")],
+            backlog_issues: [],
             active_accounts: 0,
             connected_accounts: 0,
           },
+          backlog: { summary: {}, jobs: [], items: [] },
           accounts: [],
           events: [],
         };
       }
       renderCaseyOutreachHealth();
       renderOutreachOpsSummary();
+      renderOutreachBacklog();
       renderOutreachOpsAccounts();
       renderOutreachOpsEvents();
     }

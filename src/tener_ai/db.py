@@ -748,6 +748,79 @@ class Database:
             )
         return items
 
+    def list_job_outreach_candidates(self, job_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 200), 2000))
+        query = """
+        SELECT
+            m.id AS match_id,
+            m.job_id,
+            m.score,
+            m.status,
+            m.verification_notes,
+            j.title AS job_title,
+            c.id AS candidate_id,
+            c.linkedin_id,
+            c.linkedin_public_url,
+            c.full_name,
+            c.headline,
+            c.location,
+            c.languages,
+            c.skills,
+            c.years_experience,
+            conv.id AS conversation_id,
+            conv.status AS conversation_status,
+            conv.external_chat_id,
+            conv.linkedin_account_id,
+            conv.last_message_at,
+            prs.session_id AS pre_resume_session_id,
+            prs.status AS pre_resume_status,
+            prs.next_followup_at AS pre_resume_next_followup_at,
+            (
+                SELECT msg.direction
+                FROM messages msg
+                WHERE msg.conversation_id = conv.id
+                ORDER BY msg.id DESC
+                LIMIT 1
+            ) AS last_message_direction,
+            (
+                SELECT msg.created_at
+                FROM messages msg
+                WHERE msg.conversation_id = conv.id
+                ORDER BY msg.id DESC
+                LIMIT 1
+            ) AS last_message_created_at
+        FROM candidate_job_matches m
+        JOIN jobs j ON j.id = m.job_id
+        JOIN candidates c ON c.id = m.candidate_id
+        LEFT JOIN conversations conv ON conv.id = (
+            SELECT c2.id
+            FROM conversations c2
+            WHERE c2.job_id = m.job_id
+              AND c2.candidate_id = m.candidate_id
+            ORDER BY c2.id DESC
+            LIMIT 1
+        )
+        LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+        WHERE m.job_id = ?
+          AND m.status IN ('verified', 'needs_resume')
+          AND NOT EXISTS (
+              SELECT 1
+              FROM outbound_actions oa
+              WHERE oa.job_id = m.job_id
+                AND oa.candidate_id = m.candidate_id
+                AND oa.status IN ('pending', 'running')
+          )
+        ORDER BY m.score DESC, m.id DESC
+        LIMIT ?
+        """
+        rows = self._conn.execute(query, (int(job_id), safe_limit)).fetchall()
+        items = [self._row_to_dict(r) for r in rows]
+        for item in items:
+            key, label = self._derive_candidate_current_status(item)
+            item["current_status_key"] = key
+            item["current_status_label"] = label
+        return items
+
     def get_candidate_match(self, job_id: int, candidate_id: int) -> Optional[Dict[str, Any]]:
         row = self._conn.execute(
             """
@@ -1308,6 +1381,70 @@ class Database:
         FROM outbound_actions
         WHERE {' AND '.join(where_parts)}
         ORDER BY priority DESC, id ASC
+        LIMIT ?
+        """
+        args.append(safe_limit)
+        rows = self._conn.execute(query, tuple(args)).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def list_unassigned_outreach_conversations(
+        self,
+        *,
+        limit: int = 200,
+        job_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 200), 2000))
+        where_parts = [
+            "prs.status = 'awaiting_reply'",
+            "COALESCE(conv.linkedin_account_id, 0) = 0",
+            "COALESCE(conv.external_chat_id, '') = ''",
+            "conv.status IN ('active', 'waiting_connection')",
+            "NOT EXISTS (SELECT 1 FROM outbound_actions oa WHERE oa.conversation_id = conv.id AND oa.status IN ('pending', 'running'))",
+        ]
+        args: List[Any] = []
+        if job_id is not None:
+            where_parts.append("conv.job_id = ?")
+            args.append(int(job_id))
+        query = f"""
+        SELECT
+            conv.id AS conversation_id,
+            conv.job_id,
+            conv.candidate_id,
+            conv.status AS conversation_status,
+            conv.external_chat_id,
+            conv.linkedin_account_id,
+            conv.last_message_at,
+            j.title AS job_title,
+            c.full_name AS candidate_name,
+            prs.session_id AS pre_resume_session_id,
+            prs.status AS pre_resume_status,
+            (
+                SELECT m.content
+                FROM messages m
+                WHERE m.conversation_id = conv.id AND m.direction = 'outbound'
+                ORDER BY m.id DESC
+                LIMIT 1
+            ) AS last_outbound_message,
+            (
+                SELECT m.candidate_language
+                FROM messages m
+                WHERE m.conversation_id = conv.id AND m.direction = 'outbound'
+                ORDER BY m.id DESC
+                LIMIT 1
+            ) AS last_outbound_language,
+            (
+                SELECT m.meta
+                FROM messages m
+                WHERE m.conversation_id = conv.id AND m.direction = 'outbound'
+                ORDER BY m.id DESC
+                LIMIT 1
+            ) AS last_outbound_meta
+        FROM conversations conv
+        JOIN jobs j ON j.id = conv.job_id
+        JOIN candidates c ON c.id = conv.candidate_id
+        JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+        WHERE {' AND '.join(where_parts)}
+        ORDER BY conv.last_message_at DESC, conv.id DESC
         LIMIT ?
         """
         args.append(safe_limit)

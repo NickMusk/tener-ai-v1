@@ -143,6 +143,9 @@ class OutreachOpsApiTests(unittest.TestCase):
         status, payload = self._request("GET", "/api/outreach/ops?stale_minutes=30")
         self.assertEqual(status, 200)
         summary = payload.get("summary") or {}
+        self.assertEqual(str(summary.get("delivery_health") or ""), "warning")
+        self.assertEqual(str(summary.get("backlog_health") or ""), "warning")
+        self.assertEqual(str(summary.get("health") or ""), "warning")
         self.assertEqual(int(summary.get("sent_24h") or 0), 1)
         self.assertEqual(int(summary.get("failed_24h") or 0), 1)
         self.assertEqual(int(summary.get("stuck_threads") or 0), 1)
@@ -152,6 +155,18 @@ class OutreachOpsApiTests(unittest.TestCase):
         by_id = {int(item.get("account_id") or 0): item for item in accounts}
         self.assertEqual(int((by_id.get(account_1) or {}).get("sent_24h") or 0), 1)
         self.assertEqual(int((by_id.get(account_2) or {}).get("failed_24h") or 0), 1)
+        self.assertEqual(str((by_id.get(account_1) or {}).get("delivery_health") or ""), "ok")
+        self.assertEqual(str((by_id.get(account_1) or {}).get("backlog_health") or ""), "warning")
+        stuck_candidates = (by_id.get(account_1) or {}).get("stuck_candidates") or []
+        self.assertEqual(len(stuck_candidates), 1)
+        self.assertEqual(str(stuck_candidates[0].get("candidate_name") or ""), "Ops Candidate 1")
+        self.assertEqual(int(stuck_candidates[0].get("conversation_id") or 0), conversation_1)
+
+        backlog = payload.get("backlog") or {}
+        backlog_summary = backlog.get("summary") or {}
+        self.assertEqual(int(backlog_summary.get("stuck_replies") or 0), 1)
+        backlog_items = backlog.get("items") or []
+        self.assertTrue(any(str(item.get("queue_type") or "") == "stuck_reply" for item in backlog_items))
 
     def test_outreach_ops_counts_active_accounts_from_conversation_mapping(self) -> None:
         account_id = self.db.upsert_linkedin_account(
@@ -197,6 +212,72 @@ class OutreachOpsApiTests(unittest.TestCase):
         summary = payload.get("summary") or {}
         self.assertEqual(int(summary.get("active_accounts") or 0), 1)
         self.assertEqual(int(summary.get("active_conversations") or 0), 1)
+
+    def test_outreach_ops_lists_new_thread_backlog_for_latest_auto_jobs_only(self) -> None:
+        old_job_id = self.db.insert_job(
+            title="Old Auto Job",
+            jd_text="Need QA experience.",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="junior",
+            linkedin_routing_mode="auto",
+        )
+        manual_job_id = self.db.insert_job(
+            title="Manual Job",
+            jd_text="Need QA experience.",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="junior",
+            linkedin_routing_mode="manual",
+        )
+        new_job_id = self.db.insert_job(
+            title="New Auto Job",
+            jd_text="Need QA experience.",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="junior",
+            linkedin_routing_mode="auto",
+        )
+
+        def _add_match(job_id: int, suffix: str, score: float) -> None:
+            candidate_id = self.db.upsert_candidate(
+                {
+                    "linkedin_id": f"ops-backlog-{suffix}",
+                    "full_name": f"Backlog Candidate {suffix}",
+                    "headline": "QA",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["qa"],
+                    "years_experience": 4,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+            self.db.create_candidate_match(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                score=score,
+                status="verified",
+                verification_notes={},
+            )
+
+        _add_match(old_job_id, "old", 0.71)
+        _add_match(manual_job_id, "manual", 0.99)
+        _add_match(new_job_id, "high", 0.93)
+        _add_match(new_job_id, "low", 0.62)
+
+        status, payload = self._request("GET", "/api/outreach/ops?stale_minutes=45")
+        self.assertEqual(status, 200)
+        backlog = payload.get("backlog") or {}
+        jobs = backlog.get("jobs") or []
+        self.assertGreaterEqual(len(jobs), 2)
+        self.assertEqual(int(jobs[0].get("job_id") or 0), new_job_id)
+        self.assertTrue(all(int(item.get("job_id") or 0) != manual_job_id for item in jobs))
+
+        items = [item for item in (backlog.get("items") or []) if str(item.get("queue_type") or "") == "new_thread"]
+        self.assertTrue(items)
+        self.assertEqual(int(items[0].get("job_id") or 0), new_job_id)
+        self.assertEqual(str(items[0].get("candidate_name") or ""), "Backlog Candidate high")
 
 
 if __name__ == "__main__":
