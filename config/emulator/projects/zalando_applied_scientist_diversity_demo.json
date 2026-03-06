@@ -1,0 +1,5963 @@
+{
+  "id": "zalando-applied-scientist-diversity-2025",
+  "company": "Zalando",
+  "role": "Senior Applied Scientist",
+  "year": "2025",
+  "companyProfile": {
+    "values": [
+      "Diversity and inclusion as core engineering principle",
+      "Radical collaboration across distributed teams",
+      "Data driven decision making at scale",
+      "Continuous learning and knowledge sharing"
+    ],
+    "upsides": [
+      "150M+ active customers, massive scale ML problems",
+      "World class applied science team in Berlin",
+      "Strong publication culture (NeurIPS, ICML, RecSys)",
+      "Competitive package with Berlin cost of living advantage"
+    ],
+    "downsides": [
+      "Work Council negotiations required for new AI tooling",
+      "Complex stakeholder matrix across tech and business",
+      "Hiring bar extremely high (bar raiser process inspired by Amazon)"
+    ],
+    "idealTraits": [
+      "Deep expertise in recommendation systems, personalization, or dynamic pricing",
+      "Track record of shipping ML models at scale (10M+ users)",
+      "Strong publication record or equivalent open source contributions",
+      "Experience bridging research and production",
+      "Collaborative mindset, ability to mentor and raise the bar"
+    ]
+  },
+  "candidates": [
+    {
+      "id": "elena-voronova",
+      "name": "Elena Voronova",
+      "location": "Berlin, Germany",
+      "experience": "9 years",
+      "currentScore": 88.0,
+      "currentConfidence": 78.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "elena-voronova-sig-01",
+          "title": "LinkedIn: Senior ML Engineer at Delivery Hero",
+          "detail": "LinkedIn: Senior ML Engineer at Delivery Hero, 3 years",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "elena-voronova-sig-02",
+          "title": "Led personalization team of 6",
+          "detail": "Led personalization team of 6, CV says 'contributed to personalization efforts'",
+          "category": "cv_consistency",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "elena-voronova-sig-03",
+          "title": "GitHub: 2.1k stars on recommendation engine library she authored",
+          "detail": "GitHub: 2.1k stars on recommendation engine library she authored",
+          "category": "github_activity",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "elena-voronova-sig-04",
+          "title": "Published 2 RecSys papers",
+          "detail": "Published 2 RecSys papers, LinkedIn mentions neither",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "maria-santos-silva",
+      "name": "Maria Santos Silva",
+      "location": "Lisbon, Portugal",
+      "experience": "7 years",
+      "currentScore": 72.0,
+      "currentConfidence": 65.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "maria-santos-silva-sig-01",
+          "title": "LinkedIn: Applied Scientist at Farfetch",
+          "detail": "LinkedIn: Applied Scientist at Farfetch, fashion domain expertise",
+          "category": "linkedin_profile_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "maria-santos-silva-sig-02",
+          "title": "Built size recommendation model serving 8M users",
+          "detail": "Built size recommendation model serving 8M users",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "maria-santos-silva-sig-03",
+          "title": "CV underrepresents scope: managed 4 person ML team",
+          "detail": "CV underrepresents scope: managed 4 person ML team",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "anna-berg",
+      "name": "Anna Berg",
+      "location": "Stockholm, Sweden",
+      "experience": "11 years",
+      "currentScore": 82.0,
+      "currentConfidence": 71.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "anna-berg-sig-01",
+          "title": "LinkedIn: Principal Data Scientist at Klarna",
+          "detail": "LinkedIn: Principal Data Scientist at Klarna",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "anna-berg-sig-02",
+          "title": "Built fraud detection models",
+          "detail": "Built fraud detection models, transferable to pricing optimization",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "anna-berg-sig-03",
+          "title": "Patent holder on sequential decision models",
+          "detail": "Patent holder on sequential decision models",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "sophie-laurent",
+      "name": "Sophie Laurent",
+      "location": "Paris, France",
+      "experience": "8 years",
+      "currentScore": 69.0,
+      "currentConfidence": 58.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "sophie-laurent-sig-01",
+          "title": "LinkedIn: ML Engineer at Criteo",
+          "detail": "LinkedIn: ML Engineer at Criteo, ad ranking systems",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "sophie-laurent-sig-02",
+          "title": "Deep experience with large scale recommendation at 100M+ DAU",
+          "detail": "Deep experience with large scale recommendation at 100M+ DAU",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "sophie-laurent-sig-03",
+          "title": "Modest CV framing despite leading a team of 5",
+          "detail": "Modest CV framing despite leading a team of 5",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "katarina-novak",
+      "name": "Katarina Novak",
+      "location": "Prague, Czech Republic",
+      "experience": "6 years",
+      "currentScore": 64.0,
+      "currentConfidence": 52.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "katarina-novak-sig-01",
+          "title": "LinkedIn: Data Scientist at Shoptet (Czech e-commerce)",
+          "detail": "LinkedIn: Data Scientist at Shoptet (Czech e-commerce)",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "katarina-novak-sig-02",
+          "title": "Built product ranking from scratch for 40k merchants",
+          "detail": "Built product ranking from scratch for 40k merchants",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "katarina-novak-sig-03",
+          "title": "Salary expectation 20% below Berlin market",
+          "detail": "Salary expectation 20% below Berlin market, adjusted for experience",
+          "category": "skills_depth",
+          "impact": -2,
+          "sentiment": "negative"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "lisa-muller",
+      "name": "Lisa Muller",
+      "location": "Munich, Germany",
+      "experience": "10 years",
+      "currentScore": 76.0,
+      "currentConfidence": 68.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "lisa-muller-sig-01",
+          "title": "LinkedIn: Senior Applied Scientist at BMW",
+          "detail": "LinkedIn: Senior Applied Scientist at BMW, computer vision + NLP",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "lisa-muller-sig-02",
+          "title": "Cross domain transfer potential: automotive to fashion",
+          "detail": "Cross domain transfer potential: automotive to fashion",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "lisa-muller-sig-03",
+          "title": "Strong systems engineering background",
+          "detail": "Strong systems engineering background, production ML",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "iulia-marinescu",
+      "name": "Iulia Marinescu",
+      "location": "Bucharest, Romania",
+      "experience": "7 years",
+      "currentScore": 71.0,
+      "currentConfidence": 61.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "iulia-marinescu-sig-01",
+          "title": "LinkedIn: ML Engineer at UiPath",
+          "detail": "LinkedIn: ML Engineer at UiPath, NLP and entity extraction",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "iulia-marinescu-sig-02",
+          "title": "Published 1 ACL paper on multilingual embeddings",
+          "detail": "Published 1 ACL paper on multilingual embeddings",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "iulia-marinescu-sig-03",
+          "title": "CV lists 'data science' but actual work is research grade",
+          "detail": "CV lists 'data science' but actual work is research grade",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "emma-johansson",
+      "name": "Emma Johansson",
+      "location": "Gothenburg, Sweden",
+      "experience": "5 years",
+      "currentScore": 61.0,
+      "currentConfidence": 48.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "emma-johansson-sig-01",
+          "title": "LinkedIn: Data Scientist at H&M Group",
+          "detail": "LinkedIn: Data Scientist at H&M Group",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "emma-johansson-sig-02",
+          "title": "Direct fashion retail ML experience",
+          "detail": "Direct fashion retail ML experience, demand forecasting",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "emma-johansson-sig-03",
+          "title": "Smaller scale than Zalando but domain aligned",
+          "detail": "Smaller scale than Zalando but domain aligned",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "nadia-kowalska",
+      "name": "Nadia Kowalska",
+      "location": "Warsaw, Poland",
+      "experience": "8 years",
+      "currentScore": 74.0,
+      "currentConfidence": 63.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "nadia-kowalska-sig-01",
+          "title": "LinkedIn: Senior Data Scientist at Allegro (Polish e-commerce)",
+          "detail": "LinkedIn: Senior Data Scientist at Allegro (Polish e-commerce)",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "nadia-kowalska-sig-02",
+          "title": "Recommendation systems at 20M user scale",
+          "detail": "Recommendation systems at 20M user scale",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "nadia-kowalska-sig-03",
+          "title": "CV says 'supported search ranking project'",
+          "detail": "CV says 'supported search ranking project', actually led it",
+          "category": "cv_consistency",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "sara-eriksson",
+      "name": "Sara Eriksson",
+      "location": "Helsinki, Finland",
+      "experience": "9 years",
+      "currentScore": 68.0,
+      "currentConfidence": 55.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "sara-eriksson-sig-01",
+          "title": "LinkedIn: Applied ML Researcher at Nokia Bell Labs",
+          "detail": "LinkedIn: Applied ML Researcher at Nokia Bell Labs",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "sara-eriksson-sig-02",
+          "title": "Strong theoretical foundation",
+          "detail": "Strong theoretical foundation, 5 publications",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "sara-eriksson-sig-03",
+          "title": "Looking for industry transition",
+          "detail": "Looking for industry transition, motivated by impact",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "chiara-rossi",
+      "name": "Chiara Rossi",
+      "location": "Milan, Italy",
+      "experience": "6 years",
+      "currentScore": 63.0,
+      "currentConfidence": 50.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "chiara-rossi-sig-01",
+          "title": "LinkedIn: ML Engineer at YOOX NET A PORTER",
+          "detail": "LinkedIn: ML Engineer at YOOX NET A PORTER",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "chiara-rossi-sig-02",
+          "title": "Fashion + ML intersection",
+          "detail": "Fashion + ML intersection, visual search systems",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "chiara-rossi-sig-03",
+          "title": "Describes herself as 'junior' despite 6 years and team lead role",
+          "detail": "Describes herself as 'junior' despite 6 years and team lead role",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "marta-garcia",
+      "name": "Marta Garcia Fernandez",
+      "location": "Madrid, Spain",
+      "experience": "8 years",
+      "currentScore": 70.0,
+      "currentConfidence": 60.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "marta-garcia-sig-01",
+          "title": "LinkedIn: Data Scientist at Inditex (Zara parent)",
+          "detail": "LinkedIn: Data Scientist at Inditex (Zara parent)",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "marta-garcia-sig-02",
+          "title": "Inventory optimization ML",
+          "detail": "Inventory optimization ML, directly relevant to fashion retail",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "marta-garcia-sig-03",
+          "title": "CV mentions 'analytics' but builds production ML pipelines",
+          "detail": "CV mentions 'analytics' but builds production ML pipelines",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dr-yue-chen",
+      "name": "Dr. Yue Chen",
+      "location": "Zurich, Switzerland",
+      "experience": "6 years (4 PhD + 2 postdoc)",
+      "currentScore": 91.0,
+      "currentConfidence": 82.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-yue-chen-sig-01",
+          "title": "Academia: ETH Zurich postdoc",
+          "detail": "Academia: ETH Zurich postdoc, recommendation systems",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-yue-chen-sig-02",
+          "title": "7 publications including NeurIPS spotlight on personalization",
+          "detail": "7 publications including NeurIPS spotlight on personalization",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-yue-chen-sig-03",
+          "title": "Google Scholar h-index 14",
+          "detail": "Google Scholar h-index 14, CV mentions only 'research experience'",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-yue-chen-sig-04",
+          "title": "Kaggle: top 1% in RecSys Challenge 2024",
+          "detail": "Kaggle: top 1% in RecSys Challenge 2024",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-yue-chen-sig-05",
+          "title": "Ready for industry: applied for Zalando previously but was filtered b...",
+          "detail": "Ready for industry: applied for Zalando previously but was filtered by keyword matching",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "dr-fatima-al-rashidi",
+      "name": "Dr. Fatima Al Rashidi",
+      "location": "London, UK",
+      "experience": "5 years (4 PhD + 1 industry)",
+      "currentScore": 79.0,
+      "currentConfidence": 70.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-fatima-al-rashidi-sig-01",
+          "title": "Academia: Imperial College PhD in causal inference for pricing",
+          "detail": "Academia: Imperial College PhD in causal inference for pricing",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-fatima-al-rashidi-sig-02",
+          "title": "3 papers on dynamic pricing under uncertainty",
+          "detail": "3 papers on dynamic pricing under uncertainty",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-fatima-al-rashidi-sig-03",
+          "title": "1 year at Deliveroo applying research to production",
+          "detail": "1 year at Deliveroo applying research to production",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-fatima-al-rashidi-sig-04",
+          "title": "CV does not mention Deliveroo pricing impact: 3% revenue uplift",
+          "detail": "CV does not mention Deliveroo pricing impact: 3% revenue uplift",
+          "category": "cv_consistency",
+          "impact": -2,
+          "sentiment": "negative"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "dr-ingrid-hoffmann",
+      "name": "Dr. Ingrid Hoffmann",
+      "location": "Berlin, Germany",
+      "experience": "7 years (4 PhD + 3 postdoc)",
+      "currentScore": 85.0,
+      "currentConfidence": 75.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-ingrid-hoffmann-sig-01",
+          "title": "Academia: Max Planck Institute",
+          "detail": "Academia: Max Planck Institute, causal ML",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-ingrid-hoffmann-sig-02",
+          "title": "Published 9 papers",
+          "detail": "Published 9 papers, 3 on fairness aware recommendation",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "dr-ingrid-hoffmann-sig-03",
+          "title": "Directly relevant to Zalando's bias concerns",
+          "detail": "Directly relevant to Zalando's bias concerns",
+          "category": "skills_match",
+          "impact": -2,
+          "sentiment": "negative"
+        },
+        {
+          "id": "dr-ingrid-hoffmann-sig-04",
+          "title": "Teaching experience shows mentorship ability",
+          "detail": "Teaching experience shows mentorship ability",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "dr-mei-lin-wang",
+      "name": "Dr. Mei Lin Wang",
+      "location": "Amsterdam, Netherlands",
+      "experience": "5 years (4 PhD + 1 postdoc)",
+      "currentScore": 77.0,
+      "currentConfidence": 66.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-mei-lin-wang-sig-01",
+          "title": "Academia: University of Amsterdam",
+          "detail": "Academia: University of Amsterdam, information retrieval",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-mei-lin-wang-sig-02",
+          "title": "4 SIGIR papers on e-commerce search ranking",
+          "detail": "4 SIGIR papers on e-commerce search ranking",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-mei-lin-wang-sig-03",
+          "title": "Collaborated with Booking.com on search relevance",
+          "detail": "Collaborated with Booking.com on search relevance",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dr-olga-petrova",
+      "name": "Dr. Olga Petrova",
+      "location": "Munich, Germany",
+      "experience": "6 years (4 PhD + 2 industry)",
+      "currentScore": 73.0,
+      "currentConfidence": 62.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-olga-petrova-sig-01",
+          "title": "Academia: TU Munich PhD in computer vision",
+          "detail": "Academia: TU Munich PhD in computer vision",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-olga-petrova-sig-02",
+          "title": "2 years at Siemens applied research",
+          "detail": "2 years at Siemens applied research",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-olga-petrova-sig-03",
+          "title": "Visual similarity models applicable to fashion search",
+          "detail": "Visual similarity models applicable to fashion search",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dr-amara-okafor",
+      "name": "Dr. Amara Okafor",
+      "location": "Edinburgh, UK",
+      "experience": "5 years (4 PhD + 1 postdoc)",
+      "currentScore": 75.0,
+      "currentConfidence": 64.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-amara-okafor-sig-01",
+          "title": "Academia: University of Edinburgh",
+          "detail": "Academia: University of Edinburgh, NLP and multilingual models",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-amara-okafor-sig-02",
+          "title": "Research on low resource language understanding",
+          "detail": "Research on low resource language understanding",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-amara-okafor-sig-03",
+          "title": "Relevant for Zalando's 25+ market localization challenge",
+          "detail": "Relevant for Zalando's 25+ market localization challenge",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dr-lucia-bianchi",
+      "name": "Dr. Lucia Bianchi",
+      "location": "Turin, Italy",
+      "experience": "8 years (4 PhD + 4 research)",
+      "currentScore": 70.0,
+      "currentConfidence": 58.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-lucia-bianchi-sig-01",
+          "title": "Academia: Politecnico di Torino",
+          "detail": "Academia: Politecnico di Torino, graph neural networks",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-lucia-bianchi-sig-02",
+          "title": "4 years at ISI Foundation on social network analysis",
+          "detail": "4 years at ISI Foundation on social network analysis",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-lucia-bianchi-sig-03",
+          "title": "GNN expertise applicable to customer behavior modeling",
+          "detail": "GNN expertise applicable to customer behavior modeling",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dr-priya-sharma",
+      "name": "Dr. Priya Sharma",
+      "location": "Cambridge, UK",
+      "experience": "6 years (4 PhD + 2 postdoc)",
+      "currentScore": 80.0,
+      "currentConfidence": 72.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-priya-sharma-sig-01",
+          "title": "Academia: Cambridge",
+          "detail": "Academia: Cambridge, Bayesian optimization for A/B testing",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-priya-sharma-sig-02",
+          "title": "5 papers on experiment design at scale",
+          "detail": "5 papers on experiment design at scale",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-priya-sharma-sig-03",
+          "title": "Consulted for ASOS on experimentation platform",
+          "detail": "Consulted for ASOS on experimentation platform",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-priya-sharma-sig-04",
+          "title": "CV says 'research assistant' for work where she was lead author",
+          "detail": "CV says 'research assistant' for work where she was lead author",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "alexandra-fischer",
+      "name": "Alexandra Fischer",
+      "location": "Frankfurt, Germany",
+      "experience": "10 years",
+      "currentScore": 78.0,
+      "currentConfidence": 67.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "alexandra-fischer-sig-01",
+          "title": "Adjacent: Senior Quantitative Analyst at Deutsche Bank",
+          "detail": "Adjacent: Senior Quantitative Analyst at Deutsche Bank",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "alexandra-fischer-sig-02",
+          "title": "Pricing models under uncertainty",
+          "detail": "Pricing models under uncertainty, directly transferable",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "alexandra-fischer-sig-03",
+          "title": "Python/PyTorch production stack",
+          "detail": "Python/PyTorch production stack, deploys models at scale",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "alexandra-fischer-sig-04",
+          "title": "Looking to leave finance for purpose driven tech",
+          "detail": "Looking to leave finance for purpose driven tech",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "nina-andersen",
+      "name": "Nina Andersen",
+      "location": "Copenhagen, Denmark",
+      "experience": "8 years",
+      "currentScore": 74.0,
+      "currentConfidence": 62.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "nina-andersen-sig-01",
+          "title": "Adjacent: Lead Data Scientist at Novo Nordisk (pharma)",
+          "detail": "Adjacent: Lead Data Scientist at Novo Nordisk (pharma)",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "nina-andersen-sig-02",
+          "title": "Patient segmentation models",
+          "detail": "Patient segmentation models, transferable to customer personalization",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "nina-andersen-sig-03",
+          "title": "Regulatory ML experience valuable for EU AI Act compliance",
+          "detail": "Regulatory ML experience valuable for EU AI Act compliance",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "jennifer-oconnor",
+      "name": "Jennifer O'Connor",
+      "location": "Dublin, Ireland",
+      "experience": "9 years",
+      "currentScore": 76.0,
+      "currentConfidence": 65.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "jennifer-oconnor-sig-01",
+          "title": "Adjacent: Applied Scientist at Stripe",
+          "detail": "Adjacent: Applied Scientist at Stripe, fraud and risk models",
+          "category": "skills_depth",
+          "impact": -2,
+          "sentiment": "negative"
+        },
+        {
+          "id": "jennifer-oconnor-sig-02",
+          "title": "Real time inference at massive scale",
+          "detail": "Real time inference at massive scale",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "jennifer-oconnor-sig-03",
+          "title": "Built model serving infra handling 1M+ predictions/sec",
+          "detail": "Built model serving infra handling 1M+ predictions/sec",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "ayse-demir",
+      "name": "Ayse Demir",
+      "location": "Istanbul, Turkey",
+      "experience": "7 years",
+      "currentScore": 71.0,
+      "currentConfidence": 59.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "ayse-demir-sig-01",
+          "title": "Adjacent: ML Engineer at Trendyol (Turkish fashion e-commerce)",
+          "detail": "Adjacent: ML Engineer at Trendyol (Turkish fashion e-commerce)",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "ayse-demir-sig-02",
+          "title": "Recommendation systems for 30M+ users",
+          "detail": "Recommendation systems for 30M+ users",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "ayse-demir-sig-03",
+          "title": "Direct fashion ML experience",
+          "detail": "Direct fashion ML experience, open to relocation",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "caroline-dubois",
+      "name": "Caroline Dubois",
+      "location": "Lyon, France",
+      "experience": "11 years",
+      "currentScore": 80.0,
+      "currentConfidence": 70.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "caroline-dubois-sig-01",
+          "title": "Adjacent: Director of ML at Veepee (flash sales platform)",
+          "detail": "Adjacent: Director of ML at Veepee (flash sales platform)",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "caroline-dubois-sig-02",
+          "title": "Demand forecasting and pricing at scale",
+          "detail": "Demand forecasting and pricing at scale",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "caroline-dubois-sig-03",
+          "title": "Led team of 12",
+          "detail": "Led team of 12, CV describes as 'senior individual contributor'",
+          "category": "cv_consistency",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "caroline-dubois-sig-04",
+          "title": "Salary expectation 15% below market for Director level",
+          "detail": "Salary expectation 15% below market for Director level",
+          "category": "skills_depth",
+          "impact": -2,
+          "sentiment": "negative"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "eva-lindgren",
+      "name": "Eva Lindgren",
+      "location": "Stockholm, Sweden",
+      "experience": "8 years",
+      "currentScore": 72.0,
+      "currentConfidence": 60.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "eva-lindgren-sig-01",
+          "title": "Adjacent: Applied Scientist at Ericsson",
+          "detail": "Adjacent: Applied Scientist at Ericsson, time series forecasting",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "eva-lindgren-sig-02",
+          "title": "Telco to retail transition",
+          "detail": "Telco to retail transition, strong fundamentals",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "eva-lindgren-sig-03",
+          "title": "Open source contributor to Prophet forecasting library",
+          "detail": "Open source contributor to Prophet forecasting library",
+          "category": "github_activity",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "hannah-weber",
+      "name": "Hannah Weber",
+      "location": "Vienna, Austria",
+      "experience": "7 years",
+      "currentScore": 68.0,
+      "currentConfidence": 56.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "hannah-weber-sig-01",
+          "title": "Adjacent: Senior Data Scientist at Runtastic (Adidas)",
+          "detail": "Adjacent: Senior Data Scientist at Runtastic (Adidas)",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "hannah-weber-sig-02",
+          "title": "User behavior modeling",
+          "detail": "User behavior modeling, engagement prediction",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "hannah-weber-sig-03",
+          "title": "Sports/fashion adjacent",
+          "detail": "Sports/fashion adjacent, understands consumer lifecycle",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "wei-zhang",
+      "name": "Wei Zhang",
+      "location": "Berlin, Germany",
+      "experience": "6 years",
+      "currentScore": 84.0,
+      "currentConfidence": 74.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "wei-zhang-sig-01",
+          "title": "Open source: maintainer of popular fashion embedding library (4.8k Gi...",
+          "detail": "Open source: maintainer of popular fashion embedding library (4.8k GitHub stars)",
+          "category": "github_activity",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "wei-zhang-sig-02",
+          "title": "Kaggle Grandmaster",
+          "detail": "Kaggle Grandmaster, top 0.5% globally",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "wei-zhang-sig-03",
+          "title": "LinkedIn profile minimal",
+          "detail": "LinkedIn profile minimal, no mention of open source work",
+          "category": "github_activity",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "wei-zhang-sig-04",
+          "title": "Current role: ML Engineer at small Berlin startup",
+          "detail": "Current role: ML Engineer at small Berlin startup, severely underleveled",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "zara-hussain",
+      "name": "Zara Hussain",
+      "location": "Manchester, UK",
+      "experience": "5 years",
+      "currentScore": 73.0,
+      "currentConfidence": 61.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "zara-hussain-sig-01",
+          "title": "Open source: core contributor to Hugging Face transformers library",
+          "detail": "Open source: core contributor to Hugging Face transformers library",
+          "category": "github_activity",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "zara-hussain-sig-02",
+          "title": "Focus on efficient inference and model compression",
+          "detail": "Focus on efficient inference and model compression",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "zara-hussain-sig-03",
+          "title": "Published 2 blog posts on production ML that went viral (50k reads each)",
+          "detail": "Published 2 blog posts on production ML that went viral (50k reads each)",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "zara-hussain-sig-04",
+          "title": "CV lists 'Python developer' as job title",
+          "detail": "CV lists 'Python developer' as job title",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "anja-keller",
+      "name": "Anja Keller",
+      "location": "Zurich, Switzerland",
+      "experience": "7 years",
+      "currentScore": 69.0,
+      "currentConfidence": 57.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "anja-keller-sig-01",
+          "title": "Open source: built product matching library used by 200+ companies",
+          "detail": "Open source: built product matching library used by 200+ companies",
+          "category": "github_activity",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "anja-keller-sig-02",
+          "title": "Kaggle Competition Master",
+          "detail": "Kaggle Competition Master, 3 gold medals in NLP",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "anja-keller-sig-03",
+          "title": "Works at mid size Swiss retailer",
+          "detail": "Works at mid size Swiss retailer, underleveled",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "maria-gonzalez",
+      "name": "Maria Gonzalez Ruiz",
+      "location": "Barcelona, Spain",
+      "experience": "6 years",
+      "currentScore": 75.0,
+      "currentConfidence": 63.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "maria-gonzalez-sig-01",
+          "title": "Kaggle: gold medal in H&M Personalized Fashion Recommendations",
+          "detail": "Kaggle: gold medal in H&M Personalized Fashion Recommendations",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "maria-gonzalez-sig-02",
+          "title": "Solution directly applicable to Zalando's recommendation engine",
+          "detail": "Solution directly applicable to Zalando's recommendation engine",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "maria-gonzalez-sig-03",
+          "title": "GitHub: 12 ML repos",
+          "detail": "GitHub: 12 ML repos, clean production quality code",
+          "category": "github_activity",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "maria-gonzalez-sig-04",
+          "title": "LinkedIn says 'Data Analyst' despite building production ML systems",
+          "detail": "LinkedIn says 'Data Analyst' despite building production ML systems",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "lena-kravchenko",
+      "name": "Lena Kravchenko",
+      "location": "Tallinn, Estonia",
+      "experience": "5 years",
+      "currentScore": 67.0,
+      "currentConfidence": 54.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "lena-kravchenko-sig-01",
+          "title": "Open source: contributor to LightFM recommendation library",
+          "detail": "Open source: contributor to LightFM recommendation library",
+          "category": "github_activity",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "lena-kravchenko-sig-02",
+          "title": "Built real time recommendation API handling 500k req/min",
+          "detail": "Built real time recommendation API handling 500k req/min",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "lena-kravchenko-sig-03",
+          "title": "Works at Bolt",
+          "detail": "Works at Bolt, high scale production experience",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "aisha-patel",
+      "name": "Aisha Patel",
+      "location": "London, UK",
+      "experience": "8 years",
+      "currentScore": 77.0,
+      "currentConfidence": 66.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "aisha-patel-sig-01",
+          "title": "Open source: author of bias detection toolkit for ML pipelines (3.2k...",
+          "detail": "Open source: author of bias detection toolkit for ML pipelines (3.2k stars)",
+          "category": "github_activity",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "aisha-patel-sig-02",
+          "title": "Kaggle Expert",
+          "detail": "Kaggle Expert, specializing in fairness aware ML",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "aisha-patel-sig-03",
+          "title": "Directly relevant to Zalando's AI bias concerns",
+          "detail": "Directly relevant to Zalando's AI bias concerns",
+          "category": "skills_match",
+          "impact": -2,
+          "sentiment": "negative"
+        },
+        {
+          "id": "aisha-patel-sig-04",
+          "title": "Currently at Monzo",
+          "detail": "Currently at Monzo, built credit scoring models",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "sarah-thompson",
+      "name": "Sarah Thompson",
+      "location": "London, UK",
+      "experience": "9 years",
+      "currentScore": 81.0,
+      "currentConfidence": 72.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "sarah-thompson-sig-01",
+          "title": "WiMLDS: organizer of London chapter",
+          "detail": "WiMLDS: organizer of London chapter, sourced via community network",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "sarah-thompson-sig-02",
+          "title": "Senior Applied Scientist at Spotify",
+          "detail": "Senior Applied Scientist at Spotify, personalization",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "sarah-thompson-sig-03",
+          "title": "Built discovery algorithm reaching 200M+ users",
+          "detail": "Built discovery algorithm reaching 200M+ users",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "sarah-thompson-sig-04",
+          "title": "Not actively looking",
+          "detail": "Not actively looking, but open to conversation about Zalando's mission",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "defne-yilmaz",
+      "name": "Defne Yilmaz",
+      "location": "Amsterdam, Netherlands",
+      "experience": "7 years",
+      "currentScore": 72.0,
+      "currentConfidence": 60.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "defne-yilmaz-sig-01",
+          "title": "Women in AI: speaker at Amsterdam meetup on ethical ML",
+          "detail": "Women in AI: speaker at Amsterdam meetup on ethical ML",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "defne-yilmaz-sig-02",
+          "title": "ML Engineer at Booking.com",
+          "detail": "ML Engineer at Booking.com, ranking and personalization",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "defne-yilmaz-sig-03",
+          "title": "Mentioned interest in fashion tech at networking event",
+          "detail": "Mentioned interest in fashion tech at networking event",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "kasia-wozniak",
+      "name": "Kasia Wozniak",
+      "location": "Krakow, Poland",
+      "experience": "6 years",
+      "currentScore": 66.0,
+      "currentConfidence": 53.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "kasia-wozniak-sig-01",
+          "title": "PyLadies: active member",
+          "detail": "PyLadies: active member, workshop leader on production ML",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "kasia-wozniak-sig-02",
+          "title": "Data Scientist at CD Projekt Red",
+          "detail": "Data Scientist at CD Projekt Red, real time systems",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "kasia-wozniak-sig-03",
+          "title": "Non traditional background but strong technical skills verified via G...",
+          "detail": "Non traditional background but strong technical skills verified via GitHub",
+          "category": "github_activity",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "miriam-schneider",
+      "name": "Miriam Schneider",
+      "location": "Berlin, Germany",
+      "experience": "10 years",
+      "currentScore": 79.0,
+      "currentConfidence": 69.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "miriam-schneider-sig-01",
+          "title": "Women in Tech Berlin: keynote speaker on scaling ML teams",
+          "detail": "Women in Tech Berlin: keynote speaker on scaling ML teams",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "miriam-schneider-sig-02",
+          "title": "Head of Data Science at About You (fashion e-commerce)",
+          "detail": "Head of Data Science at About You (fashion e-commerce)",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "miriam-schneider-sig-03",
+          "title": "Direct competitor experience",
+          "detail": "Direct competitor experience, built recommendation engine from scratch",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "miriam-schneider-sig-04",
+          "title": "CV lists 'manager' but still codes 40% of the time",
+          "detail": "CV lists 'manager' but still codes 40% of the time",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "dr-sarah-klein",
+      "name": "Dr. Sarah Klein",
+      "location": "Berlin, Germany",
+      "experience": "12 years",
+      "currentScore": 92.0,
+      "currentConfidence": 85.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-sarah-klein-sig-01",
+          "title": "Conference: RecSys 2024 keynote on fairness in fashion recommendation",
+          "detail": "Conference: RecSys 2024 keynote on fairness in fashion recommendation",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "dr-sarah-klein-sig-02",
+          "title": "Staff Applied Scientist at Amazon",
+          "detail": "Staff Applied Scientist at Amazon, personalization team",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-sarah-klein-sig-03",
+          "title": "12 publications",
+          "detail": "12 publications, h-index 19",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-sarah-klein-sig-04",
+          "title": "Wants to leave Amazon for European company with better work life balance",
+          "detail": "Wants to leave Amazon for European company with better work life balance",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-sarah-klein-sig-05",
+          "title": "Not on LinkedIn recruiter radar due to restricted profile",
+          "detail": "Not on LinkedIn recruiter radar due to restricted profile",
+          "category": "linkedin_completeness",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "dr-ada-nilsson",
+      "name": "Dr. Ada Nilsson",
+      "location": "Stockholm, Sweden",
+      "experience": "8 years",
+      "currentScore": 83.0,
+      "currentConfidence": 74.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-ada-nilsson-sig-01",
+          "title": "Conference: NeurIPS 2024 workshop on causal inference for business",
+          "detail": "Conference: NeurIPS 2024 workshop on causal inference for business",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-ada-nilsson-sig-02",
+          "title": "Applied Scientist at Spotify",
+          "detail": "Applied Scientist at Spotify, experimentation platform",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-ada-nilsson-sig-03",
+          "title": "Built A/B testing framework used by 500+ engineers",
+          "detail": "Built A/B testing framework used by 500+ engineers",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "dr-ada-nilsson-sig-04",
+          "title": "Passionate about fair ML",
+          "detail": "Passionate about fair ML, perfect cultural fit",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "dr-chloe-martin",
+      "name": "Dr. Chloe Martin",
+      "location": "Paris, France",
+      "experience": "9 years",
+      "currentScore": 80.0,
+      "currentConfidence": 71.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-chloe-martin-sig-01",
+          "title": "Conference: ICML 2024 paper on multi objective optimization for marke...",
+          "detail": "Conference: ICML 2024 paper on multi objective optimization for marketplaces",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-chloe-martin-sig-02",
+          "title": "Lead Applied Scientist at Vestiaire Collective (luxury fashion resale)",
+          "detail": "Lead Applied Scientist at Vestiaire Collective (luxury fashion resale)",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-chloe-martin-sig-03",
+          "title": "Fashion domain + strong research",
+          "detail": "Fashion domain + strong research, rare combination",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "dr-chloe-martin-sig-04",
+          "title": "CV understates: 'data science lead' for a team that ships to 23 markets",
+          "detail": "CV understates: 'data science lead' for a team that ships to 23 markets",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dr-maximilian-braun",
+      "name": "Dr. Maximilian Braun",
+      "location": "Berlin, Germany",
+      "experience": "10 years",
+      "currentScore": 89.0,
+      "currentConfidence": 80.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-maximilian-braun-sig-01",
+          "title": "Staff Applied Scientist at About You",
+          "detail": "Staff Applied Scientist at About You",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-maximilian-braun-sig-02",
+          "title": "Built dynamic pricing engine",
+          "detail": "Built dynamic pricing engine, 15 publications",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "dr-maximilian-braun-sig-03",
+          "title": "Strong match but potential non compete issue",
+          "detail": "Strong match but potential non compete issue",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "anders-lindqvist",
+      "name": "Anders Lindqvist",
+      "location": "Stockholm, Sweden",
+      "experience": "12 years",
+      "currentScore": 86.0,
+      "currentConfidence": 78.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "anders-lindqvist-sig-01",
+          "title": "Principal Applied Scientist at Spotify",
+          "detail": "Principal Applied Scientist at Spotify",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "anders-lindqvist-sig-02",
+          "title": "Led recommendations team of 20",
+          "detail": "Led recommendations team of 20",
+          "category": "leadership_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "anders-lindqvist-sig-03",
+          "title": "Very polished CV",
+          "detail": "Very polished CV, accurately represents experience",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "dr-marco-ferrari",
+      "name": "Dr. Marco Ferrari",
+      "location": "Milan, Italy",
+      "experience": "9 years",
+      "currentScore": 83.0,
+      "currentConfidence": 75.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-marco-ferrari-sig-01",
+          "title": "Senior Applied Scientist at Amazon",
+          "detail": "Senior Applied Scientist at Amazon, Berlin office",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-marco-ferrari-sig-02",
+          "title": "RecSys specialist",
+          "detail": "RecSys specialist, 8 publications",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-marco-ferrari-sig-03",
+          "title": "Strong candidate",
+          "detail": "Strong candidate, standard sourcing channel",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "tomasz-kowalczyk",
+      "name": "Tomasz Kowalczyk",
+      "location": "Warsaw, Poland",
+      "experience": "8 years",
+      "currentScore": 80.0,
+      "currentConfidence": 72.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "tomasz-kowalczyk-sig-01",
+          "title": "Lead ML Engineer at Allegro",
+          "detail": "Lead ML Engineer at Allegro, search ranking",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "tomasz-kowalczyk-sig-02",
+          "title": "Scaled search to 20M users",
+          "detail": "Scaled search to 20M users, 5 patents",
+          "category": "leadership_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "tomasz-kowalczyk-sig-03",
+          "title": "Open to Berlin relocation",
+          "detail": "Open to Berlin relocation",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dr-jan-de-vries",
+      "name": "Dr. Jan de Vries",
+      "location": "Amsterdam, Netherlands",
+      "experience": "11 years",
+      "currentScore": 85.0,
+      "currentConfidence": 77.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-jan-de-vries-sig-01",
+          "title": "Principal Scientist at Booking.com",
+          "detail": "Principal Scientist at Booking.com, ranking team",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-jan-de-vries-sig-02",
+          "title": "14 publications on learning to rank",
+          "detail": "14 publications on learning to rank",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-jan-de-vries-sig-03",
+          "title": "Well known in European ML community",
+          "detail": "Well known in European ML community",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": true
+    },
+    {
+      "id": "felix-schmidt",
+      "name": "Felix Schmidt",
+      "location": "Berlin, Germany",
+      "experience": "7 years",
+      "currentScore": 78.0,
+      "currentConfidence": 68.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "felix-schmidt-sig-01",
+          "title": "Senior ML Engineer at Zalando (internal referral potential)",
+          "detail": "Senior ML Engineer at Zalando (internal referral potential)",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "felix-schmidt-sig-02",
+          "title": "Knows the codebase",
+          "detail": "Knows the codebase, looking for promotion to Applied Scientist",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "felix-schmidt-sig-03",
+          "title": "Strong performer but wants title change",
+          "detail": "Strong performer but wants title change",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "pierre-lefevre",
+      "name": "Pierre Lefevre",
+      "location": "Paris, France",
+      "experience": "9 years",
+      "currentScore": 79.0,
+      "currentConfidence": 70.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "pierre-lefevre-sig-01",
+          "title": "Applied Scientist at Dataiku",
+          "detail": "Applied Scientist at Dataiku",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "pierre-lefevre-sig-02",
+          "title": "AutoML and feature engineering expertise",
+          "detail": "AutoML and feature engineering expertise",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "pierre-lefevre-sig-03",
+          "title": "Published 3 papers on efficient model training",
+          "detail": "Published 3 papers on efficient model training",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dr-nikolai-petrov",
+      "name": "Dr. Nikolai Petrov",
+      "location": "Berlin, Germany",
+      "experience": "8 years",
+      "currentScore": 81.0,
+      "currentConfidence": 73.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-nikolai-petrov-sig-01",
+          "title": "Senior Applied Scientist at Delivery Hero",
+          "detail": "Senior Applied Scientist at Delivery Hero",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-nikolai-petrov-sig-02",
+          "title": "Logistics optimization and demand forecasting",
+          "detail": "Logistics optimization and demand forecasting",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-nikolai-petrov-sig-03",
+          "title": "PhD from TU Berlin in operations research",
+          "detail": "PhD from TU Berlin in operations research",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "liam-murphy",
+      "name": "Liam Murphy",
+      "location": "Dublin, Ireland",
+      "experience": "10 years",
+      "currentScore": 77.0,
+      "currentConfidence": 67.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "liam-murphy-sig-01",
+          "title": "Staff Engineer at Intercom",
+          "detail": "Staff Engineer at Intercom, ML platform",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "liam-murphy-sig-02",
+          "title": "Infrastructure focus",
+          "detail": "Infrastructure focus, model serving at scale",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "liam-murphy-sig-03",
+          "title": "Strong engineering but less research depth",
+          "detail": "Strong engineering but less research depth",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "sven-larsson",
+      "name": "Sven Larsson",
+      "location": "Gothenburg, Sweden",
+      "experience": "13 years",
+      "currentScore": 82.0,
+      "currentConfidence": 74.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "sven-larsson-sig-01",
+          "title": "Director of ML at H&M Group",
+          "detail": "Director of ML at H&M Group",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "sven-larsson-sig-02",
+          "title": "Fashion retail domain expertise at massive scale",
+          "detail": "Fashion retail domain expertise at massive scale",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "sven-larsson-sig-03",
+          "title": "Overqualified for IC role",
+          "detail": "Overqualified for IC role, might want management",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dr-ahmed-hassan",
+      "name": "Dr. Ahmed Hassan",
+      "location": "London, UK",
+      "experience": "7 years",
+      "currentScore": 76.0,
+      "currentConfidence": 66.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-ahmed-hassan-sig-01",
+          "title": "Applied Scientist at DeepMind",
+          "detail": "Applied Scientist at DeepMind",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-ahmed-hassan-sig-02",
+          "title": "Strong research but limited production experience",
+          "detail": "Strong research but limited production experience",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-ahmed-hassan-sig-03",
+          "title": "Interested in applied roles with real world impact",
+          "detail": "Interested in applied roles with real world impact",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "lucas-meyer",
+      "name": "Lucas Meyer",
+      "location": "Zurich, Switzerland",
+      "experience": "9 years",
+      "currentScore": 79.0,
+      "currentConfidence": 69.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "lucas-meyer-sig-01",
+          "title": "Senior Applied Scientist at Google",
+          "detail": "Senior Applied Scientist at Google, Zurich",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "lucas-meyer-sig-02",
+          "title": "Shopping recommendations",
+          "detail": "Shopping recommendations, directly relevant",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "lucas-meyer-sig-03",
+          "title": "High salary expectations",
+          "detail": "High salary expectations, might not fit Zalando band",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dmitri-volkov",
+      "name": "Dmitri Volkov",
+      "location": "Berlin, Germany",
+      "experience": "8 years",
+      "currentScore": 75.0,
+      "currentConfidence": 65.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dmitri-volkov-sig-01",
+          "title": "ML Engineer at Wayfair",
+          "detail": "ML Engineer at Wayfair, product recommendations",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dmitri-volkov-sig-02",
+          "title": "E-commerce experience",
+          "detail": "E-commerce experience, visual search",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dmitri-volkov-sig-03",
+          "title": "Solid profile",
+          "detail": "Solid profile, standard LinkedIn sourced",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "oscar-bergstrom",
+      "name": "Oscar Bergstrom",
+      "location": "Stockholm, Sweden",
+      "experience": "6 years",
+      "currentScore": 72.0,
+      "currentConfidence": 61.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "oscar-bergstrom-sig-01",
+          "title": "Data Scientist at King (gaming)",
+          "detail": "Data Scientist at King (gaming), engagement prediction",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "oscar-bergstrom-sig-02",
+          "title": "Strong experimentation background",
+          "detail": "Strong experimentation background",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "oscar-bergstrom-sig-03",
+          "title": "Transferable skills from gaming to e-commerce",
+          "detail": "Transferable skills from gaming to e-commerce",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "dr-paolo-conti",
+      "name": "Dr. Paolo Conti",
+      "location": "Rome, Italy",
+      "experience": "7 years",
+      "currentScore": 74.0,
+      "currentConfidence": 63.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "dr-paolo-conti-sig-01",
+          "title": "Postdoc at La Sapienza",
+          "detail": "Postdoc at La Sapienza, now at Bending Spoons",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-paolo-conti-sig-02",
+          "title": "NLP specialist",
+          "detail": "NLP specialist, 6 publications",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "dr-paolo-conti-sig-03",
+          "title": "Good research depth",
+          "detail": "Good research depth, growing production skills",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "sebastian-kraft",
+      "name": "Sebastian Kraft",
+      "location": "Berlin, Germany",
+      "experience": "6 years",
+      "currentScore": 58.0,
+      "currentConfidence": 72.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "sebastian-kraft-sig-01",
+          "title": "Impressive LinkedIn: 'AI Visionary",
+          "detail": "Impressive LinkedIn: 'AI Visionary, Thought Leader'",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "sebastian-kraft-sig-02",
+          "title": "Actual work: standard data pipeline engineering",
+          "detail": "Actual work: standard data pipeline engineering",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "sebastian-kraft-sig-03",
+          "title": "No publications",
+          "detail": "No publications, no open source, no verifiable ML output",
+          "category": "github_activity",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "sebastian-kraft-sig-04",
+          "title": "High confidence score from self presentation",
+          "detail": "High confidence score from self presentation, low skills score",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "alexander-von-berg",
+      "name": "Alexander von Berg",
+      "location": "Munich, Germany",
+      "experience": "5 years",
+      "currentScore": 52.0,
+      "currentConfidence": 68.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "alexander-von-berg-sig-01",
+          "title": "CV claims 'led ML transformation' at consulting firm",
+          "detail": "CV claims 'led ML transformation' at consulting firm",
+          "category": "cv_consistency",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "alexander-von-berg-sig-02",
+          "title": "Verification: managed PowerBI dashboards",
+          "detail": "Verification: managed PowerBI dashboards, no ML models in production",
+          "category": "leadership_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "alexander-von-berg-sig-03",
+          "title": "LinkedIn endorsements mostly from non technical contacts",
+          "detail": "LinkedIn endorsements mostly from non technical contacts",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "james-whitfield",
+      "name": "James Whitfield",
+      "location": "London, UK",
+      "experience": "8 years",
+      "currentScore": 55.0,
+      "currentConfidence": 70.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "james-whitfield-sig-01",
+          "title": "CV: 'Senior AI Strategist' at Big 4 consulting",
+          "detail": "CV: 'Senior AI Strategist' at Big 4 consulting",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "james-whitfield-sig-02",
+          "title": "Primarily advisory work",
+          "detail": "Primarily advisory work, no hands on model building",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "james-whitfield-sig-03",
+          "title": "Published 2 Medium articles",
+          "detail": "Published 2 Medium articles, counted as 'publications' on CV",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "james-whitfield-sig-04",
+          "title": "Traditional recruiter would rank top 20",
+          "detail": "Traditional recruiter would rank top 20, actual skills score: bottom half",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "christian-huber",
+      "name": "Christian Huber",
+      "location": "Vienna, Austria",
+      "experience": "7 years",
+      "currentScore": 54.0,
+      "currentConfidence": 66.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "christian-huber-sig-01",
+          "title": "LinkedIn: 15k followers",
+          "detail": "LinkedIn: 15k followers, 'Top Voice in AI'",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "christian-huber-sig-02",
+          "title": "Actual output: 2 Jupyter notebooks on GitHub",
+          "detail": "Actual output: 2 Jupyter notebooks on GitHub, last commit 18 months ago",
+          "category": "github_activity",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "christian-huber-sig-03",
+          "title": "Current role: product manager",
+          "detail": "Current role: product manager, not engineer",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "marcus-engel",
+      "name": "Marcus Engel",
+      "location": "Hamburg, Germany",
+      "experience": "9 years",
+      "currentScore": 56.0,
+      "currentConfidence": 69.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "marcus-engel-sig-01",
+          "title": "CV claims 'built recommendation engine from scratch'",
+          "detail": "CV claims 'built recommendation engine from scratch'",
+          "category": "cv_consistency",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "marcus-engel-sig-02",
+          "title": "Verification: integrated third party API",
+          "detail": "Verification: integrated third party API, no custom ML",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "marcus-engel-sig-03",
+          "title": "Strong presentation skills mask limited technical depth",
+          "detail": "Strong presentation skills mask limited technical depth",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "patrick-oreilly",
+      "name": "Patrick O'Reilly",
+      "location": "Dublin, Ireland",
+      "experience": "6 years",
+      "currentScore": 51.0,
+      "currentConfidence": 64.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "patrick-oreilly-sig-01",
+          "title": "Claims 'ML Engineer' title but codebase is SQL and Excel macros",
+          "detail": "Claims 'ML Engineer' title but codebase is SQL and Excel macros",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "patrick-oreilly-sig-02",
+          "title": "Previous startup used 'AI powered' in marketing",
+          "detail": "Previous startup used 'AI powered' in marketing, actual product was rule based",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "patrick-oreilly-sig-03",
+          "title": "Confident self assessor",
+          "detail": "Confident self assessor, limited verifiable skills",
+          "category": "skills_depth",
+          "impact": -2,
+          "sentiment": "negative"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "florian-hartmann",
+      "name": "Florian Hartmann",
+      "location": "Berlin, Germany",
+      "experience": "4 years",
+      "currentScore": 48.0,
+      "currentConfidence": 61.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "florian-hartmann-sig-01",
+          "title": "Bootcamp graduate",
+          "detail": "Bootcamp graduate, 'Full Stack ML Engineer'",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "florian-hartmann-sig-02",
+          "title": "LinkedIn bio: 'Passionate about transforming businesses with AI'",
+          "detail": "LinkedIn bio: 'Passionate about transforming businesses with AI'",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "florian-hartmann-sig-03",
+          "title": "GitHub: forked repos only",
+          "detail": "GitHub: forked repos only, no original work",
+          "category": "github_activity",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "florian-hartmann-sig-04",
+          "title": "Salary expectation at senior level despite junior output",
+          "detail": "Salary expectation at senior level despite junior output",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "hendrik-voss",
+      "name": "Hendrik Voss",
+      "location": "Berlin, Germany",
+      "experience": "5 years",
+      "currentScore": 53.0,
+      "currentConfidence": 65.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "hendrik-voss-sig-01",
+          "title": "CV: 'Machine Learning Expert' at agency",
+          "detail": "CV: 'Machine Learning Expert' at agency",
+          "category": "cv_consistency",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "hendrik-voss-sig-02",
+          "title": "Actual work: implementing pre trained models via API calls",
+          "detail": "Actual work: implementing pre trained models via API calls",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "hendrik-voss-sig-03",
+          "title": "No understanding of model architecture or training",
+          "detail": "No understanding of model architecture or training",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "nikolaos-papadopoulos",
+      "name": "Nikolaos Papadopoulos",
+      "location": "Athens, Greece",
+      "experience": "7 years",
+      "currentScore": 57.0,
+      "currentConfidence": 67.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "nikolaos-papadopoulos-sig-01",
+          "title": "CV well structured",
+          "detail": "CV well structured, mentions every buzzword",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "nikolaos-papadopoulos-sig-02",
+          "title": "Technical assessment: confused precision with recall",
+          "detail": "Technical assessment: confused precision with recall",
+          "category": "interview",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "nikolaos-papadopoulos-sig-03",
+          "title": "Experience is real but significantly inflated on CV",
+          "detail": "Experience is real but significantly inflated on CV",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "erik-johansson-m",
+      "name": "Erik Johansson",
+      "location": "Stockholm, Sweden",
+      "experience": "8 years",
+      "currentScore": 59.0,
+      "currentConfidence": 71.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "erik-johansson-m-sig-01",
+          "title": "LinkedIn: 'Building the future of AI at unnamed stealth startup'",
+          "detail": "LinkedIn: 'Building the future of AI at unnamed stealth startup'",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "erik-johansson-m-sig-02",
+          "title": "Previous 3 roles averaged 8 months each",
+          "detail": "Previous 3 roles averaged 8 months each",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "erik-johansson-m-sig-03",
+          "title": "Conference talks at non peer reviewed events listed as 'keynotes'",
+          "detail": "Conference talks at non peer reviewed events listed as 'keynotes'",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "raphael-dupont",
+      "name": "Raphael Dupont",
+      "location": "Paris, France",
+      "experience": "6 years",
+      "currentScore": 50.0,
+      "currentConfidence": 63.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "raphael-dupont-sig-01",
+          "title": "Claims 'Applied Scientist' title at startup that has no ML product",
+          "detail": "Claims 'Applied Scientist' title at startup that has no ML product",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "raphael-dupont-sig-02",
+          "title": "GitHub activity: all commits in last 2 weeks before job search",
+          "detail": "GitHub activity: all commits in last 2 weeks before job search",
+          "category": "github_activity",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "raphael-dupont-sig-03",
+          "title": "References are all from same company",
+          "detail": "References are all from same company, all non technical",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "benjamin-wolf",
+      "name": "Benjamin Wolf",
+      "location": "Berlin, Germany",
+      "experience": "5 years",
+      "currentScore": 49.0,
+      "currentConfidence": 62.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "benjamin-wolf-sig-01",
+          "title": "CV: 'Data Science Lead' managing intern team of 2",
+          "detail": "CV: 'Data Science Lead' managing intern team of 2",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "benjamin-wolf-sig-02",
+          "title": "Inflated title",
+          "detail": "Inflated title, actual work is individual contributor analytics",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "benjamin-wolf-sig-03",
+          "title": "LinkedIn recommendations are all generic copy paste",
+          "detail": "LinkedIn recommendations are all generic copy paste",
+          "category": "linkedin_profile_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "matej-horvat",
+      "name": "Matej Horvat",
+      "location": "Bratislava, Slovakia",
+      "experience": "7 years",
+      "currentScore": 55.0,
+      "currentConfidence": 66.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "matej-horvat-sig-01",
+          "title": "CV mentions 'deep learning expertise'",
+          "detail": "CV mentions 'deep learning expertise'",
+          "category": "cv_consistency",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "matej-horvat-sig-02",
+          "title": "Actual stack: scikit learn only",
+          "detail": "Actual stack: scikit learn only, never used PyTorch or TensorFlow",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "matej-horvat-sig-03",
+          "title": "Good communicator",
+          "detail": "Good communicator, would pass traditional phone screen",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "thomas-richter",
+      "name": "Thomas Richter",
+      "location": "Dusseldorf, Germany",
+      "experience": "10 years",
+      "currentScore": 60.0,
+      "currentConfidence": 73.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "thomas-richter-sig-01",
+          "title": "Very senior title: 'VP of AI' at mid size retailer",
+          "detail": "Very senior title: 'VP of AI' at mid size retailer",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "thomas-richter-sig-02",
+          "title": "Team of 3",
+          "detail": "Team of 3, mostly BI dashboards not ML",
+          "category": "leadership_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "thomas-richter-sig-03",
+          "title": "Would rank high in traditional screening due to seniority",
+          "detail": "Would rank high in traditional screening due to seniority",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "thomas-richter-sig-04",
+          "title": "Skills assessment reveals significant gaps in modern ML",
+          "detail": "Skills assessment reveals significant gaps in modern ML",
+          "category": "interview",
+          "impact": -2,
+          "sentiment": "negative"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "ivan-kozlov",
+      "name": "Ivan Kozlov",
+      "location": "Berlin, Germany",
+      "experience": "6 years",
+      "currentScore": 54.0,
+      "currentConfidence": 64.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "ivan-kozlov-sig-01",
+          "title": "CV: 'Full stack ML Engineer' but no deployed models",
+          "detail": "CV: 'Full stack ML Engineer' but no deployed models",
+          "category": "cv_consistency",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "ivan-kozlov-sig-02",
+          "title": "GitHub: tutorial completions presented as projects",
+          "detail": "GitHub: tutorial completions presented as projects",
+          "category": "github_activity",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "ivan-kozlov-sig-03",
+          "title": "Strong networking skills",
+          "detail": "Strong networking skills, 5 referrals from Zalando employees",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "michal-novotny",
+      "name": "Michal Novotny",
+      "location": "Prague, Czech Republic",
+      "experience": "7 years",
+      "currentScore": 67.0,
+      "currentConfidence": 58.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "michal-novotny-sig-01",
+          "title": "ML Engineer at Seznam (Czech search engine)",
+          "detail": "ML Engineer at Seznam (Czech search engine)",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "michal-novotny-sig-02",
+          "title": "Search ranking experience",
+          "detail": "Search ranking experience, smaller scale",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "michal-novotny-sig-03",
+          "title": "Honest CV",
+          "detail": "Honest CV, skills accurately represented",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "david-nielsen",
+      "name": "David Nielsen",
+      "location": "Copenhagen, Denmark",
+      "experience": "6 years",
+      "currentScore": 65.0,
+      "currentConfidence": 56.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "david-nielsen-sig-01",
+          "title": "Data Scientist at Maersk",
+          "detail": "Data Scientist at Maersk, logistics optimization",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "david-nielsen-sig-02",
+          "title": "Strong fundamentals",
+          "detail": "Strong fundamentals, limited e-commerce exposure",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "david-nielsen-sig-03",
+          "title": "Published 1 paper on supply chain ML",
+          "detail": "Published 1 paper on supply chain ML",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "jakub-wisniewski",
+      "name": "Jakub Wisniewski",
+      "location": "Gdansk, Poland",
+      "experience": "5 years",
+      "currentScore": 62.0,
+      "currentConfidence": 52.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "jakub-wisniewski-sig-01",
+          "title": "ML Engineer at Intel",
+          "detail": "ML Engineer at Intel, hardware aware ML optimization",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "jakub-wisniewski-sig-02",
+          "title": "Niche but valuable: model efficiency expertise",
+          "detail": "Niche but valuable: model efficiency expertise",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "jakub-wisniewski-sig-03",
+          "title": "Looking for more applied product role",
+          "detail": "Looking for more applied product role",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "hugo-martin",
+      "name": "Hugo Martin",
+      "location": "Toulouse, France",
+      "experience": "8 years",
+      "currentScore": 68.0,
+      "currentConfidence": 59.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "hugo-martin-sig-01",
+          "title": "Applied Scientist at Airbus",
+          "detail": "Applied Scientist at Airbus, computer vision",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "hugo-martin-sig-02",
+          "title": "Aerospace to retail transition",
+          "detail": "Aerospace to retail transition, needs domain ramp up",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "hugo-martin-sig-03",
+          "title": "Strong engineering practices",
+          "detail": "Strong engineering practices, CI/CD for ML",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "lorenzo-galli",
+      "name": "Lorenzo Galli",
+      "location": "Bologna, Italy",
+      "experience": "6 years",
+      "currentScore": 64.0,
+      "currentConfidence": 54.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "lorenzo-galli-sig-01",
+          "title": "Data Scientist at Ducati (Audi group)",
+          "detail": "Data Scientist at Ducati (Audi group), IoT and prediction",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "lorenzo-galli-sig-02",
+          "title": "Time series expertise",
+          "detail": "Time series expertise, transferable to demand forecasting",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "lorenzo-galli-sig-03",
+          "title": "Published 2 papers on predictive maintenance",
+          "detail": "Published 2 papers on predictive maintenance",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "ben-harrison",
+      "name": "Ben Harrison",
+      "location": "Bristol, UK",
+      "experience": "7 years",
+      "currentScore": 66.0,
+      "currentConfidence": 57.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "ben-harrison-sig-01",
+          "title": "Senior Data Scientist at Dyson",
+          "detail": "Senior Data Scientist at Dyson, product analytics + ML",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "ben-harrison-sig-02",
+          "title": "Consumer goods experience",
+          "detail": "Consumer goods experience, understands user behavior",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "ben-harrison-sig-03",
+          "title": "Solid not spectacular profile",
+          "detail": "Solid not spectacular profile",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "adam-nagy",
+      "name": "Adam Nagy",
+      "location": "Budapest, Hungary",
+      "experience": "5 years",
+      "currentScore": 60.0,
+      "currentConfidence": 50.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "adam-nagy-sig-01",
+          "title": "ML Engineer at Prezi",
+          "detail": "ML Engineer at Prezi, recommendation features",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "adam-nagy-sig-02",
+          "title": "Smaller scale but relevant feature work",
+          "detail": "Smaller scale but relevant feature work",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "adam-nagy-sig-03",
+          "title": "Strong coding skills",
+          "detail": "Strong coding skills, weaker on research side",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "oliver-fuchs",
+      "name": "Oliver Fuchs",
+      "location": "Berlin, Germany",
+      "experience": "6 years",
+      "currentScore": 63.0,
+      "currentConfidence": 53.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "oliver-fuchs-sig-01",
+          "title": "ML Engineer at SoundCloud",
+          "detail": "ML Engineer at SoundCloud, audio recommendations",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "oliver-fuchs-sig-02",
+          "title": "Good understanding of recommendation systems",
+          "detail": "Good understanding of recommendation systems",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "oliver-fuchs-sig-03",
+          "title": "Domain transfer needed from audio to fashion",
+          "detail": "Domain transfer needed from audio to fashion",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "krzysztof-mazur",
+      "name": "Krzysztof Mazur",
+      "location": "Wroclaw, Poland",
+      "experience": "8 years",
+      "currentScore": 69.0,
+      "currentConfidence": 60.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "krzysztof-mazur-sig-01",
+          "title": "Senior Data Scientist at Nokia",
+          "detail": "Senior Data Scientist at Nokia, network optimization ML",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "krzysztof-mazur-sig-02",
+          "title": "Strong systems thinking",
+          "detail": "Strong systems thinking, telco to e-commerce transition",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "krzysztof-mazur-sig-03",
+          "title": "Published 3 papers on scalable inference",
+          "detail": "Published 3 papers on scalable inference",
+          "category": "education_signal",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "martin-holzer",
+      "name": "Martin Holzer",
+      "location": "Graz, Austria",
+      "experience": "9 years",
+      "currentScore": 71.0,
+      "currentConfidence": 62.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "martin-holzer-sig-01",
+          "title": "Lead Data Scientist at AVL (automotive testing)",
+          "detail": "Lead Data Scientist at AVL (automotive testing)",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "martin-holzer-sig-02",
+          "title": "ML at scale for simulation",
+          "detail": "ML at scale for simulation, HPC background",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "martin-holzer-sig-03",
+          "title": "Overqualified engineering skills",
+          "detail": "Overqualified engineering skills, needs ML depth growth",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "peter-strand",
+      "name": "Peter Strand",
+      "location": "Malmo, Sweden",
+      "experience": "7 years",
+      "currentScore": 67.0,
+      "currentConfidence": 58.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "peter-strand-sig-01",
+          "title": "Applied Scientist at IKEA",
+          "detail": "Applied Scientist at IKEA, supply chain ML",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "peter-strand-sig-02",
+          "title": "Retail domain",
+          "detail": "Retail domain, demand forecasting at Nordic scale",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "peter-strand-sig-03",
+          "title": "Good culture fit",
+          "detail": "Good culture fit, collaborative style",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "daniel-gruber",
+      "name": "Daniel Gruber",
+      "location": "Munich, Germany",
+      "experience": "6 years",
+      "currentScore": 64.0,
+      "currentConfidence": 54.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "daniel-gruber-sig-01",
+          "title": "ML Engineer at FlixBus",
+          "detail": "ML Engineer at FlixBus, dynamic pricing",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "daniel-gruber-sig-02",
+          "title": "Pricing experience directly relevant",
+          "detail": "Pricing experience directly relevant",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "daniel-gruber-sig-03",
+          "title": "Smaller scale than Zalando needs",
+          "detail": "Smaller scale than Zalando needs",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "matteo-romano",
+      "name": "Matteo Romano",
+      "location": "Turin, Italy",
+      "experience": "5 years",
+      "currentScore": 61.0,
+      "currentConfidence": 51.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "matteo-romano-sig-01",
+          "title": "Data Scientist at Reply (consulting)",
+          "detail": "Data Scientist at Reply (consulting), various ML projects",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "matteo-romano-sig-02",
+          "title": "Broad exposure",
+          "detail": "Broad exposure, less depth in any one area",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "matteo-romano-sig-03",
+          "title": "Fast learner",
+          "detail": "Fast learner, strong academic foundation from Politecnico",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "wojciech-kubiak",
+      "name": "Wojciech Kubiak",
+      "location": "Warsaw, Poland",
+      "experience": "6 years",
+      "currentScore": 63.0,
+      "currentConfidence": 53.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "wojciech-kubiak-sig-01",
+          "title": "ML Engineer at OLX Group",
+          "detail": "ML Engineer at OLX Group, classifieds recommendations",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "wojciech-kubiak-sig-02",
+          "title": "Marketplace experience",
+          "detail": "Marketplace experience, user intent modeling",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "wojciech-kubiak-sig-03",
+          "title": "Growing publication record (2 papers)",
+          "detail": "Growing publication record (2 papers)",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "niklas-fredriksson",
+      "name": "Niklas Fredriksson",
+      "location": "Uppsala, Sweden",
+      "experience": "4 years",
+      "currentScore": 58.0,
+      "currentConfidence": 48.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "niklas-fredriksson-sig-01",
+          "title": "Junior Applied Scientist at Spotify",
+          "detail": "Junior Applied Scientist at Spotify",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "niklas-fredriksson-sig-02",
+          "title": "Early career but strong potential",
+          "detail": "Early career but strong potential",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "niklas-fredriksson-sig-03",
+          "title": "2 NeurIPS workshop papers already",
+          "detail": "2 NeurIPS workshop papers already",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "niklas-fredriksson-sig-04",
+          "title": "Might be too junior for senior role",
+          "detail": "Might be too junior for senior role",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "stefan-bauer",
+      "name": "Stefan Bauer",
+      "location": "Berlin, Germany",
+      "experience": "4 years",
+      "currentScore": 42.0,
+      "currentConfidence": 38.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "stefan-bauer-sig-01",
+          "title": "Data Analyst",
+          "detail": "Data Analyst, no ML experience",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "stefan-bauer-sig-02",
+          "title": "Applied despite not meeting requirements",
+          "detail": "Applied despite not meeting requirements",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "romain-petit",
+      "name": "Romain Petit",
+      "location": "Brussels, Belgium",
+      "experience": "3 years",
+      "currentScore": 38.0,
+      "currentConfidence": 35.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "romain-petit-sig-01",
+          "title": "Junior developer",
+          "detail": "Junior developer, career changer from marketing",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "romain-petit-sig-02",
+          "title": "Completed online ML course",
+          "detail": "Completed online ML course, no production experience",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "vincenzo-colombo",
+      "name": "Vincenzo Colombo",
+      "location": "Naples, Italy",
+      "experience": "5 years",
+      "currentScore": 40.0,
+      "currentConfidence": 36.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "vincenzo-colombo-sig-01",
+          "title": "Web developer who lists TensorFlow.js as 'AI expertise'",
+          "detail": "Web developer who lists TensorFlow.js as 'AI expertise'",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "vincenzo-colombo-sig-02",
+          "title": "No relevant ML background",
+          "detail": "No relevant ML background",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "kevin-moser",
+      "name": "Kevin Moser",
+      "location": "Linz, Austria",
+      "experience": "6 years",
+      "currentScore": 44.0,
+      "currentConfidence": 40.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "kevin-moser-sig-01",
+          "title": "BI analyst",
+          "detail": "BI analyst, Python for data extraction only",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "kevin-moser-sig-02",
+          "title": "Confused about Applied Scientist role requirements",
+          "detail": "Confused about Applied Scientist role requirements",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "mark-jensen",
+      "name": "Mark Jensen",
+      "location": "Aarhus, Denmark",
+      "experience": "4 years",
+      "currentScore": 39.0,
+      "currentConfidence": 34.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "mark-jensen-sig-01",
+          "title": "QA engineer applying for ML role",
+          "detail": "QA engineer applying for ML role",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "mark-jensen-sig-02",
+          "title": "Took Coursera ML specialization",
+          "detail": "Took Coursera ML specialization, no applied work",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "andrea-moretti",
+      "name": "Andrea Moretti",
+      "location": "Florence, Italy",
+      "experience": "3 years",
+      "currentScore": 36.0,
+      "currentConfidence": 32.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "andrea-moretti-sig-01",
+          "title": "Fresh PhD in theoretical physics",
+          "detail": "Fresh PhD in theoretical physics, no ML experience",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "andrea-moretti-sig-02",
+          "title": "Quantitative background but needs significant ramp up",
+          "detail": "Quantitative background but needs significant ramp up",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "lars-henriksen",
+      "name": "Lars Henriksen",
+      "location": "Oslo, Norway",
+      "experience": "15 years",
+      "currentScore": 45.0,
+      "currentConfidence": 42.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "lars-henriksen-sig-01",
+          "title": "Long career in traditional software",
+          "detail": "Long career in traditional software, recent pivot to AI",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "lars-henriksen-sig-02",
+          "title": "Completed 3 week bootcamp",
+          "detail": "Completed 3 week bootcamp, marketing as 'ML Engineer'",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "lars-henriksen-sig-03",
+          "title": "Experience is real but in wrong domain entirely",
+          "detail": "Experience is real but in wrong domain entirely",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "lukas-hofer",
+      "name": "Lukas Hofer",
+      "location": "Salzburg, Austria",
+      "experience": "4 years",
+      "currentScore": 41.0,
+      "currentConfidence": 37.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "lukas-hofer-sig-01",
+          "title": "Data engineering background",
+          "detail": "Data engineering background, no modeling experience",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "lukas-hofer-sig-02",
+          "title": "Good Spark skills but not Applied Scientist material",
+          "detail": "Good Spark skills but not Applied Scientist material",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "miguel-torres",
+      "name": "Miguel Torres",
+      "location": "Valencia, Spain",
+      "experience": "5 years",
+      "currentScore": 43.0,
+      "currentConfidence": 39.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "miguel-torres-sig-01",
+          "title": "Backend developer at e-commerce company",
+          "detail": "Backend developer at e-commerce company",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "miguel-torres-sig-02",
+          "title": "Implemented ML model built by someone else",
+          "detail": "Implemented ML model built by someone else",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "miguel-torres-sig-03",
+          "title": "Good deployment skills",
+          "detail": "Good deployment skills, no modeling capability",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "jan-kovar",
+      "name": "Jan Kovar",
+      "location": "Brno, Czech Republic",
+      "experience": "3 years",
+      "currentScore": 37.0,
+      "currentConfidence": 33.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "jan-kovar-sig-01",
+          "title": "Recent graduate",
+          "detail": "Recent graduate, MSc in data science",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "jan-kovar-sig-02",
+          "title": "Too junior for Senior Applied Scientist",
+          "detail": "Too junior for Senior Applied Scientist",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "jan-kovar-sig-03",
+          "title": "Potential for junior role if available",
+          "detail": "Potential for junior role if available",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "georgi-dimitrov",
+      "name": "Georgi Dimitrov",
+      "location": "Sofia, Bulgaria",
+      "experience": "6 years",
+      "currentScore": 46.0,
+      "currentConfidence": 41.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "georgi-dimitrov-sig-01",
+          "title": "Data Scientist at outsourcing company",
+          "detail": "Data Scientist at outsourcing company",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "georgi-dimitrov-sig-02",
+          "title": "Varied projects",
+          "detail": "Varied projects, none at meaningful scale",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "georgi-dimitrov-sig-03",
+          "title": "Good fundamentals but no depth in any area",
+          "detail": "Good fundamentals but no depth in any area",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "victor-dubois-m",
+      "name": "Victor Dubois",
+      "location": "Lille, France",
+      "experience": "4 years",
+      "currentScore": 40.0,
+      "currentConfidence": 36.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "victor-dubois-m-sig-01",
+          "title": "Academic researcher",
+          "detail": "Academic researcher, pure theory, no applied work",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "victor-dubois-m-sig-02",
+          "title": "Publications in mathematical optimization",
+          "detail": "Publications in mathematical optimization, no ML",
+          "category": "education_signal",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "marius-pop",
+      "name": "Marius Pop",
+      "location": "Cluj, Romania",
+      "experience": "5 years",
+      "currentScore": 44.0,
+      "currentConfidence": 40.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "marius-pop-sig-01",
+          "title": "Software engineer at outsourcing firm",
+          "detail": "Software engineer at outsourcing firm",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "marius-pop-sig-02",
+          "title": "Exposure to ML through one client project",
+          "detail": "Exposure to ML through one client project",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "marius-pop-sig-03",
+          "title": "Motivated but needs 2+ years to reach senior level",
+          "detail": "Motivated but needs 2+ years to reach senior level",
+          "category": "skills_depth",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "tomas-svoboda",
+      "name": "Tomas Svoboda",
+      "location": "Prague, Czech Republic",
+      "experience": "7 years",
+      "currentScore": 47.0,
+      "currentConfidence": 43.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "tomas-svoboda-sig-01",
+          "title": "DevOps engineer with MLOps interest",
+          "detail": "DevOps engineer with MLOps interest",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "tomas-svoboda-sig-02",
+          "title": "Infrastructure knowledge but no modeling skills",
+          "detail": "Infrastructure knowledge but no modeling skills",
+          "category": "skills_depth",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "tomas-svoboda-sig-03",
+          "title": "Would be good MLOps hire",
+          "detail": "Would be good MLOps hire, wrong role",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        }
+      ],
+      "highlight": false
+    },
+    {
+      "id": "piotr-kaminski",
+      "name": "Piotr Kaminski",
+      "location": "Poznan, Poland",
+      "experience": "4 years",
+      "currentScore": 42.0,
+      "currentConfidence": 38.0,
+      "stage": "sourced",
+      "signals": [
+        {
+          "id": "piotr-kaminski-sig-01",
+          "title": "Data analyst with Python skills",
+          "detail": "Data analyst with Python skills",
+          "category": "skills_match",
+          "impact": 0,
+          "sentiment": "neutral"
+        },
+        {
+          "id": "piotr-kaminski-sig-02",
+          "title": "Pandas and matplotlib expert",
+          "detail": "Pandas and matplotlib expert, no ML modeling",
+          "category": "skills_match",
+          "impact": 2,
+          "sentiment": "positive"
+        },
+        {
+          "id": "piotr-kaminski-sig-03",
+          "title": "Enthusiastic about AI but lacks technical depth",
+          "detail": "Enthusiastic about AI but lacks technical depth",
+          "category": "skills_depth",
+          "impact": -2,
+          "sentiment": "negative"
+        }
+      ],
+      "highlight": false
+    }
+  ],
+  "events": [
+    {
+      "id": "e001",
+      "timestamp": "10:00:01",
+      "type": "system",
+      "title": "Pipeline initialized",
+      "detail": "Processing sourcing request for Senior Applied Scientist, Berlin. Zalando, reports to Director of Talent Acquisition. Diversity target: 40% women",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e002",
+      "timestamp": "10:00:02",
+      "type": "phase_marker",
+      "title": "Multi channel sourcing activated",
+      "detail": "Sourcing across 6 channels: LinkedIn, academic networks, adjacent industries, open source communities, women in tech networks, conference speakers. Target: 100 candidates, 40% women",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e003",
+      "timestamp": "10:00:03",
+      "type": "phase_marker",
+      "title": "Sourcing: LinkedIn",
+      "detail": "Scanning linkedin for Senior Applied Scientist candidates matching Zalando requirements",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e004",
+      "timestamp": "10:00:04",
+      "candidateId": "elena-voronova",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 9 years, profile analyzed",
+      "newScore": 88.0,
+      "newConfidence": 78.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e005",
+      "timestamp": "10:00:05",
+      "candidateId": "maria-santos-silva",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Lisbon, Portugal, 7 years, profile analyzed",
+      "newScore": 72.0,
+      "newConfidence": 65.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e006",
+      "timestamp": "10:00:06",
+      "candidateId": "anna-berg",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Stockholm, Sweden, 11 years, profile analyzed",
+      "newScore": 82.0,
+      "newConfidence": 71.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e007",
+      "timestamp": "10:00:07",
+      "candidateId": "sophie-laurent",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Paris, France, 8 years, profile analyzed",
+      "newScore": 69.0,
+      "newConfidence": 58.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e008",
+      "timestamp": "10:00:08",
+      "candidateId": "katarina-novak",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Prague, Czech Republic, 6 years, profile analyzed",
+      "newScore": 64.0,
+      "newConfidence": 52.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e009",
+      "timestamp": "10:00:09",
+      "candidateId": "lisa-muller",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Munich, Germany, 10 years, profile analyzed",
+      "newScore": 76.0,
+      "newConfidence": 68.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e010",
+      "timestamp": "10:00:10",
+      "candidateId": "iulia-marinescu",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Bucharest, Romania, 7 years, profile analyzed",
+      "newScore": 71.0,
+      "newConfidence": 61.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e011",
+      "timestamp": "10:00:11",
+      "candidateId": "emma-johansson",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Gothenburg, Sweden, 5 years, profile analyzed",
+      "newScore": 61.0,
+      "newConfidence": 48.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e012",
+      "timestamp": "10:00:12",
+      "candidateId": "nadia-kowalska",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Warsaw, Poland, 8 years, profile analyzed",
+      "newScore": 74.0,
+      "newConfidence": 63.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e013",
+      "timestamp": "10:00:13",
+      "candidateId": "sara-eriksson",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Helsinki, Finland, 9 years, profile analyzed",
+      "newScore": 68.0,
+      "newConfidence": 55.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e014",
+      "timestamp": "10:00:14",
+      "candidateId": "chiara-rossi",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Milan, Italy, 6 years, profile analyzed",
+      "newScore": 63.0,
+      "newConfidence": 50.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e015",
+      "timestamp": "10:00:15",
+      "candidateId": "marta-garcia",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Madrid, Spain, 8 years, profile analyzed",
+      "newScore": 70.0,
+      "newConfidence": 60.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e016",
+      "timestamp": "10:00:16",
+      "type": "phase_marker",
+      "title": "Sourcing: Academic networks",
+      "detail": "Scanning academic networks for Senior Applied Scientist candidates matching Zalando requirements",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e017",
+      "timestamp": "10:00:17",
+      "candidateId": "dr-yue-chen",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Zurich, Switzerland, 6 years (4 PhD + 2 postdoc), profile analyzed",
+      "newScore": 91.0,
+      "newConfidence": 82.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e018",
+      "timestamp": "10:00:18",
+      "candidateId": "dr-fatima-al-rashidi",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "London, UK, 5 years (4 PhD + 1 industry), profile analyzed",
+      "newScore": 79.0,
+      "newConfidence": 70.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e019",
+      "timestamp": "10:00:19",
+      "candidateId": "dr-ingrid-hoffmann",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 7 years (4 PhD + 3 postdoc), profile analyzed",
+      "newScore": 85.0,
+      "newConfidence": 75.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e020",
+      "timestamp": "10:00:20",
+      "candidateId": "dr-mei-lin-wang",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Amsterdam, Netherlands, 5 years (4 PhD + 1 postdoc), profile analyzed",
+      "newScore": 77.0,
+      "newConfidence": 66.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e021",
+      "timestamp": "10:00:21",
+      "candidateId": "dr-olga-petrova",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Munich, Germany, 6 years (4 PhD + 2 industry), profile analyzed",
+      "newScore": 73.0,
+      "newConfidence": 62.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e022",
+      "timestamp": "10:00:22",
+      "candidateId": "dr-amara-okafor",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Edinburgh, UK, 5 years (4 PhD + 1 postdoc), profile analyzed",
+      "newScore": 75.0,
+      "newConfidence": 64.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e023",
+      "timestamp": "10:00:23",
+      "candidateId": "dr-lucia-bianchi",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Turin, Italy, 8 years (4 PhD + 4 research), profile analyzed",
+      "newScore": 70.0,
+      "newConfidence": 58.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e024",
+      "timestamp": "10:00:24",
+      "candidateId": "dr-priya-sharma",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Cambridge, UK, 6 years (4 PhD + 2 postdoc), profile analyzed",
+      "newScore": 80.0,
+      "newConfidence": 72.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e025",
+      "timestamp": "10:00:25",
+      "type": "phase_marker",
+      "title": "Sourcing: Adjacent industries",
+      "detail": "Scanning adjacent industries for Senior Applied Scientist candidates matching Zalando requirements",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e026",
+      "timestamp": "10:00:26",
+      "candidateId": "alexandra-fischer",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Frankfurt, Germany, 10 years, profile analyzed",
+      "newScore": 78.0,
+      "newConfidence": 67.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e027",
+      "timestamp": "10:00:27",
+      "candidateId": "nina-andersen",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Copenhagen, Denmark, 8 years, profile analyzed",
+      "newScore": 74.0,
+      "newConfidence": 62.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e028",
+      "timestamp": "10:00:28",
+      "candidateId": "jennifer-oconnor",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Dublin, Ireland, 9 years, profile analyzed",
+      "newScore": 76.0,
+      "newConfidence": 65.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e029",
+      "timestamp": "10:00:29",
+      "candidateId": "ayse-demir",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Istanbul, Turkey, 7 years, profile analyzed",
+      "newScore": 71.0,
+      "newConfidence": 59.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e030",
+      "timestamp": "10:00:30",
+      "candidateId": "caroline-dubois",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Lyon, France, 11 years, profile analyzed",
+      "newScore": 80.0,
+      "newConfidence": 70.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e031",
+      "timestamp": "10:00:31",
+      "candidateId": "eva-lindgren",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Stockholm, Sweden, 8 years, profile analyzed",
+      "newScore": 72.0,
+      "newConfidence": 60.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e032",
+      "timestamp": "10:00:32",
+      "candidateId": "hannah-weber",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Vienna, Austria, 7 years, profile analyzed",
+      "newScore": 68.0,
+      "newConfidence": 56.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e033",
+      "timestamp": "10:00:33",
+      "type": "phase_marker",
+      "title": "Sourcing: Open source and Kaggle",
+      "detail": "Scanning open source and kaggle for Senior Applied Scientist candidates matching Zalando requirements",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e034",
+      "timestamp": "10:00:34",
+      "candidateId": "wei-zhang",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 6 years, profile analyzed",
+      "newScore": 84.0,
+      "newConfidence": 74.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e035",
+      "timestamp": "10:00:35",
+      "candidateId": "zara-hussain",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Manchester, UK, 5 years, profile analyzed",
+      "newScore": 73.0,
+      "newConfidence": 61.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e036",
+      "timestamp": "10:00:36",
+      "candidateId": "anja-keller",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Zurich, Switzerland, 7 years, profile analyzed",
+      "newScore": 69.0,
+      "newConfidence": 57.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e037",
+      "timestamp": "10:00:37",
+      "candidateId": "maria-gonzalez",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Barcelona, Spain, 6 years, profile analyzed",
+      "newScore": 75.0,
+      "newConfidence": 63.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e038",
+      "timestamp": "10:00:38",
+      "candidateId": "lena-kravchenko",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Tallinn, Estonia, 5 years, profile analyzed",
+      "newScore": 67.0,
+      "newConfidence": 54.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e039",
+      "timestamp": "10:00:39",
+      "candidateId": "aisha-patel",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "London, UK, 8 years, profile analyzed",
+      "newScore": 77.0,
+      "newConfidence": 66.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e040",
+      "timestamp": "10:00:40",
+      "type": "phase_marker",
+      "title": "Sourcing: Women in tech communities",
+      "detail": "Scanning women in tech communities for Senior Applied Scientist candidates matching Zalando requirements",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e041",
+      "timestamp": "10:00:41",
+      "candidateId": "sarah-thompson",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "London, UK, 9 years, profile analyzed",
+      "newScore": 81.0,
+      "newConfidence": 72.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e042",
+      "timestamp": "10:00:42",
+      "candidateId": "defne-yilmaz",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Amsterdam, Netherlands, 7 years, profile analyzed",
+      "newScore": 72.0,
+      "newConfidence": 60.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e043",
+      "timestamp": "10:00:43",
+      "candidateId": "kasia-wozniak",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Krakow, Poland, 6 years, profile analyzed",
+      "newScore": 66.0,
+      "newConfidence": 53.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e044",
+      "timestamp": "10:00:44",
+      "candidateId": "miriam-schneider",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 10 years, profile analyzed",
+      "newScore": 79.0,
+      "newConfidence": 69.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e045",
+      "timestamp": "10:00:45",
+      "type": "phase_marker",
+      "title": "Sourcing: Conference speaker networks",
+      "detail": "Scanning conference speaker networks for Senior Applied Scientist candidates matching Zalando requirements",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e046",
+      "timestamp": "10:00:46",
+      "candidateId": "dr-sarah-klein",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 12 years, profile analyzed",
+      "newScore": 92.0,
+      "newConfidence": 85.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e047",
+      "timestamp": "10:00:47",
+      "candidateId": "dr-ada-nilsson",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Stockholm, Sweden, 8 years, profile analyzed",
+      "newScore": 83.0,
+      "newConfidence": 74.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e048",
+      "timestamp": "10:00:48",
+      "candidateId": "dr-chloe-martin",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Paris, France, 9 years, profile analyzed",
+      "newScore": 80.0,
+      "newConfidence": 71.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e049",
+      "timestamp": "10:00:49",
+      "type": "phase_marker",
+      "title": "Sourcing: LinkedIn standard",
+      "detail": "Scanning LinkedIn for male and female candidates via standard keyword and skills matching",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e050",
+      "timestamp": "10:00:50",
+      "candidateId": "dr-maximilian-braun",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 10 years, profile analyzed",
+      "newScore": 89.0,
+      "newConfidence": 80.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e051",
+      "timestamp": "10:00:51",
+      "candidateId": "anders-lindqvist",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Stockholm, Sweden, 12 years, profile analyzed",
+      "newScore": 86.0,
+      "newConfidence": 78.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e052",
+      "timestamp": "10:00:52",
+      "candidateId": "dr-marco-ferrari",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Milan, Italy, 9 years, profile analyzed",
+      "newScore": 83.0,
+      "newConfidence": 75.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e053",
+      "timestamp": "10:00:53",
+      "candidateId": "tomasz-kowalczyk",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Warsaw, Poland, 8 years, profile analyzed",
+      "newScore": 80.0,
+      "newConfidence": 72.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e054",
+      "timestamp": "10:00:54",
+      "candidateId": "dr-jan-de-vries",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Amsterdam, Netherlands, 11 years, profile analyzed",
+      "newScore": 85.0,
+      "newConfidence": 77.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e055",
+      "timestamp": "10:00:55",
+      "candidateId": "felix-schmidt",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 7 years, profile analyzed",
+      "newScore": 78.0,
+      "newConfidence": 68.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e056",
+      "timestamp": "10:00:56",
+      "candidateId": "pierre-lefevre",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Paris, France, 9 years, profile analyzed",
+      "newScore": 79.0,
+      "newConfidence": 70.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e057",
+      "timestamp": "10:00:57",
+      "candidateId": "dr-nikolai-petrov",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 8 years, profile analyzed",
+      "newScore": 81.0,
+      "newConfidence": 73.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e058",
+      "timestamp": "10:00:58",
+      "candidateId": "liam-murphy",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Dublin, Ireland, 10 years, profile analyzed",
+      "newScore": 77.0,
+      "newConfidence": 67.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e059",
+      "timestamp": "10:00:59",
+      "candidateId": "sven-larsson",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Gothenburg, Sweden, 13 years, profile analyzed",
+      "newScore": 82.0,
+      "newConfidence": 74.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e060",
+      "timestamp": "10:01:00",
+      "candidateId": "dr-ahmed-hassan",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "London, UK, 7 years, profile analyzed",
+      "newScore": 76.0,
+      "newConfidence": 66.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e061",
+      "timestamp": "10:01:01",
+      "candidateId": "lucas-meyer",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Zurich, Switzerland, 9 years, profile analyzed",
+      "newScore": 79.0,
+      "newConfidence": 69.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e062",
+      "timestamp": "10:01:02",
+      "candidateId": "dmitri-volkov",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 8 years, profile analyzed",
+      "newScore": 75.0,
+      "newConfidence": 65.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e063",
+      "timestamp": "10:01:03",
+      "candidateId": "oscar-bergstrom",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Stockholm, Sweden, 6 years, profile analyzed",
+      "newScore": 72.0,
+      "newConfidence": 61.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e064",
+      "timestamp": "10:01:04",
+      "candidateId": "dr-paolo-conti",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Rome, Italy, 7 years, profile analyzed",
+      "newScore": 74.0,
+      "newConfidence": 63.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e065",
+      "timestamp": "10:01:05",
+      "candidateId": "sebastian-kraft",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 6 years, profile analyzed",
+      "newScore": 58.0,
+      "newConfidence": 72.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e066",
+      "timestamp": "10:01:06",
+      "candidateId": "alexander-von-berg",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Munich, Germany, 5 years, profile analyzed",
+      "newScore": 52.0,
+      "newConfidence": 68.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e067",
+      "timestamp": "10:01:07",
+      "candidateId": "james-whitfield",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "London, UK, 8 years, profile analyzed",
+      "newScore": 55.0,
+      "newConfidence": 70.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e068",
+      "timestamp": "10:01:08",
+      "candidateId": "christian-huber",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Vienna, Austria, 7 years, profile analyzed",
+      "newScore": 54.0,
+      "newConfidence": 66.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e069",
+      "timestamp": "10:01:09",
+      "candidateId": "marcus-engel",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Hamburg, Germany, 9 years, profile analyzed",
+      "newScore": 56.0,
+      "newConfidence": 69.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e070",
+      "timestamp": "10:01:10",
+      "candidateId": "patrick-oreilly",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Dublin, Ireland, 6 years, profile analyzed",
+      "newScore": 51.0,
+      "newConfidence": 64.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e071",
+      "timestamp": "10:01:11",
+      "candidateId": "florian-hartmann",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 4 years, profile analyzed",
+      "newScore": 48.0,
+      "newConfidence": 61.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e072",
+      "timestamp": "10:01:12",
+      "candidateId": "hendrik-voss",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 5 years, profile analyzed",
+      "newScore": 53.0,
+      "newConfidence": 65.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e073",
+      "timestamp": "10:01:13",
+      "candidateId": "nikolaos-papadopoulos",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Athens, Greece, 7 years, profile analyzed",
+      "newScore": 57.0,
+      "newConfidence": 67.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e074",
+      "timestamp": "10:01:14",
+      "candidateId": "erik-johansson-m",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Stockholm, Sweden, 8 years, profile analyzed",
+      "newScore": 59.0,
+      "newConfidence": 71.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e075",
+      "timestamp": "10:01:15",
+      "candidateId": "raphael-dupont",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Paris, France, 6 years, profile analyzed",
+      "newScore": 50.0,
+      "newConfidence": 63.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e076",
+      "timestamp": "10:01:16",
+      "candidateId": "benjamin-wolf",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 5 years, profile analyzed",
+      "newScore": 49.0,
+      "newConfidence": 62.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e077",
+      "timestamp": "10:01:17",
+      "candidateId": "matej-horvat",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Bratislava, Slovakia, 7 years, profile analyzed",
+      "newScore": 55.0,
+      "newConfidence": 66.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e078",
+      "timestamp": "10:01:18",
+      "candidateId": "thomas-richter",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Dusseldorf, Germany, 10 years, profile analyzed",
+      "newScore": 60.0,
+      "newConfidence": 73.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e079",
+      "timestamp": "10:01:19",
+      "candidateId": "ivan-kozlov",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 6 years, profile analyzed",
+      "newScore": 54.0,
+      "newConfidence": 64.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e080",
+      "timestamp": "10:01:20",
+      "candidateId": "michal-novotny",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Prague, Czech Republic, 7 years, profile analyzed",
+      "newScore": 67.0,
+      "newConfidence": 58.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e081",
+      "timestamp": "10:01:21",
+      "candidateId": "david-nielsen",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Copenhagen, Denmark, 6 years, profile analyzed",
+      "newScore": 65.0,
+      "newConfidence": 56.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e082",
+      "timestamp": "10:01:22",
+      "candidateId": "jakub-wisniewski",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Gdansk, Poland, 5 years, profile analyzed",
+      "newScore": 62.0,
+      "newConfidence": 52.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e083",
+      "timestamp": "10:01:23",
+      "candidateId": "hugo-martin",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Toulouse, France, 8 years, profile analyzed",
+      "newScore": 68.0,
+      "newConfidence": 59.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e084",
+      "timestamp": "10:01:24",
+      "candidateId": "lorenzo-galli",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Bologna, Italy, 6 years, profile analyzed",
+      "newScore": 64.0,
+      "newConfidence": 54.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e085",
+      "timestamp": "10:01:25",
+      "candidateId": "ben-harrison",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Bristol, UK, 7 years, profile analyzed",
+      "newScore": 66.0,
+      "newConfidence": 57.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e086",
+      "timestamp": "10:01:26",
+      "candidateId": "adam-nagy",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Budapest, Hungary, 5 years, profile analyzed",
+      "newScore": 60.0,
+      "newConfidence": 50.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e087",
+      "timestamp": "10:01:27",
+      "candidateId": "oliver-fuchs",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 6 years, profile analyzed",
+      "newScore": 63.0,
+      "newConfidence": 53.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e088",
+      "timestamp": "10:01:28",
+      "candidateId": "krzysztof-mazur",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Wroclaw, Poland, 8 years, profile analyzed",
+      "newScore": 69.0,
+      "newConfidence": 60.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e089",
+      "timestamp": "10:01:29",
+      "candidateId": "martin-holzer",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Graz, Austria, 9 years, profile analyzed",
+      "newScore": 71.0,
+      "newConfidence": 62.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e090",
+      "timestamp": "10:01:30",
+      "candidateId": "peter-strand",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Malmo, Sweden, 7 years, profile analyzed",
+      "newScore": 67.0,
+      "newConfidence": 58.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e091",
+      "timestamp": "10:01:31",
+      "candidateId": "daniel-gruber",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Munich, Germany, 6 years, profile analyzed",
+      "newScore": 64.0,
+      "newConfidence": 54.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e092",
+      "timestamp": "10:01:32",
+      "candidateId": "matteo-romano",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Turin, Italy, 5 years, profile analyzed",
+      "newScore": 61.0,
+      "newConfidence": 51.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e093",
+      "timestamp": "10:01:33",
+      "candidateId": "wojciech-kubiak",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Warsaw, Poland, 6 years, profile analyzed",
+      "newScore": 63.0,
+      "newConfidence": 53.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e094",
+      "timestamp": "10:01:34",
+      "candidateId": "niklas-fredriksson",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Uppsala, Sweden, 4 years, profile analyzed",
+      "newScore": 58.0,
+      "newConfidence": 48.0,
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e095",
+      "timestamp": "10:01:35",
+      "candidateId": "stefan-bauer",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Berlin, Germany, 4 years, profile analyzed",
+      "newScore": 42.0,
+      "newConfidence": 38.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e096",
+      "timestamp": "10:01:36",
+      "candidateId": "romain-petit",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Brussels, Belgium, 3 years, profile analyzed",
+      "newScore": 38.0,
+      "newConfidence": 35.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e097",
+      "timestamp": "10:01:37",
+      "candidateId": "vincenzo-colombo",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Naples, Italy, 5 years, profile analyzed",
+      "newScore": 40.0,
+      "newConfidence": 36.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e098",
+      "timestamp": "10:01:38",
+      "candidateId": "kevin-moser",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Linz, Austria, 6 years, profile analyzed",
+      "newScore": 44.0,
+      "newConfidence": 40.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e099",
+      "timestamp": "10:01:39",
+      "candidateId": "mark-jensen",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Aarhus, Denmark, 4 years, profile analyzed",
+      "newScore": 39.0,
+      "newConfidence": 34.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e100",
+      "timestamp": "10:01:40",
+      "candidateId": "andrea-moretti",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Florence, Italy, 3 years, profile analyzed",
+      "newScore": 36.0,
+      "newConfidence": 32.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e101",
+      "timestamp": "10:01:41",
+      "candidateId": "lars-henriksen",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Oslo, Norway, 15 years, profile analyzed",
+      "newScore": 45.0,
+      "newConfidence": 42.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e102",
+      "timestamp": "10:01:42",
+      "candidateId": "lukas-hofer",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Salzburg, Austria, 4 years, profile analyzed",
+      "newScore": 41.0,
+      "newConfidence": 37.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e103",
+      "timestamp": "10:01:43",
+      "candidateId": "miguel-torres",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Valencia, Spain, 5 years, profile analyzed",
+      "newScore": 43.0,
+      "newConfidence": 39.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e104",
+      "timestamp": "10:01:44",
+      "candidateId": "jan-kovar",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Brno, Czech Republic, 3 years, profile analyzed",
+      "newScore": 37.0,
+      "newConfidence": 33.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e105",
+      "timestamp": "10:01:45",
+      "candidateId": "georgi-dimitrov",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Sofia, Bulgaria, 6 years, profile analyzed",
+      "newScore": 46.0,
+      "newConfidence": 41.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e106",
+      "timestamp": "10:01:46",
+      "candidateId": "victor-dubois-m",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Lille, France, 4 years, profile analyzed",
+      "newScore": 40.0,
+      "newConfidence": 36.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e107",
+      "timestamp": "10:01:47",
+      "candidateId": "marius-pop",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Cluj, Romania, 5 years, profile analyzed",
+      "newScore": 44.0,
+      "newConfidence": 40.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e108",
+      "timestamp": "10:01:48",
+      "candidateId": "tomas-svoboda",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Prague, Czech Republic, 7 years, profile analyzed",
+      "newScore": 47.0,
+      "newConfidence": 43.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e109",
+      "timestamp": "10:01:49",
+      "candidateId": "piotr-kaminski",
+      "type": "sourced",
+      "title": "Candidate sourced",
+      "detail": "Poznan, Poland, 4 years, profile analyzed",
+      "newScore": 42.0,
+      "newConfidence": 38.0,
+      "sentiment": "negative"
+    },
+    {
+      "id": "e110",
+      "timestamp": "10:02:00",
+      "type": "phase_marker",
+      "title": "Skills first verification",
+      "detail": "Cross referencing CVs against GitHub, Google Scholar, Kaggle, patent databases, and conference proceedings. No points for self promotion",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e111",
+      "timestamp": "10:02:01",
+      "candidateId": "elena-voronova",
+      "type": "signal_detected",
+      "title": "Signal: Hidden leadership detected",
+      "detail": "CV says 'contributed to personalization efforts' but GitHub shows she authored a recommendation library with 2.1k stars and led team of 6",
+      "scoreChange": 5,
+      "newScore": 88.0,
+      "newConfidence": 83.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e112",
+      "timestamp": "10:02:02",
+      "candidateId": "dr-yue-chen",
+      "type": "signal_detected",
+      "title": "Signal: Academic output exceeds CV claims",
+      "detail": "CV mentions only 'research experience' but Google Scholar shows h-index 14, NeurIPS spotlight, and Kaggle top 1%. Previously filtered by Zalando's keyword matcher",
+      "scoreChange": 4,
+      "newScore": 91.0,
+      "newConfidence": 86.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e113",
+      "timestamp": "10:02:03",
+      "candidateId": "nadia-kowalska",
+      "type": "signal_detected",
+      "title": "Signal: Leadership understated",
+      "detail": "CV says 'supported search ranking project' but Allegro internal references confirm she led the entire initiative for 20M users",
+      "scoreChange": 3,
+      "newScore": 74.0,
+      "newConfidence": 67.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e114",
+      "timestamp": "10:02:04",
+      "candidateId": "dr-ingrid-hoffmann",
+      "type": "signal_detected",
+      "title": "Signal: Fairness ML expertise",
+      "detail": "3 of 9 publications directly address fairness aware recommendation. Directly relevant to Zalando's AI bias mitigation requirements",
+      "scoreChange": 4,
+      "newScore": 85.0,
+      "newConfidence": 79.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e115",
+      "timestamp": "10:02:05",
+      "candidateId": "wei-zhang",
+      "type": "signal_detected",
+      "title": "Signal: Open source impact hidden",
+      "detail": "Maintains fashion embedding library (4.8k GitHub stars) used by major retailers. LinkedIn profile minimal, current role severely underleveled",
+      "scoreChange": 6,
+      "newScore": 84.0,
+      "newConfidence": 78.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e116",
+      "timestamp": "10:02:06",
+      "candidateId": "maria-gonzalez",
+      "type": "signal_detected",
+      "title": "Signal: Title mismatch detected",
+      "detail": "LinkedIn says 'Data Analyst' but Kaggle gold medal in H&M Fashion Recommendations + 12 production quality ML repos on GitHub",
+      "scoreChange": 5,
+      "newScore": 75.0,
+      "newConfidence": 68.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e117",
+      "timestamp": "10:02:07",
+      "candidateId": "caroline-dubois",
+      "type": "signal_detected",
+      "title": "Signal: Seniority understated",
+      "detail": "CV describes as 'senior individual contributor' but actually Director of ML at Veepee leading team of 12. Salary expectation 15% below market",
+      "scoreChange": 4,
+      "newScore": 80.0,
+      "newConfidence": 74.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e118",
+      "timestamp": "10:02:08",
+      "candidateId": "dr-priya-sharma",
+      "type": "signal_detected",
+      "title": "Signal: Academic credit gap",
+      "detail": "CV says 'research assistant' for work where she was lead author on 5 papers. Consulted for ASOS on experimentation platform",
+      "scoreChange": 3,
+      "newScore": 80.0,
+      "newConfidence": 75.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e119",
+      "timestamp": "10:02:09",
+      "candidateId": "sarah-thompson",
+      "type": "signal_detected",
+      "title": "Signal: Passive candidate identified",
+      "detail": "WiMLDS organizer, Senior Applied Scientist at Spotify. Built discovery algorithm for 200M+ users. Not actively looking but open to Zalando's mission",
+      "scoreChange": 3,
+      "newScore": 81.0,
+      "newConfidence": 75.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e120",
+      "timestamp": "10:02:10",
+      "candidateId": "aisha-patel",
+      "type": "signal_detected",
+      "title": "Signal: Bias detection expertise",
+      "detail": "Author of open source bias detection toolkit (3.2k GitHub stars). Directly relevant to Zalando's AI fairness requirements",
+      "scoreChange": 4,
+      "newScore": 77.0,
+      "newConfidence": 70.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e121",
+      "timestamp": "10:02:11",
+      "candidateId": "dr-sarah-klein",
+      "type": "signal_detected",
+      "title": "Signal: Restricted LinkedIn profile",
+      "detail": "RecSys 2024 keynote speaker on fairness in fashion recommendation. Staff at Amazon, 12 publications, h-index 19. Invisible to standard LinkedIn recruiter search",
+      "scoreChange": 5,
+      "newScore": 92.0,
+      "newConfidence": 88.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e122",
+      "timestamp": "10:02:12",
+      "candidateId": "dr-ada-nilsson",
+      "type": "signal_detected",
+      "title": "Signal: Cultural alignment detected",
+      "detail": "NeurIPS workshop on causal inference for business. Built A/B testing framework used by 500+ engineers at Spotify. Passionate about fair ML",
+      "scoreChange": 3,
+      "newScore": 83.0,
+      "newConfidence": 77.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e123",
+      "timestamp": "10:02:13",
+      "candidateId": "miriam-schneider",
+      "type": "signal_detected",
+      "title": "Signal: Hybrid role detected",
+      "detail": "CV lists 'manager' but still codes 40% of the time. Head of Data Science at About You, built recommendation engine from scratch. Direct competitor knowledge",
+      "scoreChange": 4,
+      "newScore": 79.0,
+      "newConfidence": 73.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e124",
+      "timestamp": "10:02:14",
+      "candidateId": "anna-berg",
+      "type": "signal_detected",
+      "title": "Signal: Cross domain transferability",
+      "detail": "Patent holder on sequential decision models at Klarna. Fraud detection to pricing optimization is a proven transfer path",
+      "scoreChange": 2,
+      "newScore": 82.0,
+      "newConfidence": 74.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e125",
+      "timestamp": "10:02:15",
+      "candidateId": "dr-fatima-al-rashidi",
+      "type": "signal_detected",
+      "title": "Signal: Impact understated",
+      "detail": "CV does not mention that her pricing research at Deliveroo drove 3% revenue uplift. 3 papers on dynamic pricing under uncertainty",
+      "scoreChange": 3,
+      "newScore": 79.0,
+      "newConfidence": 73.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e126",
+      "timestamp": "10:02:16",
+      "candidateId": "sebastian-kraft",
+      "type": "signal_detected",
+      "title": "Signal: CV inflation detected",
+      "detail": "LinkedIn claims 'AI Visionary, Thought Leader'. Verification: standard data pipeline engineering. No publications, no open source, no verifiable ML output",
+      "scoreChange": -8,
+      "newScore": 58.0,
+      "newConfidence": 72.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e127",
+      "timestamp": "10:02:17",
+      "candidateId": "alexander-von-berg",
+      "type": "signal_detected",
+      "title": "Signal: Role inflation detected",
+      "detail": "CV claims 'led ML transformation'. Verification: managed PowerBI dashboards, no ML models in production",
+      "scoreChange": -10,
+      "newScore": 52.0,
+      "newConfidence": 68.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e128",
+      "timestamp": "10:02:18",
+      "candidateId": "james-whitfield",
+      "type": "signal_detected",
+      "title": "Signal: Experience mismatch",
+      "detail": "CV: 'Senior AI Strategist' at Big 4. Verification: advisory work only, no hands on model building. Medium articles listed as 'publications'",
+      "scoreChange": -9,
+      "newScore": 55.0,
+      "newConfidence": 70.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e129",
+      "timestamp": "10:02:19",
+      "candidateId": "christian-huber",
+      "type": "signal_detected",
+      "title": "Signal: Output gap detected",
+      "detail": "LinkedIn: 15k followers, 'Top Voice in AI'. Actual output: 2 Jupyter notebooks, last commit 18 months ago. Current role: product manager",
+      "scoreChange": -8,
+      "newScore": 54.0,
+      "newConfidence": 66.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e130",
+      "timestamp": "10:02:20",
+      "candidateId": "marcus-engel",
+      "type": "signal_detected",
+      "title": "Signal: Claim unverified",
+      "detail": "CV claims 'built recommendation engine from scratch'. Verification: integrated third party API, no custom ML development",
+      "scoreChange": -7,
+      "newScore": 56.0,
+      "newConfidence": 69.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e131",
+      "timestamp": "10:02:21",
+      "candidateId": "thomas-richter",
+      "type": "signal_detected",
+      "title": "Signal: Title seniority mismatch",
+      "detail": "VP of AI title at mid size retailer. Team of 3, mostly BI dashboards. Skills assessment reveals significant gaps in modern ML",
+      "scoreChange": -6,
+      "newScore": 60.0,
+      "newConfidence": 73.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e132",
+      "timestamp": "10:02:22",
+      "candidateId": "florian-hartmann",
+      "type": "signal_detected",
+      "title": "Signal: Bootcamp inflation",
+      "detail": "Bootcamp graduate positioning as 'Full Stack ML Engineer'. GitHub: forked repos only. Salary expectation at senior level despite junior output",
+      "scoreChange": -5,
+      "newScore": 48.0,
+      "newConfidence": 61.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e133",
+      "timestamp": "10:02:23",
+      "candidateId": "ivan-kozlov",
+      "type": "signal_detected",
+      "title": "Signal: Referral bias flag",
+      "detail": "Strong networking: 5 referrals from Zalando employees. But GitHub shows tutorial completions presented as projects. No deployed models",
+      "scoreChange": -4,
+      "newScore": 54.0,
+      "newConfidence": 64.0,
+      "signalCategory": "skills_depth",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e134",
+      "timestamp": "10:03:00",
+      "candidateIds": [
+        "florian-hartmann",
+        "benjamin-wolf",
+        "stefan-bauer",
+        "romain-petit",
+        "vincenzo-colombo",
+        "kevin-moser",
+        "mark-jensen",
+        "andrea-moretti",
+        "lars-henriksen",
+        "lukas-hofer",
+        "miguel-torres",
+        "jan-kovar",
+        "georgi-dimitrov",
+        "victor-dubois-m",
+        "marius-pop",
+        "tomas-svoboda",
+        "piotr-kaminski"
+      ],
+      "type": "batch_eliminated",
+      "title": "17 candidates below minimum qualification bar",
+      "detail": "Insufficient ML experience, no verifiable research or production output, or mismatched role expectations",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e135",
+      "timestamp": "10:03:01",
+      "candidateIds": [
+        "sebastian-kraft",
+        "alexander-von-berg",
+        "james-whitfield",
+        "christian-huber",
+        "marcus-engel",
+        "patrick-oreilly",
+        "hendrik-voss",
+        "nikolaos-papadopoulos",
+        "erik-johansson-m",
+        "raphael-dupont",
+        "matej-horvat",
+        "ivan-kozlov"
+      ],
+      "type": "batch_eliminated",
+      "title": "12 candidates: high self presentation, low verified skills",
+      "detail": "CV claims could not be verified against GitHub, publications, or technical assessments. Traditional screening would have advanced these candidates",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e136",
+      "timestamp": "10:04:00",
+      "type": "phase_marker",
+      "title": "Personalized outreach",
+      "detail": "Contacting top 30 candidates with role specific messaging. Emphasizing Zalando's scale, publication culture, and diversity commitment",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e137",
+      "timestamp": "10:04:01",
+      "candidateId": "dr-sarah-klein",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e138",
+      "timestamp": "10:04:02",
+      "candidateId": "dr-yue-chen",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e139",
+      "timestamp": "10:04:03",
+      "candidateId": "dr-maximilian-braun",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e140",
+      "timestamp": "10:04:04",
+      "candidateId": "elena-voronova",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e141",
+      "timestamp": "10:04:05",
+      "candidateId": "anders-lindqvist",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e142",
+      "timestamp": "10:04:06",
+      "candidateId": "dr-ingrid-hoffmann",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e143",
+      "timestamp": "10:04:07",
+      "candidateId": "dr-jan-de-vries",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e144",
+      "timestamp": "10:04:08",
+      "candidateId": "wei-zhang",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e145",
+      "timestamp": "10:04:09",
+      "candidateId": "dr-ada-nilsson",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e146",
+      "timestamp": "10:04:10",
+      "candidateId": "dr-marco-ferrari",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e147",
+      "timestamp": "10:04:11",
+      "candidateId": "anna-berg",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e148",
+      "timestamp": "10:04:12",
+      "candidateId": "sven-larsson",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e149",
+      "timestamp": "10:04:13",
+      "candidateId": "sarah-thompson",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e150",
+      "timestamp": "10:04:14",
+      "candidateId": "dr-nikolai-petrov",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e151",
+      "timestamp": "10:04:15",
+      "candidateId": "dr-priya-sharma",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e152",
+      "timestamp": "10:04:16",
+      "candidateId": "caroline-dubois",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e153",
+      "timestamp": "10:04:17",
+      "candidateId": "dr-chloe-martin",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e154",
+      "timestamp": "10:04:18",
+      "candidateId": "tomasz-kowalczyk",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e155",
+      "timestamp": "10:04:19",
+      "candidateId": "dr-fatima-al-rashidi",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e156",
+      "timestamp": "10:04:20",
+      "candidateId": "miriam-schneider",
+      "type": "message_sent",
+      "title": "Outreach message sent",
+      "detail": "Personalized message highlighting role scope, team culture, and growth opportunity at Zalando",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e157",
+      "timestamp": "10:05:00",
+      "type": "phase_marker",
+      "title": "Response analysis",
+      "detail": "Analyzing candidate responses for engagement quality, technical curiosity, and cultural alignment signals",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e158",
+      "timestamp": "10:05:01",
+      "candidateId": "dr-sarah-klein",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 8 min. Asked about team size, publication support, and fairness research agenda. Mentioned wanting to leave Amazon for European work life balance",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e159",
+      "timestamp": "10:05:02",
+      "candidateId": "dr-sarah-klein",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: strategically engaged",
+      "scoreChange": 3,
+      "newScore": 95.0,
+      "newConfidence": 90.0,
+      "signalCategory": "communication",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e160",
+      "timestamp": "10:05:03",
+      "candidateId": "dr-yue-chen",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 12 min. Shared additional unpublished research on fashion recommendation. Expressed excitement about Zalando's scale",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e161",
+      "timestamp": "10:05:04",
+      "candidateId": "dr-yue-chen",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: strategically engaged",
+      "scoreChange": 3,
+      "newScore": 94.0,
+      "newConfidence": 89.0,
+      "signalCategory": "communication",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e162",
+      "timestamp": "10:05:05",
+      "candidateId": "elena-voronova",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 20 min. Asked detailed questions about recommendation infrastructure and A/B testing framework",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e163",
+      "timestamp": "10:05:06",
+      "candidateId": "elena-voronova",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: strategically engaged",
+      "scoreChange": 2,
+      "newScore": 90.0,
+      "newConfidence": 85.0,
+      "signalCategory": "communication",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e164",
+      "timestamp": "10:05:07",
+      "candidateId": "dr-maximilian-braun",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 5 min. Very interested but flagged potential non compete clause with About You. Needs legal review",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e165",
+      "timestamp": "10:05:09",
+      "candidateId": "anders-lindqvist",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 30 min. Interested but mentioned preference for management track. May not want IC role",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e166",
+      "timestamp": "10:05:10",
+      "candidateId": "anders-lindqvist",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: standard response",
+      "scoreChange": -1,
+      "newScore": 85.0,
+      "newConfidence": 79.0,
+      "signalCategory": "communication",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e167",
+      "timestamp": "10:05:11",
+      "candidateId": "dr-ingrid-hoffmann",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 15 min. Immediately connected her fairness research to Zalando's specific challenges. Deep domain understanding",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e168",
+      "timestamp": "10:05:12",
+      "candidateId": "dr-ingrid-hoffmann",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: strategically engaged",
+      "scoreChange": 3,
+      "newScore": 88.0,
+      "newConfidence": 82.0,
+      "signalCategory": "communication",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e169",
+      "timestamp": "10:05:13",
+      "candidateId": "dr-jan-de-vries",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 45 min. Professional interest but mentioned loyalty to Booking.com team. Would need strong pull factor",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e170",
+      "timestamp": "10:05:15",
+      "candidateId": "wei-zhang",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 10 min. Shared her fashion embedding library directly. Asked about scale of Zalando's recommendation traffic",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e171",
+      "timestamp": "10:05:16",
+      "candidateId": "wei-zhang",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: strategically engaged",
+      "scoreChange": 3,
+      "newScore": 87.0,
+      "newConfidence": 81.0,
+      "signalCategory": "communication",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e172",
+      "timestamp": "10:05:17",
+      "candidateId": "dr-ada-nilsson",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 18 min. Mentioned her NeurIPS workshop and asked about Zalando's experimentation culture. Strong alignment",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e173",
+      "timestamp": "10:05:18",
+      "candidateId": "dr-ada-nilsson",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: strategically engaged",
+      "scoreChange": 2,
+      "newScore": 85.0,
+      "newConfidence": 79.0,
+      "signalCategory": "communication",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e174",
+      "timestamp": "10:05:19",
+      "candidateId": "dr-marco-ferrari",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 25 min. Standard professional interest. Currently on Amazon internal transfer freeze, timing works",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e175",
+      "timestamp": "10:05:20",
+      "candidateId": "dr-marco-ferrari",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: standard response",
+      "scoreChange": 1,
+      "newScore": 84.0,
+      "newConfidence": 78.0,
+      "signalCategory": "communication",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e176",
+      "timestamp": "10:05:21",
+      "candidateId": "anna-berg",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 35 min. Interested in applied science challenge. Klarna experience directly relevant to pricing models",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e177",
+      "timestamp": "10:05:22",
+      "candidateId": "anna-berg",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: strategically engaged",
+      "scoreChange": 1,
+      "newScore": 83.0,
+      "newConfidence": 76.0,
+      "signalCategory": "communication",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e178",
+      "timestamp": "10:05:23",
+      "candidateId": "sven-larsson",
+      "type": "no_reply",
+      "title": "No response",
+      "detail": "No response after 48 hours. H&M likely has strong retention package. Flagged as passive",
+      "sentiment": "negative",
+      "newConfidence": 72.0
+    },
+    {
+      "id": "e179",
+      "timestamp": "10:05:24",
+      "candidateId": "sven-larsson",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: standard response",
+      "scoreChange": -2,
+      "newScore": 80.0,
+      "newConfidence": 72.0,
+      "signalCategory": "communication",
+      "sentiment": "negative"
+    },
+    {
+      "id": "e180",
+      "timestamp": "10:05:25",
+      "candidateId": "caroline-dubois",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 22 min. Very excited about Zalando opportunity. Mentioned Veepee is too small for her ambitions now",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e181",
+      "timestamp": "10:05:26",
+      "candidateId": "caroline-dubois",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: strategically engaged",
+      "scoreChange": 2,
+      "newScore": 82.0,
+      "newConfidence": 76.0,
+      "signalCategory": "communication",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e182",
+      "timestamp": "10:05:27",
+      "candidateId": "sarah-thompson",
+      "type": "message_received",
+      "title": "Reply analyzed for engagement pattern",
+      "detail": "Replied in 40 min. Not actively looking but agreed to exploratory conversation. Spotify is comfortable but wants bigger impact",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e183",
+      "timestamp": "10:05:28",
+      "candidateId": "sarah-thompson",
+      "type": "score_update",
+      "title": "Engagement signal applied",
+      "detail": "Engagement pattern: strategically engaged",
+      "scoreChange": 1,
+      "newScore": 82.0,
+      "newConfidence": 76.0,
+      "signalCategory": "communication",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e184",
+      "timestamp": "10:06:00",
+      "type": "phase_marker",
+      "title": "Technical deep dive interviews",
+      "detail": "Conducting structured interviews with top 8 candidates. Same rubric for all: research depth, production experience, collaboration, fairness awareness",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e185",
+      "timestamp": "10:06:01",
+      "candidateId": "dr-sarah-klein",
+      "type": "interview_complete",
+      "title": "Interview evidence integrated",
+      "detail": "Exceptional depth in fairness aware recommendation. Described building bias monitoring pipeline at Amazon scale. Clear vision for how to apply at Zalando. Mentorship examples strong",
+      "scoreChange": 3,
+      "newScore": 98.0,
+      "newConfidence": 93.0,
+      "signalCategory": "interview",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e186",
+      "timestamp": "10:06:03",
+      "candidateId": "dr-yue-chen",
+      "type": "interview_complete",
+      "title": "Interview evidence integrated",
+      "detail": "Outstanding research depth. RecSys challenge solution directly applicable. Showed production awareness despite academic background. Zalando scale excites her",
+      "scoreChange": 3,
+      "newScore": 97.0,
+      "newConfidence": 92.0,
+      "signalCategory": "interview",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e187",
+      "timestamp": "10:06:05",
+      "candidateId": "elena-voronova",
+      "type": "interview_complete",
+      "title": "Interview evidence integrated",
+      "detail": "Strong systems thinker. Delivery Hero personalization architecture deep dive was impressive. Collaborative style evident. Undervalued in current role",
+      "scoreChange": 2,
+      "newScore": 92.0,
+      "newConfidence": 88.0,
+      "signalCategory": "interview",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e188",
+      "timestamp": "10:06:07",
+      "candidateId": "dr-ingrid-hoffmann",
+      "type": "interview_complete",
+      "title": "Interview evidence integrated",
+      "detail": "Fairness ML expertise is world class. Research directly applicable. Slightly less production experience but strong mentorship potential",
+      "scoreChange": 2,
+      "newScore": 90.0,
+      "newConfidence": 85.0,
+      "signalCategory": "interview",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e189",
+      "timestamp": "10:06:09",
+      "candidateId": "wei-zhang",
+      "type": "interview_complete",
+      "title": "Interview evidence integrated",
+      "detail": "Technical depth extraordinary. Fashion embedding library demo was compelling. Communication style understated but substance is exceptional",
+      "scoreChange": 2,
+      "newScore": 89.0,
+      "newConfidence": 84.0,
+      "signalCategory": "interview",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e190",
+      "timestamp": "10:06:11",
+      "candidateId": "dr-maximilian-braun",
+      "type": "interview_complete",
+      "title": "Interview evidence integrated",
+      "detail": "Very strong candidate. Deep pricing expertise. But non compete concern is real, estimated 6 month wait. Recommended for pipeline, not immediate hire",
+      "scoreChange": -2,
+      "newScore": 87.0,
+      "newConfidence": 83.0,
+      "signalCategory": "interview",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e191",
+      "timestamp": "10:06:13",
+      "candidateId": "dr-jan-de-vries",
+      "type": "interview_complete",
+      "title": "Interview evidence integrated",
+      "detail": "Excellent technical interview. Booking.com ranking experience is premium. However, indicated he'd need significant comp increase to move",
+      "scoreChange": 0,
+      "newScore": 85.0,
+      "newConfidence": 80.0,
+      "signalCategory": "interview",
+      "sentiment": "neutral"
+    },
+    {
+      "id": "e192",
+      "timestamp": "10:06:15",
+      "candidateId": "dr-ada-nilsson",
+      "type": "interview_complete",
+      "title": "Interview evidence integrated",
+      "detail": "Strong experimentation focus. A/B testing framework at Spotify is impressive. Good cultural fit. Slightly less depth in recommendation systems specifically",
+      "scoreChange": 1,
+      "newScore": 86.0,
+      "newConfidence": 82.0,
+      "signalCategory": "interview",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e193",
+      "timestamp": "10:07:00",
+      "type": "phase_marker",
+      "title": "Final shortlist",
+      "detail": "Selecting top 5 candidates based on holistic multi signal analysis. Slate composition: 3 women, 2 men",
+      "sentiment": "positive"
+    },
+    {
+      "id": "e194",
+      "timestamp": "10:07:01",
+      "candidateId": "dr-sarah-klein",
+      "type": "shortlisted",
+      "title": "Shortlisted #1",
+      "detail": "Fairness in fashion recommendation expert. RecSys keynote speaker. Invisible to LinkedIn sourcing. Wants to leave Amazon for European opportunity",
+      "newScore": 98.0,
+      "newConfidence": 95.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e195",
+      "timestamp": "10:07:02",
+      "candidateId": "dr-yue-chen",
+      "type": "shortlisted",
+      "title": "Shortlisted #2",
+      "detail": "ETH Zurich, NeurIPS spotlight. Previously filtered by Zalando's own keyword matcher. Kaggle top 1%. Academic to industry transition ready",
+      "newScore": 97.0,
+      "newConfidence": 94.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e196",
+      "timestamp": "10:07:03",
+      "candidateId": "elena-voronova",
+      "type": "shortlisted",
+      "title": "Shortlisted #3",
+      "detail": "Delivery Hero personalization lead. CV massively understated her role. GitHub proves technical depth. Berlin based, immediate availability",
+      "newScore": 92.0,
+      "newConfidence": 91.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e197",
+      "timestamp": "10:07:04",
+      "candidateId": "dr-ingrid-hoffmann",
+      "type": "shortlisted",
+      "title": "Shortlisted #4",
+      "detail": "Max Planck fairness ML researcher. 3 papers directly addressing Zalando's bias challenges. Strong mentorship profile",
+      "newScore": 90.0,
+      "newConfidence": 88.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e198",
+      "timestamp": "10:07:05",
+      "candidateId": "dr-maximilian-braun",
+      "type": "shortlisted",
+      "title": "Shortlisted #5",
+      "detail": "About You dynamic pricing expert. Strong match but 6 month non compete delay. Pipeline candidate for Q3",
+      "newScore": 87.0,
+      "newConfidence": 86.0,
+      "sentiment": "positive"
+    },
+    {
+      "id": "e199",
+      "timestamp": "10:07:06",
+      "type": "system",
+      "title": "Pipeline complete",
+      "detail": "100 candidates sourced across 6 channels. 40% women achieved (vs 20% market baseline). Top 5 shortlist: 4 women, 1 man. 3 of 4 women would have been invisible to traditional LinkedIn only sourcing",
+      "sentiment": "positive"
+    }
+  ],
+  "reveal": {
+    "hiredCandidateId": "dr-maximilian-braun",
+    "hiredOutcome": "Strong hire but delayed 6 months due to non compete. Eventually joined and performing well in dynamic pricing. However, the 6 month delay cost Zalando an estimated 2 quarters of recommendation improvements",
+    "tenerTopPick": "dr-sarah-klein",
+    "tenerOutcome": "Would have started immediately. RecSys keynote speaker with 12 publications on fairness aware recommendation. Directly addresses Zalando's #1 concern (AI bias). Was invisible to LinkedIn recruiters due to restricted profile. Sourced via conference speaker network",
+    "actualCost": "EUR 45K (agency fee for Braun)",
+    "tenerCost": "EUR 12K",
+    "actualTime": "94 days (including non compete negotiation)",
+    "tenerTime": "10 days to shortlist",
+    "funnel": {
+      "sourced": 100,
+      "filtered": 72,
+      "outreach": 30,
+      "engaged": 20,
+      "shortlisted": 5
+    }
+  }
+}

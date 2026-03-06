@@ -7,7 +7,9 @@ from pathlib import Path
 
 @dataclass(frozen=True)
 class InterviewModuleConfig:
+    db_backend: str
     db_path: str
+    db_dsn: str
     source_db_path: str
     source_api_base: str
     source_api_timeout_seconds: int
@@ -34,10 +36,17 @@ class InterviewModuleConfig:
     @classmethod
     def from_env(cls) -> "InterviewModuleConfig":
         root = Path(__file__).resolve().parents[2]
+        raw_backend = str(os.environ.get("TENER_INTERVIEW_DB_BACKEND", "sqlite") or "sqlite").strip().lower()
+        db_backend = raw_backend if raw_backend in {"sqlite", "postgres"} else "sqlite"
         db_path = os.environ.get(
             "TENER_INTERVIEW_DB_PATH",
             str(root / "runtime" / "tener_interview.sqlite3"),
         )
+        db_dsn = str(
+            os.environ.get("TENER_INTERVIEW_DB_DSN")
+            or os.environ.get("TENER_DB_DSN")
+            or ""
+        ).strip()
         source_db_path = os.environ.get(
             "TENER_INTERVIEW_SOURCE_DB_PATH",
             str(root / "runtime" / "tener_v1.sqlite3"),
@@ -104,7 +113,9 @@ class InterviewModuleConfig:
         )
 
         return cls(
+            db_backend=db_backend,
             db_path=db_path,
+            db_dsn=db_dsn,
             source_db_path=source_db_path,
             source_api_base=source_api_base,
             source_api_timeout_seconds=max(3, source_timeout_seconds),

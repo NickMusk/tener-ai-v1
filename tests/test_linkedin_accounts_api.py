@@ -104,8 +104,8 @@ class LinkedInAccountsApiTests(unittest.TestCase):
         items = list_payload.get("items") or []
         self.assertEqual(len(items), 2)
         first = items[0]
-        self.assertIn("daily_message_limit", first)
-        self.assertIn("daily_connect_limit", first)
+        self.assertIn("effective_daily_message_limit", first)
+        self.assertIn("effective_daily_connect_limit", first)
 
 
 if __name__ == "__main__":

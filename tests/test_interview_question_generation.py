@@ -181,6 +181,94 @@ class InterviewQuestionGenerationTests(unittest.TestCase):
             meta = out.get("meta") if isinstance(out.get("meta"), dict) else {}
             self.assertEqual(str(meta.get("culture_profile_source") or ""), "job")
 
+    def test_manual_qa_questions_are_jd_specific_and_not_backend_architecture_templates(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            guidelines_path = Path(tmpdir) / "guidelines.json"
+            profile_path = Path(tmpdir) / "company_profile.json"
+
+            guidelines_path.write_text(
+                json.dumps(
+                    {
+                        "version": "test-v4",
+                        "defaults": {
+                            "question_count": 10,
+                            "time_to_answer": 120,
+                            "time_to_think": 12,
+                            "retakes": 1,
+                            "category_targets": {
+                                "hard_skills": 0.4,
+                                "soft_skills": 0.3,
+                                "cultural_fit": 0.3,
+                            },
+                        },
+                        "skill_dictionary": [
+                            "manual testing",
+                            "api testing",
+                            "postman",
+                            "sql",
+                            "selenium",
+                            "python",
+                            "qa",
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            profile_path.write_text(
+                json.dumps(
+                    {
+                        "mission": "Ship high quality hiring workflows quickly",
+                        "values": ["ownership", "clarity", "collaboration"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            generator = InterviewQuestionGenerator(
+                guidelines_path=str(guidelines_path),
+                company_profile_path=str(profile_path),
+                company_name="Tener.ai",
+            )
+
+            out = generator.generate_for_job(
+                {
+                    "id": 404,
+                    "company": "Tener.ai",
+                    "title": "Manual QA Engineer",
+                    "jd_text": (
+                        "Role Overview: Manual QA Engineer for web platform, APIs, and AI-generated outputs. "
+                        "Responsibilities: test end-to-end flows, validate API responses in Postman, verify SQL data consistency, "
+                        "document reproducible bug reports, and collaborate with engineering on release decisions."
+                    ),
+                    "company_culture_profile": {
+                        "culture_values": ["ownership", "high standards", "clear communication"],
+                        "summary_200_300_words": "Fast-paced delivery with strict quality accountability and transparent communication.",
+                        "culture_interview_questions": [
+                            "Describe a time you pushed back on a release due to quality risk",
+                        ],
+                    },
+                }
+            )
+
+            self.assertEqual(len(out["questions"]), 10)
+            titles = [str((q or {}).get("title") or "") for q in out["questions"] if isinstance(q, dict)]
+            joined = "\n".join(titles).lower()
+
+            self.assertNotIn("design and scale", joined)
+            self.assertNotIn("architecture improvement", joined)
+            self.assertNotIn("distributed systems", joined)
+
+            # Must contain QA-specific signal words, not generic backend-only framing.
+            self.assertTrue(
+                any(any(marker in t.lower() for marker in ("test", "qa", "bug", "release", "api")) for t in titles)
+            )
+
+            # Culture profile should influence generated set.
+            self.assertIn("pushed back on a release", joined)
+
+            meta = out.get("meta") if isinstance(out.get("meta"), dict) else {}
+            self.assertEqual(str(meta.get("role_family") or ""), "qa")
+
 
 if __name__ == "__main__":
     unittest.main()

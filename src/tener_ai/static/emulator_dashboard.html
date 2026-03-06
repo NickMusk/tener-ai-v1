@@ -669,6 +669,16 @@
       return map[stage] || safeText(stage, 'Unknown');
     }
 
+    function isLifeSciencesProject(project) {
+      return safeText(project?.id, '') === 'biotech-blindspot-2024';
+    }
+
+    function hideOutcomeComparisonForProject(project) {
+      const projectId = safeText(project?.id, '');
+      return projectId === 'nabors-drilling-engineer-2024'
+        || projectId === 'nabors-ops-manager-uae-2024';
+    }
+
     async function api(path, opts = {}) {
       const res = await fetch(path, {
         headers: { 'Content-Type': 'application/json' },
@@ -733,10 +743,11 @@
       state.candidateOrder = [];
 
       const candidates = project.candidates || [];
+      const showFullPoolAtStart = isLifeSciencesProject(project);
       for (const candidate of candidates) {
         state.candidatesById.set(candidate.id, {
           ...candidate,
-          visible: false,
+          visible: showFullPoolAtStart,
           eliminated: false,
           stage: 'sourced',
           signalEvents: [...(candidate.signals || [])],
@@ -1157,20 +1168,31 @@
 
       const hired = state.candidatesById.get(reveal.hiredCandidateId || '');
       const topPick = state.candidatesById.get(reveal.tenerTopPick || '');
+      const isLifeSciencesDemo = isLifeSciencesProject(state.project);
+      const hideOutcomeComparison = hideOutcomeComparisonForProject(state.project);
+      const actualTitle = isLifeSciencesDemo ? 'Hired Candidate' : 'What Actually Happened';
+      const tenerTitle = isLifeSciencesDemo ? 'Top Recommendation' : 'What Tener Would Have Done';
+      const compareRoot = panel.querySelector('.compare');
+      if (compareRoot) {
+        compareRoot.hidden = hideOutcomeComparison;
+      }
+      if (hideOutcomeComparison) {
+        $('actual-col').innerHTML = '';
+        $('tener-col').innerHTML = '';
+        return;
+      }
 
       $('actual-col').innerHTML = `
-        <strong>What Actually Happened</strong><br>
+        <strong>${actualTitle}</strong><br>
         Hired: ${safeText(hired?.name || reveal.hiredCandidateId)}<br>
         Outcome: ${safeText(reveal.hiredOutcome)}<br>
-        Cost: ${safeText(reveal.actualCost, 'n/a')}<br>
         Time: ${safeText(reveal.actualTime, 'n/a')}
       `;
 
       $('tener-col').innerHTML = `
-        <strong>What Tener Would Have Done</strong><br>
+        <strong>${tenerTitle}</strong><br>
         Recommended: ${safeText(topPick?.name || reveal.tenerTopPick)}<br>
         Outcome: ${safeText(reveal.tenerOutcome)}<br>
-        Cost: ${safeText(reveal.tenerCost, 'n/a')}<br>
         Time: ${safeText(reveal.tenerTime, 'n/a')}
       `;
     }

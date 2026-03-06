@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib import error, parse, request
 
+from .attachments import descriptors_to_text, extract_attachment_descriptors_from_values
+
 
 class LinkedInProvider:
     def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
@@ -444,7 +446,8 @@ class UnipileLinkedInProvider(LinkedInProvider):
 
     def _normalize_chat_message(self, item: Dict[str, Any], chat_id: str) -> Dict[str, Any]:
         text = self._extract_message_text(item)
-        attachment_text = self._extract_attachment_text(item)
+        attachments = extract_attachment_descriptors_from_values([item], limit=8)
+        attachment_text = descriptors_to_text(attachments, limit=8)
         if attachment_text:
             text = f"{text}\n{attachment_text}".strip() if text else attachment_text
         provider_message_id = (
@@ -496,6 +499,7 @@ class UnipileLinkedInProvider(LinkedInProvider):
             "created_at": str(created_at).strip() if created_at else None,
             "is_sender": bool(is_sender) if isinstance(is_sender, bool) else None,
             "from_me": bool(from_me) if isinstance(from_me, bool) else None,
+            "attachments": [entry.to_dict() for entry in attachments],
             "raw": item,
         }
 
@@ -523,65 +527,8 @@ class UnipileLinkedInProvider(LinkedInProvider):
 
     @staticmethod
     def _extract_attachment_text(payload: Any, limit: int = 8) -> str:
-        fragments: List[str] = []
-        seen: set[str] = set()
-        UnipileLinkedInProvider._collect_attachment_fragments(payload, fragments=fragments, seen=seen, limit=limit)
-        return "\n".join(fragments[:limit]).strip()
-
-    @staticmethod
-    def _collect_attachment_fragments(payload: Any, fragments: List[str], seen: set[str], limit: int) -> None:
-        if len(fragments) >= limit:
-            return
-        if isinstance(payload, dict):
-            name_keys = ("name", "filename", "file_name", "title")
-            url_keys = (
-                "url",
-                "link",
-                "href",
-                "download_url",
-                "downloadUrl",
-                "signed_url",
-                "signedUrl",
-                "public_url",
-                "publicUrl",
-                "file_url",
-                "fileUrl",
-            )
-            names: List[str] = []
-            urls: List[str] = []
-            for key in name_keys:
-                raw = payload.get(key)
-                if isinstance(raw, str):
-                    cleaned = raw.strip()
-                    if cleaned:
-                        names.append(cleaned)
-            for key in url_keys:
-                raw = payload.get(key)
-                if isinstance(raw, str):
-                    cleaned = raw.strip()
-                    if cleaned.startswith("http://") or cleaned.startswith("https://"):
-                        urls.append(cleaned)
-            for url in urls:
-                if len(fragments) >= limit:
-                    return
-                text = f"attached file {names[0]} {url}".strip() if names else f"attached file {url}"
-                token = text.lower()
-                if token in seen:
-                    continue
-                seen.add(token)
-                fragments.append(text)
-
-            for nested in payload.values():
-                UnipileLinkedInProvider._collect_attachment_fragments(nested, fragments=fragments, seen=seen, limit=limit)
-                if len(fragments) >= limit:
-                    return
-            return
-
-        if isinstance(payload, list):
-            for item in payload:
-                UnipileLinkedInProvider._collect_attachment_fragments(item, fragments=fragments, seen=seen, limit=limit)
-                if len(fragments) >= limit:
-                    return
+        descriptors = extract_attachment_descriptors_from_values([payload], limit=limit)
+        return descriptors_to_text(descriptors, limit=limit)
 
     def _candidate_search_paths(self) -> List[str]:
         configured = (self.search_path or "").strip()

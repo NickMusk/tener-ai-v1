@@ -6,6 +6,7 @@ import ipaddress
 import os
 import re
 import threading
+from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -14,6 +15,8 @@ from urllib import error as urlerror, request as urlrequest
 from urllib.parse import parse_qs, unquote, urlparse
 
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
+from .attachments import descriptors_to_text, extract_attachment_descriptors_from_values
+from .auth import AuthService
 from .candidate_profile import CandidateProfileService
 from .candidate_scoring import CandidateScoringPolicy
 from .company_culture_profile import (
@@ -28,15 +31,23 @@ from .company_culture_profile import (
     canonicalize_url,
 )
 from .db import Database
+from .db_backfill import backfill_sqlite_to_postgres
+from .db_parity import DEFAULT_PARITY_TABLES, build_parity_report
+from .db_dual import DualWriteDatabase, PostgresMirrorWriter
+from .db_pg import PostgresMigrationRunner
+from .db_read_pg import PostgresReadDatabase
 from .emulator import EmulatorProjectStore
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
 from .interview_client import InterviewAPIClient
 from .linkedin_accounts import LinkedInAccountService
+from .linkedin_limits import resolve_account_limit_snapshot, validate_account_limits_payload
 from .llm_responder import CandidateLLMResponder
 from .linkedin_provider import build_linkedin_provider
 from .matching import MatchingEngine
 from .outreach_policy import LinkedInOutreachPolicy
 from .pre_resume_service import PreResumeCommunicationService
+from .signal_rules import SignalRulesEngine
+from .signals import JobSignalsLiveViewService, MonitoringService, SignalIngestionService
 from .workflow import WorkflowService
 
 
@@ -83,10 +94,22 @@ def apply_agent_instructions(services: Dict[str, Any]) -> None:
 
 def build_services() -> Dict[str, Any]:
     root = project_root()
+    db_backend = str(os.environ.get("TENER_DB_BACKEND", "sqlite") or "sqlite").strip().lower()
     local_db_path = str(root / "runtime" / "tener_v1.sqlite3")
     default_db_path = "/var/data/tener_v1.sqlite3" if os.environ.get("RENDER") else local_db_path
     configured_db_path = os.environ.get("TENER_DB_PATH", default_db_path)
     db_path = configured_db_path
+    postgres_dsn = str(os.environ.get("TENER_DB_DSN", "") or "").strip()
+    postgres_migration_status: Dict[str, Any] = {"status": "disabled", "reason": "sqlite_backend"}
+    db_runtime_mode = "sqlite_primary"
+    if db_backend in {"postgres", "dual"}:
+        if not postgres_dsn:
+            raise RuntimeError("TENER_DB_DSN is required when TENER_DB_BACKEND is set to postgres/dual")
+        runner = PostgresMigrationRunner(
+            dsn=postgres_dsn,
+            migrations_dir=str(root / "migrations"),
+        )
+        postgres_migration_status = runner.apply_all()
     try:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     except OSError:
@@ -127,13 +150,69 @@ def build_services() -> Dict[str, Any]:
         forced_test_score = 0.99
 
     try:
-        db = Database(db_path=db_path)
+        sqlite_db = Database(db_path=db_path)
     except Exception:
         if db_path != local_db_path:
-            db = Database(db_path=local_db_path)
+            sqlite_db = Database(db_path=local_db_path)
         else:
             raise
-    db.init_schema()
+    sqlite_db.init_schema()
+    db: Any = sqlite_db
+    if db_backend in {"postgres", "dual"}:
+        dual_strict = env_bool("TENER_DB_DUAL_STRICT", False)
+        db = DualWriteDatabase(
+            primary=sqlite_db,
+            mirror=PostgresMirrorWriter(postgres_dsn),
+            strict=dual_strict,
+        )
+        db_runtime_mode = "sqlite_primary_postgres_mirror"
+
+    db_read_source_raw = str(os.environ.get("TENER_DB_READ_SOURCE", "auto") or "auto").strip().lower()
+    if db_read_source_raw not in {"sqlite", "postgres", "auto"}:
+        db_read_source_raw = "auto"
+    db_read_source = db_read_source_raw
+    if db_read_source == "auto":
+        db_read_source = "postgres" if db_backend in {"postgres", "dual"} else "sqlite"
+    db_read_status: Dict[str, Any] = {
+        "status": "ok",
+        "source": db_read_source,
+        "requested_source": db_read_source_raw,
+        "reason": "default",
+    }
+    read_db: Any = db
+    if db_read_source == "postgres":
+        if not postgres_dsn:
+            db_read_status = {
+                "status": "degraded",
+                "source": "sqlite",
+                "requested_source": db_read_source_raw,
+                "reason": "postgres_read_requested_without_dsn",
+            }
+        else:
+            try:
+                read_db = PostgresReadDatabase(postgres_dsn)
+                db_read_status = {
+                    "status": "ok",
+                    "source": "postgres",
+                    "requested_source": db_read_source_raw,
+                    "reason": "postgres_read_enabled",
+                }
+            except Exception as exc:
+                if env_bool("TENER_DB_READ_STRICT", False):
+                    raise
+                db_read_status = {
+                    "status": "degraded",
+                    "source": "sqlite",
+                    "requested_source": db_read_source_raw,
+                    "reason": f"postgres_read_init_failed:{exc}",
+                }
+    else:
+        db_read_status = {
+            "status": "ok",
+            "source": "sqlite",
+            "requested_source": db_read_source_raw,
+            "reason": "sqlite_read_enabled",
+        }
 
     instructions = AgentInstructions(path=instructions_path)
     evaluation_playbook = AgentEvaluationPlaybook(path=evaluation_playbook_path)
@@ -352,17 +431,39 @@ def build_services() -> Dict[str, Any]:
         projects_dir=emulator_projects_dir,
         company_profiles_path=emulator_company_profiles_path,
     )
+    auth_service = AuthService.from_env(root=root)
+    signal_rules = SignalRulesEngine()
+    signals_ingestion = SignalIngestionService(db=db, rules_engine=signal_rules)
+    signals_live = JobSignalsLiveViewService(db=db, rules_engine=signal_rules)
+    monitoring = MonitoringService(db=db)
 
     services = {
         "db": db,
+        "read_db": read_db,
+        "db_primary_path": sqlite_db.db_path,
+        "postgres_dsn": postgres_dsn,
+        "db_backend": db_backend,
+        "db_runtime_mode": db_runtime_mode,
+        "db_read_status": db_read_status,
+        "db_cutover_state": {
+            "status": "idle",
+            "executed_at": None,
+            "details": {},
+        },
+        "db_cutover_lock": threading.Lock(),
+        "postgres_migration_status": postgres_migration_status,
         "instructions": instructions,
         "evaluation_playbook": evaluation_playbook,
         "scoring_formula": scoring_formula,
         "outreach_policy": outreach_policy,
+        "auth": auth_service,
         "linkedin_accounts": linkedin_account_service,
         "matching_engine": matching_engine,
         "pre_resume": pre_resume_service,
         "candidate_profile": candidate_profile,
+        "signals_ingestion": signals_ingestion,
+        "signals_live": signals_live,
+        "monitoring": monitoring,
         "emulator_store": emulator_store,
         "company_culture": company_culture_service,
         "workflow": workflow,
@@ -380,11 +481,21 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if not self._require_request_auth(method="GET", path=parsed.path):
+            return
 
         if parsed.path == "/dashboard/emulator":
             dashboard = project_root() / "src" / "tener_ai" / "static" / "emulator_dashboard.html"
             if not dashboard.exists():
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "emulator dashboard file not found"})
+                return
+            self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
+            return
+
+        if parsed.path == "/dashboard/signals-live":
+            dashboard = project_root() / "src" / "tener_ai" / "static" / "signals_live_dashboard.html"
+            if not dashboard.exists():
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "signals live dashboard file not found"})
                 return
             self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
             return
@@ -423,6 +534,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "candidate_resume_preview": "GET /api/candidates/{candidate_id}/resume-preview?job_id=...&url=...",
                         "candidate_resume_content": "GET /api/candidates/{candidate_id}/resume-preview/content?url=...",
                         "candidate_demo_profile": "POST /api/candidates/demo-profile",
+                        "job_signals_live": "GET /api/jobs/{job_id}/signals/live?refresh=1&limit=200&signals_limit=5000",
+                        "job_signals_ingest": "POST /api/jobs/{job_id}/signals/ingest",
+                        "monitoring_status": "GET /api/monitoring/status?limit_jobs=20",
                         "emulator_status": "GET /api/emulator",
                         "emulator_projects": "GET /api/emulator/projects",
                         "emulator_project": "GET /api/emulator/projects/{project_id}",
@@ -459,16 +573,26 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "interview_followups_run": "POST /api/interviews/followups/run",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "chats_overview": "GET /api/chats/overview?limit=200",
+                        "outreach_ops": "GET /api/outreach/ops?job_id=...&stale_minutes=45",
                         "linkedin_accounts_list": "GET /api/linkedin/accounts?limit=200&status=connected",
                         "linkedin_connect_callback": "GET /api/linkedin/accounts/connect/callback?state=...",
                         "linkedin_connect_start": "POST /api/linkedin/accounts/connect/start",
                         "linkedin_accounts_sync_all": "POST /api/linkedin/accounts/sync-all",
+                        "linkedin_account_limits_update": "POST /api/linkedin/accounts/{account_id}/limits",
                         "linkedin_account_sync": "POST /api/linkedin/accounts/{account_id}/sync",
                         "linkedin_account_disconnect": "POST /api/linkedin/accounts/{account_id}/disconnect",
                         "add_manual_account": "POST /api/agent/accounts/manual",
                         "unipile_webhook": "POST /api/webhooks/unipile",
                         "conversation_inbound": "POST /api/conversations/{conversation_id}/inbound",
                         "logs": "GET /api/logs?limit=100",
+                        "db_parity": "GET /api/db/parity?deep=0|1&sample_limit=20",
+                        "db_backfill_run": "POST /api/db/backfill/run",
+                        "db_read_source_set": "POST /api/db/read-source",
+                        "db_cutover_status": "GET /api/db/cutover/status",
+                        "db_cutover_preflight": "GET /api/db/cutover/preflight",
+                        "db_cutover_run": "POST /api/db/cutover/run",
+                        "db_cutover_rollback": "POST /api/db/cutover/rollback",
+                        "db_dual_write_strict": "POST /api/db/dual-write/strict",
                         "reload_rules": "POST /api/rules/reload",
                     },
                 },
@@ -656,7 +780,37 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 return
 
         if parsed.path == "/health":
-            self._json_response(HTTPStatus.OK, {"status": "ok"})
+            cutover_state = SERVICES.get("db_cutover_state") if isinstance(SERVICES.get("db_cutover_state"), dict) else {}
+            payload: Dict[str, Any] = {
+                "status": "ok",
+                "db_backend": SERVICES.get("db_backend"),
+                "db_runtime_mode": SERVICES.get("db_runtime_mode"),
+                "db_read_status": SERVICES.get("db_read_status"),
+                "db_cutover": {
+                    "status": cutover_state.get("status"),
+                    "executed_at": cutover_state.get("executed_at"),
+                },
+                "postgres_migration_status": SERVICES.get("postgres_migration_status"),
+            }
+            db_obj = SERVICES.get("db")
+            dual_status = getattr(db_obj, "dual_write_status", None)
+            if isinstance(dual_status, dict):
+                payload["dual_write"] = dual_status
+            self._json_response(HTTPStatus.OK, payload)
+            return
+
+        if parsed.path == "/api/monitoring/status":
+            if not self._require_admin_access():
+                return
+            monitoring = SERVICES.get("monitoring")
+            if monitoring is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "monitoring service unavailable"})
+                return
+            params = parse_qs(parsed.query or "")
+            limit_jobs = self._safe_int((params.get("limit_jobs") or ["20"])[0], 20) or 20
+            report = monitoring.build_status(limit_jobs=limit_jobs)
+            status_code = HTTPStatus.OK if str(report.get("status") or "ok") == "ok" else HTTPStatus.MULTI_STATUS
+            self._json_response(status_code, report)
             return
 
         if parsed.path == "/api/instructions":
@@ -667,6 +821,100 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, SERVICES["outreach_policy"].to_dict())
             return
 
+        if parsed.path == "/api/db/parity":
+            params = parse_qs(parsed.query or "")
+            tables = list(DEFAULT_PARITY_TABLES)
+            deep = bool(self._safe_bool((params.get("deep") or ["0"])[0], False))
+            sample_limit_raw = self._safe_int((params.get("sample_limit") or ["20"])[0], 20)
+            sample_limit = max(1, min(int(sample_limit_raw or 20), 200))
+            sqlite_path = str(SERVICES.get("db_primary_path") or "").strip()
+            postgres_dsn = str(SERVICES.get("postgres_dsn") or os.environ.get("TENER_DB_DSN", "") or "").strip()
+            if not sqlite_path:
+                self._json_response(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"status": "error", "reason": "sqlite_primary_path_missing"},
+                )
+                return
+            if not postgres_dsn:
+                self._json_response(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {
+                        "status": "error",
+                        "reason": "postgres_dsn_missing",
+                        "sqlite_path": sqlite_path,
+                        "tables": tables,
+                    },
+                )
+                return
+            try:
+                report = build_parity_report(
+                    sqlite_path=sqlite_path,
+                    postgres_dsn=postgres_dsn,
+                    tables=tables,
+                    deep=deep,
+                    sample_limit=sample_limit,
+                )
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"status": "error", "reason": "parity_check_failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, report)
+            return
+
+        if parsed.path == "/api/db/cutover/status":
+            if not self._require_admin_access():
+                return
+            cutover_lock = SERVICES.get("db_cutover_lock")
+            in_progress = bool(getattr(cutover_lock, "locked", lambda: False)())
+            payload = {
+                "status": "ok",
+                "cutover": SERVICES.get("db_cutover_state") or {"status": "idle", "executed_at": None, "details": {}},
+                "in_progress": in_progress,
+                "db_read_status": SERVICES.get("db_read_status"),
+                "db_backend": SERVICES.get("db_backend"),
+                "db_runtime_mode": SERVICES.get("db_runtime_mode"),
+            }
+            db_obj = SERVICES.get("db")
+            dual_status = getattr(db_obj, "dual_write_status", None)
+            if isinstance(dual_status, dict):
+                payload["dual_write"] = dual_status
+            self._json_response(HTTPStatus.OK, payload)
+            return
+
+        if parsed.path == "/api/db/cutover/preflight":
+            if not self._require_admin_access():
+                return
+            sqlite_path = str(SERVICES.get("db_primary_path") or "").strip()
+            postgres_dsn = str(SERVICES.get("postgres_dsn") or os.environ.get("TENER_DB_DSN", "") or "").strip()
+            if not sqlite_path:
+                self._json_response(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"status": "error", "reason": "sqlite_primary_path_missing"},
+                )
+                return
+            if not postgres_dsn:
+                self._json_response(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"status": "error", "reason": "postgres_dsn_missing"},
+                )
+                return
+            try:
+                report = self._build_cutover_preflight_report(
+                    sqlite_path=sqlite_path,
+                    postgres_dsn=postgres_dsn,
+                )
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"status": "error", "reason": "cutover_preflight_failed", "details": str(exc)},
+                )
+                return
+            code = HTTPStatus.OK if str(report.get("status") or "") == "ok" else HTTPStatus.CONFLICT
+            self._json_response(code, report)
+            return
+
         if parsed.path == "/api/linkedin/accounts":
             if not self._require_admin_access():
                 return
@@ -674,6 +922,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             limit = self._safe_int((params.get("limit") or ["200"])[0], 200) or 200
             status = str((params.get("status") or [""])[0] or "").strip().lower() or None
             out = SERVICES["linkedin_accounts"].list_accounts(status=status, limit=limit)
+            policy = SERVICES["outreach_policy"].to_dict()
+            items = out.get("items") if isinstance(out.get("items"), list) else []
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                item.update(resolve_account_limit_snapshot(item, policy))
             self._json_response(HTTPStatus.OK, out)
             return
 
@@ -785,7 +1039,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         if parsed.path == "/api/jobs":
             params = parse_qs(parsed.query or "")
             limit = self._safe_int((params.get("limit") or ["100"])[0], 100)
-            items = SERVICES["db"].list_jobs(limit=limit or 100)
+            items = self._read_db().list_jobs(limit=limit or 100)
             self._json_response(HTTPStatus.OK, {"items": items})
             return
 
@@ -794,11 +1048,61 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if job_id is None:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
                 return
-            rows = SERVICES["db"].list_candidates_for_job(job_id)
+            rows = self._read_db().list_candidates_for_job(job_id)
             scoring_formula = SERVICES.get("scoring_formula")
             if scoring_formula is not None:
                 rows = [scoring_formula.decorate_candidate_row(row) for row in rows]
             self._json_response(HTTPStatus.OK, {"job_id": job_id, "items": rows})
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/signals/live"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/signals/live$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            ingestion_service = SERVICES.get("signals_ingestion")
+            live_service = SERVICES.get("signals_live")
+            if ingestion_service is None or live_service is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "signals services unavailable"})
+                return
+            params = parse_qs(parsed.query or "")
+            refresh = bool(self._safe_bool((params.get("refresh") or ["1"])[0], True))
+            limit = self._safe_int((params.get("limit") or ["200"])[0], 200) or 200
+            signals_limit = self._safe_int((params.get("signals_limit") or ["5000"])[0], 5000) or 5000
+            ingest_result = None
+            if refresh:
+                try:
+                    ingest_result = ingestion_service.ingest_job(
+                        job_id=job_id,
+                        limit_candidates=limit,
+                    )
+                except ValueError:
+                    self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                    return
+                except Exception as exc:
+                    self._json_response(
+                        HTTPStatus.INTERNAL_SERVER_ERROR,
+                        {"error": "signals ingestion failed", "details": str(exc)},
+                    )
+                    return
+            try:
+                view = live_service.build_job_view(
+                    job_id=job_id,
+                    limit_candidates=limit,
+                    limit_signals=signals_limit,
+                )
+            except ValueError:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "signals live view failed", "details": str(exc)},
+                )
+                return
+            if ingest_result is not None:
+                view["ingestion"] = ingest_result
+            self._json_response(HTTPStatus.OK, view)
             return
 
         if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/linkedin-routing"):
@@ -833,11 +1137,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if job_id is None:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
                 return
-            job = SERVICES["db"].get_job(job_id)
+            read_db = self._read_db()
+            job = read_db.get_job(job_id)
             if not job:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
                 return
-            steps = SERVICES["db"].list_job_step_progress(job_id=job_id)
+            steps = read_db.list_job_step_progress(job_id=job_id)
             self._json_response(HTTPStatus.OK, {"job_id": job_id, "items": steps})
             return
 
@@ -846,7 +1151,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if job_id is None:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
                 return
-            job = SERVICES["db"].get_job(job_id)
+            job = self._read_db().get_job(job_id)
             if not job:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
                 return
@@ -871,14 +1176,37 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             limit = self._safe_int((params.get("limit") or ["200"])[0], 200)
             job_id_raw = (params.get("job_id") or [None])[0]
             job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
-            items = SERVICES["db"].list_conversations_overview(limit=limit or 200, job_id=job_id)
+            items = self._read_db().list_conversations_overview(limit=limit or 200, job_id=job_id)
             self._json_response(HTTPStatus.OK, {"items": items})
+            return
+
+        if parsed.path == "/api/outreach/ops":
+            params = parse_qs(parsed.query or "")
+            logs_limit = self._safe_int((params.get("limit_logs") or ["800"])[0], 800)
+            chats_limit = self._safe_int((params.get("limit_chats") or ["600"])[0], 600)
+            stale_minutes = self._safe_int((params.get("stale_minutes") or ["45"])[0], 45)
+            job_id_raw = (params.get("job_id") or [None])[0]
+            job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
+            if logs_limit is None:
+                logs_limit = 800
+            if chats_limit is None:
+                chats_limit = 600
+            if stale_minutes is None:
+                stale_minutes = 45
+            report = self._build_outreach_ops_report(
+                db=SERVICES["db"],
+                job_id=job_id,
+                logs_limit=max(100, min(int(logs_limit), 2000)),
+                chats_limit=max(100, min(int(chats_limit), 2000)),
+                stale_minutes=max(10, min(int(stale_minutes), 24 * 60)),
+            )
+            self._json_response(HTTPStatus.OK, report)
             return
 
         if parsed.path == "/api/logs":
             params = parse_qs(parsed.query or "")
             limit = self._safe_int((params.get("limit") or ["100"])[0], 100)
-            items = SERVICES["db"].list_logs(limit=limit)
+            items = self._read_db().list_logs(limit=limit)
             self._json_response(HTTPStatus.OK, {"items": items})
             return
 
@@ -886,6 +1214,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if not self._require_request_auth(method="POST", path=parsed.path):
+            return
         payload = self._read_json_body()
         if isinstance(payload, dict) and payload.get("_error"):
             self._json_response(HTTPStatus.BAD_REQUEST, payload)
@@ -897,6 +1227,342 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "emulator store unavailable"})
                 return
             self._json_response(HTTPStatus.OK, emulator_store.reload())
+            return
+
+        if parsed.path == "/api/db/backfill/run":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            sqlite_path = str(body.get("sqlite_path") or SERVICES.get("db_primary_path") or "").strip()
+            postgres_dsn = str(
+                body.get("postgres_dsn")
+                or SERVICES.get("postgres_dsn")
+                or os.environ.get("TENER_DB_DSN", "")
+                or ""
+            ).strip()
+            if not sqlite_path:
+                self._json_response(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {"status": "error", "reason": "sqlite_primary_path_missing"},
+                )
+                return
+            if not postgres_dsn:
+                self._json_response(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {
+                        "status": "error",
+                        "reason": "postgres_dsn_missing",
+                        "sqlite_path": sqlite_path,
+                    },
+                )
+                return
+            batch_size_raw = self._safe_int(body.get("batch_size"), 500)
+            batch_size = max(1, min(int(batch_size_raw or 500), 5000))
+            truncate_first = bool(self._safe_bool(body.get("truncate_first"), False))
+            tables_raw = body.get("tables")
+            tables: Optional[List[str]] = None
+            if tables_raw is not None:
+                if not isinstance(tables_raw, list):
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": "tables must be an array"})
+                    return
+                normalized = [str(item).strip() for item in tables_raw if str(item).strip()]
+                tables = normalized or None
+            try:
+                result = backfill_sqlite_to_postgres(
+                    sqlite_path=sqlite_path,
+                    postgres_dsn=postgres_dsn,
+                    batch_size=batch_size,
+                    truncate_first=truncate_first,
+                    tables=tables,
+                )
+                output = result.to_dict()
+                output["status"] = "ok" if int(output.get("failed_total") or 0) == 0 else "partial"
+                output["batch_size"] = batch_size
+                output["truncate_first"] = truncate_first
+                output["tables_requested"] = tables or []
+                SERVICES["db"].log_operation(
+                    operation="db.backfill.run",
+                    status=str(output.get("status") or "unknown"),
+                    entity_type="database",
+                    entity_id="sqlite_to_postgres",
+                    details=output,
+                )
+            except Exception as exc:
+                SERVICES["db"].log_operation(
+                    operation="db.backfill.run",
+                    status="error",
+                    entity_type="database",
+                    entity_id="sqlite_to_postgres",
+                    details={
+                        "sqlite_path": sqlite_path,
+                        "batch_size": batch_size,
+                        "truncate_first": truncate_first,
+                        "tables_requested": tables or [],
+                        "error": str(exc),
+                    },
+                )
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"status": "error", "reason": "backfill_failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, output)
+            return
+
+        if parsed.path == "/api/db/read-source":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            source = str(body.get("source") or "").strip().lower()
+            if source not in {"sqlite", "postgres"}:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "source must be sqlite or postgres"})
+                return
+            postgres_dsn = str(
+                body.get("postgres_dsn")
+                or SERVICES.get("postgres_dsn")
+                or os.environ.get("TENER_DB_DSN", "")
+                or ""
+            ).strip()
+            try:
+                out = self._switch_read_source(source=source, postgres_dsn=postgres_dsn, reason="manual_switch")
+                SERVICES["db"].log_operation(
+                    operation="db.read_source.set",
+                    status="ok",
+                    entity_type="database",
+                    entity_id="read_source",
+                    details={"source": source},
+                )
+                self._json_response(HTTPStatus.OK, out)
+            except RuntimeError as exc:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"status": "error", "reason": str(exc)})
+                return
+            except Exception as exc:
+                SERVICES["db"].log_operation(
+                    operation="db.read_source.set",
+                    status="error",
+                    entity_type="database",
+                    entity_id="read_source",
+                    details={"source": source, "error": str(exc)},
+                )
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"status": "error", "reason": "read_source_switch_failed", "details": str(exc)},
+                )
+                return
+            return
+
+        if parsed.path == "/api/db/cutover/run":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            cutover_lock = SERVICES.get("db_cutover_lock")
+            acquired = bool(getattr(cutover_lock, "acquire", lambda blocking=False: True)(False))
+            if not acquired:
+                self._json_response(
+                    HTTPStatus.CONFLICT,
+                    {"status": "error", "reason": "cutover_in_progress"},
+                )
+                return
+            sqlite_path = str(body.get("sqlite_path") or SERVICES.get("db_primary_path") or "").strip()
+            postgres_dsn = str(
+                body.get("postgres_dsn")
+                or SERVICES.get("postgres_dsn")
+                or os.environ.get("TENER_DB_DSN", "")
+                or ""
+            ).strip()
+            if not sqlite_path:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"status": "error", "reason": "sqlite_primary_path_missing"})
+                if acquired:
+                    getattr(cutover_lock, "release", lambda: None)()
+                return
+            if not postgres_dsn:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"status": "error", "reason": "postgres_dsn_missing"})
+                if acquired:
+                    getattr(cutover_lock, "release", lambda: None)()
+                return
+
+            execute_backfill = bool(self._safe_bool(body.get("execute_backfill"), False))
+            truncate_first = bool(self._safe_bool(body.get("truncate_first"), False))
+            strict_parity = bool(self._safe_bool(body.get("strict_parity"), True))
+            auto_switch_read_source = bool(self._safe_bool(body.get("auto_switch_read_source"), True))
+            set_dual_strict_on_success = bool(self._safe_bool(body.get("set_dual_strict_on_success"), True))
+            deep = bool(self._safe_bool(body.get("deep"), True))
+            batch_size_raw = self._safe_int(body.get("batch_size"), 500)
+            batch_size = max(1, min(int(batch_size_raw or 500), 5000))
+            sample_limit_raw = self._safe_int(body.get("sample_limit"), 20)
+            sample_limit = max(1, min(int(sample_limit_raw or 20), 200))
+            tables_raw = body.get("tables")
+            tables: Optional[List[str]] = None
+            if tables_raw is not None:
+                if not isinstance(tables_raw, list):
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": "tables must be an array"})
+                    return
+                normalized = [str(item).strip() for item in tables_raw if str(item).strip()]
+                tables = normalized or None
+
+            result: Dict[str, Any] = {
+                "status": "ok",
+                "executed_at": datetime.now(timezone.utc).isoformat(),
+                "config": {
+                    "execute_backfill": execute_backfill,
+                    "truncate_first": truncate_first,
+                    "strict_parity": strict_parity,
+                    "auto_switch_read_source": auto_switch_read_source,
+                    "set_dual_strict_on_success": set_dual_strict_on_success,
+                    "deep": deep,
+                    "batch_size": batch_size,
+                    "sample_limit": sample_limit,
+                    "tables_requested": tables or [],
+                },
+                "sqlite_path": sqlite_path,
+                "backfill": None,
+                "parity": None,
+                "switch_read_source": None,
+                "dual_write_strict": None,
+            }
+            try:
+                try:
+                    if execute_backfill:
+                        backfill_result = backfill_sqlite_to_postgres(
+                            sqlite_path=sqlite_path,
+                            postgres_dsn=postgres_dsn,
+                            batch_size=batch_size,
+                            truncate_first=truncate_first,
+                            tables=tables,
+                        )
+                        backfill_out = backfill_result.to_dict()
+                        backfill_out["status"] = "ok" if int(backfill_out.get("failed_total") or 0) == 0 else "partial"
+                        result["backfill"] = backfill_out
+
+                    parity_report = build_parity_report(
+                        sqlite_path=sqlite_path,
+                        postgres_dsn=postgres_dsn,
+                        tables=tables or DEFAULT_PARITY_TABLES,
+                        deep=deep,
+                        sample_limit=sample_limit,
+                    )
+                    result["parity"] = parity_report
+                    parity_ok = str(parity_report.get("status") or "") == "ok"
+                    if not parity_ok and strict_parity:
+                        result["status"] = "blocked"
+                        result["reason"] = "parity_mismatch"
+                    else:
+                        result["status"] = "ok" if parity_ok else "warning"
+                        if not parity_ok:
+                            result["reason"] = "parity_mismatch_but_not_strict"
+
+                    if auto_switch_read_source and (parity_ok or not strict_parity):
+                        switch_out = self._switch_read_source(
+                            source="postgres",
+                            postgres_dsn=postgres_dsn,
+                            reason="cutover_run",
+                        )
+                        result["switch_read_source"] = switch_out
+
+                    if set_dual_strict_on_success and str(result.get("status") or "") in {"ok", "warning"}:
+                        dual_out = self._set_dual_write_strict_mode(True)
+                        result["dual_write_strict"] = dual_out
+                except Exception as exc:
+                    result["status"] = "error"
+                    result["reason"] = "cutover_failed"
+                    result["details"] = str(exc)
+
+                SERVICES["db_cutover_state"] = result
+                SERVICES["db"].log_operation(
+                    operation="db.cutover.run",
+                    status=str(result.get("status") or "unknown"),
+                    entity_type="database",
+                    entity_id="cutover",
+                    details=result,
+                )
+                http_status = HTTPStatus.OK if str(result.get("status") or "") in {"ok", "warning"} else HTTPStatus.CONFLICT
+                if str(result.get("status") or "") == "error":
+                    http_status = HTTPStatus.INTERNAL_SERVER_ERROR
+                self._json_response(http_status, result)
+            finally:
+                if acquired:
+                    getattr(cutover_lock, "release", lambda: None)()
+            return
+
+        if parsed.path == "/api/db/cutover/rollback":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                body = {}
+            cutover_lock = SERVICES.get("db_cutover_lock")
+            acquired = bool(getattr(cutover_lock, "acquire", lambda blocking=False: True)(False))
+            if not acquired:
+                self._json_response(
+                    HTTPStatus.CONFLICT,
+                    {"status": "error", "reason": "cutover_in_progress"},
+                )
+                return
+            force_disable_strict = bool(self._safe_bool(body.get("disable_dual_strict"), True))
+            result: Dict[str, Any] = {
+                "status": "ok",
+                "executed_at": datetime.now(timezone.utc).isoformat(),
+                "switch_read_source": None,
+                "dual_write_strict": None,
+            }
+            try:
+                try:
+                    result["switch_read_source"] = self._switch_read_source(source="sqlite", reason="cutover_rollback")
+                    if force_disable_strict:
+                        result["dual_write_strict"] = self._set_dual_write_strict_mode(False)
+                except Exception as exc:
+                    result["status"] = "error"
+                    result["reason"] = "rollback_failed"
+                    result["details"] = str(exc)
+                SERVICES["db_cutover_state"] = {
+                    "status": "rolled_back" if str(result.get("status") or "") == "ok" else "rollback_error",
+                    "executed_at": result.get("executed_at"),
+                    "details": result,
+                }
+                SERVICES["db"].log_operation(
+                    operation="db.cutover.rollback",
+                    status=str(result.get("status") or "unknown"),
+                    entity_type="database",
+                    entity_id="cutover",
+                    details=result,
+                )
+                status = HTTPStatus.OK if str(result.get("status") or "") == "ok" else HTTPStatus.INTERNAL_SERVER_ERROR
+                self._json_response(status, result)
+            finally:
+                if acquired:
+                    getattr(cutover_lock, "release", lambda: None)()
+            return
+
+        if parsed.path == "/api/db/dual-write/strict":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            strict_value = self._safe_bool(body.get("strict"), None)
+            if strict_value is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "strict is required and must be boolean"})
+                return
+            result = self._set_dual_write_strict_mode(bool(strict_value))
+            SERVICES["db"].log_operation(
+                operation="db.dual_write.strict.set",
+                status=str(result.get("status") or "unknown"),
+                entity_type="database",
+                entity_id="dual_write",
+                details=result,
+            )
+            code = HTTPStatus.OK if str(result.get("status") or "") == "ok" else HTTPStatus.BAD_REQUEST
+            self._json_response(code, result)
             return
 
         if parsed.path == "/api/linkedin/accounts/connect/start":
@@ -1004,6 +1670,44 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             )
             http_status = HTTPStatus.OK if status == "ok" else HTTPStatus.BAD_REQUEST
             self._json_response(http_status, out)
+            return
+
+        match_limits = re.match(r"^/api/linkedin/accounts/(\d+)/limits$", parsed.path)
+        if match_limits:
+            if not self._require_admin_access():
+                return
+            account_id = self._safe_int(match_limits.group(1), None)
+            if account_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid account id"})
+                return
+            body = payload or {}
+            try:
+                parsed_limits = validate_account_limits_payload(body)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": str(exc)})
+                return
+            account = SERVICES["db"].update_linkedin_account_limits(
+                account_id=account_id,
+                has_daily_message_limit=bool(parsed_limits.get("has_daily_message_limit")),
+                daily_message_limit=parsed_limits.get("daily_message_limit"),
+                has_daily_connect_limit=bool(parsed_limits.get("has_daily_connect_limit")),
+                daily_connect_limit=parsed_limits.get("daily_connect_limit"),
+            )
+            if not isinstance(account, dict):
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "account_not_found"})
+                return
+            account.update(resolve_account_limit_snapshot(account, SERVICES["outreach_policy"].to_dict()))
+            SERVICES["db"].log_operation(
+                operation="linkedin.account.limits.updated",
+                status="ok",
+                entity_type="linkedin_account",
+                entity_id=str(account_id),
+                details={
+                    "daily_message_limit": account.get("daily_message_limit"),
+                    "daily_connect_limit": account.get("daily_connect_limit"),
+                },
+            )
+            self._json_response(HTTPStatus.OK, {"status": "ok", "account": account})
             return
 
         match_disconnect = re.match(r"^/api/linkedin/accounts/(\d+)/disconnect$", parsed.path)
@@ -1305,6 +2009,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     external_chat_id=external_chat_id,
                     text=inbound_text,
                     sender_provider_id=sender_provider_id or None,
+                    provider_payload=body,
+                    provider_message_id=event_id or None,
+                    occurred_at=occurred_at or None,
                 )
             except Exception as exc:
                 SERVICES["db"].log_operation(
@@ -1398,6 +2105,36 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     "interview_assessment": interview_assessment,
                 },
             )
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/signals/ingest"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/signals/ingest$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            ingestion_service = SERVICES.get("signals_ingestion")
+            if ingestion_service is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "signals ingestion service unavailable"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                body = {}
+            limit_candidates = self._safe_int(body.get("limit_candidates"), 500) or 500
+            try:
+                out = ingestion_service.ingest_job(
+                    job_id=job_id,
+                    limit_candidates=max(1, min(limit_candidates, 5000)),
+                )
+            except ValueError:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "signals ingestion failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, out)
             return
 
         if parsed.path == "/api/workflows/execute":
@@ -2346,7 +3083,456 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             return False
         return default
 
+    @staticmethod
+    def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        if text.endswith("Z"):
+            text = f"{text[:-1]}+00:00"
+        try:
+            parsed = datetime.fromisoformat(text)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed
+
+    @classmethod
+    def _build_outreach_ops_report(
+        cls,
+        *,
+        db: Any,
+        job_id: Optional[int],
+        logs_limit: int,
+        chats_limit: int,
+        stale_minutes: int,
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        last_hour = now - timedelta(hours=1)
+        last_day = now - timedelta(hours=24)
+        flow_window = now - timedelta(minutes=30)
+        stale_cutoff = now - timedelta(minutes=stale_minutes)
+
+        accounts = db.list_linkedin_accounts(limit=500)
+        conversations = db.list_conversations_overview(limit=chats_limit, job_id=job_id)
+        logs = db.list_logs(limit=logs_limit)
+
+        account_map: Dict[int, Dict[str, Any]] = {}
+        for row in accounts or []:
+            account_id = int(row.get("id") or 0)
+            if account_id <= 0:
+                continue
+            account_map[account_id] = {
+                "account_id": account_id,
+                "label": str(row.get("label") or "").strip() or f"Account {account_id}",
+                "provider_account_id": str(row.get("provider_account_id") or ""),
+                "status": str(row.get("status") or "unknown"),
+                "active_conversations": 0,
+                "waiting_connection": 0,
+                "awaiting_reply": 0,
+                "stuck_threads": 0,
+                "sent_1h": 0,
+                "sent_24h": 0,
+                "failed_1h": 0,
+                "failed_24h": 0,
+                "last_send_at": None,
+                "last_error_at": None,
+                "last_error": "",
+                "_last_send_dt": None,
+                "_last_error_dt": None,
+            }
+
+        def _ensure_account(account_id: int) -> Dict[str, Any]:
+            existing = account_map.get(account_id)
+            if existing is not None:
+                return existing
+            fallback = {
+                "account_id": account_id,
+                "label": f"Account {account_id}",
+                "provider_account_id": "",
+                "status": "unknown",
+                "active_conversations": 0,
+                "waiting_connection": 0,
+                "awaiting_reply": 0,
+                "stuck_threads": 0,
+                "sent_1h": 0,
+                "sent_24h": 0,
+                "failed_1h": 0,
+                "failed_24h": 0,
+                "last_send_at": None,
+                "last_error_at": None,
+                "last_error": "",
+                "_last_send_dt": None,
+                "_last_error_dt": None,
+            }
+            account_map[account_id] = fallback
+            return fallback
+
+        flow_detected_recently = False
+        recent_events: List[Dict[str, Any]] = []
+        max_recent_events = 80
+        conversation_account_map: Dict[int, int] = {}
+        for item in logs or []:
+            operation = str(item.get("operation") or "").strip().lower()
+            status = str(item.get("status") or "").strip().lower()
+            created_at = str(item.get("created_at") or "")
+            created_dt = cls._parse_iso_datetime(created_at)
+            details = item.get("details") if isinstance(item.get("details"), dict) else {}
+            account_id = int(details.get("linkedin_account_id") or 0)
+            if account_id <= 0 and str(item.get("entity_type") or "") == "linkedin_account":
+                account_id = cls._safe_int(item.get("entity_id"), 0) or 0
+            entry = _ensure_account(account_id) if account_id > 0 else None
+
+            if operation == "scheduler.outreach.dispatch" and status == "ok" and created_dt and created_dt >= flow_window:
+                flow_detected_recently = True
+
+            if operation == "agent.outreach.send":
+                delivery_status = str(details.get("delivery_status") or "").strip().lower()
+                is_send_ok = status == "ok" and delivery_status in {"sent", "pending_connection"}
+                is_send_failed = not is_send_ok
+                if str(item.get("entity_type") or "") == "conversation":
+                    conversation_id = cls._safe_int(item.get("entity_id"), 0) or 0
+                    if conversation_id > 0 and account_id > 0:
+                        conversation_account_map[int(conversation_id)] = int(account_id)
+                if is_send_ok and created_dt and created_dt >= flow_window:
+                    flow_detected_recently = True
+                if entry is not None and created_dt:
+                    if created_dt >= last_hour:
+                        if is_send_ok:
+                            entry["sent_1h"] += 1
+                        elif is_send_failed:
+                            entry["failed_1h"] += 1
+                    if created_dt >= last_day:
+                        if is_send_ok:
+                            entry["sent_24h"] += 1
+                        elif is_send_failed:
+                            entry["failed_24h"] += 1
+                    if is_send_ok:
+                        current_dt = entry.get("_last_send_dt")
+                        if current_dt is None or created_dt > current_dt:
+                            entry["_last_send_dt"] = created_dt
+                            entry["last_send_at"] = created_dt.isoformat()
+                    if is_send_failed:
+                        err_text = (
+                            str((details.get("delivery") or {}).get("error") or "").strip()
+                            or str((details.get("connect_request") or {}).get("error") or "").strip()
+                            or str(details.get("delivery_status") or "").strip()
+                            or "delivery_failed"
+                        )
+                        current_dt = entry.get("_last_error_dt")
+                        if current_dt is None or created_dt > current_dt:
+                            entry["_last_error_dt"] = created_dt
+                            entry["last_error_at"] = created_dt.isoformat()
+                            entry["last_error"] = err_text[:240]
+
+            if operation in {
+                "agent.outreach.send",
+                "agent.outreach.delivery_error",
+                "agent.outreach.dispatch",
+                "scheduler.outreach.dispatch",
+            } and len(recent_events) < max_recent_events:
+                recent_events.append(
+                    {
+                        "id": int(item.get("id") or 0),
+                        "created_at": created_at,
+                        "operation": operation,
+                        "status": status,
+                        "account_id": account_id or None,
+                        "entity_type": item.get("entity_type"),
+                        "entity_id": item.get("entity_id"),
+                        "delivery_status": details.get("delivery_status"),
+                        "error": (
+                            str((details.get("delivery") or {}).get("error") or "").strip()
+                            or str(details.get("error") or "").strip()
+                            or None
+                        ),
+                    }
+                )
+
+        for row in conversations or []:
+            conversation_id = int(row.get("conversation_id") or 0)
+            account_id = int(row.get("linkedin_account_id") or 0)
+            if account_id <= 0 and conversation_id > 0:
+                account_id = int(conversation_account_map.get(conversation_id) or 0)
+            if account_id <= 0:
+                continue
+            entry = _ensure_account(account_id)
+            entry["active_conversations"] += 1
+            conversation_status = str(row.get("conversation_status") or "").strip().lower()
+            pre_resume_status = str(row.get("pre_resume_status") or "").strip().lower()
+            last_message_dt = cls._parse_iso_datetime(row.get("last_message_at"))
+            if conversation_status == "waiting_connection":
+                entry["waiting_connection"] += 1
+            if pre_resume_status == "awaiting_reply":
+                entry["awaiting_reply"] += 1
+                if last_message_dt and last_message_dt <= stale_cutoff:
+                    entry["stuck_threads"] += 1
+
+        severity = {"ok": 0, "warning": 1, "critical": 2, "paused": 3}
+        rows: List[Dict[str, Any]] = []
+        for row in account_map.values():
+            account_status = str(row.get("status") or "").strip().lower()
+            health = "ok"
+            if account_status not in {"connected", "active"}:
+                health = "paused"
+            elif int(row.get("stuck_threads") or 0) > 0 or int(row.get("failed_1h") or 0) >= 2:
+                health = "critical"
+            elif int(row.get("failed_24h") or 0) > 0:
+                health = "warning"
+            row["health"] = health
+            row.pop("_last_send_dt", None)
+            row.pop("_last_error_dt", None)
+            rows.append(row)
+
+        rows.sort(
+            key=lambda item: (
+                -severity.get(str(item.get("health") or "ok"), 0),
+                -int(item.get("stuck_threads") or 0),
+                -int(item.get("failed_1h") or 0),
+                -int(item.get("sent_24h") or 0),
+                int(item.get("account_id") or 0),
+            )
+        )
+
+        sent_1h_total = sum(int(item.get("sent_1h") or 0) for item in rows)
+        sent_24h_total = sum(int(item.get("sent_24h") or 0) for item in rows)
+        failed_1h_total = sum(int(item.get("failed_1h") or 0) for item in rows)
+        failed_24h_total = sum(int(item.get("failed_24h") or 0) for item in rows)
+        stuck_threads_total = sum(int(item.get("stuck_threads") or 0) for item in rows)
+        waiting_connection_total = sum(int(item.get("waiting_connection") or 0) for item in rows)
+        awaiting_reply_total = sum(int(item.get("awaiting_reply") or 0) for item in rows)
+        active_conversations_total = sum(int(item.get("active_conversations") or 0) for item in rows)
+        active_accounts_total = sum(1 for item in rows if int(item.get("active_conversations") or 0) > 0)
+        connected_accounts_total = sum(
+            1 for item in rows if str(item.get("status") or "").strip().lower() in {"connected", "active"}
+        )
+        last_send_candidates = [str(item.get("last_send_at") or "") for item in rows if item.get("last_send_at")]
+        last_send_at = max(last_send_candidates) if last_send_candidates else None
+
+        overall_health = "ok"
+        issues: List[str] = []
+        if stuck_threads_total > 0:
+            overall_health = "critical"
+            issues.append(f"{stuck_threads_total} stuck thread(s)")
+        if failed_1h_total >= 5:
+            overall_health = "critical"
+            issues.append(f"{failed_1h_total} failed send(s) in last hour")
+        if overall_health != "critical":
+            if failed_24h_total > 0:
+                overall_health = "warning"
+                issues.append(f"{failed_24h_total} failed send(s) in last 24h")
+            if active_conversations_total > 0 and not flow_detected_recently:
+                overall_health = "warning"
+                issues.append("no successful outreach activity in last 30 minutes")
+
+        return {
+            "status": "ok",
+            "generated_at": now.isoformat(),
+            "job_id": int(job_id) if job_id else None,
+            "thresholds": {
+                "stale_minutes": stale_minutes,
+                "flow_window_minutes": 30,
+                "logs_limit": logs_limit,
+                "chats_limit": chats_limit,
+            },
+            "summary": {
+                "health": overall_health,
+                "issues": issues,
+                "accounts_total": len(rows),
+                "connected_accounts": connected_accounts_total,
+                "active_accounts": active_accounts_total,
+                "active_conversations": active_conversations_total,
+                "sent_1h": sent_1h_total,
+                "sent_24h": sent_24h_total,
+                "failed_1h": failed_1h_total,
+                "failed_24h": failed_24h_total,
+                "stuck_threads": stuck_threads_total,
+                "waiting_connection": waiting_connection_total,
+                "awaiting_reply": awaiting_reply_total,
+                "flow_detected_recently": flow_detected_recently,
+                "last_successful_send_at": last_send_at,
+            },
+            "accounts": rows,
+            "events": recent_events,
+        }
+
+    @staticmethod
+    def _read_db() -> Any:
+        db = SERVICES.get("read_db")
+        if db is None:
+            db = SERVICES["db"]
+        return db
+
+    @staticmethod
+    def _switch_read_source(*, source: str, postgres_dsn: str = "", reason: str = "manual_switch") -> Dict[str, Any]:
+        normalized = str(source or "").strip().lower()
+        if normalized == "sqlite":
+            SERVICES["read_db"] = SERVICES["db"]
+            SERVICES["db_read_status"] = {
+                "status": "ok",
+                "source": "sqlite",
+                "requested_source": "runtime",
+                "reason": reason,
+            }
+            return {
+                "status": "ok",
+                "source": "sqlite",
+                "db_read_status": SERVICES.get("db_read_status"),
+            }
+        if normalized != "postgres":
+            raise ValueError("source must be sqlite or postgres")
+        dsn = str(postgres_dsn or SERVICES.get("postgres_dsn") or os.environ.get("TENER_DB_DSN", "") or "").strip()
+        if not dsn:
+            raise RuntimeError("postgres_dsn_missing")
+        SERVICES["read_db"] = PostgresReadDatabase(dsn)
+        SERVICES["postgres_dsn"] = dsn
+        SERVICES["db_read_status"] = {
+            "status": "ok",
+            "source": "postgres",
+            "requested_source": "runtime",
+            "reason": reason,
+        }
+        return {
+            "status": "ok",
+            "source": "postgres",
+            "db_read_status": SERVICES.get("db_read_status"),
+        }
+
+    @staticmethod
+    def _set_dual_write_strict_mode(strict: bool) -> Dict[str, Any]:
+        db = SERVICES.get("db")
+        if db is None:
+            return {"status": "skipped", "reason": "db_unavailable"}
+        setter = getattr(db, "set_strict_mode", None)
+        if not callable(setter):
+            return {"status": "skipped", "reason": "db_is_not_dual_write"}
+        out = setter(bool(strict))
+        return {
+            "status": "ok",
+            "strict": bool(strict),
+            "dual_write": out if isinstance(out, dict) else {},
+        }
+
+    @staticmethod
+    def _build_cutover_preflight_report(*, sqlite_path: str, postgres_dsn: str) -> Dict[str, Any]:
+        sqlite_exists = Path(sqlite_path).exists()
+        migration_files = sorted([path.name for path in (project_root() / "migrations").glob("*.sql") if path.is_file()])
+        checks: Dict[str, Any] = {
+            "sqlite_exists": sqlite_exists,
+            "migrations_total": len(migration_files),
+            "migrations_files": migration_files,
+            "postgres_connected": False,
+            "postgres_migrations_applied": [],
+            "postgres_migrations_missing": [],
+            "read_source": str((SERVICES.get("db_read_status") or {}).get("source") or ""),
+            "db_backend": SERVICES.get("db_backend"),
+            "db_runtime_mode": SERVICES.get("db_runtime_mode"),
+            "db_cutover_state": SERVICES.get("db_cutover_state"),
+        }
+
+        db_obj = SERVICES.get("db")
+        dual_status = getattr(db_obj, "dual_write_status", None)
+        if isinstance(dual_status, dict):
+            checks["dual_write"] = dual_status
+
+        try:
+            import psycopg  # type: ignore
+        except Exception as exc:
+            checks["postgres_error"] = f"psycopg_missing:{exc}"
+            return {
+                "status": "warning" if sqlite_exists else "error",
+                "checks": checks,
+            }
+
+        try:
+            with psycopg.connect(postgres_dsn) as conn:
+                checks["postgres_connected"] = True
+                with conn.cursor() as cur:
+                    cur.execute("SELECT to_regclass('public.schema_migrations')")
+                    reg = cur.fetchone()
+                    if reg and reg[0] is not None:
+                        cur.execute("SELECT version FROM schema_migrations ORDER BY version ASC")
+                        checks["postgres_migrations_applied"] = [str(row[0]) for row in cur.fetchall()]
+                    else:
+                        checks["postgres_migrations_applied"] = []
+        except Exception as exc:
+            checks["postgres_error"] = str(exc)
+            return {
+                "status": "warning" if sqlite_exists else "error",
+                "checks": checks,
+            }
+
+        applied_set = set(str(x) for x in (checks.get("postgres_migrations_applied") or []))
+        checks["postgres_migrations_missing"] = [name for name in migration_files if name not in applied_set]
+        ready = (
+            sqlite_exists
+            and bool(checks.get("postgres_connected"))
+            and len(checks.get("postgres_migrations_missing") or []) == 0
+        )
+        return {
+            "status": "ok" if ready else "warning",
+            "checks": checks,
+        }
+
+    def _require_request_auth(self, *, method: str, path: str) -> bool:
+        auth_service = SERVICES.get("auth")
+        if auth_service is None or not bool(getattr(auth_service, "enabled", False)):
+            return True
+        if self._is_public_path(method=method, path=path):
+            return True
+        required_scopes = self._required_scopes_for_path(method=method, path=path)
+        decision = auth_service.authorize_request(
+            authorization_header=str(self.headers.get("Authorization", "") or ""),
+            required_scopes=required_scopes,
+            require_admin=False,
+        )
+        if decision.allowed:
+            return True
+        status = HTTPStatus.UNAUTHORIZED if int(decision.status_code) == 401 else HTTPStatus.FORBIDDEN
+        self._json_response(
+            status,
+            {
+                "error": str(decision.error or "auth_forbidden"),
+                "required_scopes": required_scopes,
+            },
+        )
+        return False
+
+    @staticmethod
+    def _is_public_path(*, method: str, path: str) -> bool:
+        normalized = str(path or "").strip()
+        if normalized in {"/", "/dashboard", "/dashboard/emulator", "/dashboard/signals-live", "/health", "/api"}:
+            return True
+        if normalized.startswith("/candidate/"):
+            return True
+        if method.upper() == "POST" and normalized == "/api/webhooks/unipile":
+            return True
+        if normalized == "/api/linkedin/accounts/connect/callback":
+            return True
+        return False
+
+    @staticmethod
+    def _required_scopes_for_path(*, method: str, path: str) -> List[str]:
+        if not str(path or "").startswith("/api/"):
+            return []
+        if method.upper() == "GET":
+            return ["api:read"]
+        return ["api:write"]
+
     def _require_admin_access(self) -> bool:
+        auth_service = SERVICES.get("auth")
+        if auth_service is not None and bool(getattr(auth_service, "enabled", False)):
+            decision = auth_service.authorize_request(
+                authorization_header=str(self.headers.get("Authorization", "") or ""),
+                required_scopes=["admin:*"],
+                require_admin=True,
+            )
+            if decision.allowed:
+                return True
+            status = HTTPStatus.UNAUTHORIZED if int(decision.status_code) == 401 else HTTPStatus.FORBIDDEN
+            self._json_response(status, {"error": str(decision.error or "admin_auth_required")})
+            return False
         expected = str(os.environ.get("TENER_ADMIN_API_TOKEN", "") or "").strip()
         if not expected:
             return True
@@ -2401,70 +3587,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _pick_attachment_text(payload: Dict[str, Any], *paths: str) -> str:
-        fragments: List[str] = []
-        seen: set[str] = set()
+        values: List[Any] = []
         for path in paths:
             value = TenerRequestHandler._get_nested(payload, path)
-            TenerRequestHandler._collect_attachment_fragments(value, fragments, seen, limit=12)
-            if len(fragments) >= 12:
-                break
-        return "\n".join(fragments[:12]).strip()
-
-    @staticmethod
-    def _collect_attachment_fragments(value: Any, fragments: List[str], seen: set[str], limit: int = 12) -> None:
-        if len(fragments) >= limit:
-            return
-        if isinstance(value, dict):
-            name_keys = ("name", "filename", "file_name", "title")
-            url_keys = (
-                "url",
-                "link",
-                "href",
-                "download_url",
-                "downloadUrl",
-                "signed_url",
-                "signedUrl",
-                "public_url",
-                "publicUrl",
-                "file_url",
-                "fileUrl",
-            )
-            names: List[str] = []
-            urls: List[str] = []
-            for key in name_keys:
-                raw = value.get(key)
-                if isinstance(raw, str):
-                    cleaned = raw.strip()
-                    if cleaned:
-                        names.append(cleaned)
-            for key in url_keys:
-                raw = value.get(key)
-                if isinstance(raw, str):
-                    cleaned = raw.strip()
-                    if cleaned.startswith("http://") or cleaned.startswith("https://"):
-                        urls.append(cleaned)
-
-            for url in urls:
-                if len(fragments) >= limit:
-                    return
-                text = f"attached file {names[0]} {url}".strip() if names else f"attached file {url}"
-                token = text.lower()
-                if token in seen:
-                    continue
-                seen.add(token)
-                fragments.append(text)
-
-            for nested in value.values():
-                TenerRequestHandler._collect_attachment_fragments(nested, fragments, seen, limit=limit)
-                if len(fragments) >= limit:
-                    return
-            return
-
-        if isinstance(value, list):
-            for item in value:
-                TenerRequestHandler._collect_attachment_fragments(item, fragments, seen, limit=limit)
-                if len(fragments) >= limit:
-                    return
+            values.append(value)
+        descriptors = extract_attachment_descriptors_from_values(values, limit=12)
+        return descriptors_to_text(descriptors, limit=12)
 
     @staticmethod
     def _merge_inbound_text(text: str, attachment_text: str) -> str:

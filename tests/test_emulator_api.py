@@ -131,6 +131,11 @@ class EmulatorApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("Emulator Mode", text)
 
+    def test_dashboard_signals_live_page_serves(self) -> None:
+        status, _body, text = self._request("GET", "/dashboard/signals-live")
+        self.assertEqual(status, 200)
+        self.assertIn("Live Signals View", text)
+
     def test_emulator_status_and_list_endpoints(self) -> None:
         status, payload, _ = self._request("GET", "/api/emulator")
         self.assertEqual(status, 200)
@@ -148,6 +153,19 @@ class EmulatorApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(project.get("id"), first_id)
         self.assertIsInstance(project.get("events"), list)
+
+    def test_lifesciences_project_is_available_via_api(self) -> None:
+        status, payload, _ = self._request("GET", "/api/emulator/projects")
+        self.assertEqual(status, 200)
+        items = payload.get("items") or []
+        ids = {str(item.get("id") or "") for item in items}
+        self.assertIn("biotech-blindspot-2024", ids)
+
+        status, project, _ = self._request("GET", "/api/emulator/projects/biotech-blindspot-2024")
+        self.assertEqual(status, 200)
+        self.assertEqual(project.get("id"), "biotech-blindspot-2024")
+        self.assertIn("Antibody Engineering", str(project.get("role") or ""))
+        self.assertEqual(int(((project.get("reveal") or {}).get("funnel") or {}).get("sourced") or 0), 100)
 
     def test_company_profile_lookup_and_reload(self) -> None:
         status, payload, _ = self._request("GET", "/api/emulator/company-profiles")

@@ -85,6 +85,9 @@ class WebhookInboundRoutingTests(unittest.TestCase):
 
             matches = db.list_candidates_for_job(job_id)
             self.assertEqual(matches[0]["status"], "resume_received")
+            assets = db.list_resume_assets_for_candidate(candidate_id=candidate_id, job_id=job_id, limit=20)
+            self.assertGreaterEqual(len(assets), 1)
+            self.assertEqual(str(assets[0].get("processing_status")), "stored_unparsed")
 
             fallback = workflow.process_provider_inbound_message(
                 external_chat_id="",

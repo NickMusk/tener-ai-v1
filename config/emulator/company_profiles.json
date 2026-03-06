@@ -59,6 +59,19 @@
         "values": ["Scale", "Pragmatism", "Cross-team delivery"],
         "candidate_profiles_sought": ["Platform engineers", "Data-aware product engineers"]
       }
+    },
+    {
+      "id": "helvetia-biotech",
+      "name": "Helvetia Biotech AG",
+      "domain": "helvetia-biotech.example",
+      "summary": "Swiss biotech culture focused on antibody discovery, practical lab rigor, and IP-aware collaboration.",
+      "profile": {
+        "values": ["Scientific rigor", "Hands-on execution", "Evidence-driven decisions"],
+        "candidate_profiles_sought": [
+          "Senior scientists with mAb optimization depth",
+          "Antibody engineers with phage and yeast display experience"
+        ]
+      }
     }
   ]
 }

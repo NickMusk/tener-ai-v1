@@ -34,7 +34,7 @@ class LinkedInAccountService:
         connect_url_template: str = "",
         callback_url: str = "",
         accounts_path: str = "/api/v1/accounts",
-        hosted_connect_path: str = "/api/v1/hosted/accounts/linkedin",
+        hosted_connect_path: str = "/api/v1/hosted/accounts/link",
         disconnect_path_template: str = "/api/v1/accounts/{account_id}",
     ) -> None:
         self.db = db
@@ -48,7 +48,7 @@ class LinkedInAccountService:
         self.callback_url = str(callback_url or "").strip()
         self.accounts_path = str(accounts_path or "/api/v1/accounts").strip() or "/api/v1/accounts"
         self.hosted_connect_path = (
-            str(hosted_connect_path or "/api/v1/hosted/accounts/linkedin").strip() or "/api/v1/hosted/accounts/linkedin"
+            str(hosted_connect_path or "/api/v1/hosted/accounts/link").strip() or "/api/v1/hosted/accounts/link"
         )
         self.disconnect_path_template = (
             str(disconnect_path_template or "/api/v1/accounts/{account_id}").strip() or "/api/v1/accounts/{account_id}"
@@ -255,48 +255,133 @@ class LinkedInAccountService:
         return self._create_hosted_connect_url(state=state, callback_url=callback_url, label=label)
 
     def _create_hosted_connect_url(self, *, state: str, callback_url: str, label: str) -> str:
-        endpoint = self._build_url(self.hosted_connect_path)
-        attempts = [
+        endpoints = self._hosted_connect_endpoints()
+        payloads = self._hosted_connect_payloads(state=state, callback_url=callback_url, label=label)
+        auth_modes = ["api_key_only", "default", "bearer_only"]
+
+        errors: List[str] = []
+        for endpoint in endpoints:
+            for auth_mode in auth_modes:
+                for payload in payloads:
+                    try:
+                        out = self._request_json("POST", endpoint, payload, auth_mode=auth_mode)
+                    except RuntimeError as exc:
+                        errors.append(f"{endpoint} [{auth_mode}] {exc}")
+                        continue
+                    connect_url = self._extract_connect_url(out)
+                    if connect_url:
+                        return connect_url
+                    errors.append(f"{endpoint} [{auth_mode}] missing_url_in_response")
+
+        last_error = errors[-1] if errors else "hosted_connect_url_not_available"
+        if any("authentication link doesn't exist or is no longer active" in err.lower() for err in errors):
+            raise RuntimeError(
+                "Hosted LinkedIn connect URL was rejected by Unipile (expired/invalid auth link). "
+                f"Last error: {last_error}"
+            )
+        raise RuntimeError(last_error)
+
+    def _hosted_connect_endpoints(self) -> List[str]:
+        candidates = [
+            self.hosted_connect_path,
+            "/api/v1/hosted/accounts/link",
+            "/api/v1/hosted/accounts/linkedin",
+            "/api/v1/hosted/authentication/linkedin",
+            "/api/v1/hosted/auth/linkedin",
+        ]
+        out: List[str] = []
+        seen = set()
+        for raw in candidates:
+            endpoint = self._build_url(str(raw or "").strip())
+            if not endpoint or endpoint in seen:
+                continue
+            seen.add(endpoint)
+            out.append(endpoint)
+        return out
+
+    def _hosted_connect_payloads(self, *, state: str, callback_url: str, label: str) -> List[Dict[str, Any]]:
+        callback_with_state = self._append_query_param(callback_url, "state", state)
+        expires_on = (datetime.now(UTC) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+        payloads: List[Dict[str, Any]] = [
+            {
+                "type": "create",
+                "providers": ["LINKEDIN"],
+                "api_url": self.base_url,
+                "expiresOn": expires_on,
+                "success_redirect_url": callback_with_state,
+                "failure_redirect_url": callback_with_state,
+            },
             {
                 "provider": "LINKEDIN",
                 "type": "create",
                 "state": state,
-                "redirect_url": callback_url,
+                "redirect_url": callback_with_state,
             },
             {
                 "provider": "linkedin",
                 "state": state,
-                "success_redirect_url": callback_url,
-                "failure_redirect_url": callback_url,
+                "success_redirect_url": callback_with_state,
+                "failure_redirect_url": callback_with_state,
             },
             {
                 "provider": "linkedin",
                 "state": state,
-                "redirect_uri": callback_url,
+                "redirect_uri": callback_with_state,
+            },
+            {
+                "provider": "LINKEDIN",
+                "state": state,
+                "redirect_url": callback_with_state,
+                "redirect_uri": callback_with_state,
             },
         ]
         if label:
-            for payload in attempts:
+            for payload in payloads:
                 payload["name"] = label
+        return payloads
 
-        last_error = "hosted_connect_url_not_available"
-        for payload in attempts:
-            try:
-                out = self._request_json("POST", endpoint, payload)
-            except RuntimeError as exc:
-                last_error = str(exc)
-                continue
-            for candidate in (
-                out.get("url"),
-                out.get("link"),
-                out.get("auth_url"),
-                out.get("hosted_url"),
-                (out.get("data") or {}).get("url") if isinstance(out.get("data"), dict) else None,
-                (out.get("data") or {}).get("link") if isinstance(out.get("data"), dict) else None,
-            ):
-                if isinstance(candidate, str) and candidate.strip():
-                    return candidate.strip()
-        raise RuntimeError(last_error)
+    @staticmethod
+    def _extract_connect_url(payload: Dict[str, Any]) -> str:
+        for candidate in (
+            payload.get("url"),
+            payload.get("link"),
+            payload.get("auth_url"),
+            payload.get("hosted_url"),
+            (payload.get("data") or {}).get("url") if isinstance(payload.get("data"), dict) else None,
+            (payload.get("data") or {}).get("link") if isinstance(payload.get("data"), dict) else None,
+        ):
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+        return ""
+
+    @staticmethod
+    def _append_query_param(url: str, key: str, value: str) -> str:
+        base = str(url or "").strip()
+        if not base:
+            return base
+        parsed = parse.urlparse(base)
+        query = parse.parse_qsl(parsed.query, keep_blank_values=True)
+        replaced = False
+        out_query: List[tuple[str, str]] = []
+        for k, v in query:
+            if k == key:
+                out_query.append((key, value))
+                replaced = True
+            else:
+                out_query.append((k, v))
+        if not replaced:
+            out_query.append((key, value))
+        new_query = parse.urlencode(out_query, doseq=True)
+        return parse.urlunparse(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                new_query,
+                parsed.fragment,
+            )
+        )
 
     def _fetch_remote_accounts(self) -> List[Dict[str, Any]]:
         endpoint = self._build_url(self.accounts_path)
@@ -347,9 +432,16 @@ class LinkedInAccountService:
         except RuntimeError as exc:
             return {"attempted": True, "status": "error", "error": str(exc)}
 
-    def _request_json(self, method: str, url: str, payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    def _request_json(
+        self,
+        method: str,
+        url: str,
+        payload: Optional[Dict[str, Any]],
+        *,
+        auth_mode: str = "default",
+    ) -> Dict[str, Any]:
         data = None
-        headers = self._headers_json()
+        headers = self._headers_json(auth_mode=auth_mode)
         if payload is not None:
             data = json.dumps(payload).encode("utf-8")
             headers["Content-Type"] = "application/json"
@@ -371,9 +463,20 @@ class LinkedInAccountService:
         except error.URLError as exc:
             raise RuntimeError(f"Unipile network error: {exc.reason}") from exc
 
-    def _headers_json(self) -> Dict[str, str]:
+    def _headers_json(self, *, auth_mode: str = "default") -> Dict[str, str]:
         if not self.api_key:
             return {"Accept": "application/json"}
+        normalized_mode = str(auth_mode or "default").strip().lower()
+        if normalized_mode == "api_key_only":
+            return {
+                "Accept": "application/json",
+                "X-API-KEY": self.api_key,
+            }
+        if normalized_mode == "bearer_only":
+            return {
+                "Accept": "application/json",
+                "Authorization": f"Bearer {self.api_key}",
+            }
         return {
             "Accept": "application/json",
             "Authorization": f"Bearer {self.api_key}",
