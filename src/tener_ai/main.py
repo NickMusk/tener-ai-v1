@@ -3238,6 +3238,15 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         conversation_account_map: Dict[int, int] = {}
         backlog_stuck_items: List[Dict[str, Any]] = []
         backlog_waiting_connection_items: List[Dict[str, Any]] = []
+        seen_stuck_people: set[tuple[int, int, str]] = set()
+        seen_stuck_people_by_account: Dict[int, set[tuple[int, int, str]]] = {}
+
+        def _stuck_person_key(*, account_id: int, candidate_id: int, job_id: int, candidate_name: str) -> tuple[int, int, str]:
+            if candidate_id > 0:
+                return (account_id, job_id, f"candidate:{candidate_id}")
+            normalized_name = re.sub(r"\s+", " ", str(candidate_name or "").strip().lower())
+            return (account_id, job_id, f"name:{normalized_name or '-'}")
+
         for item in logs or []:
             operation = str(item.get("operation") or "").strip().lower()
             status = str(item.get("status") or "").strip().lower()
@@ -3355,13 +3364,25 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 if entry is not None:
                     entry["awaiting_reply"] += 1
                 if last_message_dt and last_message_dt <= stale_cutoff:
+                    stuck_key = _stuck_person_key(
+                        account_id=account_id,
+                        candidate_id=int(row.get("candidate_id") or 0),
+                        job_id=int(row.get("job_id") or 0),
+                        candidate_name=candidate_name,
+                    )
                     stuck_item = {
                         **queue_base,
                         "queue_type": "stuck_reply",
                         "status": "awaiting_reply",
                     }
-                    backlog_stuck_items.append(stuck_item)
+                    if stuck_key not in seen_stuck_people:
+                        backlog_stuck_items.append(stuck_item)
+                        seen_stuck_people.add(stuck_key)
                     if entry is not None:
+                        account_seen = seen_stuck_people_by_account.setdefault(account_id, set())
+                        if stuck_key in account_seen:
+                            continue
+                        account_seen.add(stuck_key)
                         entry["stuck_threads"] += 1
                         if len(entry["stuck_candidates"]) < 10:
                             entry["stuck_candidates"].append(stuck_item)

@@ -213,6 +213,77 @@ class OutreachOpsApiTests(unittest.TestCase):
         self.assertEqual(int(summary.get("active_accounts") or 0), 1)
         self.assertEqual(int(summary.get("active_conversations") or 0), 1)
 
+    def test_outreach_ops_deduplicates_stuck_people_per_account(self) -> None:
+        account_id = self.db.upsert_linkedin_account(
+            provider="unipile",
+            provider_account_id="acc-ops-dedupe",
+            status="connected",
+            connected_at=utc_now_iso(),
+        )
+        job_id = self.db.insert_job(
+            title="Manual QA Engineer",
+            jd_text="Need QA experience.",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="junior",
+        )
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "ops-ln-dedupe",
+                "full_name": "Forced Test Candidate (olena-bachek-b8523121a)",
+                "headline": "QA",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["qa"],
+                "years_experience": 4,
+                "raw": {},
+            },
+            source="linkedin",
+        )
+        conversation_ids = []
+        for idx in range(3):
+            conversation_id = self.db.create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+            self.db.set_conversation_linkedin_account(conversation_id=conversation_id, account_id=account_id)
+            self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+            self.db.upsert_pre_resume_session(
+                session_id=f"pre-ops-dedupe-{idx}",
+                conversation_id=conversation_id,
+                job_id=job_id,
+                candidate_id=candidate_id,
+                state={"status": "awaiting_reply", "language": "en"},
+                instruction="",
+            )
+            conversation_ids.append(conversation_id)
+        with self.db.transaction() as conn:
+            for conversation_id in conversation_ids:
+                conn.execute(
+                    "UPDATE conversations SET last_message_at = ? WHERE id = ?",
+                    ("2025-01-01T00:00:00+00:00", int(conversation_id)),
+                )
+
+        status, payload = self._request("GET", "/api/outreach/ops?stale_minutes=30")
+        self.assertEqual(status, 200)
+
+        summary = payload.get("summary") or {}
+        self.assertEqual(int(summary.get("stuck_threads") or 0), 1)
+
+        accounts = payload.get("accounts") or []
+        by_id = {int(item.get("account_id") or 0): item for item in accounts}
+        account_row = by_id.get(account_id) or {}
+        self.assertEqual(int(account_row.get("stuck_threads") or 0), 1)
+        stuck_candidates = account_row.get("stuck_candidates") or []
+        self.assertEqual(len(stuck_candidates), 1)
+        self.assertEqual(
+            str(stuck_candidates[0].get("candidate_name") or ""),
+            "Forced Test Candidate (olena-bachek-b8523121a)",
+        )
+
+        backlog = payload.get("backlog") or {}
+        backlog_summary = backlog.get("summary") or {}
+        self.assertEqual(int(backlog_summary.get("stuck_replies") or 0), 1)
+        stuck_items = [item for item in (backlog.get("items") or []) if str(item.get("queue_type") or "") == "stuck_reply"]
+        self.assertEqual(len(stuck_items), 1)
+
     def test_outreach_ops_lists_new_thread_backlog_for_latest_auto_jobs_only(self) -> None:
         account_id = self.db.upsert_linkedin_account(
             provider="unipile",

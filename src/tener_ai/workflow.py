@@ -3368,6 +3368,7 @@ class WorkflowService:
     ) -> Dict[str, Any]:
         safe_limit = max(1, min(int(limit or 100), 500))
         rows = self.db.list_pending_outbound_actions(limit=safe_limit, job_id=job_id, action_ids=action_ids)
+        selection_states: Dict[int, Dict[str, Any]] = {}
         processed = 0
         sent = 0
         pending_connection = 0
@@ -3383,7 +3384,12 @@ class WorkflowService:
                 continue
             processed += 1
             try:
-                result = self._dispatch_single_outbound_action(row=row)
+                row_job_id = int(row.get("job_id") or 0)
+                selection_state = selection_states.setdefault(
+                    row_job_id,
+                    self._build_linkedin_account_selection_state(job_id=row_job_id),
+                )
+                result = self._dispatch_single_outbound_action(row=row, selection_state=selection_state)
             except Exception as exc:
                 failed += 1
                 self.db.complete_outbound_action(
@@ -3715,7 +3721,12 @@ class WorkflowService:
                 break
         return out
 
-    def _dispatch_single_outbound_action(self, row: Dict[str, Any]) -> Dict[str, Any]:
+    def _dispatch_single_outbound_action(
+        self,
+        row: Dict[str, Any],
+        *,
+        selection_state: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
         action_id = int(row.get("id") or 0)
         job_id = int(row.get("job_id") or 0)
         candidate_id = int(row.get("candidate_id") or 0)
@@ -3746,7 +3757,10 @@ class WorkflowService:
                 "error": error,
             }
 
-        account, selection_error = self._select_linkedin_account_for_new_thread(job_id=job_id)
+        account, selection_error = self._select_linkedin_account_for_new_thread(
+            job_id=job_id,
+            selection_state=selection_state,
+        )
         if not account:
             retry_at = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
             error_reason = selection_error or "no_connected_account_or_daily_budget"
@@ -3836,6 +3850,11 @@ class WorkflowService:
                 )
         else:
             delivery_status = "failed"
+            if self._is_provider_limit_error(delivery):
+                self._exclude_linkedin_account_from_selection_state(
+                    selection_state=selection_state,
+                    account_id=account_id,
+                )
             self.db.log_operation(
                 operation="agent.outreach.delivery_error",
                 status="error",
@@ -3955,26 +3974,83 @@ class WorkflowService:
             score = score * 100.0
         return int(max(0.0, min(100.0, score)) * 100)
 
-    def _select_linkedin_account_for_new_thread(self, *, job_id: int) -> tuple[Dict[str, Any] | None, str | None]:
+    def _build_linkedin_account_selection_state(self, *, job_id: int) -> Dict[str, Any]:
         rows, routing_error = self._connected_linkedin_accounts_for_job(job_id=job_id)
-        if not rows:
-            return None, routing_error or "no_connected_account"
         day = self._utc_day_key()
-        eligible: List[tuple[int, int, Dict[str, Any]]] = []
+        projected_counts: Dict[int, int] = {}
+        daily_caps: Dict[int, int] = {}
+        normalized_rows: List[Dict[str, Any]] = []
         for row in rows:
             account_id = int(row.get("id") or 0)
             if account_id <= 0:
                 continue
             counters = self.db.get_linkedin_account_daily_counter(account_id=account_id, day_utc=day)
-            sent = int(counters.get("new_threads_sent") or 0)
-            daily_cap = effective_daily_message_limit(row, self.linkedin_outreach_policy)
+            projected_counts[account_id] = int(counters.get("new_threads_sent") or 0)
+            daily_caps[account_id] = effective_daily_message_limit(row, self.linkedin_outreach_policy)
+            normalized_rows.append(row)
+        return {
+            "job_id": int(job_id),
+            "routing_error": routing_error,
+            "rows": normalized_rows,
+            "projected_counts": projected_counts,
+            "daily_caps": daily_caps,
+            "excluded_account_ids": set(),
+        }
+
+    @staticmethod
+    def _exclude_linkedin_account_from_selection_state(
+        *,
+        selection_state: Dict[str, Any] | None,
+        account_id: int,
+    ) -> None:
+        if selection_state is None or int(account_id) <= 0:
+            return
+        excluded = selection_state.get("excluded_account_ids")
+        if not isinstance(excluded, set):
+            excluded = set()
+            selection_state["excluded_account_ids"] = excluded
+        excluded.add(int(account_id))
+
+    def _select_linkedin_account_for_new_thread(
+        self,
+        *,
+        job_id: int,
+        selection_state: Dict[str, Any] | None = None,
+    ) -> tuple[Dict[str, Any] | None, str | None]:
+        if selection_state is None:
+            selection_state = self._build_linkedin_account_selection_state(job_id=job_id)
+        rows = selection_state.get("rows") if isinstance(selection_state.get("rows"), list) else []
+        routing_error = str(selection_state.get("routing_error") or "").strip() or None
+        if not rows:
+            return None, routing_error or "no_connected_account"
+        projected_counts = (
+            selection_state.get("projected_counts") if isinstance(selection_state.get("projected_counts"), dict) else {}
+        )
+        daily_caps = selection_state.get("daily_caps") if isinstance(selection_state.get("daily_caps"), dict) else {}
+        excluded_account_ids = (
+            selection_state.get("excluded_account_ids")
+            if isinstance(selection_state.get("excluded_account_ids"), set)
+            else set()
+        )
+        eligible: List[tuple[int, int, Dict[str, Any]]] = []
+        for row in rows:
+            account_id = int(row.get("id") or 0)
+            if account_id <= 0:
+                continue
+            if account_id in excluded_account_ids:
+                continue
+            sent = int(projected_counts.get(account_id) or 0)
+            daily_cap = int(daily_caps.get(account_id) or 0)
             if sent >= daily_cap:
                 continue
             eligible.append((sent, account_id, row))
         if not eligible:
             return None, "daily_new_threads_budget_reached"
         eligible.sort(key=lambda item: (item[0], item[1]))
-        return eligible[0][2], None
+        _, selected_account_id, selected_row = eligible[0]
+        projected_counts[selected_account_id] = int(projected_counts.get(selected_account_id) or 0) + 1
+        selection_state["projected_counts"] = projected_counts
+        return selected_row, None
 
     def preview_linkedin_account_sequence_for_new_threads(
         self,
@@ -4678,6 +4754,24 @@ class WorkflowService:
             "not to be first degree",
             "not first degree",
             "first degree connection",
+        )
+        return any(token in text for token in needles)
+
+    @staticmethod
+    def _is_provider_limit_error(delivery: Dict[str, Any]) -> bool:
+        if not isinstance(delivery, dict):
+            return False
+        if delivery.get("sent"):
+            return False
+        reason = str(delivery.get("reason") or "").lower()
+        error = str(delivery.get("error") or "").lower()
+        text = f"{reason} {error}"
+        needles = (
+            "limit_exceeded",
+            "usage limit",
+            "reached the usage limit",
+            "rate limit",
+            "too many requests",
         )
         return any(token in text for token in needles)
 

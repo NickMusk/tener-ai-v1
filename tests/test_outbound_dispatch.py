@@ -55,6 +55,27 @@ class _ExplodingManagedStubProvider:
         raise RuntimeError(self.error_text)
 
 
+class _LimitExceededManagedStubProvider:
+    def __init__(self, *, account_ref: str) -> None:
+        self.account_ref = account_ref
+        self.sent_messages: List[str] = []
+
+    def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+        self.sent_messages.append(message)
+        return {
+            "sent": False,
+            "provider": "unipile",
+            "error": 'Unipile HTTP error 422: {"status":422,"type":"errors/limit_exceeded","title":"Limit exceeded"}',
+        }
+
+    def send_connection_request(self, candidate_profile: Dict[str, Any], message: str | None = None) -> Dict[str, Any]:
+        return {
+            "sent": False,
+            "provider": "unipile",
+            "error": 'Unipile HTTP error 422: {"status":422,"type":"errors/limit_exceeded","title":"Limit exceeded"}',
+        }
+
+
 class OutboundDispatchTests(unittest.TestCase):
     def _create_workflow(
         self,
@@ -153,6 +174,95 @@ class OutboundDispatchTests(unittest.TestCase):
             conversation = db.get_conversation(conversation_id)
             self.assertEqual(int(conversation["linkedin_account_id"]), account_2)
             self.assertEqual(conversation["status"], "active")
+
+    def test_dispatch_excludes_provider_limited_account_for_remaining_batch(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_dispatch_provider_limit.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            account_1 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-limit-1",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            account_2 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-limit-2",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            account_3 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-limit-3",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            providers = {
+                "acc-limit-1": _LimitExceededManagedStubProvider(account_ref="acc-limit-1"),
+                "acc-limit-2": _ManagedStubProvider(account_ref="acc-limit-2"),
+                "acc-limit-3": _ManagedStubProvider(account_ref="acc-limit-3"),
+            }
+            workflow._build_managed_provider = lambda account_id: providers[str(account_id)]  # type: ignore[method-assign]
+
+            job_id, candidate_1 = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="limit-1")
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[
+                    {
+                        "profile": {
+                            "linkedin_id": "ln-outbound-limit-2",
+                            "full_name": "Outbound Candidate limit-2",
+                            "headline": "Backend Engineer",
+                            "location": "Remote",
+                            "languages": ["en"],
+                            "skills": ["python"],
+                            "years_experience": 6,
+                            "raw": {},
+                        },
+                        "score": 0.81,
+                        "status": "verified",
+                        "notes": {},
+                    },
+                    {
+                        "profile": {
+                            "linkedin_id": "ln-outbound-limit-3",
+                            "full_name": "Outbound Candidate limit-3",
+                            "headline": "Backend Engineer",
+                            "location": "Remote",
+                            "languages": ["en"],
+                            "skills": ["python"],
+                            "years_experience": 6,
+                            "raw": {},
+                        },
+                        "score": 0.8,
+                        "status": "verified",
+                        "notes": {},
+                    },
+                ],
+            )
+            candidate_2 = int(added["added"][0]["candidate_id"])
+            candidate_3 = int(added["added"][1]["candidate_id"])
+
+            queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_1, candidate_2, candidate_3])
+            dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
+
+            self.assertEqual(dispatched["processed"], 3)
+            self.assertEqual(dispatched["failed"], 1)
+            self.assertEqual(dispatched["sent"], 2)
+            items_by_candidate = {
+                int(item.get("candidate_id") or 0): item
+                for item in (dispatched.get("items") or [])
+            }
+            self.assertEqual(int(items_by_candidate[candidate_1].get("linkedin_account_id") or 0), account_1)
+            self.assertEqual(str(items_by_candidate[candidate_1].get("delivery_status") or ""), "failed")
+            self.assertEqual(int(items_by_candidate[candidate_2].get("linkedin_account_id") or 0), account_2)
+            self.assertEqual(int(items_by_candidate[candidate_3].get("linkedin_account_id") or 0), account_3)
+
+            self.assertEqual(len(providers["acc-limit-1"].sent_messages), 1)
+            self.assertEqual(len(providers["acc-limit-2"].sent_messages), 1)
+            self.assertEqual(len(providers["acc-limit-3"].sent_messages), 1)
 
     def test_dispatch_defers_when_no_connected_accounts(self) -> None:
         with TemporaryDirectory() as td:
@@ -324,7 +434,7 @@ class OutboundDispatchTests(unittest.TestCase):
             queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
             action_id = int(queued["items"][0]["action_id"])
             workflow._dispatch_single_outbound_action = (  # type: ignore[method-assign]
-                lambda row: (_ for _ in ()).throw(RuntimeError("bad parameter or other API misuse"))
+                lambda row, selection_state=None: (_ for _ in ()).throw(RuntimeError("bad parameter or other API misuse"))
             )
 
             dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
