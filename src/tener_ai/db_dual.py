@@ -54,9 +54,9 @@ class PostgresMirrorWriter:
                     """
                     INSERT INTO jobs (
                         id, title, company, company_website, jd_text, location,
-                        preferred_languages, seniority, linkedin_routing_mode, created_at
+                        preferred_languages, seniority, linkedin_routing_mode, archived_at, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT(id) DO UPDATE SET
                         title = EXCLUDED.title,
                         company = EXCLUDED.company,
@@ -65,7 +65,8 @@ class PostgresMirrorWriter:
                         location = EXCLUDED.location,
                         preferred_languages = EXCLUDED.preferred_languages,
                         seniority = EXCLUDED.seniority,
-                        linkedin_routing_mode = EXCLUDED.linkedin_routing_mode
+                        linkedin_routing_mode = EXCLUDED.linkedin_routing_mode,
+                        archived_at = EXCLUDED.archived_at
                     """,
                     (
                         int(row.get("id") or 0),
@@ -77,6 +78,7 @@ class PostgresMirrorWriter:
                         self._json(row.get("preferred_languages") or []),
                         row.get("seniority"),
                         row.get("linkedin_routing_mode") or "auto",
+                        (str(row.get("archived_at") or "").strip() or None),
                         row.get("created_at") or utc_now_iso(),
                     ),
                 )
@@ -620,6 +622,22 @@ class DualWriteDatabase:
             if isinstance(row, dict):
                 self._mirror_call("update_job_jd_text", lambda: self._mirror.upsert_job(row))
         return updated
+
+    def set_job_archived(self, *args: Any, **kwargs: Any) -> bool:
+        updated = bool(self._primary.set_job_archived(*args, **kwargs))
+        if updated:
+            job_id = int(kwargs.get("job_id") if "job_id" in kwargs else args[0])
+            row = self._primary.get_job(job_id)
+            if isinstance(row, dict):
+                self._mirror_call("set_job_archived", lambda: self._mirror.upsert_job(row))
+        return updated
+
+    def archive_jobs(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        result = self._primary.archive_jobs(*args, **kwargs)
+        for row in self._primary.list_jobs(limit=1000, include_archived=True):
+            if isinstance(row, dict):
+                self._mirror_call("archive_jobs", lambda row=row: self._mirror.upsert_job(row))
+        return result
 
     def upsert_job_culture_profile(self, *args: Any, **kwargs: Any) -> None:
         self._primary.upsert_job_culture_profile(*args, **kwargs)

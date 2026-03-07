@@ -15,6 +15,7 @@ os.environ.setdefault("TENER_DB_PATH", str(Path(gettempdir()) / "tener_job_archi
 
 from tener_ai import main as api_main
 from tener_ai.db import Database
+from tener_ai.db_dual import DualWriteDatabase
 
 
 class JobArchivingTests(unittest.TestCase):
@@ -104,6 +105,27 @@ class JobArchivingTests(unittest.TestCase):
         items = payload_jobs.get("items") or []
         self.assertEqual(len(items), 1)
         self.assertEqual(str(items[0].get("title") or ""), "Manual QA Engineer")
+
+    def test_dual_write_archive_jobs_mirrors_archived_at(self) -> None:
+        class _Mirror:
+            def __init__(self) -> None:
+                self.rows = []
+
+            def upsert_job(self, row: Dict[str, Any]) -> None:
+                self.rows.append(dict(row))
+
+        mirror = _Mirror()
+        dual = DualWriteDatabase(primary=self.db, mirror=mirror, strict=True)
+
+        result = dual.archive_jobs(exclude_titles=["Manual QA Engineer"])
+        self.assertEqual(int(result.get("updated") or 0), 2)
+        archived_titles = {
+            str(row.get("title") or "")
+            for row in mirror.rows
+            if str(row.get("archived_at") or "").strip()
+        }
+        self.assertIn("Senior Backend Engineer", archived_titles)
+        self.assertIn("Frontend Engineer", archived_titles)
 
 
 if __name__ == "__main__":
