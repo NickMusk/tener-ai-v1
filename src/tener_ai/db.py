@@ -700,6 +700,7 @@ class Database:
             conv.id AS conversation_id,
             conv.status AS conversation_status,
             conv.external_chat_id,
+            conv.linkedin_account_id,
             conv.last_message_at,
             prs.session_id AS pre_resume_session_id,
             prs.status AS pre_resume_status,
@@ -718,6 +719,51 @@ class Database:
                 ORDER BY msg.id DESC
                 LIMIT 1
             ) AS last_message_created_at
+            ,
+            (
+                SELECT msg.meta
+                FROM messages msg
+                WHERE msg.conversation_id = conv.id
+                  AND msg.direction = 'outbound'
+                ORDER BY msg.id DESC
+                LIMIT 1
+            ) AS last_outbound_meta,
+            (
+                SELECT oa.action_type
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_type,
+            (
+                SELECT oa.status
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_status,
+            (
+                SELECT oa.not_before
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_not_before,
+            (
+                SELECT oa.payload_json
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_payload_json
         FROM candidate_job_matches m
         JOIN candidates c ON c.id = m.candidate_id
         LEFT JOIN conversations conv ON conv.id = (
@@ -739,6 +785,7 @@ class Database:
             key, label = self._derive_candidate_current_status(item)
             item["current_status_key"] = key
             item["current_status_label"] = label
+            item.update(self._derive_candidate_lifecycle(item))
             candidate_id = int(item.get("candidate_id") or 0)
             candidate_assessments = list(assessments_by_candidate.get(candidate_id, []))
             item["agent_assessments"] = candidate_assessments
@@ -789,6 +836,51 @@ class Database:
                 ORDER BY msg.id DESC
                 LIMIT 1
             ) AS last_message_created_at
+            ,
+            (
+                SELECT msg.meta
+                FROM messages msg
+                WHERE msg.conversation_id = conv.id
+                  AND msg.direction = 'outbound'
+                ORDER BY msg.id DESC
+                LIMIT 1
+            ) AS last_outbound_meta,
+            (
+                SELECT oa.action_type
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_type,
+            (
+                SELECT oa.status
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_status,
+            (
+                SELECT oa.not_before
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_not_before,
+            (
+                SELECT oa.payload_json
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_payload_json
         FROM candidate_job_matches m
         JOIN jobs j ON j.id = m.job_id
         JOIN candidates c ON c.id = m.candidate_id
@@ -819,6 +911,7 @@ class Database:
             key, label = self._derive_candidate_current_status(item)
             item["current_status_key"] = key
             item["current_status_label"] = label
+            item.update(self._derive_candidate_lifecycle(item))
         return items
 
     def get_candidate_match(self, job_id: int, candidate_id: int) -> Optional[Dict[str, Any]]:
@@ -882,7 +975,51 @@ class Database:
                 WHERE msg.conversation_id = conv.id
                 ORDER BY msg.id DESC
                 LIMIT 1
-            ) AS last_message_created_at
+            ) AS last_message_created_at,
+            (
+                SELECT msg.meta
+                FROM messages msg
+                WHERE msg.conversation_id = conv.id
+                  AND msg.direction = 'outbound'
+                ORDER BY msg.id DESC
+                LIMIT 1
+            ) AS last_outbound_meta,
+            (
+                SELECT oa.action_type
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_type,
+            (
+                SELECT oa.status
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_status,
+            (
+                SELECT oa.not_before
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_not_before,
+            (
+                SELECT oa.payload_json
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_payload_json
         FROM candidate_job_matches m
         JOIN jobs j ON j.id = m.job_id
         LEFT JOIN job_culture_profiles cp ON cp.job_id = m.job_id
@@ -916,6 +1053,7 @@ class Database:
             key, label = self._derive_candidate_current_status(item)
             item["current_status_key"] = key
             item["current_status_label"] = label
+            item.update(self._derive_candidate_lifecycle(item))
         return items
 
     def list_candidate_assessments(self, candidate_id: int, job_id: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -3007,11 +3145,14 @@ class Database:
             "meta",
             "metadata",
             "details",
+            "last_outbound_meta",
             "resume_links",
             "state_json",
             "output_json",
             "payload_json",
             "result_json",
+            "pending_action_payload_json",
+            "pending_action_result_json",
             "profile_json",
             "sources_json",
             "warnings_json",
@@ -3079,3 +3220,73 @@ class Database:
         if match_status:
             return match_status, match_status.replace("_", " ").title()
         return "unknown", "Unknown"
+
+    @staticmethod
+    def _derive_candidate_lifecycle(item: Dict[str, Any]) -> Dict[str, Any]:
+        pending_payload = (
+            item.get("pending_action_payload_json") if isinstance(item.get("pending_action_payload_json"), dict) else {}
+        )
+        pending_action_status = str(item.get("pending_action_status") or "").strip().lower()
+        pending_action_type = str(item.get("pending_action_type") or "").strip().lower()
+        pending_action_kind = str(pending_payload.get("planned_action_kind") or "").strip().lower()
+        if pending_action_type and not pending_action_kind:
+            delivery_mode = str(pending_payload.get("delivery_mode") or "").strip().lower()
+            pending_action_kind = "connect_request" if delivery_mode == "connect_first" else "message"
+        pending_action_label = {
+            "connect_request": "Connect planned",
+            "message": "Message planned",
+        }.get(pending_action_kind, "Action planned" if pending_action_type else "")
+
+        current_status_key = str(item.get("current_status_key") or "").strip().lower()
+        conversation_status = str(item.get("conversation_status") or "").strip().lower()
+        pre_resume_status = str(item.get("pre_resume_status") or "").strip().lower()
+        last_message_direction = str(item.get("last_message_direction") or "").strip().lower()
+        last_outbound_meta = item.get("last_outbound_meta") if isinstance(item.get("last_outbound_meta"), dict) else {}
+        last_outbound_type = str(last_outbound_meta.get("type") or "").strip().lower()
+        delivery_status = str(last_outbound_meta.get("delivery_status") or "").strip().lower()
+
+        lifecycle_key = "ready_for_outreach"
+        lifecycle_label = "Ready for outreach"
+        lifecycle_detail = ""
+
+        if pending_action_status in {"pending", "running"}:
+            lifecycle_key = f"planned_{pending_action_kind or 'action'}"
+            lifecycle_label = pending_action_label or "Action planned"
+            lifecycle_detail = "Queued for delivery"
+        elif conversation_status == "waiting_connection" or current_status_key == "outreach_pending_connection":
+            lifecycle_key = "connect_sent_waiting_acceptance"
+            lifecycle_label = "Connect sent"
+            lifecycle_detail = "Waiting for acceptance"
+        elif last_outbound_type == "outreach_after_connection":
+            lifecycle_key = "connected_first_message_sent"
+            lifecycle_label = "Connected"
+            lifecycle_detail = "First message sent"
+        elif current_status_key == "in_dialogue":
+            lifecycle_key = "dialogue_started"
+            lifecycle_label = "Dialogue started"
+            lifecycle_detail = "Candidate replied"
+        elif current_status_key == "cv_received":
+            lifecycle_key = "resume_received"
+            lifecycle_label = "Resume received"
+            lifecycle_detail = "CV or resume received"
+        elif current_status_key == "outreached":
+            lifecycle_key = "message_sent"
+            lifecycle_label = "Message sent"
+            lifecycle_detail = "Waiting for reply"
+        elif pre_resume_status in {"engaged_no_resume", "will_send_later"}:
+            lifecycle_key = "dialogue_started"
+            lifecycle_label = "Dialogue started"
+            lifecycle_detail = "Resume not received yet"
+        elif delivery_status == "pending_connection":
+            lifecycle_key = "connect_sent_waiting_acceptance"
+            lifecycle_label = "Connect sent"
+            lifecycle_detail = "Waiting for acceptance"
+
+        return {
+            "planned_action_kind": pending_action_kind or None,
+            "planned_action_label": pending_action_label or None,
+            "candidate_lifecycle_key": lifecycle_key,
+            "candidate_lifecycle_label": lifecycle_label,
+            "candidate_lifecycle_detail": lifecycle_detail or None,
+            "pending_action_status_label": pending_action_status or None,
+        }

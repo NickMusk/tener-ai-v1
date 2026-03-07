@@ -106,6 +106,12 @@ class OutreachOpsApiTests(unittest.TestCase):
             state={"status": "awaiting_reply", "language": "en"},
             instruction="",
         )
+        full_error = (
+            "Unipile HTTP error 403: "
+            "{\"status\":403,\"type\":\"errors/subscription_required\","
+            "\"title\":\"Subscription required\","
+            "\"detail\":\"The action you're trying to achieve requires a subscription to provider's services.\"}"
+        )
         with self.db.transaction() as conn:
             conn.execute(
                 "UPDATE conversations SET last_message_at = ? WHERE id = ?",
@@ -135,7 +141,7 @@ class OutreachOpsApiTests(unittest.TestCase):
                     "conversation",
                     "999",
                     "error",
-                    json.dumps({"delivery_status": "failed", "linkedin_account_id": int(account_2), "error": "api_error"}),
+                    json.dumps({"delivery_status": "failed", "linkedin_account_id": int(account_2), "error": full_error}),
                     utc_now_iso(),
                 ),
             )
@@ -157,6 +163,9 @@ class OutreachOpsApiTests(unittest.TestCase):
         self.assertEqual(int((by_id.get(account_2) or {}).get("failed_24h") or 0), 1)
         self.assertEqual(str((by_id.get(account_1) or {}).get("delivery_health") or ""), "ok")
         self.assertEqual(str((by_id.get(account_1) or {}).get("backlog_health") or ""), "warning")
+        self.assertEqual(str((by_id.get(account_1) or {}).get("dispatch_state") or ""), "ready")
+        self.assertEqual(str((by_id.get(account_2) or {}).get("dispatch_state") or ""), "blocked_subscription")
+        self.assertEqual(str((by_id.get(account_2) or {}).get("last_error") or ""), full_error)
         stuck_candidates = (by_id.get(account_1) or {}).get("stuck_candidates") or []
         self.assertEqual(len(stuck_candidates), 1)
         self.assertEqual(str(stuck_candidates[0].get("candidate_name") or ""), "Ops Candidate 1")
@@ -375,6 +384,9 @@ class OutreachOpsApiTests(unittest.TestCase):
         self.assertEqual(str(items[0].get("candidate_name") or ""), "Backlog Candidate high")
         self.assertEqual(int(items[0].get("likely_account_id") or 0), account_id)
         self.assertEqual(str(items[0].get("likely_account_label") or ""), "Planned Sender")
+        self.assertEqual(str(items[0].get("queue_reason") or ""), "new_thread")
+        self.assertEqual(str(items[0].get("planned_action_kind") or ""), "connect_request")
+        self.assertEqual(str(items[0].get("planned_action_label") or ""), "Connect planned")
 
 
 if __name__ == "__main__":

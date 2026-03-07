@@ -90,8 +90,10 @@ class OutreachConnectionFlowTests(unittest.TestCase):
             self.assertEqual(outreach["sent"], 0)
             self.assertEqual(outreach["pending_connection"], 1)
             self.assertEqual(outreach["failed"], 0)
+            self.assertEqual(len(provider.sent_messages), 0)
             self.assertEqual(len(provider.connection_requests), 1)
             self.assertEqual(outreach["items"][0]["delivery_status"], "pending_connection")
+            self.assertEqual(str(outreach["items"][0].get("planned_action_kind") or ""), "connect_request")
 
             conversation_id = int(outreach["items"][0]["conversation_id"])
             conversation = db.get_conversation(conversation_id)

@@ -1412,10 +1412,12 @@
     }
 
     function escapeHtml(str) {
-      return str
+      return String(str || '')
         .replaceAll('&', '&amp;')
         .replaceAll('<', '&lt;')
-        .replaceAll('>', '&gt;');
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
     }
 
     function normalizeLinkedinPublicUrl(raw) {
@@ -1441,6 +1443,32 @@
       if (!text) return '';
       if (text.length <= limit) return text;
       return text.slice(0, limit - 1) + '…';
+    }
+
+    async function copyText(value) {
+      const text = String(value || "");
+      if (!text) return false;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+          return true;
+        }
+      } catch (_) {}
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "readonly");
+      area.style.position = "absolute";
+      area.style.left = "-9999px";
+      document.body.appendChild(area);
+      area.select();
+      let copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } catch (_) {
+        copied = false;
+      }
+      document.body.removeChild(area);
+      return copied;
     }
 
     function formatAgentAssessmentCell(scorecard, agentKey) {
@@ -2311,6 +2339,8 @@
       }
       body.innerHTML = items.map((row) => {
         const queueType = String(row.queue_type || "unknown").replace(/_/g, " ");
+        const queueReason = escapeHtml(row.queue_reason_label || queueType);
+        const plannedAction = escapeHtml(row.planned_action_label || "-");
         const score = row.score == null ? "-" : Number(row.score).toFixed(2);
         const candidate = escapeHtml(row.candidate_name || `Candidate ${row.candidate_id || "-"}`);
         const jobTitle = escapeHtml(row.job_title || "-");
@@ -2327,7 +2357,10 @@
           : '<span class="muted">-</span>';
         return `
           <tr>
-            <td>${escapeHtml(queueType)}</td>
+            <td>
+              <div>${queueReason}</div>
+              <div class="muted mono" style="font-size:11px;">${plannedAction}</div>
+            </td>
             <td>${candidate}</td>
             <td>${jobLabel}</td>
             <td class="mono">${escapeHtml(score)}</td>
@@ -2360,7 +2393,8 @@
       body.innerHTML = rows.map((row) => {
         const accountLabel = `#${Number(row.account_id || 0)} ${escapeHtml(row.label || "-")}`;
         const provider = escapeHtml(row.provider_account_id || "-");
-        const status = escapeHtml(row.status || "-");
+        const status = escapeHtml(row.dispatch_state_label || row.status || "-");
+        const connectionStatus = escapeHtml(row.connection_status || row.status || "-");
         const deliveryHealth = String(row.delivery_health || row.health || "unknown").toLowerCase();
         const backlogHealth = String(row.backlog_health || "unknown").toLowerCase();
         const sentPair = `${Number(row.sent_1h || 0)}/${Number(row.sent_24h || 0)}`;
@@ -2368,7 +2402,11 @@
         const active = Number(row.active_conversations || 0);
         const stuck = Number(row.stuck_threads || 0);
         const lastSuccess = formatTimestampCompact(row.last_send_at);
-        const lastError = escapeHtml(shortText(row.last_error || "-", 90));
+        const fullLastError = String(row.last_error || "").trim();
+        const lastErrorPreview = escapeHtml(shortText(fullLastError || "-", 90));
+        const copyButton = fullLastError
+          ? `<button class="ops-copy-error-btn" data-error="${encodeURIComponent(fullLastError)}" style="margin-top:6px;">Copy</button>`
+          : "";
         const stuckCandidates = Array.isArray(row.stuck_candidates) ? row.stuck_candidates : [];
         const stuckMarkup = stuckCandidates.length
           ? stuckCandidates.slice(0, 3).map((item) => {
@@ -2384,14 +2422,14 @@
             <td><div>${accountLabel}</div><div class="muted mono" style="font-size:11px;">${provider}</div></td>
             <td><span class="health-pill ${escapeHtml(deliveryHealth)}">${escapeHtml(deliveryHealth)}</span></td>
             <td><span class="health-pill ${escapeHtml(backlogHealth)}">${escapeHtml(backlogHealth)}</span></td>
-            <td>${status}</td>
+            <td><div>${status}</div><div class="muted mono" style="font-size:11px;">conn:${connectionStatus}</div></td>
             <td class="mono">${active}</td>
             <td class="mono">${sentPair}</td>
             <td class="mono">${failedPair}</td>
             <td class="mono">${stuck}</td>
             <td>${stuckMarkup}</td>
             <td class="mono">${lastSuccess}</td>
-            <td class="mono">${lastError}</td>
+            <td class="mono" title="${escapeHtml(fullLastError || "-")}"><div>${lastErrorPreview}</div>${copyButton}</td>
           </tr>
         `;
       }).join("");
@@ -2403,6 +2441,16 @@
           setActiveView("agent");
           await refreshAgentWorkspace();
           await openAgentConversation(conversationId);
+        });
+      });
+      document.querySelectorAll(".ops-copy-error-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const raw = decodeURIComponent(String(btn.dataset.error || ""));
+          const copied = await copyText(raw);
+          btn.textContent = copied ? "Copied" : "Copy failed";
+          setTimeout(() => {
+            btn.textContent = "Copy";
+          }, 1200);
         });
       });
     }
@@ -2924,8 +2972,11 @@
         body.innerHTML = filteredItems.map((x) => {
           const skills = (x.skills || []).slice(0, 6).join(', ');
           const currentStatus = escapeHtml(x.current_status_label || x.status || '-');
-          const rawStatus = escapeHtml(x.status || '-');
-          const preResumeStatus = escapeHtml(x.pre_resume_status || '-');
+          const lifecycleLabel = escapeHtml(x.candidate_lifecycle_label || '-');
+          const lifecycleParts = [];
+          if (x.planned_action_label) lifecycleParts.push(String(x.planned_action_label));
+          if (x.candidate_lifecycle_detail) lifecycleParts.push(String(x.candidate_lifecycle_detail));
+          const lifecycleText = lifecycleParts.length ? `${lifecycleLabel} • ${lifecycleParts.join(' • ')}` : lifecycleLabel;
           const scorecard = x.agent_scorecard || {};
           const candidateId = Number(x.candidate_id || 0) || 0;
           const linkedinPublicUrl = normalizeLinkedinPublicUrl(x.linkedin_public_url);
@@ -2938,7 +2989,7 @@
               <td><div>${escapeHtml(x.full_name || '-')}</div>${linkedinLink}</td>
               <td>
                 <div>${currentStatus}</div>
-                <div class="muted mono" style="font-size:11px;">raw:${rawStatus} • pre:${preResumeStatus}</div>
+                <div class="muted mono" style="font-size:11px;">${escapeHtml(lifecycleText)}</div>
               </td>
               <td>${formatAgentAssessmentCell(scorecard, 'sourcing_vetting')}</td>
               <td>${formatAgentAssessmentCell(scorecard, 'communication')}</td>

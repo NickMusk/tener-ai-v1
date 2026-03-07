@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -162,18 +163,19 @@ class OutboundDispatchTests(unittest.TestCase):
 
             dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
             self.assertEqual(dispatched["processed"], 1)
-            self.assertEqual(dispatched["sent"], 1)
-            self.assertEqual(dispatched["pending_connection"], 0)
+            self.assertEqual(dispatched["sent"], 0)
+            self.assertEqual(dispatched["pending_connection"], 1)
             self.assertEqual(dispatched["deferred"], 0)
 
             action = db.get_outbound_action(action_id)
             self.assertEqual(action["status"], "completed")
             self.assertEqual(int(action["account_id"]), account_2)
+            self.assertEqual(str((action.get("result_json") or {}).get("planned_action_kind") or ""), "connect_request")
 
             conversation_id = int(queued["conversation_ids"][0])
             conversation = db.get_conversation(conversation_id)
             self.assertEqual(int(conversation["linkedin_account_id"]), account_2)
-            self.assertEqual(conversation["status"], "active")
+            self.assertEqual(conversation["status"], "waiting_connection")
 
     def test_dispatch_excludes_provider_limited_account_for_remaining_batch(self) -> None:
         with TemporaryDirectory() as td:
@@ -246,6 +248,17 @@ class OutboundDispatchTests(unittest.TestCase):
             candidate_3 = int(added["added"][1]["candidate_id"])
 
             queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_1, candidate_2, candidate_3])
+            for item in queued["items"]:
+                action_id = int(item.get("action_id") or 0)
+                action = db.get_outbound_action(action_id)
+                payload = dict((action or {}).get("payload_json") or {})
+                payload["delivery_mode"] = "message_first"
+                payload["planned_action_kind"] = "message"
+                with db.transaction() as conn:
+                    conn.execute(
+                        "UPDATE outbound_actions SET payload_json = ? WHERE id = ?",
+                        (json.dumps(payload), action_id),
+                    )
             dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
 
             self.assertEqual(dispatched["processed"], 3)
@@ -343,11 +356,13 @@ class OutboundDispatchTests(unittest.TestCase):
             action_id = int(queued["items"][0]["action_id"])
             dispatched = workflow.dispatch_outbound_actions(limit=5, job_id=job_id)
             self.assertEqual(dispatched["processed"], 1)
-            self.assertEqual(dispatched["sent"], 1)
+            self.assertEqual(dispatched["sent"], 0)
+            self.assertEqual(dispatched["pending_connection"], 1)
             action = db.get_outbound_action(action_id)
             self.assertEqual(action["status"], "completed")
             self.assertEqual(int(action["account_id"]), account_1)
-            self.assertEqual(len(providers["acc-a"].sent_messages), 1)
+            self.assertEqual(len(providers["acc-a"].sent_messages), 0)
+            self.assertEqual(len(providers["acc-a"].connect_messages), 1)
             self.assertEqual(len(providers["acc-b"].sent_messages), 0)
 
     def test_dispatch_respects_connect_weekly_cap(self) -> None:
@@ -546,17 +561,19 @@ class OutboundDispatchTests(unittest.TestCase):
             self.assertEqual(out["jobs_selected"], 1)
             self.assertEqual(int(out["jobs"][0]["job_id"]), new_job_id)
             self.assertEqual(int(out["totals"]["new_threads_queued"]), 1)
-            self.assertEqual(int(out["totals"]["sent"]), 1)
+            self.assertEqual(int(out["totals"]["sent"]) or 0, 0)
+            self.assertEqual(int(out["totals"]["pending_connection"]) or 0, 1)
 
             high_match = db.get_candidate_match(new_job_id, high_candidate)
             low_match = db.get_candidate_match(new_job_id, low_candidate)
             old_match = db.get_candidate_match(old_job_id, old_candidate)
             manual_match = db.get_candidate_match(manual_job_id, manual_candidate)
-            self.assertEqual(str((high_match or {}).get("status") or ""), "outreach_sent")
+            self.assertEqual(str((high_match or {}).get("status") or ""), "outreach_pending_connection")
             self.assertEqual(str((low_match or {}).get("status") or ""), "verified")
             self.assertEqual(str((old_match or {}).get("status") or ""), "verified")
             self.assertEqual(str((manual_match or {}).get("status") or ""), "verified")
-            self.assertEqual(len(provider.sent_messages), 1)
+            self.assertEqual(len(provider.sent_messages), 0)
+            self.assertEqual(len(provider.connect_messages), 1)
 
 
 if __name__ == "__main__":

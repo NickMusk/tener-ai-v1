@@ -501,9 +501,15 @@ class WorkflowService:
                     inbound_text=None,
                     outbound_text=message,
                     state_status=session_state.get("status"),
-                    details={"job_id": job_id, "candidate_id": candidate_id, "source": "outreach"},
+                        details={"job_id": job_id, "candidate_id": candidate_id, "source": "outreach"},
                 )
 
+            conversation = self.db.get_conversation(conversation_id)
+            delivery_mode = self._determine_initial_outreach_delivery_mode(
+                action_type="outreach_initial",
+                conversation=conversation,
+            )
+            planned_action_kind = self._planned_action_kind_for_delivery_mode(delivery_mode)
             priority = self._outreach_priority(match=match)
             action_id = self.db.create_outbound_action(
                 job_id=job_id,
@@ -517,6 +523,8 @@ class WorkflowService:
                     "request_resume": bool(request_resume),
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
+                    "delivery_mode": delivery_mode,
+                    "planned_action_kind": planned_action_kind,
                 },
             )
             queued_action_ids.append(action_id)
@@ -529,6 +537,8 @@ class WorkflowService:
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
                     "pre_resume_session_id": pre_resume_session_id,
+                    "delivery_mode": delivery_mode,
+                    "planned_action_kind": planned_action_kind,
                     "action_id": action_id,
                 }
             )
@@ -702,17 +712,26 @@ class WorkflowService:
                     inbound_text=None,
                     outbound_text=message,
                     state_status=session_state.get("status"),
-                    details={"job_id": job_id, "candidate_id": candidate_id, "source": "outreach"},
+                        details={"job_id": job_id, "candidate_id": candidate_id, "source": "outreach"},
                 )
 
+            conversation = self.db.get_conversation(conversation_id)
+            delivery_mode = self._determine_initial_outreach_delivery_mode(
+                action_type="outreach_initial",
+                conversation=conversation,
+            )
+            planned_action_kind = self._planned_action_kind_for_delivery_mode(delivery_mode)
             connect_request = None
             delivery_status = "failed"
-            try:
-                delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
-            except Exception as exc:
-                delivery = {"sent": False, "provider": "linkedin", "error": str(exc)}
+            if delivery_mode == "connect_first":
+                delivery = {"sent": False, "provider": "linkedin", "reason": "connect_first"}
+            else:
+                try:
+                    delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
+                except Exception as exc:
+                    delivery = {"sent": False, "provider": "linkedin", "error": str(exc)}
 
-            if delivery.get("sent"):
+            if delivery_mode != "connect_first" and delivery.get("sent"):
                 sent += 1
                 delivery_status = "sent"
                 self.db.update_conversation_status(conversation_id=conversation_id, status="active")
@@ -722,7 +741,7 @@ class WorkflowService:
                     status="outreach_sent",
                     extra_notes={"outreach_state": "sent"},
                 )
-            elif self._is_connection_required_error(delivery):
+            elif delivery_mode == "connect_first" or self._is_connection_required_error(delivery):
                 _, connect_message = self.outreach_agent.compose_connection_request(job=job, candidate=candidate)
                 try:
                     connect_request = self.sourcing_agent.send_connection_request(
@@ -798,6 +817,8 @@ class WorkflowService:
                     "auto": True,
                     "delivery": delivery,
                     "delivery_status": delivery_status,
+                    "delivery_mode": delivery_mode,
+                    "planned_action_kind": planned_action_kind,
                     "connect_request": connect_request,
                     "pending_delivery": delivery_status == "pending_connection",
                     "request_resume": request_resume,
@@ -817,6 +838,8 @@ class WorkflowService:
                     "language": language,
                     "delivery": delivery,
                     "delivery_status": delivery_status,
+                    "delivery_mode": delivery_mode,
+                    "planned_action_kind": planned_action_kind,
                     "connect_request": connect_request,
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
@@ -841,6 +864,8 @@ class WorkflowService:
                     "language": language,
                     "delivery": delivery,
                     "delivery_status": delivery_status,
+                    "delivery_mode": delivery_mode,
+                    "planned_action_kind": planned_action_kind,
                     "connect_request": connect_request,
                     "request_resume": request_resume,
                     "screening_status": screening_status or None,
@@ -3503,6 +3528,8 @@ class WorkflowService:
                     "request_resume": bool(last_meta.get("request_resume")),
                     "screening_status": str(last_meta.get("screening_status") or ""),
                     "pre_resume_session_id": pre_resume_session_id,
+                    "delivery_mode": "message_first",
+                    "planned_action_kind": "message",
                 },
                 priority=0,
             )
@@ -3731,6 +3758,7 @@ class WorkflowService:
         job_id = int(row.get("job_id") or 0)
         candidate_id = int(row.get("candidate_id") or 0)
         conversation_id = int(row.get("conversation_id") or 0)
+        action_type = str(row.get("action_type") or "").strip().lower()
         payload = row.get("payload_json") if isinstance(row.get("payload_json"), dict) else {}
         language = str(payload.get("language") or "en").strip().lower() or "en"
         message = str(payload.get("message") or "").strip()
@@ -3756,6 +3784,16 @@ class WorkflowService:
                 "delivery_status": "failed",
                 "error": error,
             }
+
+        delivery_mode = str(payload.get("delivery_mode") or "").strip().lower()
+        if delivery_mode not in {"connect_first", "message_first"}:
+            delivery_mode = self._determine_initial_outreach_delivery_mode(
+                action_type=action_type,
+                conversation=conversation,
+            )
+        planned_action_kind = str(payload.get("planned_action_kind") or "").strip().lower()
+        if not planned_action_kind:
+            planned_action_kind = self._planned_action_kind_for_delivery_mode(delivery_mode)
 
         account, selection_error = self._select_linkedin_account_for_new_thread(
             job_id=job_id,
@@ -3783,12 +3821,15 @@ class WorkflowService:
 
         connect_request = None
         delivery_status = "failed"
-        try:
-            delivery = provider.send_message(candidate_profile=candidate, message=message)
-        except Exception as exc:
-            delivery = {"sent": False, "provider": "unipile", "error": str(exc)}
+        if delivery_mode == "connect_first":
+            delivery = {"sent": False, "provider": "unipile", "reason": "connect_first"}
+        else:
+            try:
+                delivery = provider.send_message(candidate_profile=candidate, message=message)
+            except Exception as exc:
+                delivery = {"sent": False, "provider": "unipile", "error": str(exc)}
 
-        if delivery.get("sent"):
+        if delivery_mode != "connect_first" and delivery.get("sent"):
             delivery_status = "sent"
             self.db.set_conversation_linkedin_account(conversation_id=conversation_id, account_id=account_id)
             self.db.update_conversation_status(conversation_id=conversation_id, status="active")
@@ -3799,7 +3840,7 @@ class WorkflowService:
                 extra_notes={"outreach_state": "sent", "linkedin_account_id": account_id},
             )
             self._increment_managed_account_counters(account_id=account_id, connect_delta=0, new_threads_delta=1, replies_delta=0)
-        elif self._is_connection_required_error(delivery):
+        elif delivery_mode == "connect_first" or self._is_connection_required_error(delivery):
             if not self._can_send_connect_request(account=account):
                 retry_at = (datetime.now(timezone.utc) + timedelta(hours=12)).isoformat()
                 self.db.release_outbound_action(
@@ -3890,6 +3931,8 @@ class WorkflowService:
                 "auto": True,
                 "delivery": delivery,
                 "delivery_status": delivery_status,
+                "delivery_mode": delivery_mode,
+                "planned_action_kind": planned_action_kind,
                 "connect_request": connect_request,
                 "pending_delivery": delivery_status == "pending_connection",
                 "request_resume": request_resume,
@@ -3910,6 +3953,8 @@ class WorkflowService:
                 "language": language,
                 "delivery": delivery,
                 "delivery_status": delivery_status,
+                "delivery_mode": delivery_mode,
+                "planned_action_kind": planned_action_kind,
                 "connect_request": connect_request,
                 "request_resume": request_resume,
                 "screening_status": screening_status or None,
@@ -3934,6 +3979,8 @@ class WorkflowService:
             result={
                 "delivery_status": delivery_status,
                 "delivery": delivery,
+                "delivery_mode": delivery_mode,
+                "planned_action_kind": planned_action_kind,
                 "connect_request": connect_request,
                 "external_chat_id": external_chat_id or None,
                 "chat_binding": chat_binding,
@@ -3947,6 +3994,8 @@ class WorkflowService:
             "candidate_id": candidate_id,
             "delivery_status": delivery_status,
             "delivery": delivery,
+            "delivery_mode": delivery_mode,
+            "planned_action_kind": planned_action_kind,
             "connect_request": connect_request,
             "external_chat_id": external_chat_id or None,
             "chat_binding": chat_binding,
@@ -4160,6 +4209,36 @@ class WorkflowService:
 
     def _policy_allowed_connects_today(self, account: Dict[str, Any]) -> int:
         return policy_allowed_connects_today(self.linkedin_outreach_policy, account)
+
+    def _determine_initial_outreach_delivery_mode(
+        self,
+        *,
+        action_type: str,
+        conversation: Dict[str, Any] | None,
+    ) -> str:
+        normalized_action_type = str(action_type or "").strip().lower()
+        if normalized_action_type == "pre_resume_recovery":
+            return "message_first"
+        if not isinstance(conversation, dict):
+            return "connect_first"
+        if str(conversation.get("external_chat_id") or "").strip():
+            return "message_first"
+        conversation_status = str(conversation.get("status") or "").strip().lower()
+        if conversation_status == "waiting_connection":
+            return "message_first"
+        if int(conversation.get("linkedin_account_id") or 0) > 0:
+            return "message_first"
+        conversation_id = int(conversation.get("id") or 0)
+        if conversation_id > 0:
+            messages = self.db.list_messages(conversation_id)
+            if messages:
+                return "message_first"
+        return "connect_first"
+
+    @staticmethod
+    def _planned_action_kind_for_delivery_mode(delivery_mode: str) -> str:
+        normalized = str(delivery_mode or "").strip().lower()
+        return "connect_request" if normalized == "connect_first" else "message"
 
     @staticmethod
     def _utc_day_key() -> str:

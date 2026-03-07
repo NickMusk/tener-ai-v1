@@ -190,18 +190,22 @@ class LinkedInAccountService:
         if not self.api_key:
             return {"status": "error", "reason": "unipile_api_key_missing", "updated": 0, "items": []}
 
+        sync_at = utc_now_iso()
         remote_items = self._fetch_remote_accounts()
         normalized = [self._normalize_remote_account(x) for x in remote_items]
         normalized = [x for x in normalized if x.get("provider_account_id")]
+        local_rows = [row for row in self.db.list_linkedin_accounts(limit=2000) if str(row.get("provider") or "").strip().lower() == self.provider]
         if account_id is not None:
             local = self.db.get_linkedin_account(account_id)
             if not local:
                 return {"status": "error", "reason": "account_not_found", "updated": 0, "items": []}
             target_provider_id = str(local.get("provider_account_id") or "").strip()
             normalized = [x for x in normalized if str(x.get("provider_account_id") or "").strip() == target_provider_id]
+            local_rows = [row for row in local_rows if int(row.get("id") or 0) == int(account_id)]
 
         updated = 0
         items: List[Dict[str, Any]] = []
+        remote_provider_ids = {str(entry.get("provider_account_id") or "").strip() for entry in normalized}
         for entry in normalized:
             row_id = self.db.upsert_linkedin_account(
                 provider=self.provider,
@@ -210,13 +214,42 @@ class LinkedInAccountService:
                 label=(str(entry.get("label") or "").strip() or None),
                 provider_user_id=(str(entry.get("provider_user_id") or "").strip() or None),
                 metadata={"remote": entry.get("raw") or {}, "source": "sync"},
-                last_synced_at=utc_now_iso(),
+                last_synced_at=sync_at,
             )
             updated += 1
             row = self.db.get_linkedin_account(row_id)
             if row:
                 items.append(row)
-        return {"status": "ok", "provider": self.provider, "updated": updated, "items": items}
+        removed = 0
+        for row in local_rows:
+            row_id = int(row.get("id") or 0)
+            provider_account_id = str(row.get("provider_account_id") or "").strip()
+            if row_id <= 0 or not provider_account_id:
+                continue
+            if provider_account_id in remote_provider_ids:
+                continue
+            if str(row.get("status") or "").strip().lower() == "removed":
+                continue
+            self.db.update_linkedin_account_status(
+                account_id=row_id,
+                status="removed",
+                metadata={
+                    "source": "sync",
+                    "removed_from_provider": True,
+                    "removed_from_provider_at": sync_at,
+                },
+            )
+            removed += 1
+            refreshed = self.db.get_linkedin_account(row_id)
+            if refreshed:
+                items.append(refreshed)
+        return {
+            "status": "ok",
+            "provider": self.provider,
+            "updated": updated,
+            "removed": removed,
+            "items": items,
+        }
 
     def disconnect_account(self, *, account_id: int, remote_disable: bool = False) -> Dict[str, Any]:
         row = self.db.get_linkedin_account(account_id)

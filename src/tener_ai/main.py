@@ -3247,6 +3247,27 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             normalized_name = re.sub(r"\s+", " ", str(candidate_name or "").strip().lower())
             return (account_id, job_id, f"name:{normalized_name or '-'}")
 
+        def _classify_account_issue(error_text: str) -> str | None:
+            lowered = str(error_text or "").strip().lower()
+            if not lowered:
+                return None
+            if "subscription_required" in lowered:
+                return "blocked_subscription"
+            if "account not found" in lowered:
+                return "removed"
+            if "limit_exceeded" in lowered or "rate limit" in lowered or "usage limit" in lowered:
+                return "rate_limited"
+            return None
+
+        def _queue_reason_label(reason: str) -> str:
+            mapping = {
+                "new_thread": "New outreach",
+                "recovery": "Recovery backlog",
+                "waiting_connection": "Connect sent",
+                "stuck_reply": "Stuck reply",
+            }
+            return mapping.get(str(reason or "").strip().lower(), str(reason or "").replace("_", " ").strip().title() or "Unknown")
+
         for item in logs or []:
             operation = str(item.get("operation") or "").strip().lower()
             status = str(item.get("status") or "").strip().lower()
@@ -3291,6 +3312,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         err_text = (
                             str((details.get("delivery") or {}).get("error") or "").strip()
                             or str((details.get("connect_request") or {}).get("error") or "").strip()
+                            or str(details.get("error") or "").strip()
                             or str(details.get("delivery_status") or "").strip()
                             or "delivery_failed"
                         )
@@ -3298,7 +3320,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         if current_dt is None or created_dt > current_dt:
                             entry["_last_error_dt"] = created_dt
                             entry["last_error_at"] = created_dt.isoformat()
-                            entry["last_error"] = err_text[:240]
+                            entry["last_error"] = err_text
+                            entry["dispatch_issue"] = _classify_account_issue(err_text)
 
             if operation in {
                 "agent.outreach.send",
@@ -3357,6 +3380,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     {
                         **queue_base,
                         "queue_type": "waiting_connection",
+                        "queue_reason": "waiting_connection",
+                        "queue_reason_label": _queue_reason_label("waiting_connection"),
+                        "planned_action_kind": "message",
+                        "planned_action_label": "Message after acceptance",
                         "status": "waiting_connection",
                     }
                 )
@@ -3373,6 +3400,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     stuck_item = {
                         **queue_base,
                         "queue_type": "stuck_reply",
+                        "queue_reason": "stuck_reply",
+                        "queue_reason_label": _queue_reason_label("stuck_reply"),
+                        "planned_action_kind": "message",
+                        "planned_action_label": "Follow up message",
                         "status": "awaiting_reply",
                     }
                     if stuck_key not in seen_stuck_people:
@@ -3393,9 +3424,36 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             account_status = str(row.get("status") or "").strip().lower()
             delivery_health = "ok"
             backlog_health = "ok"
-            if account_status not in {"connected", "active"}:
+            dispatch_issue = str(row.get("dispatch_issue") or "").strip().lower()
+            dispatch_state = "ready"
+            dispatch_state_label = "Ready"
+            if account_status == "removed" or dispatch_issue == "removed":
+                dispatch_state = "removed"
+                dispatch_state_label = "Removed from provider"
+                delivery_health = "critical"
+                backlog_health = "paused"
+            elif account_status not in {"connected", "active"}:
+                dispatch_state = "inactive"
+                dispatch_state_label = "Inactive"
                 delivery_health = "paused"
                 backlog_health = "paused"
+            elif dispatch_issue == "blocked_subscription":
+                dispatch_state = "blocked_subscription"
+                dispatch_state_label = "Blocked by subscription"
+                delivery_health = "critical"
+            elif dispatch_issue == "rate_limited":
+                dispatch_state = "rate_limited"
+                dispatch_state_label = "Rate limited"
+                delivery_health = "warning"
+            elif (
+                int(row.get("active_conversations") or 0) == 0
+                and int(row.get("sent_24h") or 0) == 0
+                and int(row.get("failed_24h") or 0) == 0
+                and not row.get("last_send_at")
+            ):
+                dispatch_state = "idle_unverified"
+                dispatch_state_label = "Connected, unverified"
+                delivery_health = "warning"
             elif int(row.get("failed_1h") or 0) >= 2:
                 delivery_health = "critical"
             elif int(row.get("failed_24h") or 0) > 0:
@@ -3410,9 +3468,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             row["health"] = health
             row["delivery_health"] = delivery_health
             row["backlog_health"] = backlog_health
+            row["connection_status"] = account_status or "unknown"
+            row["dispatch_state"] = dispatch_state
+            row["dispatch_state_label"] = dispatch_state_label
             row.pop("_last_send_dt", None)
             row.pop("_last_error_dt", None)
-            rows.append(row)
+            if dispatch_state != "removed":
+                rows.append(row)
 
         rows.sort(
             key=lambda item: (
@@ -3514,6 +3576,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 job_backlog_rows.append(
                     {
                         "queue_type": "new_thread",
+                        "queue_reason": "new_thread",
+                        "queue_reason_label": _queue_reason_label("new_thread"),
                         "job_id": row_job_id,
                         "job_title": str(item.get("job_title") or "").strip() or "-",
                         "candidate_id": int(item.get("candidate_id") or 0),
@@ -3523,22 +3587,28 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "score": float(item.get("score") or 0.0),
                         "last_message_at": item.get("last_message_created_at") or item.get("last_message_at"),
                         "linkedin_account_id": int(item.get("linkedin_account_id") or 0) or None,
+                        "planned_action_kind": str(item.get("planned_action_kind") or "connect_request"),
+                        "planned_action_label": str(item.get("planned_action_label") or "Connect planned"),
                     }
                 )
             for item in recovery_candidates[:backlog_items_per_job]:
                 job_backlog_rows.append(
                     {
-                        "queue_type": "unassigned_recovery",
+                        "queue_type": "recovery",
+                        "queue_reason": "recovery",
+                        "queue_reason_label": _queue_reason_label("recovery"),
                         "job_id": row_job_id,
                         "job_title": str(item.get("job_title") or "").strip() or "-",
                         "candidate_id": int(item.get("candidate_id") or 0),
                         "candidate_name": str(item.get("candidate_name") or "").strip()
                         or f"Candidate {int(item.get('candidate_id') or 0)}",
                         "conversation_id": int(item.get("conversation_id") or 0) or None,
-                        "status": "unassigned_recovery",
+                        "status": "recovery",
                         "score": None,
                         "last_message_at": item.get("last_message_at"),
                         "linkedin_account_id": None,
+                        "planned_action_kind": "message",
+                        "planned_action_label": "Recovery message planned",
                     }
                 )
             predicted_accounts: List[Dict[str, Any]] = []
@@ -3552,6 +3622,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 predicted = predicted_accounts[idx] if idx < len(predicted_accounts) else {}
                 item["likely_account_id"] = int(predicted.get("account_id") or 0) or None
                 item["likely_account_label"] = str(predicted.get("label") or "").strip() or None
+                if item.get("likely_account_label") and not item.get("planned_action_label"):
+                    planned_kind = str(item.get("planned_action_kind") or "").strip().lower()
+                    if planned_kind == "connect_request":
+                        item["planned_action_label"] = "Connect planned"
+                    elif planned_kind == "message":
+                        item["planned_action_label"] = "Message planned"
                 backlog_rows.append(item)
             backlog_summary["new_threads"] += len(new_thread_candidates)
             backlog_summary["unassigned_recovery"] += len(recovery_candidates)

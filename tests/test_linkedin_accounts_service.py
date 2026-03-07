@@ -131,6 +131,27 @@ class LinkedInAccountsServiceTests(unittest.TestCase):
             self.assertEqual(str(rows[0].get("provider_account_id")), "acc_sync_1")
             self.assertEqual(str(rows[0].get("label")), "Recruiter 01")
 
+    def test_sync_accounts_marks_missing_remote_account_as_removed(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "linkedin_accounts_removed.sqlite3"))
+            db.init_schema()
+            existing_id = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc_sync_missing",
+                status="connected",
+                label="Missing Recruiter",
+            )
+            service = _StubSyncService(db)
+
+            out = service.sync_accounts()
+            self.assertEqual(out.get("status"), "ok")
+            self.assertEqual(int(out.get("updated") or 0), 1)
+            self.assertEqual(int(out.get("removed") or 0), 1)
+
+            existing = db.get_linkedin_account(existing_id)
+            self.assertIsNotNone(existing)
+            self.assertEqual(str((existing or {}).get("status") or ""), "removed")
+
     def test_disconnect_marks_account_disconnected(self) -> None:
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "linkedin_accounts_disconnect.sqlite3"))

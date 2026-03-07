@@ -78,17 +78,29 @@ class CandidateCurrentStatusTests(unittest.TestCase):
 
             rows = db.list_candidates_for_job(job_id)
             self.assertEqual(rows[0]["current_status_key"], "added")
+            self.assertEqual(rows[0]["candidate_lifecycle_key"], "ready_for_outreach")
 
             outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
-            self.assertEqual(outreach["sent"], 1)
+            self.assertEqual(outreach["sent"], 0)
+            self.assertEqual(outreach["pending_connection"], 1)
             conversation_id = int(outreach["items"][0]["conversation_id"])
 
             rows = db.list_candidates_for_job(job_id)
+            self.assertEqual(rows[0]["current_status_key"], "outreach_pending_connection")
+            self.assertEqual(rows[0]["candidate_lifecycle_key"], "connect_sent_waiting_acceptance")
+
+            polled = workflow.poll_pending_connections(job_id=job_id, limit=20)
+            self.assertEqual(polled["connected"], 1)
+            self.assertEqual(polled["sent"], 1)
+
+            rows = db.list_candidates_for_job(job_id)
             self.assertEqual(rows[0]["current_status_key"], "outreached")
+            self.assertEqual(rows[0]["candidate_lifecycle_key"], "connected_first_message_sent")
 
             workflow.process_inbound_message(conversation_id=conversation_id, text="Tell me more")
             rows = db.list_candidates_for_job(job_id)
             self.assertEqual(rows[0]["current_status_key"], "in_dialogue")
+            self.assertEqual(rows[0]["candidate_lifecycle_key"], "dialogue_started")
 
             workflow.process_inbound_message(
                 conversation_id=conversation_id,
@@ -97,6 +109,7 @@ class CandidateCurrentStatusTests(unittest.TestCase):
             rows = db.list_candidates_for_job(job_id)
             self.assertEqual(rows[0]["current_status_key"], "cv_received")
             self.assertEqual(rows[0]["current_status_label"], "CV Received")
+            self.assertEqual(rows[0]["candidate_lifecycle_key"], "resume_received")
 
 
 if __name__ == "__main__":
