@@ -1240,6 +1240,26 @@ class WorkflowService:
             entity_id=str(inbound_id),
             details={"conversation_id": conversation_id},
         )
+        account_id = int(conversation.get("linkedin_account_id") or 0)
+        self._record_outreach_account_event(
+            event_key=f"message:{inbound_id}:reply_received",
+            account_id=account_id,
+            event_type="reply_received",
+            job_id=int(conversation["job_id"]),
+            candidate_id=int(conversation["candidate_id"]),
+            conversation_id=conversation_id,
+            details={"message_id": inbound_id},
+        )
+        if str(conversation.get("status") or "").strip().lower() == "waiting_connection":
+            self._record_outreach_account_event(
+                event_key=f"conversation:{conversation_id}:connect_accepted",
+                account_id=account_id,
+                event_type="connect_accepted",
+                job_id=int(conversation["job_id"]),
+                candidate_id=int(conversation["candidate_id"]),
+                conversation_id=conversation_id,
+                details={"source": "inbound_message", "message_id": inbound_id},
+            )
 
         pre_resume = self.db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
         if pre_resume and self.pre_resume_service is not None:
@@ -1358,6 +1378,15 @@ class WorkflowService:
                         entity_type="candidate",
                         entity_id=str(conversation["candidate_id"]),
                         details={"conversation_id": conversation_id, "session_id": session_id},
+                    )
+                    self._record_outreach_account_event(
+                        event_key=f"message:{inbound_id}:resume_received",
+                        account_id=account_id,
+                        event_type="resume_received",
+                        job_id=int(conversation["job_id"]),
+                        candidate_id=int(conversation["candidate_id"]),
+                        conversation_id=conversation_id,
+                        details={"message_id": inbound_id, "session_id": session_id},
                     )
                 self._record_communication_dialogue_assessment(
                     job_id=int(conversation["job_id"]),
@@ -1854,6 +1883,15 @@ class WorkflowService:
             return {"processed": False, "reason": "candidate_not_found", "conversation_id": int(conversation["id"])}
         if str(conversation.get("status") or "") != "waiting_connection":
             return {"processed": False, "reason": "conversation_not_waiting_connection", "conversation_id": int(conversation["id"])}
+        self._record_outreach_account_event(
+            event_key=f"conversation:{int(conversation['id'])}:connect_accepted",
+            account_id=int(conversation.get("linkedin_account_id") or 0),
+            event_type="connect_accepted",
+            job_id=int(conversation["job_id"]),
+            candidate_id=int(conversation["candidate_id"]),
+            conversation_id=int(conversation["id"]),
+            details={"source": "connection_event"},
+        )
         delivery = self._deliver_pending_outreach_message(conversation_id=int(conversation["id"]), candidate=candidate)
         return {
             "processed": True,
@@ -3818,6 +3856,21 @@ class WorkflowService:
         provider_account_id = str(account.get("provider_account_id") or "").strip()
         account_id = int(account.get("id") or 0)
         provider = self._build_managed_provider(account_id=provider_account_id)
+        planned_event_type = "connect_planned" if planned_action_kind == "connect_request" else "message_planned"
+        self._record_outreach_account_event(
+            event_key=f"action:{action_id}:{planned_event_type}",
+            account_id=account_id,
+            event_type=planned_event_type,
+            job_id=job_id,
+            candidate_id=candidate_id,
+            conversation_id=conversation_id,
+            details={
+                "action_id": action_id,
+                "action_type": action_type,
+                "delivery_mode": delivery_mode,
+                "planned_action_kind": planned_action_kind,
+            },
+        )
 
         connect_request = None
         delivery_status = "failed"
@@ -3840,6 +3893,19 @@ class WorkflowService:
                 extra_notes={"outreach_state": "sent", "linkedin_account_id": account_id},
             )
             self._increment_managed_account_counters(account_id=account_id, connect_delta=0, new_threads_delta=1, replies_delta=0)
+            self._record_outreach_account_event(
+                event_key=f"action:{action_id}:message_sent",
+                account_id=account_id,
+                event_type="message_sent",
+                job_id=job_id,
+                candidate_id=candidate_id,
+                conversation_id=conversation_id,
+                details={
+                    "action_id": action_id,
+                    "action_type": action_type,
+                    "delivery_mode": delivery_mode,
+                },
+            )
         elif delivery_mode == "connect_first" or self._is_connection_required_error(delivery):
             if not self._can_send_connect_request(account=account):
                 retry_at = (datetime.now(timezone.utc) + timedelta(hours=12)).isoformat()
@@ -3880,6 +3946,19 @@ class WorkflowService:
                     },
                 )
                 self._increment_managed_account_counters(account_id=account_id, connect_delta=1, new_threads_delta=0, replies_delta=0)
+                self._record_outreach_account_event(
+                    event_key=f"action:{action_id}:connect_sent",
+                    account_id=account_id,
+                    event_type="connect_sent",
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    conversation_id=conversation_id,
+                    details={
+                        "action_id": action_id,
+                        "action_type": action_type,
+                        "delivery_mode": delivery_mode,
+                    },
+                )
             else:
                 delivery_status = "failed"
                 self.db.log_operation(
@@ -3902,6 +3981,20 @@ class WorkflowService:
                 entity_type="candidate",
                 entity_id=str(candidate_id),
                 details={"job_id": job_id, "delivery": delivery},
+            )
+            self._record_outreach_account_event(
+                event_key=f"action:{action_id}:message_failed",
+                account_id=account_id,
+                event_type="message_failed",
+                job_id=job_id,
+                candidate_id=candidate_id,
+                conversation_id=conversation_id,
+                details={
+                    "action_id": action_id,
+                    "action_type": action_type,
+                    "delivery_mode": delivery_mode,
+                    "error": str(delivery.get("error") or delivery.get("reason") or "delivery_failed"),
+                },
             )
 
         external_chat_id = str(delivery.get("chat_id") or "").strip()
@@ -4239,6 +4332,32 @@ class WorkflowService:
     def _planned_action_kind_for_delivery_mode(delivery_mode: str) -> str:
         normalized = str(delivery_mode or "").strip().lower()
         return "connect_request" if normalized == "connect_first" else "message"
+
+    def _record_outreach_account_event(
+        self,
+        *,
+        event_key: str,
+        account_id: int,
+        event_type: str,
+        job_id: int | None = None,
+        candidate_id: int | None = None,
+        conversation_id: int | None = None,
+        details: Dict[str, Any] | None = None,
+        created_at: str | None = None,
+    ) -> bool:
+        normalized_account_id = int(account_id or 0)
+        if normalized_account_id <= 0:
+            return False
+        return self.db.insert_outreach_account_event(
+            event_key=event_key,
+            account_id=normalized_account_id,
+            event_type=event_type,
+            job_id=job_id,
+            candidate_id=candidate_id,
+            conversation_id=conversation_id,
+            details=details,
+            created_at=created_at,
+        )
 
     @staticmethod
     def _utc_day_key() -> str:
@@ -4925,6 +5044,15 @@ class WorkflowService:
                     status="outreach_sent",
                     extra_notes={"outreach_state": "sent_after_connection"},
                 )
+                self._record_outreach_account_event(
+                    event_key=f"message:{int(pending.get('id') or 0)}:message_sent",
+                    account_id=int(conversation.get("linkedin_account_id") or 0),
+                    event_type="message_sent",
+                    job_id=int(conversation["job_id"]),
+                    candidate_id=int(conversation["candidate_id"]),
+                    conversation_id=conversation_id,
+                    details={"source": "send_after_connection", "trigger": "connection_accepted"},
+                )
                 self._record_communication_outreach_assessment(
                     job_id=int(conversation["job_id"]),
                     candidate_id=int(conversation["candidate_id"]),
@@ -4976,6 +5104,18 @@ class WorkflowService:
             entity_type="conversation",
             entity_id=str(conversation_id),
             details={"delivery": delivery},
+        )
+        self._record_outreach_account_event(
+            event_key=f"message:{int(pending.get('id') or 0)}:message_failed",
+            account_id=int((conversation or {}).get("linkedin_account_id") or 0),
+            event_type="message_failed",
+            job_id=int((conversation or {}).get("job_id") or 0) or None,
+            candidate_id=int((conversation or {}).get("candidate_id") or 0) or None,
+            conversation_id=conversation_id,
+            details={
+                "source": "send_after_connection",
+                "error": str(delivery.get("error") or delivery.get("reason") or "delivery_failed"),
+            },
         )
         return delivery
 

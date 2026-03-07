@@ -177,6 +177,44 @@ class OutboundDispatchTests(unittest.TestCase):
             self.assertEqual(int(conversation["linkedin_account_id"]), account_2)
             self.assertEqual(conversation["status"], "waiting_connection")
 
+    def test_dispatch_records_account_funnel_events_across_connect_and_reply(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_dispatch_funnel.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            account_id = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-funnel-1",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            providers = {
+                "acc-funnel-1": _ManagedStubProvider(account_ref="acc-funnel-1"),
+            }
+            workflow._build_managed_provider = lambda account_id: providers[str(account_id)]  # type: ignore[method-assign]
+
+            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="funnel")
+            queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            conversation_id = int(queued["conversation_ids"][0])
+
+            dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
+            self.assertEqual(dispatched["pending_connection"], 1)
+
+            processed = workflow.process_connection_event(sender_provider_id="ln-outbound-funnel")
+            self.assertTrue(processed["processed"])
+            workflow.process_inbound_message(conversation_id=conversation_id, text="Tell me more")
+
+            funnel = db.summarize_outreach_account_funnel(account_ids=[account_id], recent_limit=5).get(account_id) or {}
+            self.assertEqual(int(funnel.get("connects_planned") or 0), 1)
+            self.assertEqual(int(funnel.get("connects_sent") or 0), 1)
+            self.assertEqual(int(funnel.get("connects_accepted") or 0), 1)
+            self.assertEqual(int(funnel.get("messages_sent") or 0), 1)
+            self.assertEqual(int(funnel.get("replies_received") or 0), 1)
+            recent = funnel.get("recent_candidates") or []
+            self.assertEqual(len(recent), 1)
+            self.assertEqual(str(recent[0].get("stage_label") or ""), "Replied")
+
     def test_dispatch_excludes_provider_limited_account_for_remaining_batch(self) -> None:
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "outbound_dispatch_provider_limit.sqlite3"))

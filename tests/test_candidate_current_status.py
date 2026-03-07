@@ -111,6 +111,61 @@ class CandidateCurrentStatusTests(unittest.TestCase):
             self.assertEqual(rows[0]["current_status_label"], "CV Received")
             self.assertEqual(rows[0]["candidate_lifecycle_key"], "resume_received")
 
+    def test_candidate_status_marks_interview_passed_when_scored_above_threshold(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "candidate_interview_passed.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(_DeliveredProvider()),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python and AWS",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile = {
+                "linkedin_id": "ln-status-interview-pass",
+                "unipile_profile_id": "ln-status-interview-pass",
+                "attendee_provider_id": "ln-status-interview-pass",
+                "full_name": "Interview Passed Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": [],
+                "years_experience": 5,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.61, "status": "needs_resume", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+            db.update_candidate_match_status(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                status="interview_scored",
+                extra_notes={"interview_status": "scored", "interview_total_score": 84.0},
+            )
+
+            rows = db.list_candidates_for_job(job_id)
+            self.assertEqual(rows[0]["current_status_key"], "interview_passed")
+            self.assertEqual(rows[0]["current_status_label"], "Interview Passed")
+            self.assertEqual(rows[0]["candidate_lifecycle_key"], "interview_passed")
+            self.assertEqual(rows[0]["candidate_lifecycle_label"], "Interview passed")
+            self.assertEqual(rows[0]["candidate_lifecycle_detail"], "Score 84.0")
+
 
 if __name__ == "__main__":
     unittest.main()

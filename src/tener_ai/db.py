@@ -320,6 +320,28 @@ class Database:
         CREATE INDEX IF NOT EXISTS idx_outbound_actions_job
             ON outbound_actions(job_id, status, id DESC);
 
+        CREATE TABLE IF NOT EXISTS outreach_account_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_key TEXT NOT NULL UNIQUE,
+            account_id INTEGER NOT NULL,
+            job_id INTEGER,
+            candidate_id INTEGER,
+            conversation_id INTEGER,
+            event_type TEXT NOT NULL,
+            details TEXT,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(account_id) REFERENCES linkedin_accounts(id),
+            FOREIGN KEY(job_id) REFERENCES jobs(id),
+            FOREIGN KEY(candidate_id) REFERENCES candidates(id),
+            FOREIGN KEY(conversation_id) REFERENCES conversations(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_outreach_account_events_account_created
+            ON outreach_account_events(account_id, created_at DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_outreach_account_events_account_candidate
+            ON outreach_account_events(account_id, candidate_id, created_at DESC, id DESC);
+        CREATE INDEX IF NOT EXISTS idx_outreach_account_events_job_created
+            ON outreach_account_events(job_id, created_at DESC, id DESC);
+
         CREATE TABLE IF NOT EXISTS linkedin_account_daily_counters (
             account_id INTEGER NOT NULL,
             day_utc TEXT NOT NULL,
@@ -1672,6 +1694,144 @@ class Database:
             (int(action_id),),
         ).fetchone()
         return self._row_to_dict(row) if row else None
+
+    def insert_outreach_account_event(
+        self,
+        *,
+        event_key: str,
+        account_id: int,
+        event_type: str,
+        job_id: Optional[int] = None,
+        candidate_id: Optional[int] = None,
+        conversation_id: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
+        created_at: Optional[str] = None,
+    ) -> bool:
+        normalized_key = str(event_key or "").strip()
+        if not normalized_key:
+            raise ValueError("event_key is required")
+        normalized_type = str(event_type or "").strip().lower()
+        if not normalized_type:
+            raise ValueError("event_type is required")
+        occurred_at = str(created_at or utc_now_iso())
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                INSERT OR IGNORE INTO outreach_account_events (
+                    event_key, account_id, job_id, candidate_id, conversation_id,
+                    event_type, details, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    normalized_key,
+                    int(account_id),
+                    int(job_id) if job_id is not None else None,
+                    int(candidate_id) if candidate_id is not None else None,
+                    int(conversation_id) if conversation_id is not None else None,
+                    normalized_type,
+                    json.dumps(details or {}),
+                    occurred_at,
+                ),
+            )
+            return cur.rowcount > 0
+
+    def summarize_outreach_account_funnel(
+        self,
+        *,
+        account_ids: List[int],
+        recent_limit: int = 5,
+    ) -> Dict[int, Dict[str, Any]]:
+        valid_account_ids = [int(x) for x in account_ids if int(x) > 0]
+        if not valid_account_ids:
+            return {}
+        placeholders = ",".join(["?"] * len(valid_account_ids))
+        rows = self._conn.execute(
+            f"""
+            SELECT
+                e.*,
+                c.full_name AS candidate_name,
+                j.title AS job_title
+            FROM outreach_account_events e
+            LEFT JOIN candidates c ON c.id = e.candidate_id
+            LEFT JOIN jobs j ON j.id = e.job_id
+            WHERE e.account_id IN ({placeholders})
+            ORDER BY e.created_at DESC, e.id DESC
+            """,
+            tuple(valid_account_ids),
+        ).fetchall()
+        summary: Dict[int, Dict[str, Any]] = {
+            account_id: {
+                "connects_planned": 0,
+                "connects_sent": 0,
+                "connects_accepted": 0,
+                "messages_planned": 0,
+                "messages_sent": 0,
+                "replies_received": 0,
+                "resumes_received": 0,
+                "recent_candidates": [],
+            }
+            for account_id in valid_account_ids
+        }
+        stage_count_keys = {
+            "connect_planned": "connects_planned",
+            "connect_sent": "connects_sent",
+            "connect_accepted": "connects_accepted",
+            "message_planned": "messages_planned",
+            "message_sent": "messages_sent",
+            "reply_received": "replies_received",
+            "resume_received": "resumes_received",
+        }
+        stage_labels = {
+            "connect_planned": "Connect planned",
+            "connect_sent": "Connect sent",
+            "connect_accepted": "Accepted",
+            "message_planned": "Message planned",
+            "message_sent": "Message sent",
+            "message_failed": "Message failed",
+            "reply_received": "Replied",
+            "resume_received": "Resume received",
+        }
+        counted_keys: Dict[int, Dict[str, set[str]]] = {
+            account_id: {metric_key: set() for metric_key in stage_count_keys.values()}
+            for account_id in valid_account_ids
+        }
+        recent_seen: Dict[int, set[str]] = {account_id: set() for account_id in valid_account_ids}
+
+        for raw_row in rows:
+            item = self._row_to_dict(raw_row)
+            account_id = int(item.get("account_id") or 0)
+            if account_id <= 0 or account_id not in summary:
+                continue
+            event_type = str(item.get("event_type") or "").strip().lower()
+            count_key = stage_count_keys.get(event_type)
+            candidate_id = int(item.get("candidate_id") or 0)
+            dedupe_key = f"candidate:{candidate_id}" if candidate_id > 0 else f"event:{int(item.get('id') or 0)}"
+            if count_key and dedupe_key not in counted_keys[account_id][count_key]:
+                counted_keys[account_id][count_key].add(dedupe_key)
+                summary[account_id][count_key] += 1
+
+            if len(summary[account_id]["recent_candidates"]) >= max(1, int(recent_limit or 5)):
+                continue
+            if event_type not in stage_labels:
+                continue
+            if dedupe_key in recent_seen[account_id]:
+                continue
+            recent_seen[account_id].add(dedupe_key)
+            summary[account_id]["recent_candidates"].append(
+                {
+                    "candidate_id": candidate_id or None,
+                    "candidate_name": str(item.get("candidate_name") or "").strip() or f"Candidate {candidate_id or '-'}",
+                    "job_id": int(item.get("job_id") or 0) or None,
+                    "job_title": str(item.get("job_title") or "").strip() or "-",
+                    "conversation_id": int(item.get("conversation_id") or 0) or None,
+                    "event_type": event_type,
+                    "stage_label": stage_labels.get(event_type) or event_type.replace("_", " ").title(),
+                    "created_at": item.get("created_at"),
+                }
+            )
+
+        return summary
 
     def get_linkedin_account_daily_counter(self, account_id: int, day_utc: str) -> Dict[str, Any]:
         row = self._conn.execute(
@@ -3031,6 +3191,30 @@ class Database:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_resume_assets_processing ON resume_assets(processing_status, updated_at DESC, id DESC)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS outreach_account_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_key TEXT NOT NULL UNIQUE,
+                    account_id INTEGER NOT NULL,
+                    job_id INTEGER,
+                    candidate_id INTEGER,
+                    conversation_id INTEGER,
+                    event_type TEXT NOT NULL,
+                    details TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_outreach_account_events_account_created ON outreach_account_events(account_id, created_at DESC, id DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_outreach_account_events_account_candidate ON outreach_account_events(account_id, candidate_id, created_at DESC, id DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_outreach_account_events_job_created ON outreach_account_events(job_id, created_at DESC, id DESC)"
+            )
 
         columns = self._table_columns("conversations")
         if "external_chat_id" not in columns:
@@ -3170,6 +3354,36 @@ class Database:
         return item
 
     @staticmethod
+    def _candidate_interview_score(item: Dict[str, Any]) -> float | None:
+        verification_notes = item.get("verification_notes") if isinstance(item.get("verification_notes"), dict) else {}
+        for key in ("interview_total_score", "interview_score", "final_interview_score"):
+            raw = verification_notes.get(key) if isinstance(verification_notes, dict) else None
+            if raw is None:
+                continue
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                continue
+        scorecard = item.get("agent_scorecard") if isinstance(item.get("agent_scorecard"), dict) else {}
+        interview = scorecard.get("interview_evaluation") if isinstance(scorecard.get("interview_evaluation"), dict) else {}
+        raw_score = interview.get("latest_score")
+        if raw_score is None:
+            return None
+        try:
+            return float(raw_score)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _candidate_passed_interview(cls, item: Dict[str, Any], threshold: float = 80.0) -> bool:
+        verification_notes = item.get("verification_notes") if isinstance(item.get("verification_notes"), dict) else {}
+        interview_status = str((verification_notes or {}).get("interview_status") or "").strip().lower()
+        if interview_status != "scored":
+            return False
+        score = cls._candidate_interview_score(item)
+        return score is not None and float(score) >= float(threshold)
+
+    @staticmethod
     def _derive_candidate_current_status(item: Dict[str, Any]) -> tuple[str, str]:
         match_status = str(item.get("status") or "").strip().lower()
         conversation_status = str(item.get("conversation_status") or "").strip().lower()
@@ -3188,8 +3402,12 @@ class Database:
             "expired": ("interview_failed", "Interview Failed"),
             "canceled": ("interview_failed", "Interview Failed"),
         }
+        if Database._candidate_passed_interview(item):
+            return "interview_passed", "Interview Passed"
         if interview_status in interview_map:
             return interview_map[interview_status]
+        if match_status == "interview_scored" and Database._candidate_passed_interview(item):
+            return "interview_passed", "Interview Passed"
         if match_status in {"interview_invited", "interview_in_progress", "interview_completed", "interview_scored", "interview_failed"}:
             return match_status, match_status.replace("_", " ").title()
 
@@ -3269,6 +3487,20 @@ class Database:
             lifecycle_key = "resume_received"
             lifecycle_label = "Resume received"
             lifecycle_detail = "CV or resume received"
+        elif current_status_key == "interview_passed":
+            lifecycle_key = "interview_passed"
+            lifecycle_label = "Interview passed"
+            interview_score = Database._candidate_interview_score(item)
+            lifecycle_detail = f"Score {interview_score:.1f}" if interview_score is not None else "Passed screening interview"
+        elif current_status_key == "interview_scored":
+            lifecycle_key = "interview_scored"
+            lifecycle_label = "Interview scored"
+            interview_score = Database._candidate_interview_score(item)
+            lifecycle_detail = f"Score {interview_score:.1f}" if interview_score is not None else "Interview results received"
+        elif current_status_key == "interview_failed":
+            lifecycle_key = "interview_failed"
+            lifecycle_label = "Interview failed"
+            lifecycle_detail = "Candidate did not pass interview"
         elif current_status_key == "outreached":
             lifecycle_key = "message_sent"
             lifecycle_label = "Message sent"

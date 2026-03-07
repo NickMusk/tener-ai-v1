@@ -3486,6 +3486,23 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             )
         )
 
+        funnel_by_account = db.summarize_outreach_account_funnel(
+            account_ids=[int(item.get("account_id") or 0) for item in rows],
+            recent_limit=5,
+        )
+        for row in rows:
+            funnel = funnel_by_account.get(int(row.get("account_id") or 0)) or {}
+            row["funnel"] = {
+                "connects_planned": int(funnel.get("connects_planned") or 0),
+                "connects_sent": int(funnel.get("connects_sent") or 0),
+                "connects_accepted": int(funnel.get("connects_accepted") or 0),
+                "messages_planned": int(funnel.get("messages_planned") or 0),
+                "messages_sent": int(funnel.get("messages_sent") or 0),
+                "replies_received": int(funnel.get("replies_received") or 0),
+                "resumes_received": int(funnel.get("resumes_received") or 0),
+            }
+            row["recent_funnel_candidates"] = funnel.get("recent_candidates") or []
+
         sent_1h_total = sum(int(item.get("sent_1h") or 0) for item in rows)
         sent_24h_total = sum(int(item.get("sent_24h") or 0) for item in rows)
         failed_1h_total = sum(int(item.get("failed_1h") or 0) for item in rows)

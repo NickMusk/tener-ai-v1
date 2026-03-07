@@ -222,6 +222,27 @@ class OutreachOpsApiTests(unittest.TestCase):
         self.assertEqual(int(summary.get("active_accounts") or 0), 1)
         self.assertEqual(int(summary.get("active_conversations") or 0), 1)
 
+    def test_outreach_ops_hides_removed_accounts_from_operational_rows(self) -> None:
+        connected_id = self.db.upsert_linkedin_account(
+            provider="unipile",
+            provider_account_id="acc-ops-live",
+            status="connected",
+            connected_at=utc_now_iso(),
+        )
+        self.db.upsert_linkedin_account(
+            provider="unipile",
+            provider_account_id="acc-ops-removed",
+            status="removed",
+            connected_at=utc_now_iso(),
+        )
+
+        status, payload = self._request("GET", "/api/outreach/ops")
+        self.assertEqual(status, 200)
+        accounts = payload.get("accounts") or []
+        self.assertEqual(len(accounts), 1)
+        self.assertEqual(int(accounts[0].get("account_id") or 0), connected_id)
+        self.assertEqual(int((payload.get("summary") or {}).get("accounts_total") or 0), 1)
+
     def test_outreach_ops_deduplicates_stuck_people_per_account(self) -> None:
         account_id = self.db.upsert_linkedin_account(
             provider="unipile",
@@ -387,6 +408,68 @@ class OutreachOpsApiTests(unittest.TestCase):
         self.assertEqual(str(items[0].get("queue_reason") or ""), "new_thread")
         self.assertEqual(str(items[0].get("planned_action_kind") or ""), "connect_request")
         self.assertEqual(str(items[0].get("planned_action_label") or ""), "Connect planned")
+
+    def test_outreach_ops_includes_account_funnel_summary_and_recent_candidates(self) -> None:
+        account_id = self.db.upsert_linkedin_account(
+            provider="unipile",
+            provider_account_id="acc-ops-funnel",
+            status="connected",
+            connected_at=utc_now_iso(),
+        )
+        job_id = self.db.insert_job(
+            title="Senior Backend Engineer",
+            jd_text="Need Python and AWS.",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="senior",
+        )
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "ops-funnel-ln-1",
+                "full_name": "Funnel Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python"],
+                "years_experience": 6,
+                "raw": {},
+            },
+            source="linkedin",
+        )
+        conversation_id = self.db.create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+        self.db.set_conversation_linkedin_account(conversation_id=conversation_id, account_id=account_id)
+        for event_type, created_at in (
+            ("connect_planned", "2025-03-01T10:00:00+00:00"),
+            ("connect_sent", "2025-03-01T10:01:00+00:00"),
+            ("connect_accepted", "2025-03-01T10:02:00+00:00"),
+            ("message_sent", "2025-03-01T10:03:00+00:00"),
+            ("reply_received", "2025-03-01T10:04:00+00:00"),
+            ("resume_received", "2025-03-01T10:05:00+00:00"),
+        ):
+            self.db.insert_outreach_account_event(
+                event_key=f"funnel:test:{event_type}",
+                account_id=account_id,
+                event_type=event_type,
+                job_id=job_id,
+                candidate_id=candidate_id,
+                conversation_id=conversation_id,
+                created_at=created_at,
+            )
+
+        status, payload = self._request("GET", "/api/outreach/ops")
+        self.assertEqual(status, 200)
+        account = (payload.get("accounts") or [])[0]
+        funnel = account.get("funnel") or {}
+        self.assertEqual(int(funnel.get("connects_planned") or 0), 1)
+        self.assertEqual(int(funnel.get("connects_sent") or 0), 1)
+        self.assertEqual(int(funnel.get("connects_accepted") or 0), 1)
+        self.assertEqual(int(funnel.get("messages_sent") or 0), 1)
+        self.assertEqual(int(funnel.get("replies_received") or 0), 1)
+        self.assertEqual(int(funnel.get("resumes_received") or 0), 1)
+        recent = account.get("recent_funnel_candidates") or []
+        self.assertEqual(len(recent), 1)
+        self.assertEqual(str(recent[0].get("candidate_name") or ""), "Funnel Candidate")
+        self.assertEqual(str(recent[0].get("stage_label") or ""), "Resume received")
 
 
 if __name__ == "__main__":

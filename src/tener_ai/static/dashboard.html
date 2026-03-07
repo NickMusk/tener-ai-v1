@@ -1092,6 +1092,8 @@
                 <th>Active</th>
                 <th>Sent 1h/24h</th>
                 <th>Failed 1h/24h</th>
+                <th>Funnel</th>
+                <th>Recent Funnel</th>
                 <th>Stuck</th>
                 <th>Stuck Candidates</th>
                 <th>Last Success</th>
@@ -1099,7 +1101,7 @@
               </tr>
             </thead>
             <tbody id="ops-accounts-tbody">
-              <tr><td colspan="11" class="muted">No data yet</td></tr>
+              <tr><td colspan="13" class="muted">No data yet</td></tr>
             </tbody>
           </table>
         </div>
@@ -2387,7 +2389,7 @@
       if (!body) return;
       const rows = Array.isArray((state.outreachOps || {}).accounts) ? state.outreachOps.accounts : [];
       if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="11" class="muted">No LinkedIn account telemetry yet</td></tr>';
+        body.innerHTML = '<tr><td colspan="13" class="muted">No LinkedIn account telemetry yet</td></tr>';
         return;
       }
       body.innerHTML = rows.map((row) => {
@@ -2407,6 +2409,27 @@
         const copyButton = fullLastError
           ? `<button class="ops-copy-error-btn" data-error="${encodeURIComponent(fullLastError)}" style="margin-top:6px;">Copy</button>`
           : "";
+        const funnel = row.funnel || {};
+        const funnelMarkup = [
+          `Invites ${Number(funnel.connects_sent || 0)}`,
+          `Accepted ${Number(funnel.connects_accepted || 0)}`,
+          `Msgs ${Number(funnel.messages_sent || 0)}`,
+          `Replies ${Number(funnel.replies_received || 0)}`,
+          `CVs ${Number(funnel.resumes_received || 0)}`,
+        ].map((part) => `<div class="mono" style="font-size:11px;">${escapeHtml(part)}</div>`).join("");
+        const recentFunnel = Array.isArray(row.recent_funnel_candidates) ? row.recent_funnel_candidates : [];
+        const recentFunnelMarkup = recentFunnel.length
+          ? recentFunnel.map((item) => {
+              const conversationId = Number(item.conversation_id || 0);
+              const candidateLabel = escapeHtml(item.candidate_name || `Candidate ${item.candidate_id || "-"}`);
+              const stageLabel = escapeHtml(item.stage_label || "-");
+              const ts = escapeHtml(formatTimestampCompact(item.created_at));
+              const base = `<div>${candidateLabel}</div><div class="muted mono" style="font-size:11px;">${stageLabel} • ${ts}</div>`;
+              return conversationId > 0
+                ? `<button class="ops-open-chat-inline" data-conversation-id="${conversationId}" style="display:block; width:100%; text-align:left; margin-bottom:6px;">${base}</button>`
+                : `<div style="margin-bottom:6px;">${base}</div>`;
+            }).join("")
+          : '<span class="muted">-</span>';
         const stuckCandidates = Array.isArray(row.stuck_candidates) ? row.stuck_candidates : [];
         const stuckMarkup = stuckCandidates.length
           ? stuckCandidates.slice(0, 3).map((item) => {
@@ -2426,6 +2449,8 @@
             <td class="mono">${active}</td>
             <td class="mono">${sentPair}</td>
             <td class="mono">${failedPair}</td>
+            <td>${funnelMarkup}</td>
+            <td>${recentFunnelMarkup}</td>
             <td class="mono">${stuck}</td>
             <td>${stuckMarkup}</td>
             <td class="mono">${lastSuccess}</td>
