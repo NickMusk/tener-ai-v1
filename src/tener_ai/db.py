@@ -50,6 +50,7 @@ class Database:
             preferred_languages TEXT,
             seniority TEXT,
             linkedin_routing_mode TEXT NOT NULL DEFAULT 'auto',
+            archived_at TEXT,
             created_at TEXT NOT NULL
         );
 
@@ -414,6 +415,7 @@ class Database:
         if not row:
             return None
         item = self._row_to_dict(row)
+        item["is_archived"] = bool(str(item.get("archived_at") or "").strip())
         profile = self.get_job_culture_profile(job_id=int(job_id))
         self._attach_job_culture_profile(item=item, profile=profile)
         return item
@@ -430,18 +432,93 @@ class Database:
             )
             return cur.rowcount > 0
 
-    def list_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
-        rows = self._conn.execute(
-            "SELECT * FROM jobs ORDER BY id DESC LIMIT ?",
-            (max(1, min(limit, 1000)),),
-        ).fetchall()
+    def list_jobs(self, limit: int = 100, include_archived: bool = False) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(limit, 1000))
+        if include_archived:
+            rows = self._conn.execute(
+                "SELECT * FROM jobs ORDER BY id DESC LIMIT ?",
+                (safe_limit,),
+            ).fetchall()
+        else:
+            rows = self._conn.execute(
+                "SELECT * FROM jobs WHERE archived_at IS NULL ORDER BY id DESC LIMIT ?",
+                (safe_limit,),
+            ).fetchall()
         items = [self._row_to_dict(r) for r in rows]
+        for item in items:
+            item["is_archived"] = bool(str(item.get("archived_at") or "").strip())
         job_ids = [int(item.get("id") or 0) for item in items if int(item.get("id") or 0) > 0]
         profiles = self.list_job_culture_profiles(job_ids=job_ids)
         for item in items:
             job_id = int(item.get("id") or 0)
             self._attach_job_culture_profile(item=item, profile=profiles.get(job_id))
         return items
+
+    def set_job_archived(self, job_id: int, archived: bool = True) -> bool:
+        archived_at = utc_now_iso() if archived else None
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                UPDATE jobs
+                SET archived_at = ?
+                WHERE id = ?
+                """,
+                (archived_at, int(job_id)),
+            )
+            return cur.rowcount > 0
+
+    def archive_jobs(
+        self,
+        *,
+        exclude_job_ids: Optional[List[int]] = None,
+        exclude_titles: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        normalized_ids: List[int] = []
+        seen_ids: set[int] = set()
+        for raw in exclude_job_ids or []:
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if value <= 0 or value in seen_ids:
+                continue
+            seen_ids.add(value)
+            normalized_ids.append(value)
+
+        normalized_titles: set[str] = {
+            str(raw or "").strip().lower()
+            for raw in (exclude_titles or [])
+            if str(raw or "").strip()
+        }
+
+        rows = self._conn.execute("SELECT id, title, archived_at FROM jobs ORDER BY id ASC").fetchall()
+        target_ids: List[int] = []
+        archived_jobs: List[Dict[str, Any]] = []
+        for row in rows:
+            job_id = int(row["id"] or 0)
+            title = str(row["title"] or "").strip()
+            if job_id <= 0:
+                continue
+            if job_id in seen_ids:
+                continue
+            if title.lower() in normalized_titles:
+                continue
+            if str(row["archived_at"] or "").strip():
+                continue
+            target_ids.append(job_id)
+            archived_jobs.append({"id": job_id, "title": title})
+
+        if not target_ids:
+            return {"updated": 0, "archived_jobs": []}
+
+        now = utc_now_iso()
+        placeholders = ",".join(["?"] * len(target_ids))
+        with self.transaction() as conn:
+            conn.execute(
+                f"UPDATE jobs SET archived_at = ? WHERE id IN ({placeholders})",
+                (now, *target_ids),
+            )
+        return {"updated": len(target_ids), "archived_jobs": archived_jobs, "archived_at": now}
 
     def upsert_job_culture_profile(
         self,
@@ -3156,6 +3233,9 @@ class Database:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN linkedin_routing_mode TEXT")
                 conn.execute("UPDATE jobs SET linkedin_routing_mode = 'auto' WHERE linkedin_routing_mode IS NULL OR TRIM(linkedin_routing_mode) = ''")
+        if "archived_at" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN archived_at TEXT")
         linkedin_columns = self._table_columns("linkedin_accounts")
         if "daily_message_limit" not in linkedin_columns:
             with self.transaction() as conn:

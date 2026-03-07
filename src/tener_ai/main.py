@@ -528,6 +528,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "create_job": "POST /api/jobs",
                         "list_jobs": "GET /api/jobs",
                         "get_job": "GET /api/jobs/{job_id}",
+                        "archive_jobs_bulk": "POST /api/jobs/archive-bulk",
                         "job_progress": "GET /api/jobs/{job_id}/progress",
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
                         "candidate_profile": "GET /api/candidates/{candidate_id}/profile?job_id=...&audit=0|1",
@@ -2048,6 +2049,39 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 },
             )
             self._json_response(HTTPStatus.OK, {"status": "ok", "event_key": event_key, "result": result})
+            return
+
+        if parsed.path == "/api/jobs/archive-bulk":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            exclude_titles_raw = body.get("exclude_titles")
+            exclude_job_ids_raw = body.get("exclude_job_ids")
+            if exclude_titles_raw is not None and not isinstance(exclude_titles_raw, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "exclude_titles must be an array"})
+                return
+            if exclude_job_ids_raw is not None and not isinstance(exclude_job_ids_raw, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "exclude_job_ids must be an array"})
+                return
+            result = SERVICES["db"].archive_jobs(
+                exclude_titles=[str(item or "").strip() for item in (exclude_titles_raw or []) if str(item or "").strip()],
+                exclude_job_ids=exclude_job_ids_raw or [],
+            )
+            SERVICES["db"].log_operation(
+                operation="job.archive.bulk",
+                status="ok",
+                entity_type="job",
+                entity_id="bulk",
+                details={
+                    "updated": int(result.get("updated") or 0),
+                    "exclude_titles": [str(item or "").strip() for item in (exclude_titles_raw or []) if str(item or "").strip()],
+                    "exclude_job_ids": [int(item) for item in (exclude_job_ids_raw or []) if self._safe_int(item, None) is not None],
+                },
+            )
+            self._json_response(HTTPStatus.OK, {"status": "ok", **result})
             return
 
         if parsed.path == "/api/jobs":

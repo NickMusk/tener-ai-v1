@@ -68,7 +68,7 @@ class PostgresReadDatabase:
         with self._psycopg.connect(self.dsn) as conn:
             yield conn
 
-    def list_jobs(self, limit: int = 100) -> List[Dict[str, Any]]:
+    def list_jobs(self, limit: int = 100, include_archived: bool = False) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 100), 1000))
         with self._connect() as conn:
             with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
@@ -87,7 +87,12 @@ class PostgresReadDatabase:
                     (safe_limit,),
                 )
                 rows = cur.fetchall()
-        return [self._row_to_dict(dict(row)) for row in rows]
+        items = [self._row_to_dict(dict(row)) for row in rows]
+        for item in items:
+            item["is_archived"] = bool(str(item.get("archived_at") or "").strip())
+        if include_archived:
+            return items
+        return [item for item in items if not bool(item.get("is_archived"))]
 
     def get_job(self, job_id: int) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
@@ -107,7 +112,11 @@ class PostgresReadDatabase:
                     (int(job_id),),
                 )
                 row = cur.fetchone()
-        return self._row_to_dict(dict(row)) if row else None
+        if not row:
+            return None
+        item = self._row_to_dict(dict(row))
+        item["is_archived"] = bool(str(item.get("archived_at") or "").strip())
+        return item
 
     def list_job_step_progress(self, job_id: int) -> List[Dict[str, Any]]:
         with self._connect() as conn:
