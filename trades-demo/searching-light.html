@@ -3,574 +3,954 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tener | Finding Your Crew...</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <title>Tener | Processing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #ffffff;
-            --bg-secondary: #f8f9fb;
-            --bg-card: #ffffff;
+            --bg: #ffffff;
+            --bg-secondary: #f9fafb;
+            --bg-tertiary: #f3f4f6;
             --accent: #0d9488;
-            --accent-light: #14b8a6;
-            --accent-dim: rgba(13, 148, 136, 0.08);
-            --accent-glow: rgba(13, 148, 136, 0.2);
-            --text-primary: #111827;
+            --accent-bg: #f0fdfa;
+            --text: #111827;
             --text-secondary: #6b7280;
-            --text-dim: #9ca3af;
+            --text-muted: #9ca3af;
             --border: #e5e7eb;
-            --success: #10b981;
-            --warning: #f59e0b;
+            --green: #10b981;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Outfit', sans-serif;
+            font-family: 'Inter', system-ui, sans-serif;
             background: var(--bg-secondary);
-            color: var(--text-primary);
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        /* Navigation */
-        nav {
-            position: fixed;
-            top: 0; left: 0; right: 0;
-            z-index: 100;
-            padding: 1.5rem 3rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: rgba(255, 255, 255, 0.95);
-            backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--border);
-        }
-
-        .logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .logo-icon {
-            width: 32px; height: 32px;
-            background: var(--accent);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        .nav-status {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
-            color: var(--accent);
-        }
-
-        .processing-spinner {
-            width: 20px; height: 20px;
-            border: 2px solid var(--accent-dim);
-            border-top-color: var(--accent);
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Main container */
-        .search-container {
-            position: relative;
-            z-index: 1;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 8rem 3rem 4rem;
-        }
-
-        /* Job summary card */
-        .job-summary {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 16px;
-            padding: 1.5rem 2rem;
-            margin-bottom: 3rem;
-            display: flex;
-            align-items: center;
-            gap: 1.5rem;
-            max-width: 600px;
-            width: 100%;
-            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
-            animation: fadeIn 0.5s ease-out;
-        }
-
-        .job-icon {
-            width: 50px; height: 50px;
-            background: var(--accent-dim);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 1.5rem;
-        }
-
-        .job-details h3 {
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 0.25rem;
-        }
-
-        .job-details p {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        /* Main progress area */
-        .progress-area {
-            text-align: center;
-            max-width: 700px;
-            width: 100%;
-        }
-
-        .main-title {
-            font-size: 2.5rem;
-            font-weight: 700;
-            margin-bottom: 0.5rem;
-            color: var(--text-primary);
-            animation: fadeIn 0.5s ease-out 0.1s both;
-        }
-
-        .main-subtitle {
-            color: var(--text-secondary);
-            font-size: 1.1rem;
-            margin-bottom: 3rem;
-            animation: fadeIn 0.5s ease-out 0.2s both;
-        }
-
-        /* AI Activity Feed */
-        .activity-feed {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 2rem;
-            text-align: left;
-            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
-            animation: fadeIn 0.5s ease-out 0.3s both;
-        }
-
-        .feed-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 1.5rem;
-            padding-bottom: 1rem;
-            border-bottom: 1px solid var(--border);
-        }
-
-        .feed-header-left {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-
-        .ai-badge {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.5rem 1rem;
-            background: var(--accent-dim);
-            border-radius: 100px;
-            font-size: 0.85rem;
-            font-weight: 500;
-            color: var(--accent);
-        }
-
-        .pulse-dot {
-            width: 8px; height: 8px;
-            background: var(--accent);
-            border-radius: 50%;
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; transform: scale(1); }
-            50% { opacity: 0.5; transform: scale(1.2); }
-        }
-
-        .feed-timer {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 1rem;
-            color: var(--text-dim);
-        }
-
-        /* Activity items */
-        .activity-list {
-            display: flex;
-            flex-direction: column;
-            gap: 0.75rem;
-            margin-bottom: 2rem;
-        }
-
-        .activity-item {
-            display: flex;
-            align-items: flex-start;
-            gap: 1rem;
-            padding: 0.75rem;
-            background: var(--bg-secondary);
-            border-radius: 10px;
-            opacity: 0;
-            animation: slideIn 0.3s ease-out forwards;
-        }
-
-        .activity-item:nth-child(1) { animation-delay: 0.5s; }
-        .activity-item:nth-child(2) { animation-delay: 1.5s; }
-        .activity-item:nth-child(3) { animation-delay: 2.5s; }
-        .activity-item:nth-child(4) { animation-delay: 3s; }
-        .activity-item:nth-child(5) { animation-delay: 4s; }
-        .activity-item:nth-child(6) { animation-delay: 4.5s; }
-        .activity-item:nth-child(7) { animation-delay: 5s; }
-        .activity-item:nth-child(8) { animation-delay: 5.5s; }
-
-        @keyframes slideIn {
-            from { opacity: 0; transform: translateX(-20px); }
-            to { opacity: 1; transform: translateX(0); }
-        }
-
-        .activity-icon {
-            width: 32px; height: 32px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 0.9rem;
-            flex-shrink: 0;
-        }
-
-        .activity-icon.search { background: rgba(59, 130, 246, 0.1); }
-        .activity-icon.check { background: var(--accent-dim); color: var(--accent); }
-        .activity-icon.ai { background: rgba(139, 92, 246, 0.1); }
-        .activity-icon.filter { background: rgba(245, 158, 11, 0.1); }
-        .activity-icon.flag { background: rgba(239, 68, 68, 0.1); }
-
-        .activity-content {
-            flex: 1;
-        }
-
-        .activity-text {
-            font-size: 0.9rem;
-            color: var(--text-primary);
-            margin-bottom: 0.15rem;
-        }
-
-        .activity-meta {
-            font-size: 0.75rem;
-            color: var(--text-dim);
-        }
-
-        /* Progress bar */
-        .progress-container {
-            margin-top: 1.5rem;
-            padding-top: 1.5rem;
-            border-top: 1px solid var(--border);
-        }
-
-        .progress-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 0.75rem;
-        }
-
-        .progress-label {
-            font-size: 0.85rem;
-            color: var(--text-secondary);
-        }
-
-        .progress-value {
-            font-family: 'JetBrains Mono', monospace;
-            font-size: 0.85rem;
-            color: var(--accent);
-        }
-
-        .progress-bar {
-            height: 8px;
-            background: var(--bg-secondary);
-            border-radius: 4px;
+            color: var(--text);
+            height: 100vh;
             overflow: hidden;
         }
 
-        .progress-fill {
-            height: 100%;
-            width: 0%;
-            background: linear-gradient(90deg, var(--accent), var(--accent-light));
-            border-radius: 4px;
-            animation: progressGrow 6s ease-out forwards;
+        header {
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 56px;
         }
 
-        @keyframes progressGrow {
-            0% { width: 0%; }
-            20% { width: 25%; }
-            40% { width: 50%; }
-            60% { width: 70%; }
-            80% { width: 90%; }
-            100% { width: 100%; }
+        .logo {
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--text);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
-        /* Stats preview */
-        .stats-preview {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 1rem;
-            margin-top: 1.5rem;
-            opacity: 0;
-            animation: fadeIn 0.5s ease-out 6s forwards;
+        .logo-mark {
+            width: 24px;
+            height: 24px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        .stat-mini {
-            text-align: center;
-            padding: 1rem;
-            background: var(--bg-secondary);
-            border-radius: 10px;
+        .header-info {
+            display: flex;
+            align-items: center;
+            gap: 24px;
         }
 
-        .stat-mini-value {
+        .job-title {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .job-title strong {
+            color: var(--text);
+        }
+
+        .timer {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 1.5rem;
+            font-size: 13px;
+            color: var(--text-muted);
+            min-width: 40px;
+        }
+
+        /* MAIN LAYOUT: fixed grid, no overflow */
+        main {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            height: calc(100vh - 56px);
+            overflow: hidden;
+        }
+
+        /* Left side: status + funnel + candidates preview */
+        .main-area {
+            display: grid;
+            grid-template-rows: 90px 1fr 150px;
+            overflow: hidden;
+            padding-bottom: 16px;
+        }
+
+        /* Status header - fixed height */
+        .status-header {
+            padding: 24px 48px;
+            text-align: center;
+        }
+
+        .status-text {
+            font-size: 24px;
+            font-weight: 600;
+            color: var(--text);
+            line-height: 1.3;
+        }
+
+        .status-text .highlight {
+            color: var(--accent);
+        }
+
+        .status-sub {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        /* Funnel container - flex center */
+        .funnel-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 80px;
+            overflow: hidden;
+        }
+
+        .funnel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 560px;
+        }
+
+        .funnel-stage {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 8px 0;
+        }
+
+        .funnel-bar {
+            height: 68px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            transition: all 0.3s ease;
+        }
+
+        .funnel-stage[data-stage="sourced"] .funnel-bar { width: 100%; }
+        .funnel-stage[data-stage="screening"] .funnel-bar { width: 80%; }
+        .funnel-stage[data-stage="vetting"] .funnel-bar { width: 58%; }
+        .funnel-stage[data-stage="qualified"] .funnel-bar { width: 42%; }
+
+        .funnel-stage.pending .funnel-bar {
+            background: var(--bg-tertiary);
+            border-color: var(--border);
+        }
+
+        .funnel-stage.active .funnel-bar {
+            background: var(--accent-bg);
+            border-color: var(--accent);
+        }
+
+        .funnel-stage.complete .funnel-bar {
+            background: var(--bg);
+            border-color: var(--border);
+        }
+
+        .funnel-label {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .funnel-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+
+        .funnel-stage.active .funnel-icon {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .funnel-stage.complete .funnel-icon {
+            background: var(--green);
+            border-color: var(--green);
+        }
+
+        .funnel-name {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: color 0.3s ease;
+        }
+
+        .funnel-stage.active .funnel-name,
+        .funnel-stage.complete .funnel-name {
+            color: var(--text);
+        }
+
+        .funnel-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-muted);
+            min-width: 70px;
+            text-align: right;
+            transition: color 0.3s ease;
+        }
+
+        .funnel-stage.active .funnel-count {
+            color: var(--accent);
+        }
+
+        .funnel-stage.complete .funnel-count {
+            color: var(--text);
+        }
+
+        .funnel-connector {
+            width: 2px;
+            height: 18px;
+            background: var(--border);
+            transition: background 0.3s ease;
+        }
+
+        .funnel-connector.complete {
+            background: var(--green);
+        }
+
+        /* Top candidates - fixed height, always reserved */
+        .top-candidates {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 16px 48px 32px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .top-candidates.visible {
+            opacity: 1;
+        }
+
+        .top-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 12px;
+            text-align: center;
+        }
+
+        .top-list {
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .top-card {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px 16px;
+            text-align: center;
+            min-width: 120px;
+        }
+
+        .top-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--accent);
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 8px;
+        }
+
+        .top-name {
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 2px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .top-role {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .top-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
             font-weight: 700;
             color: var(--accent);
         }
 
-        .stat-mini-label {
-            font-size: 0.75rem;
-            color: var(--text-dim);
-            margin-top: 0.25rem;
+        /* Right: Activity panel - fixed grid layout */
+        .activity-panel {
+            background: var(--bg);
+            border-left: 1px solid var(--border);
+            display: grid;
+            grid-template-rows: auto auto 1fr auto;
+            height: 100%;
+            overflow: hidden;
         }
 
-        /* View results button */
-        .view-results-btn {
-            margin-top: 2rem;
-            padding: 1rem 3rem;
-            background: linear-gradient(135deg, var(--accent), var(--accent-light));
-            border: none;
-            border-radius: 12px;
-            color: white;
-            font-family: 'Outfit', sans-serif;
-            font-size: 1.1rem;
+        .panel-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .panel-header h2 {
+            font-size: 13px;
             font-weight: 600;
-            cursor: pointer;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .sources-section {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sources-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        .sources-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 6px;
+        }
+
+        .source-item {
             display: flex;
             align-items: center;
-            gap: 0.75rem;
-            opacity: 0;
-            animation: fadeIn 0.5s ease-out 6.5s forwards;
+            justify-content: space-between;
+            padding: 6px 10px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            font-size: 11px;
+            transition: all 0.2s ease;
+        }
+
+        .source-item.pending {
+            opacity: 0.4;
+        }
+
+        .source-item.active {
+            opacity: 1;
+            background: var(--accent-bg);
+        }
+
+        .source-item.complete {
+            opacity: 1;
+        }
+
+        .source-name {
+            color: var(--text-secondary);
+        }
+
+        .source-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        /* Activity log - scrollable */
+        .activity-log {
+            overflow-y: auto;
+            padding: 16px 20px;
+            min-height: 0;
+        }
+
+        .log-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+        }
+
+        .log-entries {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .log-entry {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 6px 0;
+            font-size: 12px;
+            border-bottom: 1px solid var(--bg-secondary);
+        }
+
+        .log-entry:last-child {
+            border-bottom: none;
+        }
+
+        .log-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            width: 32px;
+        }
+
+        .log-text {
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .log-text strong {
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .log-text .num {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        /* CTA area - fixed at bottom */
+        .cta-area {
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .cta-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            opacity: 0.4;
+            pointer-events: none;
             transition: all 0.3s ease;
         }
 
-        .view-results-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 40px var(--accent-glow);
+        .cta-btn.ready {
+            opacity: 1;
+            pointer-events: auto;
         }
 
-        /* Responsive */
-        @media (max-width: 768px) {
-            nav { padding: 1rem 1.5rem; }
-            .search-container { padding: 6rem 1.5rem 3rem; }
-            .main-title { font-size: 1.8rem; }
-            .activity-feed { padding: 1.5rem; }
-            .stats-preview { grid-template-columns: 1fr; }
+        .cta-btn.ready:hover {
+            background: #0f766e;
+        }
+
+        .cta-meta {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 8px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .cta-meta strong {
+            color: var(--accent);
         }
     </style>
 </head>
 <body>
-    <nav>
-        <div class="logo">
-            <div class="logo-icon">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="white" stroke-width="2.5">
+    <header>
+        <a href="index.html" class="logo">
+            <div class="logo-mark">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" stroke-width="2.5">
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
                 </svg>
             </div>
-            <span>Tener</span>
-        </div>
-        <div class="nav-status">
-            <div class="processing-spinner"></div>
-            Processing...
-        </div>
-    </nav>
-
-    <main class="search-container">
-        <div class="job-summary">
-            <div class="job-icon">⚡</div>
-            <div class="job-details">
-                <h3>Senior Electrician</h3>
-                <p>Midland, TX • OSHA 30 required • Starting ASAP</p>
+            Tener
+        </a>
+        
+        <div class="header-info">
+            <div class="job-title">
+                <strong>Senior Electrician</strong> · Midland, TX
             </div>
+            <div class="timer" id="timer">0:00</div>
         </div>
+    </header>
 
-        <div class="progress-area">
-            <h1 class="main-title">Finding your crew...</h1>
-            <p class="main-subtitle">AI is scanning our network and external sources</p>
+    <main>
+        <div class="main-area">
+            <div class="status-header">
+                <div class="status-text" id="status-text">Initializing search...</div>
+                <div class="status-sub" id="status-sub">Connecting to talent sources</div>
+            </div>
 
-            <div class="activity-feed">
-                <div class="feed-header">
-                    <div class="feed-header-left">
-                        <div class="ai-badge">
-                            <div class="pulse-dot"></div>
-                            AI Agent Active
-                        </div>
-                    </div>
-                    <div class="feed-timer" id="timer">00:00</div>
-                </div>
-
-                <div class="activity-list">
-                    <div class="activity-item">
-                        <div class="activity-icon search">🔍</div>
-                        <div class="activity-content">
-                            <div class="activity-text">Scanning <strong>Indeed</strong> for electricians in Texas...</div>
-                            <div class="activity-meta">Source 1 of 4</div>
+            <div class="funnel-container">
+                <div class="funnel">
+                    <div class="funnel-stage active" data-stage="sourced" id="stage-sourced">
+                        <div class="funnel-bar">
+                            <div class="funnel-label">
+                                <div class="funnel-icon">🔍</div>
+                                <div class="funnel-name">Sourced</div>
+                            </div>
+                            <div class="funnel-count" id="count-sourced">0</div>
                         </div>
                     </div>
 
-                    <div class="activity-item">
-                        <div class="activity-icon check">✓</div>
-                        <div class="activity-content">
-                            <div class="activity-text">Found <strong>147</strong> potential matches</div>
-                            <div class="activity-meta">Indeed, LinkedIn, internal database</div>
+                    <div class="funnel-connector" id="conn-1"></div>
+
+                    <div class="funnel-stage pending" data-stage="screening" id="stage-screening">
+                        <div class="funnel-bar">
+                            <div class="funnel-label">
+                                <div class="funnel-icon">📋</div>
+                                <div class="funnel-name">Screening</div>
+                            </div>
+                            <div class="funnel-count" id="count-screening">—</div>
                         </div>
                     </div>
 
-                    <div class="activity-item">
-                        <div class="activity-icon search">🔍</div>
-                        <div class="activity-content">
-                            <div class="activity-text">Verifying <strong>OSHA certifications</strong>...</div>
-                            <div class="activity-meta">Cross-referencing OSHA database</div>
+                    <div class="funnel-connector" id="conn-2"></div>
+
+                    <div class="funnel-stage pending" data-stage="vetting" id="stage-vetting">
+                        <div class="funnel-bar">
+                            <div class="funnel-label">
+                                <div class="funnel-icon">🛡️</div>
+                                <div class="funnel-name">Vetting</div>
+                            </div>
+                            <div class="funnel-count" id="count-vetting">—</div>
                         </div>
                     </div>
 
-                    <div class="activity-item">
-                        <div class="activity-icon check">✓</div>
-                        <div class="activity-content">
-                            <div class="activity-text"><strong>89 candidates</strong> have valid OSHA 30</div>
-                            <div class="activity-meta">58 candidates filtered out</div>
+                    <div class="funnel-connector" id="conn-3"></div>
+
+                    <div class="funnel-stage pending" data-stage="qualified" id="stage-qualified">
+                        <div class="funnel-bar">
+                            <div class="funnel-label">
+                                <div class="funnel-icon">✓</div>
+                                <div class="funnel-name">Qualified</div>
+                            </div>
+                            <div class="funnel-count" id="count-qualified">—</div>
                         </div>
-                    </div>
-
-                    <div class="activity-item">
-                        <div class="activity-icon ai">🧠</div>
-                        <div class="activity-content">
-                            <div class="activity-text">Analyzing <strong>experience patterns</strong>...</div>
-                            <div class="activity-meta">Matching against job requirements</div>
-                        </div>
-                    </div>
-
-                    <div class="activity-item">
-                        <div class="activity-icon filter">⚡</div>
-                        <div class="activity-content">
-                            <div class="activity-text">Filtering by <strong>location & availability</strong>...</div>
-                            <div class="activity-meta">Within 50 miles of Midland, TX</div>
-                        </div>
-                    </div>
-
-                    <div class="activity-item">
-                        <div class="activity-icon flag">🚩</div>
-                        <div class="activity-content">
-                            <div class="activity-text">Flagged <strong>4 candidates</strong> with expired certifications</div>
-                            <div class="activity-meta">Moved to review queue</div>
-                        </div>
-                    </div>
-
-                    <div class="activity-item">
-                        <div class="activity-icon ai">🧠</div>
-                        <div class="activity-content">
-                            <div class="activity-text">Ranking <strong>23 qualified candidates</strong> by match score...</div>
-                            <div class="activity-meta">Generating shortlist</div>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="progress-container">
-                    <div class="progress-header">
-                        <span class="progress-label">Processing candidates</span>
-                        <span class="progress-value" id="progress-text">0%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill"></div>
-                    </div>
-                </div>
-
-                <div class="stats-preview">
-                    <div class="stat-mini">
-                        <div class="stat-mini-value">147</div>
-                        <div class="stat-mini-label">Scanned</div>
-                    </div>
-                    <div class="stat-mini">
-                        <div class="stat-mini-value">23</div>
-                        <div class="stat-mini-label">Qualified</div>
-                    </div>
-                    <div class="stat-mini">
-                        <div class="stat-mini-value">8</div>
-                        <div class="stat-mini-label">Top matches</div>
                     </div>
                 </div>
             </div>
 
-            <button class="view-results-btn" onclick="window.location.href='results-light.html'">
-                View Candidates
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-                    <line x1="5" y1="12" x2="19" y2="12"/>
-                    <polyline points="12 5 19 12 12 19"/>
-                </svg>
-            </button>
+            <div class="top-candidates" id="top-candidates">
+                <div class="top-title">Top Matches</div>
+                <div class="top-list">
+                    <div class="top-card">
+                        <div class="top-avatar">JM</div>
+                        <div class="top-name">James Mitchell</div>
+                        <div class="top-role">Master Electrician</div>
+                        <div class="top-score">97%</div>
+                    </div>
+                    <div class="top-card">
+                        <div class="top-avatar">RG</div>
+                        <div class="top-name">Roberto Garcia</div>
+                        <div class="top-role">Senior Electrician</div>
+                        <div class="top-score">94%</div>
+                    </div>
+                    <div class="top-card">
+                        <div class="top-avatar">DW</div>
+                        <div class="top-name">David Williams</div>
+                        <div class="top-role">Journeyman</div>
+                        <div class="top-score">91%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="activity-panel">
+            <div class="panel-header">
+                <h2>Live Log</h2>
+            </div>
+
+            <div class="sources-section">
+                <div class="sources-title">Sources</div>
+                <div class="sources-grid" id="sources-grid">
+                    <div class="source-item pending" data-source="indeed">
+                        <span class="source-name">Indeed</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="linkedin">
+                        <span class="source-name">LinkedIn</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="rigzone">
+                        <span class="source-name">Rigzone</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="ibew">
+                        <span class="source-name">IBEW Local</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="tradesmen">
+                        <span class="source-name">Tradesmen</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="veterans">
+                        <span class="source-name">Hire Heroes</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="internal">
+                        <span class="source-name">Tener DB</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="isnetworld">
+                        <span class="source-name">ISNetworld</span>
+                        <span class="source-count">—</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="activity-log">
+                <div class="log-title">Activity</div>
+                <div class="log-entries" id="log-entries"></div>
+            </div>
+
+            <div class="cta-area">
+                <button class="cta-btn" id="cta-btn" onclick="window.location.href='results-light.html'">Processing...</button>
+                <div class="cta-meta">
+                    <span>Manual: ~40 hours</span>
+                    <span>Tener: <strong>40 sec</strong></span>
+                </div>
+            </div>
         </div>
     </main>
 
     <script>
-        // Timer
+        const sources = [
+            { id: 'indeed', name: 'Indeed', count: 45 },
+            { id: 'linkedin', name: 'LinkedIn', count: 32 },
+            { id: 'rigzone', name: 'Rigzone', count: 28 },
+            { id: 'ibew', name: 'IBEW Local', count: 18 },
+            { id: 'tradesmen', name: 'Tradesmen', count: 15 },
+            { id: 'veterans', name: 'Hire Heroes', count: 10 },
+            { id: 'internal', name: 'Tener DB', count: 12 }
+        ];
+
         let seconds = 0;
-        const timerEl = document.getElementById('timer');
-        const progressText = document.getElementById('progress-text');
-        const mainTitle = document.querySelector('.main-title');
-        const mainSubtitle = document.querySelector('.main-subtitle');
-        const viewBtn = document.querySelector('.view-results-btn');
-        const aiBadge = document.querySelector('.ai-badge');
-        
-        const timerInterval = setInterval(() => {
+        let totalSourced = 0;
+
+        setInterval(() => {
             seconds++;
-            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
-            const secs = (seconds % 60).toString().padStart(2, '0');
-            timerEl.textContent = `${mins}:${secs}`;
-            
-            // Update progress text
-            let progress = Math.min(95, Math.floor(seconds * 15));
-            progressText.textContent = `${progress}%`;
-            
-            if (seconds >= 7) {
-                clearInterval(timerInterval);
-                progressText.textContent = '100%';
-                
-                // Success state
-                mainTitle.innerHTML = '✓ Found 23 qualified workers';
-                mainTitle.style.color = '#0d9488';
-                mainSubtitle.textContent = 'Screened 147 candidates in 2 minutes. Your shortlist is ready.';
-                aiBadge.innerHTML = '<span style="color:#0d9488">✓</span> Complete';
-                aiBadge.style.background = 'rgba(13, 148, 136, 0.15)';
-                
-                // Make button more prominent
-                viewBtn.style.transform = 'scale(1.05)';
-                viewBtn.style.boxShadow = '0 10px 40px rgba(13, 148, 136, 0.3)';
-            }
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            document.getElementById('timer').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
         }, 1000);
+
+        function setStatus(text, sub) {
+            document.getElementById('status-text').innerHTML = text;
+            if (sub) document.getElementById('status-sub').textContent = sub;
+        }
+
+        function addLog(text) {
+            const entries = document.getElementById('log-entries');
+            const time = `${Math.floor(seconds / 60)}:${(seconds % 60).toString().padStart(2, '0')}`;
+            
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">${time}</span><span class="log-text">${text}</span>`;
+            entries.insertBefore(entry, entries.firstChild);
+        }
+
+        function updateSource(id, count, isActive = false) {
+            const item = document.querySelector(`[data-source="${id}"]`);
+            item.classList.remove('pending', 'active');
+            item.classList.add(isActive ? 'active' : 'complete');
+            if (count !== null) {
+                item.querySelector('.source-count').textContent = count;
+            }
+        }
+
+        function setStage(stage, state) {
+            const el = document.getElementById(`stage-${stage}`);
+            el.classList.remove('pending', 'active', 'complete');
+            el.classList.add(state);
+        }
+
+        function setConnector(num, state) {
+            const el = document.getElementById(`conn-${num}`);
+            el.classList.remove('complete');
+            if (state === 'complete') el.classList.add('complete');
+        }
+
+        // ========== PHASE 1: SOURCING (0-16s) ==========
+        
+        // Initial
+        setTimeout(() => {
+            setStatus('Connecting to <span class="highlight">talent sources</span>...', 'Initializing API connections');
+            addLog('Initializing search parameters...');
+        }, 500);
+
+        setTimeout(() => {
+            addLog('Job: Senior Electrician, Midland TX');
+            addLog('Requirements: 5+ years, OSHA 30, TX License');
+        }, 1200);
+
+        // Source each platform (7 sources × 2s each = 14s)
+        sources.forEach((source, i) => {
+            const startTime = 2000 + i * 2000;
+            
+            setTimeout(() => {
+                updateSource(source.id, '...', true);
+                setStatus(`Sourcing from <span class="highlight">${source.name}</span>...`, 'Searching job boards and databases');
+            }, startTime);
+            
+            setTimeout(() => {
+                updateSource(source.id, source.count);
+                totalSourced += source.count;
+                document.getElementById('count-sourced').textContent = totalSourced;
+                addLog(`Found <span class="num">${source.count}</span> profiles from <strong>${source.name}</strong>`);
+            }, startTime + 1200);
+        });
+
+        // ISNetworld API connection (at 16s)
+        setTimeout(() => {
+            updateSource('isnetworld', '...', true);
+            setStatus('Connecting to <span class="highlight">ISNetworld</span>...', 'Compliance verification API');
+        }, 16000);
+
+        setTimeout(() => {
+            const item = document.querySelector(`[data-source="isnetworld"]`);
+            item.classList.remove('pending', 'active');
+            item.classList.add('complete');
+            item.querySelector('.source-count').textContent = '✓';
+            addLog('Connected to <strong>ISNetworld</strong> compliance API');
+        }, 17000);
+
+        // ========== PHASE 2: SCREENING (17-26s) ==========
+
+        setTimeout(() => {
+            setStage('sourced', 'complete');
+            setConnector(1, 'complete');
+            setStage('screening', 'active');
+            
+            setStatus(`Screening <span class="highlight">${totalSourced} profiles</span>...`, 'Matching against job requirements');
+            addLog(`Aggregated <span class="num">${totalSourced}</span> candidate profiles`);
+        }, 17500);
+
+        // Screening step 1: Parse resumes
+        setTimeout(() => {
+            setStatus('Parsing <span class="highlight">resumes</span>...', 'Extracting skills and experience');
+            addLog('Parsing resumes and extracting data...');
+        }, 18500);
+
+        setTimeout(() => {
+            addLog('<span class="num">156</span> resumes successfully parsed');
+        }, 19500);
+
+        // Screening step 2: Skills match
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">skills match</span>...', 'Electrician, industrial, commercial');
+            addLog('Filtering by skills: electrician, industrial...');
+        }, 20000);
+
+        setTimeout(() => {
+            addLog('<span class="num">142</span> have required skills');
+        }, 21000);
+
+        // Screening step 3: Experience level
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">experience level</span>...', 'Minimum 5 years required');
+            addLog('Filtering by experience: 5+ years...');
+        }, 21500);
+
+        setTimeout(() => {
+            addLog('<span class="num">118</span> meet experience requirement');
+        }, 22500);
+
+        // Screening step 4: Location
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">location</span>...', 'Within 50 miles of Midland, TX');
+            addLog('Filtering by location: within 50mi of Midland...');
+        }, 23000);
+
+        setTimeout(() => {
+            addLog('<span class="num">98</span> within acceptable distance');
+        }, 24000);
+
+        // Screening step 5: Availability
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">availability</span>...', 'Available within 2 weeks');
+            addLog('Filtering by availability: start within 2 weeks...');
+        }, 24500);
+
+        // Screening complete
+        setTimeout(() => {
+            document.getElementById('count-screening').textContent = '89';
+            addLog('<span class="num">89</span> pass all screening criteria');
+        }, 25500);
+
+        // ========== PHASE 3: VETTING (26-36s) ==========
+
+        setTimeout(() => {
+            setStage('screening', 'complete');
+            setConnector(2, 'complete');
+            setStage('vetting', 'active');
+            
+            setStatus('Verifying <span class="highlight">certifications</span>...', 'Checking credentials and compliance');
+            addLog('Starting credential verification...');
+        }, 26000);
+
+        // Vetting step 1: OSHA 30
+        setTimeout(() => {
+            setStatus('Verifying <span class="highlight">OSHA 30</span>...', 'Safety certification required');
+            addLog('Verifying OSHA 30 certifications...');
+        }, 27000);
+
+        setTimeout(() => {
+            addLog('<span class="num">78</span> have valid OSHA 30');
+        }, 28200);
+
+        // Vetting step 2: State license
+        setTimeout(() => {
+            setStatus('Verifying <span class="highlight">TX License</span>...', 'State electrician license');
+            addLog('Verifying TX Electrician License...');
+        }, 28700);
+
+        setTimeout(() => {
+            addLog('<span class="num">71</span> have active TX license');
+        }, 29900);
+
+        // Vetting step 3: ISNetworld
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">ISNetworld</span>...', 'Contractor compliance status');
+            addLog('Querying ISNetworld compliance records...');
+        }, 30400);
+
+        setTimeout(() => {
+            addLog('<span class="num">64</span> ISNetworld compliant');
+        }, 31600);
+
+        // Vetting step 4: Drug screen
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">drug screen</span>...', 'Pre-employment screening status');
+            addLog('Verifying drug screen status...');
+        }, 32100);
+
+        setTimeout(() => {
+            addLog('<span class="num">58</span> clear drug screen');
+        }, 33300);
+
+        // Vetting step 5: Background check
+        setTimeout(() => {
+            setStatus('Running <span class="highlight">background check</span>...', 'Criminal and employment history');
+            addLog('Running background verification...');
+        }, 33800);
+
+        setTimeout(() => {
+            addLog('<span class="num">55</span> clear background check');
+        }, 35000);
+
+        // Vetting step 6: Safety record
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">safety record</span>...', 'TRIR and incident history');
+            addLog('Verifying safety record (TRIR scores)...');
+        }, 35500);
+
+        // Vetting complete
+        setTimeout(() => {
+            document.getElementById('count-vetting').textContent = '52';
+            addLog('<span class="num">52</span> pass all vetting requirements');
+        }, 36700);
+
+        // ========== PHASE 4: RANKING (36-40s) ==========
+
+        setTimeout(() => {
+            setStage('vetting', 'complete');
+            setConnector(3, 'complete');
+            setStage('qualified', 'active');
+            
+            setStatus('Ranking <span class="highlight">candidates</span>...', 'Calculating match scores');
+            addLog('Initiating candidate ranking...');
+        }, 37000);
+
+        setTimeout(() => {
+            addLog('Scoring by experience level...');
+        }, 37800);
+
+        setTimeout(() => {
+            addLog('Scoring by skills match...');
+        }, 38400);
+
+        setTimeout(() => {
+            addLog('Scoring by proximity to job site...');
+        }, 39000);
+
+        setTimeout(() => {
+            addLog('Scoring by availability...');
+        }, 39600);
+
+        // Final ranking
+        setTimeout(() => {
+            addLog('Computing overall match scores...');
+        }, 40200);
+
+        setTimeout(() => {
+            addLog('Ranking candidates by fit...');
+        }, 40800);
+
+        // ========== COMPLETE (40s) ==========
+
+        setTimeout(() => {
+            document.getElementById('count-qualified').textContent = '23';
+            setStage('qualified', 'complete');
+            
+            setStatus('✓ Found <span class="highlight">23 qualified candidates</span>', 'Ready for your review');
+            addLog('<span class="num">23</span> top candidates selected');
+            
+            document.getElementById('top-candidates').classList.add('visible');
+            
+            document.getElementById('cta-btn').classList.add('ready');
+            document.getElementById('cta-btn').textContent = 'View All 23 Candidates →';
+        }, 41500);
     </script>
 </body>
 </html>

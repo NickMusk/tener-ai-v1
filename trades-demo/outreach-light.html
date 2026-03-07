@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Check Availability</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #ffffff;
+            --bg-secondary: #f9fafb;
+            --bg-tertiary: #f3f4f6;
+            --accent: #0d9488;
+            --accent-hover: #0f766e;
+            --accent-bg: #f0fdfa;
+            --text: #111827;
+            --text-secondary: #6b7280;
+            --text-muted: #9ca3af;
+            --border: #e5e7eb;
+            --green: #10b981;
+            --green-bg: #ecfdf5;
+            --yellow: #f59e0b;
+            --yellow-bg: #fffbeb;
+            --red: #ef4444;
+            --red-bg: #fef2f2;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 56px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .back-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .back-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 18px;
+            color: var(--text);
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-mark {
+            width: 24px;
+            height: 24px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .header-job {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .header-job strong {
+            color: var(--text);
+        }
+
+        main {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        .page-header {
+            margin-bottom: 24px;
+        }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .page-subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 24px;
+        }
+
+        /* Candidates list */
+        .candidates-section {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .section-badge {
+            font-size: 12px;
+            padding: 4px 10px;
+            background: var(--accent-bg);
+            color: var(--accent);
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        .candidate-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+            transition: background 0.2s;
+        }
+
+        .candidate-item:last-child {
+            border-bottom: none;
+        }
+
+        .candidate-avatar {
+            width: 40px;
+            height: 40px;
+            background: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .candidate-info {
+            flex: 1;
+        }
+
+        .candidate-name {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+
+        .candidate-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .candidate-phone {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .candidate-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+
+        .candidate-status.pending {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+        }
+
+        .candidate-status.sent {
+            background: var(--yellow-bg);
+            color: var(--yellow);
+        }
+
+        .candidate-status.available {
+            background: var(--green-bg);
+            color: var(--green);
+        }
+
+        .candidate-status.unavailable {
+            background: var(--red-bg);
+            color: var(--red);
+        }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: currentColor;
+        }
+
+        /* Message preview */
+        .message-section {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+        }
+
+        .message-preview {
+            padding: 20px;
+        }
+
+        .message-label {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .message-bubble {
+            background: var(--accent);
+            color: white;
+            padding: 14px 16px;
+            border-radius: 16px 16px 4px 16px;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 16px;
+        }
+
+        .message-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .message-meta span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .edit-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .edit-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Action panel */
+        .action-panel {
+            padding: 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .send-btn {
+            width: 100%;
+            padding: 14px;
+            background: var(--accent);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-family: inherit;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .send-btn:hover {
+            background: var(--accent-hover);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .send-hint {
+            text-align: center;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 10px;
+        }
+
+        /* Stats cards */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        .stat-card {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat-value.green { color: var(--green); }
+        .stat-value.yellow { color: var(--yellow); }
+        .stat-value.gray { color: var(--text-muted); }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Response timeline */
+        .timeline-section {
+            margin-top: 24px;
+        }
+
+        .timeline-header {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .timeline-live {
+            font-size: 11px;
+            padding: 3px 8px;
+            background: var(--green-bg);
+            color: var(--green);
+            border-radius: 10px;
+            font-weight: 500;
+        }
+
+        .timeline-list {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .timeline-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .timeline-item:last-child {
+            border-bottom: none;
+        }
+
+        .timeline-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            width: 50px;
+        }
+
+        .timeline-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .timeline-icon.sent { background: var(--yellow-bg); }
+        .timeline-icon.available { background: var(--green-bg); }
+        .timeline-icon.unavailable { background: var(--red-bg); }
+
+        .timeline-content {
+            flex: 1;
+        }
+
+        .timeline-name {
+            font-weight: 500;
+        }
+
+        .timeline-response {
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* Edit message modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .modal-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .modal-card {
+            background: var(--bg);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 480px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .modal-overlay.visible .modal-card {
+            transform: scale(1);
+        }
+
+        .modal-header {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .modal-close:hover {
+            background: var(--border);
+        }
+
+        .modal-body {
+            padding: 24px;
+        }
+
+        .modal-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 14px;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-family: inherit;
+            font-size: 14px;
+            line-height: 1.5;
+            resize: vertical;
+        }
+
+        .modal-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-bg);
+        }
+
+        .modal-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            padding: 20px 24px;
+            border-top: 1px solid var(--border);
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .modal-btn.primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .modal-btn.secondary {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        /* Success modal */
+        .success-icon {
+            width: 64px;
+            height: 64px;
+            background: var(--green-bg);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 32px;
+            margin: 0 auto 16px;
+        }
+
+        .success-title {
+            font-size: 20px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .success-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <a href="results-light.html" class="back-btn">← Back to Results</a>
+            <a href="index.html" class="logo">
+                <div class="logo-mark">
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="white" stroke-width="2.5">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                </div>
+                Tener
+            </a>
+        </div>
+        <div class="header-job">
+            <strong>Senior Electrician</strong> · Midland, TX
+        </div>
+    </header>
+
+    <main>
+        <div class="page-header">
+            <h1 class="page-title">Check Availability</h1>
+            <p class="page-subtitle">Send SMS to verify candidate availability before scheduling interviews</p>
+        </div>
+
+        <div class="content-grid">
+            <div>
+                <!-- Selected candidates -->
+                <div class="candidates-section">
+                    <div class="section-header">
+                        <span class="section-title">Selected Candidates</span>
+                        <span class="section-badge">5 workers</span>
+                    </div>
+                    
+                    <div class="candidate-item">
+                        <div class="candidate-avatar">JM</div>
+                        <div class="candidate-info">
+                            <div class="candidate-name">James Mitchell</div>
+                            <div class="candidate-meta">Master Electrician • 14 yrs</div>
+                        </div>
+                        <div class="candidate-phone">+1 (432) 555-1234</div>
+                        <div class="candidate-status available">
+                            <span class="status-dot"></span>
+                            Available
+                        </div>
+                    </div>
+                    
+                    <div class="candidate-item">
+                        <div class="candidate-avatar">RG</div>
+                        <div class="candidate-info">
+                            <div class="candidate-name">Roberto Garcia</div>
+                            <div class="candidate-meta">Senior Electrician • 11 yrs</div>
+                        </div>
+                        <div class="candidate-phone">+1 (432) 555-2345</div>
+                        <div class="candidate-status available">
+                            <span class="status-dot"></span>
+                            Available
+                        </div>
+                    </div>
+                    
+                    <div class="candidate-item">
+                        <div class="candidate-avatar">DW</div>
+                        <div class="candidate-info">
+                            <div class="candidate-name">David Williams</div>
+                            <div class="candidate-meta">Electrician • 8 yrs</div>
+                        </div>
+                        <div class="candidate-phone">+1 (432) 555-3456</div>
+                        <div class="candidate-status sent">
+                            <span class="status-dot"></span>
+                            Waiting...
+                        </div>
+                    </div>
+                    
+                    <div class="candidate-item">
+                        <div class="candidate-avatar">MJ</div>
+                        <div class="candidate-info">
+                            <div class="candidate-name">Michael Johnson</div>
+                            <div class="candidate-meta">Electrician • 6 yrs</div>
+                        </div>
+                        <div class="candidate-phone">+1 (432) 555-4567</div>
+                        <div class="candidate-status unavailable">
+                            <span class="status-dot"></span>
+                            Unavailable
+                        </div>
+                    </div>
+                    
+                    <div class="candidate-item">
+                        <div class="candidate-avatar">TH</div>
+                        <div class="candidate-info">
+                            <div class="candidate-name">Thomas Harris</div>
+                            <div class="candidate-meta">Electrician • 9 yrs</div>
+                        </div>
+                        <div class="candidate-phone">+1 (432) 555-5678</div>
+                        <div class="candidate-status sent">
+                            <span class="status-dot"></span>
+                            Waiting...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Response timeline -->
+                <div class="timeline-section">
+                    <div class="timeline-header">
+                        Response Timeline
+                        <span class="timeline-live">● Live</span>
+                    </div>
+                    <div class="timeline-list">
+                        <div class="timeline-item">
+                            <span class="timeline-time">0:45</span>
+                            <div class="timeline-icon available">✓</div>
+                            <div class="timeline-content">
+                                <div class="timeline-name">Roberto Garcia</div>
+                                <div class="timeline-response">"Yes, available. Can start Monday."</div>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <span class="timeline-time">0:32</span>
+                            <div class="timeline-icon available">✓</div>
+                            <div class="timeline-content">
+                                <div class="timeline-name">James Mitchell</div>
+                                <div class="timeline-response">"Available. When do you need me?"</div>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <span class="timeline-time">0:28</span>
+                            <div class="timeline-icon unavailable">✗</div>
+                            <div class="timeline-content">
+                                <div class="timeline-name">Michael Johnson</div>
+                                <div class="timeline-response">"Currently on a 3-month contract. Available in April."</div>
+                            </div>
+                        </div>
+                        <div class="timeline-item">
+                            <span class="timeline-time">0:05</span>
+                            <div class="timeline-icon sent">📤</div>
+                            <div class="timeline-content">
+                                <div class="timeline-name">All candidates</div>
+                                <div class="timeline-response">SMS sent to 5 workers</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right panel -->
+            <div>
+                <div class="message-section">
+                    <div class="message-preview">
+                        <div class="message-label">SMS Preview</div>
+                        <div class="message-bubble">
+                            Hi! This is Tener AI reaching out on behalf of a company hiring Senior Electricians in Midland, TX. Are you available for a new opportunity starting within 2 weeks? Reply YES or NO.
+                        </div>
+                        <div class="message-meta">
+                            <span>📱 Via Twilio</span>
+                            <span>~160 chars</span>
+                            <a class="edit-link" onclick="openEditModal()">Edit message</a>
+                        </div>
+                    </div>
+                    <div class="action-panel">
+                        <button class="send-btn" id="send-btn" onclick="sendMessages()">
+                            📱 Send SMS to 5 Candidates
+                        </button>
+                        <div class="send-hint">Typically 80% respond within 2 minutes</div>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-value green" id="stat-available">0</div>
+                        <div class="stat-label">Available</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value yellow" id="stat-waiting">0</div>
+                        <div class="stat-label">Waiting</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value gray" id="stat-unavailable">0</div>
+                        <div class="stat-label">Unavailable</div>
+                    </div>
+                </div>
+
+                <!-- Next steps -->
+                <div class="stat-card" style="margin-top: 16px; text-align: left;" id="next-steps" style="display: none;">
+                    <div class="message-label">Next Steps</div>
+                    <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 8px;">
+                        <button class="send-btn" style="background: var(--green);" onclick="showScheduleSuccess()">
+                            📅 Schedule Interviews (<span id="available-count">0</span> available)
+                        </button>
+                        <button class="send-btn" style="background: var(--bg-tertiary); color: var(--text-secondary);" onclick="window.location.href='results-light.html'">
+                            🔄 Send to More Candidates
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Edit Message Modal -->
+    <div class="modal-overlay" id="edit-modal" onclick="closeModal('edit-modal', event)">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <span class="modal-title">Edit SMS Message</span>
+                <button class="modal-close" onclick="closeModal('edit-modal')">✕</button>
+            </div>
+            <div class="modal-body">
+                <textarea class="modal-textarea" id="message-textarea">Hi! This is Tener AI reaching out on behalf of a company hiring Senior Electricians in Midland, TX. Are you available for a new opportunity starting within 2 weeks? Reply YES or NO.</textarea>
+                <div class="modal-hint">Keep under 160 characters for single SMS. Current: <span id="char-count">156</span></div>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn secondary" onclick="closeModal('edit-modal')">Cancel</button>
+                <button class="modal-btn primary" onclick="saveMessage()">Save Message</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Schedule Success Modal -->
+    <div class="modal-overlay" id="success-modal" onclick="closeModal('success-modal', event)">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div class="modal-body" style="padding: 32px;">
+                <div class="success-icon">✓</div>
+                <div class="success-title">Interviews Scheduled!</div>
+                <div class="success-text">
+                    We've sent interview invitations to 2 available candidates. They'll receive SMS and email with time slots to choose from.
+                    <br><br>
+                    You'll be notified when they confirm their preferred time.
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn primary" onclick="window.location.href='results-light.html'" style="flex: 1;">
+                    Back to Dashboard
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let messagesSent = false;
+        
+        function openEditModal() {
+            document.getElementById('edit-modal').classList.add('visible');
+        }
+        
+        function closeModal(modalId, event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById(modalId).classList.remove('visible');
+        }
+        
+        function saveMessage() {
+            const text = document.getElementById('message-textarea').value;
+            document.querySelector('.message-bubble').textContent = text;
+            closeModal('edit-modal');
+        }
+        
+        function updateCharCount() {
+            const text = document.getElementById('message-textarea').value;
+            document.getElementById('char-count').textContent = text.length;
+        }
+        
+        document.getElementById('message-textarea').addEventListener('input', updateCharCount);
+        
+        function sendMessages() {
+            if (messagesSent) return;
+            messagesSent = true;
+            
+            const btn = document.getElementById('send-btn');
+            btn.innerHTML = '⏳ Sending...';
+            btn.disabled = true;
+            
+            // Simulate sending
+            setTimeout(() => {
+                btn.innerHTML = '✓ Messages Sent';
+                btn.style.background = 'var(--green)';
+                
+                // Update stats
+                document.getElementById('stat-waiting').textContent = '5';
+                
+                // Show timeline
+                document.querySelector('.timeline-section').style.display = 'block';
+                
+                // Simulate responses
+                simulateResponses();
+            }, 1500);
+        }
+        
+        function simulateResponses() {
+            const timeline = document.querySelector('.timeline-list');
+            const statuses = document.querySelectorAll('.candidate-status');
+            
+            // First response at 3s
+            setTimeout(() => {
+                statuses[0].className = 'candidate-status available';
+                statuses[0].innerHTML = '<span class="status-dot"></span> Available';
+                document.getElementById('stat-available').textContent = '1';
+                document.getElementById('stat-waiting').textContent = '4';
+                document.getElementById('available-count').textContent = '1';
+                addTimelineEntry(timeline, '0:03', 'available', 'James Mitchell', '"Yes, available. Can start Monday."');
+            }, 3000);
+            
+            // Second response at 5s
+            setTimeout(() => {
+                statuses[1].className = 'candidate-status available';
+                statuses[1].innerHTML = '<span class="status-dot"></span> Available';
+                document.getElementById('stat-available').textContent = '2';
+                document.getElementById('stat-waiting').textContent = '3';
+                document.getElementById('available-count').textContent = '2';
+                addTimelineEntry(timeline, '0:05', 'available', 'Roberto Garcia', '"Available. When do you need me?"');
+            }, 5000);
+            
+            // Third response at 7s (unavailable)
+            setTimeout(() => {
+                statuses[3].className = 'candidate-status unavailable';
+                statuses[3].innerHTML = '<span class="status-dot"></span> Unavailable';
+                document.getElementById('stat-unavailable').textContent = '1';
+                document.getElementById('stat-waiting').textContent = '2';
+                addTimelineEntry(timeline, '0:07', 'unavailable', 'Michael Johnson', '"On contract until April."');
+                
+                // Show next steps
+                document.getElementById('next-steps').style.display = 'block';
+            }, 7000);
+        }
+        
+        function addTimelineEntry(container, time, type, name, response) {
+            const icon = type === 'available' ? '✓' : '✗';
+            const entry = document.createElement('div');
+            entry.className = 'timeline-item';
+            entry.innerHTML = `
+                <span class="timeline-time">${time}</span>
+                <div class="timeline-icon ${type}">${icon}</div>
+                <div class="timeline-content">
+                    <div class="timeline-name">${name}</div>
+                    <div class="timeline-response">${response}</div>
+                </div>
+            `;
+            container.insertBefore(entry, container.firstChild);
+        }
+        
+        function showScheduleSuccess() {
+            document.getElementById('success-modal').classList.add('visible');
+        }
+        
+        // Hide timeline initially
+        document.querySelector('.timeline-section').style.display = 'none';
+    </script>
+</body>
+</html>

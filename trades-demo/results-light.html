@@ -564,15 +564,14 @@
         }
 
         .candidate-row {
-            display: grid;
-            grid-template-columns: auto 1fr auto auto;
-            gap: 1rem;
+            display: flex;
             align-items: center;
-            padding: 1rem;
+            gap: 12px;
+            padding: 10px 14px;
             background: var(--bg-card);
             border: 1px solid var(--border);
             border-radius: 10px;
-            margin-bottom: 0.5rem;
+            margin-bottom: 8px;
             cursor: pointer;
             transition: all 0.2s;
         }
@@ -583,43 +582,63 @@
         }
 
         .candidate-avatar-sm {
-            width: 40px; height: 40px;
+            width: 36px; height: 36px;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
             border-radius: 8px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.9rem;
+            font-size: 0.8rem;
             font-weight: 600;
             color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .candidate-info {
+            min-width: 140px;
         }
 
         .candidate-info h4 {
-            font-size: 0.95rem;
+            font-size: 0.85rem;
             font-weight: 600;
-            margin-bottom: 0.15rem;
+            margin-bottom: 1px;
             color: var(--text-primary);
         }
 
         .candidate-info p {
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             color: var(--text-dim);
+        }
+
+        .candidate-extra {
+            display: flex;
+            gap: 14px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            flex: 1;
+        }
+
+        .candidate-extra span {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            white-space: nowrap;
         }
 
         .candidate-compliance {
             display: flex;
-            gap: 0.3rem;
+            gap: 3px;
         }
 
         .mini-badge {
-            width: 20px; height: 20px;
+            width: 18px; height: 18px;
             background: var(--accent-dim);
             border-radius: 4px;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 0.65rem;
+            font-size: 0.6rem;
         }
 
         .mini-badge.verified {
@@ -629,9 +648,31 @@
 
         .candidate-score {
             font-family: 'JetBrains Mono', monospace;
-            font-size: 1rem;
+            font-size: 0.9rem;
             font-weight: 600;
             color: var(--accent);
+        }
+
+        .details-btn {
+            width: 24px;
+            height: 24px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 50%;
+            font-size: 12px;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .details-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
         }
 
         /* Right Panel */
@@ -913,6 +954,407 @@
             text-decoration: none;
         }
 
+        /* Selection bar */
+        .selection-bar {
+            position: fixed;
+            bottom: 24px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--text-primary);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .selection-bar.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .selection-count {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .selection-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .selection-btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+        }
+
+        .selection-btn.primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .selection-btn.primary:hover {
+            background: var(--accent-light);
+        }
+
+        .selection-btn.secondary {
+            background: rgba(255,255,255,0.15);
+            color: white;
+        }
+
+        .selection-btn.secondary:hover {
+            background: rgba(255,255,255,0.25);
+        }
+
+        .selection-clear {
+            background: none;
+            border: none;
+            color: rgba(255,255,255,0.6);
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 4px;
+        }
+
+        .selection-clear:hover {
+            color: white;
+        }
+
+        /* Checkbox styles */
+        .pick-checkbox {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            width: 22px;
+            height: 22px;
+            border: 2px solid var(--border-strong);
+            border-radius: 6px;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .pick-checkbox:hover {
+            border-color: var(--accent);
+        }
+
+        .pick-checkbox.checked {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .pick-checkbox.checked::after {
+            content: '✓';
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+        }
+
+        .top-pick-card {
+            position: relative;
+        }
+
+        .top-pick-card.selected {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 2px var(--accent-dim);
+        }
+
+        .candidate-checkbox {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-strong);
+            border-radius: 5px;
+            background: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .candidate-checkbox:hover {
+            border-color: var(--accent);
+        }
+
+        .candidate-checkbox.checked {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .candidate-checkbox.checked::after {
+            content: '✓';
+            color: white;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .candidate-row.selected {
+            background: var(--accent-dim);
+        }
+
+        /* Candidate Detail Popup */
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .popup-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .popup-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 520px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .popup-overlay.visible .popup-card {
+            transform: scale(1);
+        }
+
+        .popup-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .popup-avatar {
+            width: 64px;
+            height: 64px;
+            background: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .popup-title-area {
+            flex: 1;
+        }
+
+        .popup-name {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .popup-subtitle {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .popup-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .popup-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            width: 32px;
+            height: 32px;
+            border: none;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            font-size: 18px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .popup-close:hover {
+            background: var(--border);
+            color: var(--text-primary);
+        }
+
+        .popup-body {
+            padding: 24px;
+        }
+
+        .popup-section {
+            margin-bottom: 20px;
+        }
+
+        .popup-section:last-child {
+            margin-bottom: 0;
+        }
+
+        .popup-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-dim);
+            margin-bottom: 10px;
+        }
+
+        .popup-info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        .popup-info-item {
+            background: var(--bg-secondary);
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .popup-info-label {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-bottom: 4px;
+        }
+
+        .popup-info-value {
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .popup-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .popup-badge {
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .popup-badge.verified {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .popup-badge.warning {
+            background: rgba(245, 158, 11, 0.1);
+            color: #d97706;
+        }
+
+        .popup-safety-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+        }
+
+        .popup-safety-item {
+            text-align: center;
+            padding: 12px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+        }
+
+        .popup-safety-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--success);
+        }
+
+        .popup-safety-value.caution {
+            color: var(--warning);
+        }
+
+        .popup-safety-label {
+            font-size: 11px;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        .popup-actions {
+            display: flex;
+            gap: 12px;
+            padding: 20px 24px;
+            border-top: 1px solid var(--border);
+        }
+
+        .popup-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .popup-btn.primary {
+            background: var(--accent);
+            color: white;
+        }
+
+        .popup-btn.primary:hover {
+            background: #0f766e;
+        }
+
+        .popup-btn.secondary {
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .popup-btn.secondary:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
         /* Responsive */
         @media (max-width: 900px) {
             .main {
@@ -954,7 +1396,7 @@
 <body>
     <nav>
         <div class="nav-left">
-            <a href="index-light.html" class="logo" style="text-decoration: none; color: inherit;">
+            <a href="index.html" class="logo" style="text-decoration: none; color: inherit;">
                 <div class="logo-icon">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="white" stroke-width="2.5">
                         <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
@@ -974,7 +1416,7 @@
             </div>
             <button class="nav-btn">📊 Export</button>
             <button class="nav-btn">🔗 Share</button>
-            <button class="nav-btn primary" onclick="window.location.href='index-light.html'">+ New Search</button>
+            <button class="nav-btn primary" onclick="window.location.href='index.html'">+ New Search</button>
         </div>
     </nav>
 
@@ -1073,7 +1515,8 @@
                 <h3 class="section-title">🏆 Top 3 Picks — Start Here</h3>
                 <div class="top-picks-grid">
                     <!-- Pick 1 -->
-                    <div class="top-pick-card">
+                    <div class="top-pick-card" data-candidate="james-mitchell" onclick="toggleCandidate(this, event)">
+                        <div class="pick-checkbox"></div>
                         <div class="pick-rank">1</div>
                         <div class="pick-avatar">JM</div>
                         <div class="pick-name">James Mitchell</div>
@@ -1101,7 +1544,8 @@
                     </div>
 
                     <!-- Pick 2 -->
-                    <div class="top-pick-card">
+                    <div class="top-pick-card" data-candidate="roberto-garcia" onclick="toggleCandidate(this, event)">
+                        <div class="pick-checkbox"></div>
                         <div class="pick-rank">2</div>
                         <div class="pick-avatar">RG</div>
                         <div class="pick-name">Roberto Garcia</div>
@@ -1129,7 +1573,8 @@
                     </div>
 
                     <!-- Pick 3 -->
-                    <div class="top-pick-card">
+                    <div class="top-pick-card" data-candidate="david-williams" onclick="toggleCandidate(this, event)">
+                        <div class="pick-checkbox"></div>
                         <div class="pick-rank">3</div>
                         <div class="pick-avatar">DW</div>
                         <div class="pick-name">David Williams</div>
@@ -1162,11 +1607,18 @@
             <div class="all-candidates">
                 <h3 class="section-title">All Qualified Candidates (23)</h3>
                 
-                <div class="candidate-row">
+                <div class="candidate-row" data-candidate="michael-johnson" onclick="toggleCandidate(this, event)">
+                    <div class="candidate-checkbox"></div>
                     <div class="candidate-avatar-sm">MJ</div>
                     <div class="candidate-info">
                         <h4>Michael Johnson</h4>
-                        <p>Electrician • 6 yrs • Big Spring, TX</p>
+                        <p>Electrician • 6 yrs</p>
+                    </div>
+                    <div class="candidate-extra">
+                        <span>📍 Big Spring (45 mi)</span>
+                        <span>📱 (432) 555-4567</span>
+                        <span>💰 $42/hr</span>
+                        <span>⏳ 1 week</span>
                     </div>
                     <div class="candidate-compliance">
                         <span class="mini-badge verified">✓</span>
@@ -1174,13 +1626,21 @@
                         <span class="mini-badge verified">✓</span>
                     </div>
                     <span class="candidate-score">85%</span>
+                    <button class="details-btn" onclick="event.stopPropagation(); openCandidatePopup('michael-johnson')" title="View details">ⓘ</button>
                 </div>
 
-                <div class="candidate-row">
+                <div class="candidate-row" data-candidate="thomas-harris" onclick="toggleCandidate(this, event)">
+                    <div class="candidate-checkbox"></div>
                     <div class="candidate-avatar-sm">TH</div>
                     <div class="candidate-info">
                         <h4>Thomas Harris</h4>
-                        <p>Electrician • 9 yrs • Lubbock, TX</p>
+                        <p>Electrician • 9 yrs</p>
+                    </div>
+                    <div class="candidate-extra">
+                        <span>📍 Lubbock (120 mi)</span>
+                        <span>📱 (432) 555-5678</span>
+                        <span>💰 $46/hr</span>
+                        <span>✓ Now</span>
                     </div>
                     <div class="candidate-compliance">
                         <span class="mini-badge verified">✓</span>
@@ -1188,13 +1648,21 @@
                         <span class="mini-badge verified">✓</span>
                     </div>
                     <span class="candidate-score">83%</span>
+                    <button class="details-btn" onclick="event.stopPropagation(); openCandidatePopup('thomas-harris')" title="View details">ⓘ</button>
                 </div>
 
-                <div class="candidate-row">
+                <div class="candidate-row" data-candidate="carlos-ramirez" onclick="toggleCandidate(this, event)">
+                    <div class="candidate-checkbox"></div>
                     <div class="candidate-avatar-sm">CR</div>
                     <div class="candidate-info">
                         <h4>Carlos Ramirez</h4>
-                        <p>Electrician • 5 yrs • Monahans, TX</p>
+                        <p>Electrician • 5 yrs</p>
+                    </div>
+                    <div class="candidate-extra">
+                        <span>📍 Monahans (50 mi)</span>
+                        <span>📱 (432) 555-6789</span>
+                        <span>💰 $40/hr</span>
+                        <span>✓ Now</span>
                     </div>
                     <div class="candidate-compliance">
                         <span class="mini-badge verified">✓</span>
@@ -1202,13 +1670,21 @@
                         <span class="mini-badge verified">✓</span>
                     </div>
                     <span class="candidate-score">81%</span>
+                    <button class="details-btn" onclick="event.stopPropagation(); openCandidatePopup('carlos-ramirez')" title="View details">ⓘ</button>
                 </div>
 
-                <div class="candidate-row">
+                <div class="candidate-row" data-candidate="brian-thompson" onclick="toggleCandidate(this, event)">
+                    <div class="candidate-checkbox"></div>
                     <div class="candidate-avatar-sm">BT</div>
                     <div class="candidate-info">
                         <h4>Brian Thompson</h4>
-                        <p>Electrician • 7 yrs • Pecos, TX</p>
+                        <p>Electrician • 7 yrs</p>
+                    </div>
+                    <div class="candidate-extra">
+                        <span>📍 Pecos (65 mi)</span>
+                        <span>📱 (432) 555-7890</span>
+                        <span>💰 $43/hr</span>
+                        <span>⏳ 2 wks</span>
                     </div>
                     <div class="candidate-compliance">
                         <span class="mini-badge verified">✓</span>
@@ -1216,6 +1692,7 @@
                         <span class="mini-badge verified">✓</span>
                     </div>
                     <span class="candidate-score">79%</span>
+                    <button class="details-btn" onclick="event.stopPropagation(); openCandidatePopup('brian-thompson')" title="View details">ⓘ</button>
                 </div>
 
                 <button class="quick-action secondary" style="width: 100%; margin-top: 0.5rem;">
@@ -1348,7 +1825,238 @@
         </div>
     </div>
 
+    <!-- Selection Bar -->
+    <div class="selection-bar" id="selection-bar">
+        <span class="selection-count"><span id="selected-count">0</span> selected</span>
+        <div class="selection-actions">
+            <button class="selection-btn primary" onclick="window.location.href='outreach-light.html'">
+                📱 Check Availability
+            </button>
+            <button class="selection-btn secondary">📅 Schedule Interviews</button>
+        </div>
+        <button class="selection-clear" onclick="clearSelection()">✕</button>
+    </div>
+
+    <!-- Candidate Detail Popup -->
+    <div class="popup-overlay" id="candidate-popup" onclick="closePopup(event)">
+        <div class="popup-card" onclick="event.stopPropagation()">
+            <button class="popup-close" onclick="closePopup()">✕</button>
+            <div class="popup-header">
+                <div class="popup-avatar" id="popup-avatar">JM</div>
+                <div class="popup-title-area">
+                    <div class="popup-name" id="popup-name">James Mitchell</div>
+                    <div class="popup-subtitle" id="popup-subtitle">Master Electrician • 14 years experience</div>
+                </div>
+                <div class="popup-score" id="popup-score">97%</div>
+            </div>
+            <div class="popup-body">
+                <div class="popup-section">
+                    <div class="popup-section-title">Contact & Availability</div>
+                    <div class="popup-info-grid">
+                        <div class="popup-info-item">
+                            <div class="popup-info-label">Phone</div>
+                            <div class="popup-info-value" id="popup-phone">+1 (432) 555-1234</div>
+                        </div>
+                        <div class="popup-info-item">
+                            <div class="popup-info-label">Location</div>
+                            <div class="popup-info-value" id="popup-location">Odessa, TX (42 mi)</div>
+                        </div>
+                        <div class="popup-info-item">
+                            <div class="popup-info-label">Availability</div>
+                            <div class="popup-info-value" id="popup-availability">Available immediately</div>
+                        </div>
+                        <div class="popup-info-item">
+                            <div class="popup-info-label">Expected Rate</div>
+                            <div class="popup-info-value" id="popup-rate">$52/hr</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="popup-section">
+                    <div class="popup-section-title">Compliance & Certifications</div>
+                    <div class="popup-badges" id="popup-badges">
+                        <span class="popup-badge verified">✓ ISNetworld Verified</span>
+                        <span class="popup-badge verified">✓ Drug Screen Clear</span>
+                        <span class="popup-badge verified">✓ Background Check</span>
+                        <span class="popup-badge verified">✓ OSHA 30</span>
+                        <span class="popup-badge verified">✓ TX Electrician License</span>
+                    </div>
+                </div>
+                <div class="popup-section">
+                    <div class="popup-section-title">Safety Record</div>
+                    <div class="popup-safety-grid">
+                        <div class="popup-safety-item">
+                            <div class="popup-safety-value" id="popup-isn">400285712</div>
+                            <div class="popup-safety-label">ISN ID</div>
+                        </div>
+                        <div class="popup-safety-item">
+                            <div class="popup-safety-value" id="popup-trir">0.0</div>
+                            <div class="popup-safety-label">TRIR</div>
+                        </div>
+                        <div class="popup-safety-item">
+                            <div class="popup-safety-value" id="popup-incidents">0</div>
+                            <div class="popup-safety-label">Incidents</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="popup-actions">
+                <a href="tel:+14325551234" class="popup-btn primary">📞 Call Now</a>
+                <button class="popup-btn secondary" onclick="selectAndClose()">✓ Select Candidate</button>
+            </div>
+        </div>
+    </div>
+
     <script>
+        let selectedCandidates = new Set();
+        let currentPopupCandidate = null;
+
+        // Candidate data
+        const candidateData = {
+            'james-mitchell': {
+                avatar: 'JM', name: 'James Mitchell', title: 'Master Electrician • 14 years experience',
+                score: '97%', phone: '+1 (432) 555-1234', location: 'Odessa, TX (42 mi)',
+                availability: 'Available immediately', rate: '$52/hr',
+                isn: '400285712', trir: '0.0', incidents: '0',
+                badges: ['ISNetworld Verified', 'Drug Screen Clear', 'Background Check', 'OSHA 30', 'TX Electrician License']
+            },
+            'roberto-garcia': {
+                avatar: 'RG', name: 'Roberto Garcia', title: 'Senior Electrician • 11 years experience',
+                score: '94%', phone: '+1 (432) 555-2345', location: 'Midland, TX (8 mi)',
+                availability: 'Available immediately', rate: '$48/hr',
+                isn: '400193845', trir: '0.0', incidents: '0',
+                badges: ['ISNetworld Verified', 'Drug Screen Clear', 'Background Check', 'OSHA 30', 'TX Electrician License']
+            },
+            'david-williams': {
+                avatar: 'DW', name: 'David Williams', title: 'Electrician • 8 years experience',
+                score: '89%', phone: '+1 (432) 555-3456', location: 'Andrews, TX (35 mi)',
+                availability: '2 weeks notice', rate: '$45/hr',
+                isn: '400156723', trir: '0.8', incidents: '1',
+                badges: ['ISNetworld Verified', 'Drug Screen Clear', 'Background Check', 'OSHA 30 (exp 30d)']
+            },
+            'michael-johnson': {
+                avatar: 'MJ', name: 'Michael Johnson', title: 'Electrician • 6 years experience',
+                score: '85%', phone: '+1 (432) 555-4567', location: 'Big Spring, TX (45 mi)',
+                availability: 'Available in 1 week', rate: '$42/hr',
+                isn: '400198234', trir: '0.0', incidents: '0',
+                badges: ['ISNetworld Verified', 'Drug Screen Clear', 'Background Check', 'OSHA 30']
+            },
+            'thomas-harris': {
+                avatar: 'TH', name: 'Thomas Harris', title: 'Electrician • 9 years experience',
+                score: '83%', phone: '+1 (432) 555-5678', location: 'Lubbock, TX (120 mi)',
+                availability: 'Available immediately', rate: '$46/hr',
+                isn: '400176543', trir: '0.2', incidents: '0',
+                badges: ['ISNetworld Verified', 'Drug Screen Clear', 'Background Check', 'OSHA 30', 'TX Electrician License']
+            },
+            'carlos-ramirez': {
+                avatar: 'CR', name: 'Carlos Ramirez', title: 'Electrician • 5 years experience',
+                score: '81%', phone: '+1 (432) 555-6789', location: 'Monahans, TX (50 mi)',
+                availability: 'Available immediately', rate: '$40/hr',
+                isn: '400187654', trir: '0.0', incidents: '0',
+                badges: ['ISNetworld Verified', 'Drug Screen Clear', 'Background Check', 'OSHA 30']
+            },
+            'brian-thompson': {
+                avatar: 'BT', name: 'Brian Thompson', title: 'Electrician • 7 years experience',
+                score: '79%', phone: '+1 (432) 555-7890', location: 'Pecos, TX (65 mi)',
+                availability: 'Available in 2 weeks', rate: '$43/hr',
+                isn: '400165432', trir: '0.4', incidents: '0',
+                badges: ['ISNetworld Verified', 'Drug Screen Clear', 'Background Check', 'OSHA 30']
+            }
+        };
+
+        function openCandidatePopup(candidateId) {
+            const data = candidateData[candidateId];
+            if (!data) return;
+            
+            currentPopupCandidate = candidateId;
+            
+            document.getElementById('popup-avatar').textContent = data.avatar;
+            document.getElementById('popup-name').textContent = data.name;
+            document.getElementById('popup-subtitle').textContent = data.title;
+            document.getElementById('popup-score').textContent = data.score;
+            document.getElementById('popup-phone').textContent = data.phone;
+            document.getElementById('popup-location').textContent = data.location;
+            document.getElementById('popup-availability').textContent = data.availability;
+            document.getElementById('popup-rate').textContent = data.rate;
+            document.getElementById('popup-isn').textContent = data.isn;
+            document.getElementById('popup-trir').textContent = data.trir;
+            document.getElementById('popup-incidents').textContent = data.incidents;
+            
+            // Update badges
+            const badgesHtml = data.badges.map(b => 
+                `<span class="popup-badge ${b.includes('exp') ? 'warning' : 'verified'}">✓ ${b}</span>`
+            ).join('');
+            document.getElementById('popup-badges').innerHTML = badgesHtml;
+            
+            // Update TRIR color
+            const trirEl = document.getElementById('popup-trir');
+            trirEl.className = 'popup-safety-value' + (parseFloat(data.trir) > 0.5 ? ' caution' : '');
+            
+            document.getElementById('candidate-popup').classList.add('visible');
+        }
+
+        function closePopup(event) {
+            if (event && event.target !== event.currentTarget) return;
+            document.getElementById('candidate-popup').classList.remove('visible');
+        }
+
+        function selectAndClose() {
+            if (currentPopupCandidate) {
+                const el = document.querySelector(`[data-candidate="${currentPopupCandidate}"]`);
+                if (el && !selectedCandidates.has(currentPopupCandidate)) {
+                    selectedCandidates.add(currentPopupCandidate);
+                    const checkbox = el.querySelector('.pick-checkbox, .candidate-checkbox');
+                    if (checkbox) checkbox.classList.add('checked');
+                    el.classList.add('selected');
+                    updateSelectionBar();
+                }
+            }
+            closePopup();
+        }
+
+        function toggleCandidate(element, event) {
+            // Don't toggle if clicking on phone link or details button
+            if (event.target.closest('.pick-phone') || event.target.closest('.details-btn')) return;
+            
+            const candidateId = element.dataset.candidate;
+            const checkbox = element.querySelector('.pick-checkbox, .candidate-checkbox');
+            
+            if (selectedCandidates.has(candidateId)) {
+                selectedCandidates.delete(candidateId);
+                checkbox.classList.remove('checked');
+                element.classList.remove('selected');
+            } else {
+                selectedCandidates.add(candidateId);
+                checkbox.classList.add('checked');
+                element.classList.add('selected');
+            }
+            
+            updateSelectionBar();
+        }
+
+        function updateSelectionBar() {
+            const bar = document.getElementById('selection-bar');
+            const count = document.getElementById('selected-count');
+            
+            count.textContent = selectedCandidates.size;
+            
+            if (selectedCandidates.size > 0) {
+                bar.classList.add('visible');
+            } else {
+                bar.classList.remove('visible');
+            }
+        }
+
+        function clearSelection() {
+            selectedCandidates.clear();
+            document.querySelectorAll('.pick-checkbox, .candidate-checkbox').forEach(cb => {
+                cb.classList.remove('checked');
+            });
+            document.querySelectorAll('.top-pick-card, .candidate-row').forEach(el => {
+                el.classList.remove('selected');
+            });
+            updateSelectionBar();
+        }
+
         function showView(view) {
             // Update buttons
             document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));

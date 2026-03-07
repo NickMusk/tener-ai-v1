@@ -307,40 +307,15 @@
             color: var(--accent);
         }
 
-        /* Toggle for detailed */
-        .toggle-detailed {
+        /* Job description section */
+        .jd-section {
             margin-top: 1rem;
-            text-align: center;
-        }
-
-        .toggle-btn {
-            background: none;
-            border: none;
-            color: var(--text-dim);
-            font-family: 'Outfit', sans-serif;
-            font-size: 0.85rem;
-            cursor: pointer;
-            text-decoration: underline;
-        }
-
-        .toggle-btn:hover {
-            color: var(--text-secondary);
-        }
-
-        .detailed-section {
-            display: none;
-            margin-top: 1.5rem;
-            padding-top: 1.5rem;
-            border-top: 1px solid var(--border);
-        }
-
-        .detailed-section.show {
-            display: block;
+            margin-bottom: 1.5rem;
         }
 
         .job-textarea {
             width: 100%;
-            min-height: 100px;
+            min-height: 120px;
             padding: 1rem;
             background: var(--bg-secondary);
             border: 1px solid var(--border);
@@ -766,7 +741,7 @@
         </div>
         <div class="nav-right">
             <div class="theme-toggle">
-                <button class="theme-btn" onclick="window.location.href='index-dark.html'">🌙</button>
+                <button class="theme-btn" onclick="window.location.href='index.html'">🌙</button>
                 <button class="theme-btn active">☀️</button>
             </div>
             <div class="nav-phone">
@@ -832,6 +807,15 @@
                     </select>
                 </div>
 
+                <div class="jd-section">
+                    <label style="display: block; font-size: 0.9rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--text-secondary);">Job Description (optional)</label>
+                    <textarea class="job-textarea" placeholder="Paste full job description or detailed requirements here..."></textarea>
+                    <div class="upload-row">
+                        <button class="upload-btn">📎 Upload JD (PDF/Word)</button>
+                        <button class="upload-btn">🔗 Import from ATS</button>
+                    </div>
+                </div>
+
                 <button class="submit-btn" onclick="window.location.href='searching-light.html'">
                     Find Workers Now
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
@@ -859,21 +843,6 @@
                 <!-- Guarantee -->
                 <div class="guarantee-badge">
                     🛡️ 90-day replacement guarantee — if they don't work out, we find replacement free
-                </div>
-            </div>
-
-            <!-- Toggle for enterprise users -->
-            <div class="toggle-detailed">
-                <button class="toggle-btn" onclick="toggleDetailed()">
-                    Need to paste a job description or upload JD? Click here
-                </button>
-            </div>
-
-            <div class="detailed-section" id="detailed-section">
-                <textarea class="job-textarea" placeholder="Paste job description or detailed requirements here..."></textarea>
-                <div class="upload-row">
-                    <button class="upload-btn">📎 Upload JD (PDF/Word)</button>
-                    <button class="upload-btn">🔗 Import from ATS</button>
                 </div>
             </div>
         </div>
