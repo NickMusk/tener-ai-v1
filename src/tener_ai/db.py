@@ -1488,6 +1488,7 @@ class Database:
         conversation_id: int,
         action_type: str,
         payload: Dict[str, Any],
+        account_id: Optional[int] = None,
         priority: int = 0,
         not_before: Optional[str] = None,
     ) -> int:
@@ -1501,7 +1502,7 @@ class Database:
                     not_before, attempts, account_id, payload_json, result_json, last_error,
                     created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, 'pending', ?, ?, 0, NULL, ?, NULL, NULL, ?, ?)
+                VALUES (?, ?, ?, ?, 'pending', ?, ?, 0, ?, ?, NULL, NULL, ?, ?)
                 """,
                 (
                     job_id,
@@ -1510,12 +1511,73 @@ class Database:
                     action_type,
                     int(priority),
                     due,
+                    int(account_id) if account_id is not None else None,
                     json.dumps(payload or {}),
                     now,
                     now,
                 ),
             )
             return int(cur.lastrowid)
+
+    def summarize_linkedin_account_workload(self, account_ids: List[int]) -> Dict[int, Dict[str, int]]:
+        valid_ids = sorted({int(x) for x in (account_ids or []) if int(x) > 0})
+        if not valid_ids:
+            return {}
+        placeholders = ",".join(["?"] * len(valid_ids))
+        result = {
+            account_id: {
+                "active_conversations": 0,
+                "waiting_connection": 0,
+                "assigned_actions": 0,
+                "total_load": 0,
+            }
+            for account_id in valid_ids
+        }
+        conv_rows = self._conn.execute(
+            f"""
+            SELECT
+                linkedin_account_id AS account_id,
+                SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_conversations,
+                SUM(CASE WHEN status = 'waiting_connection' THEN 1 ELSE 0 END) AS waiting_connection
+            FROM conversations
+            WHERE linkedin_account_id IN ({placeholders})
+              AND status IN ('active', 'waiting_connection')
+            GROUP BY linkedin_account_id
+            """,
+            tuple(valid_ids),
+        ).fetchall()
+        for row in conv_rows:
+            account_id = int(row["account_id"] or 0)
+            if account_id <= 0 or account_id not in result:
+                continue
+            result[account_id]["active_conversations"] = int(row["active_conversations"] or 0)
+            result[account_id]["waiting_connection"] = int(row["waiting_connection"] or 0)
+
+        action_rows = self._conn.execute(
+            f"""
+            SELECT
+                account_id,
+                COUNT(*) AS assigned_actions
+            FROM outbound_actions
+            WHERE account_id IN ({placeholders})
+              AND status IN ('pending', 'running')
+            GROUP BY account_id
+            """,
+            tuple(valid_ids),
+        ).fetchall()
+        for row in action_rows:
+            account_id = int(row["account_id"] or 0)
+            if account_id <= 0 or account_id not in result:
+                continue
+            result[account_id]["assigned_actions"] = int(row["assigned_actions"] or 0)
+
+        for account_id, item in result.items():
+            item["total_load"] = (
+                int(item.get("active_conversations") or 0)
+                + int(item.get("waiting_connection") or 0)
+                + int(item.get("assigned_actions") or 0)
+            )
+        return result
 
     def list_pending_outbound_actions(
         self,

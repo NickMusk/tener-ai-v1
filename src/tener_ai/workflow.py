@@ -397,6 +397,7 @@ class WorkflowService:
         out_items: List[Dict[str, Any]] = []
         conversation_ids: List[int] = []
         queued_action_ids: List[int] = []
+        selection_state = self._build_linkedin_account_selection_state(job_id=job_id)
         failed = 0
         test_filter_skipped = 0
 
@@ -511,7 +512,7 @@ class WorkflowService:
             )
             planned_action_kind = self._planned_action_kind_for_delivery_mode(delivery_mode)
             priority = self._outreach_priority(match=match)
-            action_id = self.db.create_outbound_action(
+            action_id, assigned_account_id = self._queue_managed_outbound_action(
                 job_id=job_id,
                 candidate_id=candidate_id,
                 conversation_id=conversation_id,
@@ -526,6 +527,7 @@ class WorkflowService:
                     "delivery_mode": delivery_mode,
                     "planned_action_kind": planned_action_kind,
                 },
+                selection_state=selection_state,
             )
             queued_action_ids.append(action_id)
             out_items.append(
@@ -540,6 +542,7 @@ class WorkflowService:
                     "delivery_mode": delivery_mode,
                     "planned_action_kind": planned_action_kind,
                     "action_id": action_id,
+                    "linkedin_account_id": assigned_account_id,
                 }
             )
             conversation_ids.append(conversation_id)
@@ -3498,6 +3501,38 @@ class WorkflowService:
             "items": items,
         }
 
+    def _queue_managed_outbound_action(
+        self,
+        *,
+        job_id: int,
+        candidate_id: int,
+        conversation_id: int,
+        action_type: str,
+        payload: Dict[str, Any],
+        priority: int = 0,
+        not_before: str | None = None,
+        selection_state: Dict[str, Any] | None = None,
+    ) -> tuple[int, int | None]:
+        assigned_account_id: int | None = None
+        if self._managed_linkedin_available():
+            account, _ = self._select_linkedin_account_for_new_thread(
+                job_id=job_id,
+                selection_state=selection_state,
+            )
+            if account is not None:
+                assigned_account_id = int(account.get("id") or 0) or None
+        action_id = self.db.create_outbound_action(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            conversation_id=conversation_id,
+            action_type=action_type,
+            payload=payload,
+            account_id=assigned_account_id,
+            priority=priority,
+            not_before=not_before,
+        )
+        return int(action_id), assigned_account_id
+
     def backfill_outreach_for_unassigned_conversations(
         self,
         *,
@@ -3509,6 +3544,7 @@ class WorkflowService:
         queued_action_ids: List[int] = []
         skipped = 0
         items: List[Dict[str, Any]] = []
+        selection_states: Dict[int, Dict[str, Any]] = {}
 
         for row in rows:
             conversation_id = int(row.get("conversation_id") or 0)
@@ -3555,7 +3591,11 @@ class WorkflowService:
                 )
                 continue
 
-            action_id = self.db.create_outbound_action(
+            selection_state = selection_states.setdefault(
+                row_job_id,
+                self._build_linkedin_account_selection_state(job_id=row_job_id),
+            )
+            action_id, assigned_account_id = self._queue_managed_outbound_action(
                 job_id=row_job_id,
                 candidate_id=candidate_id,
                 conversation_id=conversation_id,
@@ -3570,6 +3610,7 @@ class WorkflowService:
                     "planned_action_kind": "message",
                 },
                 priority=0,
+                selection_state=selection_state,
             )
             queued_action_ids.append(int(action_id))
             items.append(
@@ -3578,6 +3619,7 @@ class WorkflowService:
                     "candidate_id": candidate_id,
                     "status": "queued",
                     "action_id": int(action_id),
+                    "linkedin_account_id": assigned_account_id,
                 }
             )
 
@@ -3833,7 +3875,8 @@ class WorkflowService:
         if not planned_action_kind:
             planned_action_kind = self._planned_action_kind_for_delivery_mode(delivery_mode)
 
-        account, selection_error = self._select_linkedin_account_for_new_thread(
+        account, selection_error = self._resolve_linkedin_account_for_outbound_action(
+            row=row,
             job_id=job_id,
             selection_state=selection_state,
         )
@@ -4120,24 +4163,52 @@ class WorkflowService:
         rows, routing_error = self._connected_linkedin_accounts_for_job(job_id=job_id)
         day = self._utc_day_key()
         projected_counts: Dict[int, int] = {}
+        projected_loads: Dict[int, int] = {}
         daily_caps: Dict[int, int] = {}
         normalized_rows: List[Dict[str, Any]] = []
+        account_ids: List[int] = []
         for row in rows:
             account_id = int(row.get("id") or 0)
             if account_id <= 0:
                 continue
+            account_ids.append(account_id)
             counters = self.db.get_linkedin_account_daily_counter(account_id=account_id, day_utc=day)
             projected_counts[account_id] = int(counters.get("new_threads_sent") or 0)
             daily_caps[account_id] = effective_daily_message_limit(row, self.linkedin_outreach_policy)
             normalized_rows.append(row)
+        workloads = self.db.summarize_linkedin_account_workload(account_ids=account_ids)
+        for account_id in account_ids:
+            projected_loads[account_id] = int((workloads.get(account_id) or {}).get("total_load") or 0)
         return {
             "job_id": int(job_id),
             "routing_error": routing_error,
             "rows": normalized_rows,
             "projected_counts": projected_counts,
+            "projected_loads": projected_loads,
             "daily_caps": daily_caps,
             "excluded_account_ids": set(),
         }
+
+    @staticmethod
+    def _find_linkedin_account_in_selection_state(
+        *,
+        selection_state: Dict[str, Any] | None,
+        account_id: int,
+    ) -> Dict[str, Any] | None:
+        if selection_state is None or int(account_id) <= 0:
+            return None
+        rows = selection_state.get("rows") if isinstance(selection_state.get("rows"), list) else []
+        excluded_account_ids = (
+            selection_state.get("excluded_account_ids")
+            if isinstance(selection_state.get("excluded_account_ids"), set)
+            else set()
+        )
+        if int(account_id) in excluded_account_ids:
+            return None
+        for row in rows:
+            if int(row.get("id") or 0) == int(account_id):
+                return row
+        return None
 
     @staticmethod
     def _exclude_linkedin_account_from_selection_state(
@@ -4168,13 +4239,16 @@ class WorkflowService:
         projected_counts = (
             selection_state.get("projected_counts") if isinstance(selection_state.get("projected_counts"), dict) else {}
         )
+        projected_loads = (
+            selection_state.get("projected_loads") if isinstance(selection_state.get("projected_loads"), dict) else {}
+        )
         daily_caps = selection_state.get("daily_caps") if isinstance(selection_state.get("daily_caps"), dict) else {}
         excluded_account_ids = (
             selection_state.get("excluded_account_ids")
             if isinstance(selection_state.get("excluded_account_ids"), set)
             else set()
         )
-        eligible: List[tuple[int, int, Dict[str, Any]]] = []
+        eligible: List[tuple[int, int, int, Dict[str, Any]]] = []
         for row in rows:
             account_id = int(row.get("id") or 0)
             if account_id <= 0:
@@ -4182,17 +4256,40 @@ class WorkflowService:
             if account_id in excluded_account_ids:
                 continue
             sent = int(projected_counts.get(account_id) or 0)
+            load = int(projected_loads.get(account_id) or 0)
             daily_cap = int(daily_caps.get(account_id) or 0)
             if sent >= daily_cap:
                 continue
-            eligible.append((sent, account_id, row))
+            eligible.append((load, sent, account_id, row))
         if not eligible:
             return None, "daily_new_threads_budget_reached"
-        eligible.sort(key=lambda item: (item[0], item[1]))
-        _, selected_account_id, selected_row = eligible[0]
+        eligible.sort(key=lambda item: (item[0], item[1], item[2]))
+        _, _, selected_account_id, selected_row = eligible[0]
         projected_counts[selected_account_id] = int(projected_counts.get(selected_account_id) or 0) + 1
+        projected_loads[selected_account_id] = int(projected_loads.get(selected_account_id) or 0) + 1
         selection_state["projected_counts"] = projected_counts
+        selection_state["projected_loads"] = projected_loads
         return selected_row, None
+
+    def _resolve_linkedin_account_for_outbound_action(
+        self,
+        *,
+        row: Dict[str, Any],
+        job_id: int,
+        selection_state: Dict[str, Any] | None = None,
+    ) -> tuple[Dict[str, Any] | None, str | None]:
+        assigned_account_id = int(row.get("account_id") or 0)
+        if assigned_account_id > 0:
+            assigned = self._find_linkedin_account_in_selection_state(
+                selection_state=selection_state,
+                account_id=assigned_account_id,
+            )
+            if assigned is not None:
+                return assigned, None
+        return self._select_linkedin_account_for_new_thread(
+            job_id=job_id,
+            selection_state=selection_state,
+        )
 
     def preview_linkedin_account_sequence_for_new_threads(
         self,
@@ -4201,46 +4298,37 @@ class WorkflowService:
         slots: int,
     ) -> Dict[str, Any]:
         safe_slots = max(0, min(int(slots or 0), 200))
-        rows, routing_error = self._connected_linkedin_accounts_for_job(job_id=job_id)
+        selection_state = self._build_linkedin_account_selection_state(job_id=job_id)
+        rows = selection_state.get("rows") if isinstance(selection_state.get("rows"), list) else []
+        routing_error = str(selection_state.get("routing_error") or "").strip() or None
         if not rows:
             return {"items": [], "reason": routing_error or "no_connected_account"}
-        day = self._utc_day_key()
-        base_counts: Dict[int, int] = {}
-        caps: Dict[int, int] = {}
-        normalized_rows: Dict[int, Dict[str, Any]] = {}
-        for row in rows:
-            account_id = int(row.get("id") or 0)
-            if account_id <= 0:
-                continue
-            counters = self.db.get_linkedin_account_daily_counter(account_id=account_id, day_utc=day)
-            base_counts[account_id] = int(counters.get("new_threads_sent") or 0)
-            caps[account_id] = int(effective_daily_message_limit(row, self.linkedin_outreach_policy))
-            normalized_rows[account_id] = row
-
         items: List[Dict[str, Any]] = []
-        projected_counts = dict(base_counts)
         reason = "ok"
         for _ in range(safe_slots):
-            eligible: List[tuple[int, int, Dict[str, Any]]] = []
-            for account_id, row in normalized_rows.items():
-                projected = int(projected_counts.get(account_id) or 0)
-                daily_cap = int(caps.get(account_id) or 0)
-                if projected >= daily_cap:
-                    continue
-                eligible.append((projected, account_id, row))
-            if not eligible:
-                reason = "daily_new_threads_budget_reached"
+            row, selection_error = self._select_linkedin_account_for_new_thread(
+                job_id=job_id,
+                selection_state=selection_state,
+            )
+            if row is None:
+                reason = selection_error or "daily_new_threads_budget_reached"
                 break
-            eligible.sort(key=lambda item: (item[0], item[1]))
-            projected, account_id, row = eligible[0]
-            projected_counts[account_id] = projected + 1
+            account_id = int(row.get("id") or 0)
+            projected_counts = (
+                selection_state.get("projected_counts") if isinstance(selection_state.get("projected_counts"), dict) else {}
+            )
+            projected_loads = (
+                selection_state.get("projected_loads") if isinstance(selection_state.get("projected_loads"), dict) else {}
+            )
+            daily_caps = selection_state.get("daily_caps") if isinstance(selection_state.get("daily_caps"), dict) else {}
             items.append(
                 {
                     "account_id": account_id,
                     "label": str(row.get("label") or "").strip() or f"Account {account_id}",
                     "provider_account_id": str(row.get("provider_account_id") or ""),
-                    "daily_cap": int(caps.get(account_id) or 0),
-                    "projected_new_threads_sent": int(projected_counts[account_id]),
+                    "daily_cap": int(daily_caps.get(account_id) or 0),
+                    "projected_new_threads_sent": int(projected_counts.get(account_id) or 0),
+                    "projected_load": int(projected_loads.get(account_id) or 0),
                 }
             )
         return {"items": items, "reason": reason}

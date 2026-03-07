@@ -2348,8 +2348,8 @@
         const jobTitle = escapeHtml(row.job_title || "-");
         const jobLabel = Number(row.job_id || 0) > 0 ? `#${Number(row.job_id || 0)} ${jobTitle}` : jobTitle;
         const lastActivity = formatTimestampCompact(row.last_message_at);
-        const accountLabel = row.likely_account_label
-          ? escapeHtml(String(row.likely_account_label))
+        const accountLabel = row.assigned_account_label
+          ? escapeHtml(String(row.assigned_account_label))
           : Number(row.linkedin_account_id || 0) > 0
             ? escapeHtml(outreachAccountLabel(row.linkedin_account_id))
             : "-";

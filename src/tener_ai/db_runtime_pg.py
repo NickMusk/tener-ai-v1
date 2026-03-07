@@ -978,6 +978,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
         conversation_id: int,
         action_type: str,
         payload: Dict[str, Any],
+        account_id: Optional[int] = None,
         priority: int = 0,
         not_before: Optional[str] = None,
     ) -> int:
@@ -992,7 +993,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                         not_before, attempts, account_id, payload_json, result_json, last_error,
                         created_at, updated_at
                     )
-                    VALUES (%s, %s, %s, %s, 'pending', %s, %s, 0, NULL, %s, NULL, NULL, %s, %s)
+                    VALUES (%s, %s, %s, %s, 'pending', %s, %s, 0, %s, %s, NULL, NULL, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -1002,6 +1003,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                         action_type,
                         int(priority),
                         due,
+                        int(account_id) if account_id is not None else None,
                         self._json(payload or {}),
                         now,
                         now,
@@ -1009,6 +1011,65 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 )
                 row = cur.fetchone()
                 return int(row[0] if row else 0)
+
+    def summarize_linkedin_account_workload(self, account_ids: List[int]) -> Dict[int, Dict[str, int]]:
+        valid_ids = sorted({int(x) for x in (account_ids or []) if int(x) > 0})
+        if not valid_ids:
+            return {}
+        result = {
+            account_id: {
+                "active_conversations": 0,
+                "waiting_connection": 0,
+                "assigned_actions": 0,
+                "total_load": 0,
+            }
+            for account_id in valid_ids
+        }
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        linkedin_account_id AS account_id,
+                        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_conversations,
+                        SUM(CASE WHEN status = 'waiting_connection' THEN 1 ELSE 0 END) AS waiting_connection
+                    FROM conversations
+                    WHERE linkedin_account_id = ANY(%s)
+                      AND status IN ('active', 'waiting_connection')
+                    GROUP BY linkedin_account_id
+                    """,
+                    (valid_ids,),
+                )
+                for row in cur.fetchall():
+                    account_id = int(row["account_id"] or 0)
+                    if account_id <= 0 or account_id not in result:
+                        continue
+                    result[account_id]["active_conversations"] = int(row["active_conversations"] or 0)
+                    result[account_id]["waiting_connection"] = int(row["waiting_connection"] or 0)
+                cur.execute(
+                    """
+                    SELECT
+                        account_id,
+                        COUNT(*) AS assigned_actions
+                    FROM outbound_actions
+                    WHERE account_id = ANY(%s)
+                      AND status IN ('pending', 'running')
+                    GROUP BY account_id
+                    """,
+                    (valid_ids,),
+                )
+                for row in cur.fetchall():
+                    account_id = int(row["account_id"] or 0)
+                    if account_id <= 0 or account_id not in result:
+                        continue
+                    result[account_id]["assigned_actions"] = int(row["assigned_actions"] or 0)
+        for account_id, item in result.items():
+            item["total_load"] = (
+                int(item.get("active_conversations") or 0)
+                + int(item.get("waiting_connection") or 0)
+                + int(item.get("assigned_actions") or 0)
+            )
+        return result
 
     def list_pending_outbound_actions(
         self,

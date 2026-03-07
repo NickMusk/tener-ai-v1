@@ -3364,8 +3364,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "job_id": int(row.get("job_id") or 0),
                 "job_title": str(row.get("job_title") or "").strip() or "-",
                 "linkedin_account_id": account_id or None,
-                "likely_account_id": account_id or None,
-                "likely_account_label": _ensure_account(account_id).get("label") if account_id > 0 else None,
+                "assigned_account_id": account_id or None,
+                "assigned_account_label": _ensure_account(account_id).get("label") if account_id > 0 else None,
                 "last_message_at": row.get("last_message_at"),
             }
             if account_id > 0:
@@ -3604,6 +3604,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "score": float(item.get("score") or 0.0),
                         "last_message_at": item.get("last_message_created_at") or item.get("last_message_at"),
                         "linkedin_account_id": int(item.get("linkedin_account_id") or 0) or None,
+                        "assigned_account_id": None,
+                        "assigned_account_label": None,
                         "planned_action_kind": str(item.get("planned_action_kind") or "connect_request"),
                         "planned_action_label": str(item.get("planned_action_label") or "Connect planned"),
                     }
@@ -3624,27 +3626,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "score": None,
                         "last_message_at": item.get("last_message_at"),
                         "linkedin_account_id": None,
+                        "assigned_account_id": None,
+                        "assigned_account_label": None,
                         "planned_action_kind": "message",
                         "planned_action_label": "Recovery message planned",
                     }
                 )
-            predicted_accounts: List[Dict[str, Any]] = []
-            if workflow is not None and hasattr(workflow, "preview_linkedin_account_sequence_for_new_threads"):
-                preview = workflow.preview_linkedin_account_sequence_for_new_threads(
-                    job_id=row_job_id,
-                    slots=len(job_backlog_rows),
-                )
-                predicted_accounts = preview.get("items") if isinstance(preview.get("items"), list) else []
-            for idx, item in enumerate(job_backlog_rows):
-                predicted = predicted_accounts[idx] if idx < len(predicted_accounts) else {}
-                item["likely_account_id"] = int(predicted.get("account_id") or 0) or None
-                item["likely_account_label"] = str(predicted.get("label") or "").strip() or None
-                if item.get("likely_account_label") and not item.get("planned_action_label"):
-                    planned_kind = str(item.get("planned_action_kind") or "").strip().lower()
-                    if planned_kind == "connect_request":
-                        item["planned_action_label"] = "Connect planned"
-                    elif planned_kind == "message":
-                        item["planned_action_label"] = "Message planned"
+            for item in job_backlog_rows:
                 backlog_rows.append(item)
             backlog_summary["new_threads"] += len(new_thread_candidates)
             backlog_summary["unassigned_recovery"] += len(recovery_candidates)

@@ -126,7 +126,7 @@ class OutboundDispatchTests(unittest.TestCase):
         candidate_id = int(added["added"][0]["candidate_id"])
         return job_id, candidate_id
 
-    def test_dispatch_prefers_least_used_connected_account(self) -> None:
+    def test_queue_assignment_prefers_lower_workload_account(self) -> None:
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "outbound_dispatch.sqlite3"))
             db.init_schema()
@@ -144,12 +144,39 @@ class OutboundDispatchTests(unittest.TestCase):
                 status="connected",
                 connected_at="2025-01-01T00:00:00+00:00",
             )
-            db.increment_linkedin_account_counters(
-                account_id=account_1,
-                day_utc=workflow._utc_day_key(),
-                week_start_utc=workflow._utc_week_start_key(),
-                new_threads_delta=7,
+            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="a")
+            loaded_candidate = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-loaded-a",
+                    "full_name": "Loaded Candidate A",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python"],
+                    "years_experience": 6,
+                    "raw": {},
+                },
+                source="linkedin",
             )
+            loaded_conversation = db.create_conversation(job_id=job_id, candidate_id=loaded_candidate, channel="linkedin")
+            db.set_conversation_linkedin_account(conversation_id=loaded_conversation, account_id=account_1)
+            db.update_conversation_status(conversation_id=loaded_conversation, status="active")
+            waiting_candidate = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-loaded-b",
+                    "full_name": "Loaded Candidate B",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python"],
+                    "years_experience": 6,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+            waiting_conversation = db.create_conversation(job_id=job_id, candidate_id=waiting_candidate, channel="linkedin")
+            db.set_conversation_linkedin_account(conversation_id=waiting_conversation, account_id=account_1)
+            db.update_conversation_status(conversation_id=waiting_conversation, status="waiting_connection")
 
             providers = {
                 "acc-1": _ManagedStubProvider(account_ref="acc-1"),
@@ -157,9 +184,11 @@ class OutboundDispatchTests(unittest.TestCase):
             }
             workflow._build_managed_provider = lambda account_id: providers[str(account_id)]  # type: ignore[method-assign]
 
-            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="a")
             queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
             action_id = int(queued["items"][0]["action_id"])
+            self.assertEqual(int(queued["items"][0].get("linkedin_account_id") or 0), account_2)
+            queued_action = db.get_outbound_action(action_id)
+            self.assertEqual(int(queued_action["account_id"]), account_2)
 
             dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
             self.assertEqual(dispatched["processed"], 1)
@@ -176,6 +205,150 @@ class OutboundDispatchTests(unittest.TestCase):
             conversation = db.get_conversation(conversation_id)
             self.assertEqual(int(conversation["linkedin_account_id"]), account_2)
             self.assertEqual(conversation["status"], "waiting_connection")
+
+    def test_dispatch_uses_preassigned_account_owner(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_dispatch_owner.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            account_1 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-owner-1",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            account_2 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-owner-2",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            providers = {
+                "acc-owner-1": _ManagedStubProvider(account_ref="acc-owner-1"),
+                "acc-owner-2": _ManagedStubProvider(account_ref="acc-owner-2"),
+            }
+            workflow._build_managed_provider = lambda account_id: providers[str(account_id)]  # type: ignore[method-assign]
+
+            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="owner")
+            loaded_candidate = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-owner-load",
+                    "full_name": "Owner Load Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python"],
+                    "years_experience": 6,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+            loaded_conversation = db.create_conversation(job_id=job_id, candidate_id=loaded_candidate, channel="linkedin")
+            db.set_conversation_linkedin_account(conversation_id=loaded_conversation, account_id=account_1)
+            db.update_conversation_status(conversation_id=loaded_conversation, status="active")
+
+            queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            action_id = int(queued["items"][0]["action_id"])
+            queued_action = db.get_outbound_action(action_id)
+            self.assertEqual(int(queued_action["account_id"]), account_2)
+
+            db.update_conversation_status(conversation_id=loaded_conversation, status="closed")
+
+            dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
+            self.assertEqual(dispatched["processed"], 1)
+            self.assertEqual(dispatched["pending_connection"], 1)
+            dispatched_action = db.get_outbound_action(action_id)
+            self.assertEqual(int(dispatched_action["account_id"]), account_2)
+            self.assertEqual(len(providers["acc-owner-1"].connect_messages), 0)
+            self.assertEqual(len(providers["acc-owner-2"].connect_messages), 1)
+
+    def test_recovery_backfill_assigns_owner_from_lower_workload_account(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_dispatch_recovery.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            account_1 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-recovery-1",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            account_2 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-recovery-2",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            providers = {
+                "acc-recovery-1": _ManagedStubProvider(account_ref="acc-recovery-1"),
+                "acc-recovery-2": _ManagedStubProvider(account_ref="acc-recovery-2"),
+            }
+            workflow._build_managed_provider = lambda account_id: providers[str(account_id)]  # type: ignore[method-assign]
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            load_candidate = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-recovery-load",
+                    "full_name": "Recovery Load Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python"],
+                    "years_experience": 6,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+            load_conversation = db.create_conversation(job_id=job_id, candidate_id=load_candidate, channel="linkedin")
+            db.set_conversation_linkedin_account(conversation_id=load_conversation, account_id=account_1)
+            db.update_conversation_status(conversation_id=load_conversation, status="waiting_connection")
+
+            candidate_id = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-recovery-target",
+                    "full_name": "Recovery Target Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python"],
+                    "years_experience": 6,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+            conversation_id = db.create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+            db.update_conversation_status(conversation_id=conversation_id, status="active")
+            db.upsert_pre_resume_session(
+                session_id="pre-recovery-target",
+                conversation_id=conversation_id,
+                job_id=job_id,
+                candidate_id=candidate_id,
+                state={"status": "awaiting_reply", "language": "en"},
+                instruction="",
+            )
+            db.add_message(
+                conversation_id=conversation_id,
+                direction="outbound",
+                content="Following up on your application",
+                candidate_language="en",
+                meta={"delivery_status": "queued"},
+            )
+
+            result = workflow.backfill_outreach_for_unassigned_conversations(job_id=job_id, limit=10)
+            self.assertEqual(int(result["queued"]), 1)
+            self.assertEqual(int(result["dispatched"]["sent"]), 1)
+            self.assertEqual(int(result["items"][0].get("linkedin_account_id") or 0), account_2)
+            action_id = int(result["items"][0]["action_id"])
+            action = db.get_outbound_action(action_id)
+            self.assertEqual(int(action["account_id"]), account_2)
 
     def test_dispatch_records_account_funnel_events_across_connect_and_reply(self) -> None:
         with TemporaryDirectory() as td:
