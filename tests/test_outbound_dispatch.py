@@ -344,11 +344,12 @@ class OutboundDispatchTests(unittest.TestCase):
 
             result = workflow.backfill_outreach_for_unassigned_conversations(job_id=job_id, limit=10)
             self.assertEqual(int(result["queued"]), 1)
-            self.assertEqual(int(result["dispatched"]["sent"]), 1)
+            self.assertEqual(int(result["dispatched"]["pending_connection"]), 1)
             self.assertEqual(int(result["items"][0].get("linkedin_account_id") or 0), account_2)
             action_id = int(result["items"][0]["action_id"])
             action = db.get_outbound_action(action_id)
             self.assertEqual(int(action["account_id"]), account_2)
+            self.assertEqual(str((action.get("result_json") or {}).get("planned_action_kind") or ""), "connect_request")
 
     def test_dispatch_records_account_funnel_events_across_connect_and_reply(self) -> None:
         with TemporaryDirectory() as td:
@@ -673,6 +674,106 @@ class OutboundDispatchTests(unittest.TestCase):
             self.assertEqual(action["status"], "failed")
             self.assertIn("bad parameter", str(action.get("last_error") or ""))
 
+    def test_rebalance_round_robins_connect_capacity_across_auto_jobs(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_rebalance_round_robin.sqlite3"))
+            db.init_schema()
+            policy = {
+                "connect_invites": {"weekly_cap_per_account": 1},
+                "outbound_messages": {"daily_new_threads_per_account": {"max": 30}},
+            }
+            workflow = self._create_workflow(
+                db=db,
+                managed_linkedin_dispatch_inline=False,
+                linkedin_outreach_policy=policy,
+            )
+            account_1 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-rr-1",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            account_2 = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-rr-2",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            providers = {
+                "acc-rr-1": _ManagedStubProvider(account_ref="acc-rr-1", require_connection=True),
+                "acc-rr-2": _ManagedStubProvider(account_ref="acc-rr-2", require_connection=True),
+            }
+            workflow._build_managed_provider = lambda account_id: providers[str(account_id)]  # type: ignore[method-assign]
+
+            job_a = db.insert_job(
+                title="Job A",
+                jd_text="Need Python.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+                linkedin_routing_mode="auto",
+            )
+            job_b = db.insert_job(
+                title="Job B",
+                jd_text="Need Python.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+                linkedin_routing_mode="auto",
+            )
+
+            def _add(job_id: int, suffix: str, score: float) -> int:
+                added = workflow.add_verified_candidates(
+                    job_id=job_id,
+                    verified_items=[
+                        {
+                            "profile": {
+                                "linkedin_id": f"ln-rr-{suffix}",
+                                "full_name": f"RR Candidate {suffix}",
+                                "headline": "Backend Engineer",
+                                "location": "Remote",
+                                "languages": ["en"],
+                                "skills": ["python"],
+                                "years_experience": 6,
+                                "raw": {},
+                            },
+                            "score": score,
+                            "status": "verified",
+                            "notes": {},
+                        }
+                    ],
+                )
+                return int(added["added"][0]["candidate_id"])
+
+            job_a_first = _add(job_a, "a1", 0.95)
+            job_a_second = _add(job_a, "a2", 0.90)
+            job_b_first = _add(job_b, "b1", 0.94)
+            job_b_second = _add(job_b, "b2", 0.89)
+
+            out = workflow.rebalance_outreach_capacity(
+                job_limit=2,
+                candidates_per_job=10,
+                recovery_per_job=10,
+                jobs_scan_limit=10,
+            )
+
+            self.assertEqual(out["status"], "ok")
+            self.assertEqual(int(out["planner"]["connect_capacity_total"] or 0), 2)
+            self.assertEqual(int(out["planner"]["connect_planned"] or 0), 2)
+            self.assertEqual(int(out["totals"]["new_threads_queued"] or 0), 2)
+            self.assertEqual(int(out["totals"]["pending_connection"] or 0), 2)
+
+            job_a_first_match = db.get_candidate_match(job_a, job_a_first)
+            job_a_second_match = db.get_candidate_match(job_a, job_a_second)
+            job_b_first_match = db.get_candidate_match(job_b, job_b_first)
+            job_b_second_match = db.get_candidate_match(job_b, job_b_second)
+            self.assertEqual(str((job_a_first_match or {}).get("status") or ""), "outreach_pending_connection")
+            self.assertEqual(str((job_b_first_match or {}).get("status") or ""), "outreach_pending_connection")
+            self.assertEqual(str((job_a_second_match or {}).get("status") or ""), "verified")
+            self.assertEqual(str((job_b_second_match or {}).get("status") or ""), "verified")
+            self.assertEqual(len(providers["acc-rr-1"].connect_messages), 1)
+            self.assertEqual(len(providers["acc-rr-2"].connect_messages), 1)
+
     def test_outreach_inline_dispatch_error_does_not_fail_entire_step(self) -> None:
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "outbound_inline_dispatch_error.sqlite3"))
@@ -771,20 +872,20 @@ class OutboundDispatchTests(unittest.TestCase):
             self.assertEqual(out["status"], "ok")
             self.assertEqual(out["jobs_selected"], 1)
             self.assertEqual(int(out["jobs"][0]["job_id"]), new_job_id)
-            self.assertEqual(int(out["totals"]["new_threads_queued"]), 1)
+            self.assertEqual(int(out["totals"]["new_threads_queued"]), 2)
             self.assertEqual(int(out["totals"]["sent"]) or 0, 0)
-            self.assertEqual(int(out["totals"]["pending_connection"]) or 0, 1)
+            self.assertEqual(int(out["totals"]["pending_connection"]) or 0, 2)
 
             high_match = db.get_candidate_match(new_job_id, high_candidate)
             low_match = db.get_candidate_match(new_job_id, low_candidate)
             old_match = db.get_candidate_match(old_job_id, old_candidate)
             manual_match = db.get_candidate_match(manual_job_id, manual_candidate)
             self.assertEqual(str((high_match or {}).get("status") or ""), "outreach_pending_connection")
-            self.assertEqual(str((low_match or {}).get("status") or ""), "verified")
+            self.assertEqual(str((low_match or {}).get("status") or ""), "outreach_pending_connection")
             self.assertEqual(str((old_match or {}).get("status") or ""), "verified")
             self.assertEqual(str((manual_match or {}).get("status") or ""), "verified")
             self.assertEqual(len(provider.sent_messages), 0)
-            self.assertEqual(len(provider.connect_messages), 1)
+            self.assertEqual(len(provider.connect_messages), 2)
 
 
 if __name__ == "__main__":

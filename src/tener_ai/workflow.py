@@ -388,7 +388,14 @@ class WorkflowService:
                 "instruction": self.stage_instructions.get("outreach", ""),
             }
 
-    def _outreach_candidates_managed(self, job_id: int, candidate_ids: List[int], test_mode: bool | None = None) -> Dict[str, Any]:
+    def _outreach_candidates_managed(
+        self,
+        job_id: int,
+        candidate_ids: List[int],
+        test_mode: bool | None = None,
+        selection_state_override: Dict[str, Any] | None = None,
+        dispatch_inline_override: bool | None = None,
+    ) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
         forced_identifiers = self._load_forced_test_identifiers()
         forced_lookup = self._build_forced_identifier_lookup(job=job, forced_identifiers=forced_identifiers)
@@ -397,7 +404,7 @@ class WorkflowService:
         out_items: List[Dict[str, Any]] = []
         conversation_ids: List[int] = []
         queued_action_ids: List[int] = []
-        selection_state = self._build_linkedin_account_selection_state(job_id=job_id)
+        selection_state = selection_state_override or self._build_linkedin_account_selection_state(job_id=job_id)
         failed = 0
         test_filter_skipped = 0
 
@@ -547,10 +554,11 @@ class WorkflowService:
             )
             conversation_ids.append(conversation_id)
 
+        dispatch_inline = self.managed_linkedin_dispatch_inline if dispatch_inline_override is None else bool(dispatch_inline_override)
         sent = 0
         pending_connection = 0
         dispatch_error = None
-        if self.managed_linkedin_dispatch_inline and queued_action_ids:
+        if dispatch_inline and queued_action_ids:
             try:
                 dispatched = self.dispatch_outbound_actions(limit=len(queued_action_ids), action_ids=queued_action_ids, job_id=job_id)
             except Exception as exc:
@@ -3514,10 +3522,12 @@ class WorkflowService:
         selection_state: Dict[str, Any] | None = None,
     ) -> tuple[int, int | None]:
         assigned_account_id: int | None = None
+        planned_action_kind = str(payload.get("planned_action_kind") or "").strip().lower() or "connect_request"
         if self._managed_linkedin_available():
             account, _ = self._select_linkedin_account_for_new_thread(
                 job_id=job_id,
                 selection_state=selection_state,
+                planned_action_kind=planned_action_kind,
             )
             if account is not None:
                 assigned_account_id = int(account.get("id") or 0) or None
@@ -3533,6 +3543,80 @@ class WorkflowService:
         )
         return int(action_id), assigned_account_id
 
+    def _queue_recovery_outbound_action(
+        self,
+        *,
+        row: Dict[str, Any],
+        selection_state: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        conversation_id = int(row.get("conversation_id") or 0)
+        candidate_id = int(row.get("candidate_id") or 0)
+        row_job_id = int(row.get("job_id") or 0)
+        pre_resume_session_id = str(row.get("pre_resume_session_id") or "").strip() or None
+        message = str(row.get("last_outbound_message") or "").strip()
+        language = str(row.get("last_outbound_language") or "").strip().lower() or "en"
+        raw_meta = row.get("last_outbound_meta")
+        last_meta: Dict[str, Any] = {}
+        if isinstance(raw_meta, dict):
+            last_meta = raw_meta
+        elif isinstance(raw_meta, str):
+            try:
+                parsed = json.loads(raw_meta)
+                if isinstance(parsed, dict):
+                    last_meta = parsed
+            except json.JSONDecodeError:
+                last_meta = {}
+
+        if not message:
+            return {
+                "conversation_id": conversation_id,
+                "candidate_id": candidate_id,
+                "status": "skipped",
+                "reason": "no_last_outbound_message",
+            }
+
+        delivery = last_meta.get("delivery") if isinstance(last_meta.get("delivery"), dict) else {}
+        connect_request = last_meta.get("connect_request") if isinstance(last_meta.get("connect_request"), dict) else {}
+        if bool(delivery.get("sent")) or bool(connect_request.get("sent")):
+            return {
+                "conversation_id": conversation_id,
+                "candidate_id": candidate_id,
+                "status": "skipped",
+                "reason": "invite_or_delivery_already_sent",
+            }
+
+        conversation = self.db.get_conversation(conversation_id)
+        delivery_mode = self._determine_initial_outreach_delivery_mode(
+            action_type="pre_resume_recovery",
+            conversation=conversation,
+        )
+        planned_action_kind = self._planned_action_kind_for_delivery_mode(delivery_mode)
+        action_id, assigned_account_id = self._queue_managed_outbound_action(
+            job_id=row_job_id,
+            candidate_id=candidate_id,
+            conversation_id=conversation_id,
+            action_type="pre_resume_recovery",
+            payload={
+                "message": message,
+                "language": language,
+                "request_resume": bool(last_meta.get("request_resume")),
+                "screening_status": str(last_meta.get("screening_status") or ""),
+                "pre_resume_session_id": pre_resume_session_id,
+                "delivery_mode": delivery_mode,
+                "planned_action_kind": planned_action_kind,
+            },
+            priority=0,
+            selection_state=selection_state,
+        )
+        return {
+            "conversation_id": conversation_id,
+            "candidate_id": candidate_id,
+            "status": "queued",
+            "action_id": int(action_id),
+            "linkedin_account_id": assigned_account_id,
+            "planned_action_kind": planned_action_kind,
+        }
+
     def backfill_outreach_for_unassigned_conversations(
         self,
         *,
@@ -3547,81 +3631,17 @@ class WorkflowService:
         selection_states: Dict[int, Dict[str, Any]] = {}
 
         for row in rows:
-            conversation_id = int(row.get("conversation_id") or 0)
-            candidate_id = int(row.get("candidate_id") or 0)
             row_job_id = int(row.get("job_id") or 0)
-            pre_resume_session_id = str(row.get("pre_resume_session_id") or "").strip() or None
-            message = str(row.get("last_outbound_message") or "").strip()
-            language = str(row.get("last_outbound_language") or "").strip().lower() or "en"
-            raw_meta = row.get("last_outbound_meta")
-            last_meta: Dict[str, Any] = {}
-            if isinstance(raw_meta, dict):
-                last_meta = raw_meta
-            elif isinstance(raw_meta, str):
-                try:
-                    parsed = json.loads(raw_meta)
-                    if isinstance(parsed, dict):
-                        last_meta = parsed
-                except json.JSONDecodeError:
-                    last_meta = {}
-
-            if not message:
-                skipped += 1
-                items.append(
-                    {
-                        "conversation_id": conversation_id,
-                        "candidate_id": candidate_id,
-                        "status": "skipped",
-                        "reason": "no_last_outbound_message",
-                    }
-                )
-                continue
-
-            delivery = last_meta.get("delivery") if isinstance(last_meta.get("delivery"), dict) else {}
-            connect_request = last_meta.get("connect_request") if isinstance(last_meta.get("connect_request"), dict) else {}
-            if bool(delivery.get("sent")) or bool(connect_request.get("sent")):
-                skipped += 1
-                items.append(
-                    {
-                        "conversation_id": conversation_id,
-                        "candidate_id": candidate_id,
-                        "status": "skipped",
-                        "reason": "invite_or_delivery_already_sent",
-                    }
-                )
-                continue
-
             selection_state = selection_states.setdefault(
                 row_job_id,
                 self._build_linkedin_account_selection_state(job_id=row_job_id),
             )
-            action_id, assigned_account_id = self._queue_managed_outbound_action(
-                job_id=row_job_id,
-                candidate_id=candidate_id,
-                conversation_id=conversation_id,
-                action_type="pre_resume_recovery",
-                payload={
-                    "message": message,
-                    "language": language,
-                    "request_resume": bool(last_meta.get("request_resume")),
-                    "screening_status": str(last_meta.get("screening_status") or ""),
-                    "pre_resume_session_id": pre_resume_session_id,
-                    "delivery_mode": "message_first",
-                    "planned_action_kind": "message",
-                },
-                priority=0,
-                selection_state=selection_state,
-            )
-            queued_action_ids.append(int(action_id))
-            items.append(
-                {
-                    "conversation_id": conversation_id,
-                    "candidate_id": candidate_id,
-                    "status": "queued",
-                    "action_id": int(action_id),
-                    "linkedin_account_id": assigned_account_id,
-                }
-            )
+            item = self._queue_recovery_outbound_action(row=row, selection_state=selection_state)
+            if str(item.get("status") or "") == "queued":
+                queued_action_ids.append(int(item.get("action_id") or 0))
+            else:
+                skipped += 1
+            items.append(item)
 
         dispatch_result: Dict[str, Any] = {
             "processed": 0,
@@ -3703,6 +3723,106 @@ class WorkflowService:
             "result": out,
         }
 
+    def _collect_rebalance_backlog_for_job(
+        self,
+        *,
+        job: Dict[str, Any],
+        candidate_scan_limit: int,
+        recovery_scan_limit: int,
+    ) -> Dict[str, Any]:
+        job_id = int(job.get("job_id") or job.get("id") or 0)
+        if job_id <= 0:
+            return {
+                "job_id": 0,
+                "job_title": str(job.get("job_title") or job.get("title") or "").strip() or "-",
+                "connect_items": [],
+                "message_items": [],
+                "new_thread_backlog": 0,
+                "recovery_backlog": 0,
+            }
+        connect_items: List[Dict[str, Any]] = []
+        message_items: List[Dict[str, Any]] = []
+        new_thread_rows = self.db.list_job_outreach_candidates(job_id=job_id, limit=max(1, min(candidate_scan_limit, 1000)))
+        for row in new_thread_rows:
+            if str(row.get("current_status_key") or "").strip().lower() != "added":
+                continue
+            candidate_id = int(row.get("candidate_id") or 0)
+            if candidate_id <= 0:
+                continue
+            connect_items.append(
+                {
+                    "item_type": "new_thread",
+                    "job_id": job_id,
+                    "job_title": str(row.get("job_title") or job.get("job_title") or job.get("title") or "").strip() or "-",
+                    "candidate_id": candidate_id,
+                    "score": float(row.get("score") or 0.0),
+                }
+            )
+
+        recovery_rows = self.db.list_unassigned_outreach_conversations(
+            limit=max(1, min(recovery_scan_limit, 1000)),
+            job_id=job_id,
+        )
+        for row in recovery_rows:
+            conversation = self.db.get_conversation(int(row.get("conversation_id") or 0))
+            delivery_mode = self._determine_initial_outreach_delivery_mode(
+                action_type="pre_resume_recovery",
+                conversation=conversation,
+            )
+            item = {
+                "item_type": "recovery",
+                "job_id": job_id,
+                "job_title": str(row.get("job_title") or job.get("job_title") or job.get("title") or "").strip() or "-",
+                "candidate_id": int(row.get("candidate_id") or 0),
+                "conversation_id": int(row.get("conversation_id") or 0),
+                "row": row,
+            }
+            if delivery_mode == "connect_first":
+                connect_items.append(item)
+            else:
+                message_items.append(item)
+
+        connect_items.sort(key=lambda item: (0 if item.get("item_type") == "recovery" else 1, -float(item.get("score") or 0.0)))
+        return {
+            "job_id": job_id,
+            "job_title": str(job.get("job_title") or job.get("title") or "").strip() or "-",
+            "connect_items": connect_items,
+            "message_items": message_items,
+            "new_thread_backlog": len([item for item in connect_items if item.get("item_type") == "new_thread"]),
+            "recovery_backlog": len(recovery_rows),
+        }
+
+    @staticmethod
+    def _allocate_backlog_round_robin(
+        *,
+        job_queues: Dict[int, List[Dict[str, Any]]],
+        total_slots: int,
+    ) -> List[Dict[str, Any]]:
+        remaining_slots = max(0, int(total_slots or 0))
+        if remaining_slots <= 0:
+            return []
+        queues: Dict[int, List[Dict[str, Any]]] = {
+            int(job_id): list(items)
+            for job_id, items in (job_queues or {}).items()
+            if int(job_id) > 0 and isinstance(items, list) and items
+        }
+        ordered_job_ids = [job_id for job_id in sorted(queues.keys()) if queues.get(job_id)]
+        out: List[Dict[str, Any]] = []
+        while remaining_slots > 0 and ordered_job_ids:
+            next_round: List[int] = []
+            for job_id in ordered_job_ids:
+                queue = queues.get(job_id) or []
+                if not queue:
+                    continue
+                out.append(queue.pop(0))
+                remaining_slots -= 1
+                if queue:
+                    next_round.append(job_id)
+                if remaining_slots <= 0:
+                    break
+            ordered_job_ids = next_round
+        return out
+
     def rebalance_outreach_capacity(
         self,
         *,
@@ -3725,7 +3845,62 @@ class WorkflowService:
             limit_jobs=job_limit,
             scan_limit=jobs_scan_limit,
         )
+        if not selected_jobs:
+            return {
+                "status": "ok",
+                "reason": "no_open_backlog",
+                "jobs_scanned": 0,
+                "jobs_selected": 0,
+                "jobs": [],
+                "totals": {
+                    "new_threads_queued": 0,
+                    "recovery_queued": 0,
+                    "sent": 0,
+                    "pending_connection": 0,
+                    "failed": 0,
+                    "deferred": 0,
+                },
+            }
+
+        shared_selection_state = self._build_linkedin_account_selection_state(job_id=int(selected_jobs[0].get("job_id") or 0))
+        connect_capacity_total = sum(
+            int(value or 0)
+            for value in (
+                shared_selection_state.get("projected_connect_remaining")
+                if isinstance(shared_selection_state.get("projected_connect_remaining"), dict)
+                else {}
+            ).values()
+        )
+        message_capacity_total = 0
+        projected_counts = (
+            shared_selection_state.get("projected_counts") if isinstance(shared_selection_state.get("projected_counts"), dict) else {}
+        )
+        daily_caps = shared_selection_state.get("daily_caps") if isinstance(shared_selection_state.get("daily_caps"), dict) else {}
+        for account_id, daily_cap in daily_caps.items():
+            message_capacity_total += max(0, int(daily_cap or 0) - int(projected_counts.get(account_id) or 0))
+
+        candidate_scan_limit = max(1, min(max(int(candidates_per_job or 0), 500), 1000))
+        recovery_scan_limit = max(1, min(max(int(recovery_per_job or 0), 500), 1000))
+        backlog_by_job: Dict[int, Dict[str, Any]] = {}
+        connect_job_queues: Dict[int, List[Dict[str, Any]]] = {}
+        message_job_queues: Dict[int, List[Dict[str, Any]]] = {}
+        for job in selected_jobs:
+            backlog = self._collect_rebalance_backlog_for_job(
+                job=job,
+                candidate_scan_limit=candidate_scan_limit,
+                recovery_scan_limit=recovery_scan_limit,
+            )
+            job_id = int(backlog.get("job_id") or 0)
+            if job_id <= 0:
+                continue
+            backlog_by_job[job_id] = backlog
+            connect_job_queues[job_id] = list(backlog.get("connect_items") or [])
+            message_job_queues[job_id] = list(backlog.get("message_items") or [])
+
+        connect_plan = self._allocate_backlog_round_robin(job_queues=connect_job_queues, total_slots=connect_capacity_total)
+        message_plan = self._allocate_backlog_round_robin(job_queues=message_job_queues, total_slots=message_capacity_total)
         job_results: List[Dict[str, Any]] = []
+        job_results_map: Dict[int, Dict[str, Any]] = {}
         totals = {
             "new_threads_queued": 0,
             "recovery_queued": 0,
@@ -3734,60 +3909,104 @@ class WorkflowService:
             "failed": 0,
             "deferred": 0,
         }
+        queued_action_ids: List[int] = []
 
         for job in selected_jobs:
             row_job_id = int(job.get("job_id") or 0)
+            backlog = backlog_by_job.get(row_job_id) or {}
+            job_results_map[row_job_id] = {
+                "job_id": row_job_id,
+                "job_title": backlog.get("job_title") or job.get("job_title"),
+                "new_thread_backlog": int(backlog.get("new_thread_backlog") or 0),
+                "recovery_backlog": int(backlog.get("recovery_backlog") or 0),
+                "new_threads": {"queued": 0, "candidate_ids": [], "action_ids": [], "items": []},
+                "recovery": {"queued": 0, "action_ids": [], "items": []},
+            }
+
+        for planned_item in connect_plan + message_plan:
+            row_job_id = int(planned_item.get("job_id") or 0)
             if row_job_id <= 0:
                 continue
-            queued = self.queue_job_outreach_candidates(job_id=row_job_id, limit=candidates_per_job)
-            action_ids = [int(x) for x in (queued.get("action_ids") or []) if int(x) > 0]
-            dispatched: Dict[str, Any] = {
-                "processed": 0,
-                "sent": 0,
-                "pending_connection": 0,
-                "failed": 0,
-                "deferred": 0,
-                "items": [],
-            }
-            if action_ids:
-                dispatched = self.dispatch_outbound_actions(
-                    limit=max(len(action_ids), 1),
-                    action_ids=action_ids,
-                    job_id=row_job_id,
-                )
-            recovery = self.backfill_outreach_for_unassigned_conversations(
-                job_id=row_job_id,
-                limit=recovery_per_job,
-            )
-
-            totals["new_threads_queued"] += int(queued.get("queued") or 0)
-            totals["recovery_queued"] += int(recovery.get("queued") or 0)
-            totals["sent"] += int(dispatched.get("sent") or 0) + int((recovery.get("dispatched") or {}).get("sent") or 0)
-            totals["pending_connection"] += int(dispatched.get("pending_connection") or 0) + int(
-                (recovery.get("dispatched") or {}).get("pending_connection") or 0
-            )
-            totals["failed"] += int(dispatched.get("failed") or 0) + int((recovery.get("dispatched") or {}).get("failed") or 0)
-            totals["deferred"] += int(dispatched.get("deferred") or 0) + int(
-                (recovery.get("dispatched") or {}).get("deferred") or 0
-            )
-            job_results.append(
+            job_bucket = job_results_map.setdefault(
+                row_job_id,
                 {
                     "job_id": row_job_id,
-                    "job_title": job.get("job_title"),
-                    "new_thread_backlog": int(job.get("new_thread_backlog") or 0),
-                    "recovery_backlog": int(job.get("recovery_backlog") or 0),
-                    "new_threads": queued,
-                    "new_threads_dispatched": dispatched,
-                    "recovery": recovery,
-                }
+                    "job_title": planned_item.get("job_title"),
+                    "new_thread_backlog": 0,
+                    "recovery_backlog": 0,
+                    "new_threads": {"queued": 0, "candidate_ids": [], "action_ids": [], "items": []},
+                    "recovery": {"queued": 0, "action_ids": [], "items": []},
+                },
             )
+            if str(planned_item.get("item_type") or "") == "new_thread":
+                candidate_id = int(planned_item.get("candidate_id") or 0)
+                if candidate_id <= 0:
+                    continue
+                out = self._outreach_candidates_managed(
+                    job_id=row_job_id,
+                    candidate_ids=[candidate_id],
+                    selection_state_override=shared_selection_state,
+                    dispatch_inline_override=False,
+                )
+                action_ids = [
+                    int(item.get("action_id") or 0)
+                    for item in (out.get("items") or [])
+                    if isinstance(item, dict) and int(item.get("action_id") or 0) > 0
+                ]
+                queued_action_ids.extend(action_ids)
+                job_bucket["new_threads"]["queued"] += len(action_ids)
+                job_bucket["new_threads"]["candidate_ids"].append(candidate_id)
+                job_bucket["new_threads"]["action_ids"].extend(action_ids)
+                job_bucket["new_threads"]["items"].extend(out.get("items") or [])
+                totals["new_threads_queued"] += len(action_ids)
+            else:
+                queued = self._queue_recovery_outbound_action(
+                    row=planned_item.get("row") if isinstance(planned_item.get("row"), dict) else {},
+                    selection_state=shared_selection_state,
+                )
+                if str(queued.get("status") or "") != "queued":
+                    continue
+                action_id = int(queued.get("action_id") or 0)
+                if action_id <= 0:
+                    continue
+                queued_action_ids.append(action_id)
+                job_bucket["recovery"]["queued"] += 1
+                job_bucket["recovery"]["action_ids"].append(action_id)
+                job_bucket["recovery"]["items"].append(queued)
+                totals["recovery_queued"] += 1
+
+        dispatched: Dict[str, Any] = {
+            "processed": 0,
+            "sent": 0,
+            "pending_connection": 0,
+            "failed": 0,
+            "deferred": 0,
+            "items": [],
+        }
+        if queued_action_ids:
+            dispatched = self.dispatch_outbound_actions(
+                limit=max(len(queued_action_ids), 1),
+                action_ids=queued_action_ids,
+            )
+        totals["sent"] += int(dispatched.get("sent") or 0)
+        totals["pending_connection"] += int(dispatched.get("pending_connection") or 0)
+        totals["failed"] += int(dispatched.get("failed") or 0)
+        totals["deferred"] += int(dispatched.get("deferred") or 0)
+        job_results = [job_results_map[job_id] for job_id in sorted(job_results_map.keys())]
 
         return {
             "status": "ok",
-            "reason": "rebalanced",
+            "reason": "planned_and_dispatched",
             "jobs_scanned": len(selected_jobs),
             "jobs_selected": len(job_results),
             "jobs": job_results,
+            "dispatched": dispatched,
+            "planner": {
+                "connect_capacity_total": connect_capacity_total,
+                "message_capacity_total": message_capacity_total,
+                "connect_planned": len(connect_plan),
+                "message_planned": len(message_plan),
+            },
             "totals": totals,
         }
 
@@ -3879,6 +4098,7 @@ class WorkflowService:
             row=row,
             job_id=job_id,
             selection_state=selection_state,
+            planned_action_kind=planned_action_kind,
         )
         if not account:
             retry_at = (datetime.now(timezone.utc) + timedelta(minutes=20)).isoformat()
@@ -4162,8 +4382,10 @@ class WorkflowService:
     def _build_linkedin_account_selection_state(self, *, job_id: int) -> Dict[str, Any]:
         rows, routing_error = self._connected_linkedin_accounts_for_job(job_id=job_id)
         day = self._utc_day_key()
+        week_start = self._utc_week_start_key()
         projected_counts: Dict[int, int] = {}
         projected_loads: Dict[int, int] = {}
+        projected_connect_remaining: Dict[int, int] = {}
         daily_caps: Dict[int, int] = {}
         normalized_rows: List[Dict[str, Any]] = []
         account_ids: List[int] = []
@@ -4173,8 +4395,14 @@ class WorkflowService:
                 continue
             account_ids.append(account_id)
             counters = self.db.get_linkedin_account_daily_counter(account_id=account_id, day_utc=day)
+            weekly_counters = self.db.get_linkedin_account_weekly_counter(account_id=account_id, week_start_utc=week_start)
             projected_counts[account_id] = int(counters.get("new_threads_sent") or 0)
             daily_caps[account_id] = effective_daily_message_limit(row, self.linkedin_outreach_policy)
+            projected_connect_remaining[account_id] = self._remaining_connect_capacity(
+                account=row,
+                daily_counters=counters,
+                weekly_counters=weekly_counters,
+            )
             normalized_rows.append(row)
         workloads = self.db.summarize_linkedin_account_workload(account_ids=account_ids)
         for account_id in account_ids:
@@ -4185,6 +4413,7 @@ class WorkflowService:
             "rows": normalized_rows,
             "projected_counts": projected_counts,
             "projected_loads": projected_loads,
+            "projected_connect_remaining": projected_connect_remaining,
             "daily_caps": daily_caps,
             "excluded_account_ids": set(),
         }
@@ -4229,6 +4458,7 @@ class WorkflowService:
         *,
         job_id: int,
         selection_state: Dict[str, Any] | None = None,
+        planned_action_kind: str | None = None,
     ) -> tuple[Dict[str, Any] | None, str | None]:
         if selection_state is None:
             selection_state = self._build_linkedin_account_selection_state(job_id=job_id)
@@ -4236,11 +4466,17 @@ class WorkflowService:
         routing_error = str(selection_state.get("routing_error") or "").strip() or None
         if not rows:
             return None, routing_error or "no_connected_account"
+        normalized_kind = str(planned_action_kind or "").strip().lower() or "connect_request"
         projected_counts = (
             selection_state.get("projected_counts") if isinstance(selection_state.get("projected_counts"), dict) else {}
         )
         projected_loads = (
             selection_state.get("projected_loads") if isinstance(selection_state.get("projected_loads"), dict) else {}
+        )
+        projected_connect_remaining = (
+            selection_state.get("projected_connect_remaining")
+            if isinstance(selection_state.get("projected_connect_remaining"), dict)
+            else {}
         )
         daily_caps = selection_state.get("daily_caps") if isinstance(selection_state.get("daily_caps"), dict) else {}
         excluded_account_ids = (
@@ -4258,17 +4494,31 @@ class WorkflowService:
             sent = int(projected_counts.get(account_id) or 0)
             load = int(projected_loads.get(account_id) or 0)
             daily_cap = int(daily_caps.get(account_id) or 0)
-            if sent >= daily_cap:
-                continue
+            if normalized_kind == "connect_request":
+                connect_remaining = int(projected_connect_remaining.get(account_id) or 0)
+                if connect_remaining <= 0:
+                    continue
+            else:
+                if sent >= daily_cap:
+                    continue
             eligible.append((load, sent, account_id, row))
         if not eligible:
+            if normalized_kind == "connect_request":
+                return None, "connect_budget_reached"
             return None, "daily_new_threads_budget_reached"
         eligible.sort(key=lambda item: (item[0], item[1], item[2]))
         _, _, selected_account_id, selected_row = eligible[0]
-        projected_counts[selected_account_id] = int(projected_counts.get(selected_account_id) or 0) + 1
+        if normalized_kind == "connect_request":
+            projected_connect_remaining[selected_account_id] = max(
+                0,
+                int(projected_connect_remaining.get(selected_account_id) or 0) - 1,
+            )
+        else:
+            projected_counts[selected_account_id] = int(projected_counts.get(selected_account_id) or 0) + 1
         projected_loads[selected_account_id] = int(projected_loads.get(selected_account_id) or 0) + 1
         selection_state["projected_counts"] = projected_counts
         selection_state["projected_loads"] = projected_loads
+        selection_state["projected_connect_remaining"] = projected_connect_remaining
         return selected_row, None
 
     def _resolve_linkedin_account_for_outbound_action(
@@ -4277,6 +4527,7 @@ class WorkflowService:
         row: Dict[str, Any],
         job_id: int,
         selection_state: Dict[str, Any] | None = None,
+        planned_action_kind: str | None = None,
     ) -> tuple[Dict[str, Any] | None, str | None]:
         assigned_account_id = int(row.get("account_id") or 0)
         if assigned_account_id > 0:
@@ -4289,6 +4540,7 @@ class WorkflowService:
         return self._select_linkedin_account_for_new_thread(
             job_id=job_id,
             selection_state=selection_state,
+            planned_action_kind=planned_action_kind,
         )
 
     def preview_linkedin_account_sequence_for_new_threads(
@@ -4351,19 +4603,29 @@ class WorkflowService:
             return [], "no_connected_accounts"
         return rows, None
 
-    def _can_send_connect_request(self, account: Dict[str, Any]) -> bool:
+    def _remaining_connect_capacity(
+        self,
+        *,
+        account: Dict[str, Any],
+        daily_counters: Dict[str, Any] | None = None,
+        weekly_counters: Dict[str, Any] | None = None,
+    ) -> int:
         account_id = int(account.get("id") or 0)
         if account_id <= 0:
-            return False
-        day = self._utc_day_key()
-        week_start = self._utc_week_start_key()
-        daily = self.db.get_linkedin_account_daily_counter(account_id=account_id, day_utc=day)
-        weekly = self.db.get_linkedin_account_weekly_counter(account_id=account_id, week_start_utc=week_start)
-        daily_connect_sent = int(daily.get("connect_sent") or 0)
-        weekly_connect_sent = int(weekly.get("connect_sent") or 0)
-        weekly_cap = policy_weekly_connect_cap(self.linkedin_outreach_policy)
-        allowed_today = effective_daily_connect_limit(account, self.linkedin_outreach_policy)
-        return weekly_connect_sent < weekly_cap and daily_connect_sent < allowed_today
+            return 0
+        daily = daily_counters or self.db.get_linkedin_account_daily_counter(account_id=account_id, day_utc=self._utc_day_key())
+        weekly = weekly_counters or self.db.get_linkedin_account_weekly_counter(
+            account_id=account_id,
+            week_start_utc=self._utc_week_start_key(),
+        )
+        daily_connect_sent = int((daily or {}).get("connect_sent") or 0)
+        weekly_connect_sent = int((weekly or {}).get("connect_sent") or 0)
+        weekly_cap = self._policy_weekly_connect_cap()
+        allowed_today = self._policy_allowed_connects_today(account)
+        return max(0, min(max(0, weekly_cap - weekly_connect_sent), max(0, allowed_today - daily_connect_sent)))
+
+    def _can_send_connect_request(self, account: Dict[str, Any]) -> bool:
+        return self._remaining_connect_capacity(account=account) > 0
 
     def _increment_managed_account_counters(
         self,
@@ -4391,6 +4653,32 @@ class WorkflowService:
     def _policy_allowed_connects_today(self, account: Dict[str, Any]) -> int:
         return policy_allowed_connects_today(self.linkedin_outreach_policy, account)
 
+    def _conversation_supports_direct_message(self, conversation: Dict[str, Any] | None) -> bool:
+        if not isinstance(conversation, dict):
+            return False
+        if str(conversation.get("external_chat_id") or "").strip():
+            return True
+        conversation_status = str(conversation.get("status") or "").strip().lower()
+        if conversation_status == "active" and int(conversation.get("linkedin_account_id") or 0) > 0:
+            return True
+        conversation_id = int(conversation.get("id") or 0)
+        if conversation_id <= 0:
+            return False
+        for message in self.db.list_messages(conversation_id):
+            if str(message.get("direction") or "").strip().lower() == "inbound":
+                return True
+            meta = message.get("meta") if isinstance(message.get("meta"), dict) else {}
+            if not isinstance(meta, dict):
+                continue
+            delivery = meta.get("delivery") if isinstance(meta.get("delivery"), dict) else {}
+            connect_request = meta.get("connect_request") if isinstance(meta.get("connect_request"), dict) else {}
+            delivery_status = str(meta.get("delivery_status") or "").strip().lower()
+            if bool(delivery.get("sent")) or delivery_status == "sent":
+                return True
+            if bool(connect_request.get("accepted")):
+                return True
+        return False
+
     def _determine_initial_outreach_delivery_mode(
         self,
         *,
@@ -4398,22 +4686,15 @@ class WorkflowService:
         conversation: Dict[str, Any] | None,
     ) -> str:
         normalized_action_type = str(action_type or "").strip().lower()
-        if normalized_action_type == "pre_resume_recovery":
-            return "message_first"
         if not isinstance(conversation, dict):
             return "connect_first"
-        if str(conversation.get("external_chat_id") or "").strip():
+        if self._conversation_supports_direct_message(conversation):
             return "message_first"
         conversation_status = str(conversation.get("status") or "").strip().lower()
         if conversation_status == "waiting_connection":
             return "message_first"
-        if int(conversation.get("linkedin_account_id") or 0) > 0:
-            return "message_first"
-        conversation_id = int(conversation.get("id") or 0)
-        if conversation_id > 0:
-            messages = self.db.list_messages(conversation_id)
-            if messages:
-                return "message_first"
+        if normalized_action_type == "pre_resume_recovery":
+            return "connect_first"
         return "connect_first"
 
     @staticmethod
