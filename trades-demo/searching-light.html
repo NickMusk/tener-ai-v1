@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Finding Your Crew...</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fb;
+            --bg-card: #ffffff;
+            --accent: #0d9488;
+            --accent-light: #14b8a6;
+            --accent-dim: rgba(13, 148, 136, 0.08);
+            --accent-glow: rgba(13, 148, 136, 0.2);
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --text-dim: #9ca3af;
+            --border: #e5e7eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            padding: 1.5rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-icon {
+            width: 32px; height: 32px;
+            background: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-status {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent);
+        }
+
+        .processing-spinner {
+            width: 20px; height: 20px;
+            border: 2px solid var(--accent-dim);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Main container */
+        .search-container {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 8rem 3rem 4rem;
+        }
+
+        /* Job summary card */
+        .job-summary {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 3rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04);
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .job-icon {
+            width: 50px; height: 50px;
+            background: var(--accent-dim);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .job-details h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .job-details p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Main progress area */
+        .progress-area {
+            text-align: center;
+            max-width: 700px;
+            width: 100%;
+        }
+
+        .main-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            color: var(--text-primary);
+            animation: fadeIn 0.5s ease-out 0.1s both;
+        }
+
+        .main-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+            animation: fadeIn 0.5s ease-out 0.2s both;
+        }
+
+        /* AI Activity Feed */
+        .activity-feed {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: left;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+            animation: fadeIn 0.5s ease-out 0.3s both;
+        }
+
+        .feed-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .feed-header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .ai-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: var(--accent-dim);
+            border-radius: 100px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: var(--accent);
+        }
+
+        .pulse-dot {
+            width: 8px; height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(1.2); }
+        }
+
+        .feed-timer {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            color: var(--text-dim);
+        }
+
+        /* Activity items */
+        .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            opacity: 0;
+            animation: slideIn 0.3s ease-out forwards;
+        }
+
+        .activity-item:nth-child(1) { animation-delay: 0.5s; }
+        .activity-item:nth-child(2) { animation-delay: 1.5s; }
+        .activity-item:nth-child(3) { animation-delay: 2.5s; }
+        .activity-item:nth-child(4) { animation-delay: 3s; }
+        .activity-item:nth-child(5) { animation-delay: 4s; }
+        .activity-item:nth-child(6) { animation-delay: 4.5s; }
+        .activity-item:nth-child(7) { animation-delay: 5s; }
+        .activity-item:nth-child(8) { animation-delay: 5.5s; }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .activity-icon {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            flex-shrink: 0;
+        }
+
+        .activity-icon.search { background: rgba(59, 130, 246, 0.1); }
+        .activity-icon.check { background: var(--accent-dim); color: var(--accent); }
+        .activity-icon.ai { background: rgba(139, 92, 246, 0.1); }
+        .activity-icon.filter { background: rgba(245, 158, 11, 0.1); }
+        .activity-icon.flag { background: rgba(239, 68, 68, 0.1); }
+
+        .activity-content {
+            flex: 1;
+        }
+
+        .activity-text {
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            margin-bottom: 0.15rem;
+        }
+
+        .activity-meta {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        /* Progress bar */
+        .progress-container {
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+        }
+
+        .progress-label {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .progress-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent);
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, var(--accent), var(--accent-light));
+            border-radius: 4px;
+            animation: progressGrow 6s ease-out forwards;
+        }
+
+        @keyframes progressGrow {
+            0% { width: 0%; }
+            20% { width: 25%; }
+            40% { width: 50%; }
+            60% { width: 70%; }
+            80% { width: 90%; }
+            100% { width: 100%; }
+        }
+
+        /* Stats preview */
+        .stats-preview {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 1.5rem;
+            opacity: 0;
+            animation: fadeIn 0.5s ease-out 6s forwards;
+        }
+
+        .stat-mini {
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+        }
+
+        .stat-mini-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat-mini-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-top: 0.25rem;
+        }
+
+        /* View results button */
+        .view-results-btn {
+            margin-top: 2rem;
+            padding: 1rem 3rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            opacity: 0;
+            animation: fadeIn 0.5s ease-out 6.5s forwards;
+            transition: all 0.3s ease;
+        }
+
+        .view-results-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px var(--accent-glow);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            nav { padding: 1rem 1.5rem; }
+            .search-container { padding: 6rem 1.5rem 3rem; }
+            .main-title { font-size: 1.8rem; }
+            .activity-feed { padding: 1.5rem; }
+            .stats-preview { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="white" stroke-width="2.5">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+            </div>
+            <span>Tener</span>
+        </div>
+        <div class="nav-status">
+            <div class="processing-spinner"></div>
+            Processing...
+        </div>
+    </nav>
+
+    <main class="search-container">
+        <div class="job-summary">
+            <div class="job-icon">⚡</div>
+            <div class="job-details">
+                <h3>Senior Electrician</h3>
+                <p>Midland, TX • OSHA 30 required • Starting ASAP</p>
+            </div>
+        </div>
+
+        <div class="progress-area">
+            <h1 class="main-title">Finding your crew...</h1>
+            <p class="main-subtitle">AI is scanning our network and external sources</p>
+
+            <div class="activity-feed">
+                <div class="feed-header">
+                    <div class="feed-header-left">
+                        <div class="ai-badge">
+                            <div class="pulse-dot"></div>
+                            AI Agent Active
+                        </div>
+                    </div>
+                    <div class="feed-timer" id="timer">00:00</div>
+                </div>
+
+                <div class="activity-list">
+                    <div class="activity-item">
+                        <div class="activity-icon search">🔍</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Scanning <strong>Indeed</strong> for electricians in Texas...</div>
+                            <div class="activity-meta">Source 1 of 4</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon check">✓</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Found <strong>147</strong> potential matches</div>
+                            <div class="activity-meta">Indeed, LinkedIn, internal database</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon search">🔍</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Verifying <strong>OSHA certifications</strong>...</div>
+                            <div class="activity-meta">Cross-referencing OSHA database</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon check">✓</div>
+                        <div class="activity-content">
+                            <div class="activity-text"><strong>89 candidates</strong> have valid OSHA 30</div>
+                            <div class="activity-meta">58 candidates filtered out</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon ai">🧠</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Analyzing <strong>experience patterns</strong>...</div>
+                            <div class="activity-meta">Matching against job requirements</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon filter">⚡</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Filtering by <strong>location & availability</strong>...</div>
+                            <div class="activity-meta">Within 50 miles of Midland, TX</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon flag">🚩</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Flagged <strong>4 candidates</strong> with expired certifications</div>
+                            <div class="activity-meta">Moved to review queue</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon ai">🧠</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Ranking <strong>23 qualified candidates</strong> by match score...</div>
+                            <div class="activity-meta">Generating shortlist</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="progress-container">
+                    <div class="progress-header">
+                        <span class="progress-label">Processing candidates</span>
+                        <span class="progress-value" id="progress-text">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                </div>
+
+                <div class="stats-preview">
+                    <div class="stat-mini">
+                        <div class="stat-mini-value">147</div>
+                        <div class="stat-mini-label">Scanned</div>
+                    </div>
+                    <div class="stat-mini">
+                        <div class="stat-mini-value">23</div>
+                        <div class="stat-mini-label">Qualified</div>
+                    </div>
+                    <div class="stat-mini">
+                        <div class="stat-mini-value">8</div>
+                        <div class="stat-mini-label">Top matches</div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="view-results-btn" onclick="window.location.href='results-light.html'">
+                View Candidates
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </button>
+        </div>
+    </main>
+
+    <script>
+        // Timer
+        let seconds = 0;
+        const timerEl = document.getElementById('timer');
+        const progressText = document.getElementById('progress-text');
+        const mainTitle = document.querySelector('.main-title');
+        const mainSubtitle = document.querySelector('.main-subtitle');
+        const viewBtn = document.querySelector('.view-results-btn');
+        const aiBadge = document.querySelector('.ai-badge');
+        
+        const timerInterval = setInterval(() => {
+            seconds++;
+            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const secs = (seconds % 60).toString().padStart(2, '0');
+            timerEl.textContent = `${mins}:${secs}`;
+            
+            // Update progress text
+            let progress = Math.min(95, Math.floor(seconds * 15));
+            progressText.textContent = `${progress}%`;
+            
+            if (seconds >= 7) {
+                clearInterval(timerInterval);
+                progressText.textContent = '100%';
+                
+                // Success state
+                mainTitle.innerHTML = '✓ Found 23 qualified workers';
+                mainTitle.style.color = '#0d9488';
+                mainSubtitle.textContent = 'Screened 147 candidates in 2 minutes. Your shortlist is ready.';
+                aiBadge.innerHTML = '<span style="color:#0d9488">✓</span> Complete';
+                aiBadge.style.background = 'rgba(13, 148, 136, 0.15)';
+                
+                // Make button more prominent
+                viewBtn.style.transform = 'scale(1.05)';
+                viewBtn.style.boxShadow = '0 10px 40px rgba(13, 148, 136, 0.3)';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

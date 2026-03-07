@@ -1,0 +1,1378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Your Candidates Are Ready</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fb;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f3f4f6;
+            --accent: #0d9488;
+            --accent-light: #14b8a6;
+            --accent-dim: rgba(13, 148, 136, 0.08);
+            --accent-glow: rgba(13, 148, 136, 0.15);
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --text-dim: #9ca3af;
+            --border: #e5e7eb;
+            --border-strong: #d1d5db;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* Nav */
+        nav {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .logo {
+            font-size: 1.3rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .logo-icon {
+            width: 28px; height: 28px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-job {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.8rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            padding: 0.3rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
+        .theme-btn {
+            padding: 0.3rem 0.5rem;
+            background: transparent;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            cursor: pointer;
+        }
+
+        .theme-btn.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .nav-btn {
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .nav-btn.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        /* Main Layout */
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            min-height: 100vh;
+            padding-top: 56px;
+        }
+
+        /* Left Panel */
+        .left-panel {
+            padding: 1.5rem;
+            overflow-y: auto;
+            max-height: calc(100vh - 56px);
+        }
+
+        /* Success Header */
+        .success-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, var(--accent-dim), rgba(13, 148, 136, 0.03));
+            border: 1px solid rgba(13, 148, 136, 0.2);
+            border-radius: 14px;
+        }
+
+        .success-icon {
+            width: 48px; height: 48px;
+            background: var(--accent);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+        }
+
+        .success-content h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+            color: var(--text-primary);
+        }
+
+        .success-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .success-meta strong {
+            color: var(--accent);
+        }
+
+        /* Quick Actions Bar */
+        .quick-actions-bar {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .quick-action {
+            padding: 0.6rem 1rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: background 0.2s;
+        }
+
+        .quick-action:hover {
+            background: var(--accent-light);
+        }
+
+        .quick-action.secondary {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+        }
+
+        .quick-action.secondary:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        /* View Toggle */
+        .view-toggle {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+            padding: 0.25rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            width: fit-content;
+        }
+
+        .view-btn {
+            padding: 0.5rem 1rem;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .view-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .view-btn.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        /* Pipeline View */
+        .pipeline-view {
+            margin-bottom: 2rem;
+        }
+
+        .pipeline-columns {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 0.75rem;
+        }
+
+        .pipeline-column {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 0.75rem;
+            min-height: 300px;
+        }
+
+        .pipeline-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.75rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .pipeline-header.hired {
+            border-bottom-color: var(--accent);
+        }
+
+        .pipeline-title {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .pipeline-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.75rem;
+            padding: 0.15rem 0.4rem;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            color: var(--text-dim);
+        }
+
+        .pipeline-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .pipeline-card {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: grab;
+            transition: all 0.2s;
+        }
+
+        .pipeline-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 2px 8px var(--accent-dim);
+        }
+
+        .p-avatar {
+            width: 28px; height: 28px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .p-name {
+            flex: 1;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--text-primary);
+        }
+
+        .p-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--accent);
+        }
+
+        .pipeline-more {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            text-align: center;
+            padding: 0.5rem;
+        }
+
+        .pipeline-empty {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            text-align: center;
+            padding: 2rem 0.5rem;
+            border: 1px dashed var(--border);
+            border-radius: 8px;
+        }
+
+        /* Top 3 Picks */
+        .top-picks {
+            margin-bottom: 2rem;
+        }
+
+        .section-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .top-picks-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+        }
+
+        .top-pick-card {
+            background: var(--bg-card);
+            border: 2px solid var(--accent);
+            border-radius: 14px;
+            padding: 1.25rem;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        }
+
+        .top-pick-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 24px var(--accent-dim);
+        }
+
+        .pick-rank {
+            position: absolute;
+            top: -10px;
+            left: -10px;
+            width: 28px; height: 28px;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: white;
+            box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+        }
+
+        .pick-avatar {
+            width: 56px; height: 56px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: var(--accent);
+            margin-bottom: 0.75rem;
+        }
+
+        .pick-name {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+            color: var(--text-primary);
+        }
+
+        .pick-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-bottom: 0.5rem;
+        }
+
+        .pick-meta {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-bottom: 0.75rem;
+        }
+
+        /* Compliance Badges */
+        .compliance-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .compliance-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.2rem;
+            padding: 0.2rem 0.5rem;
+            background: var(--accent-dim);
+            border-radius: 4px;
+            font-size: 0.7rem;
+            color: var(--accent);
+        }
+
+        .compliance-badge.warning {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .compliance-badge.verified {
+            background: var(--accent-dim);
+        }
+
+        /* Safety Row */
+        .safety-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .safety-badge {
+            padding: 0.2rem 0.5rem;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-dim);
+        }
+
+        .safety-badge.good {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .safety-badge.caution {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .pick-score {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .score-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .pick-phone {
+            padding: 0.4rem 0.6rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 0.8rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .pick-phone:hover {
+            background: var(--accent-light);
+        }
+
+        /* All Candidates List */
+        .all-candidates {
+            margin-top: 2rem;
+        }
+
+        .candidate-row {
+            display: grid;
+            grid-template-columns: auto 1fr auto auto;
+            gap: 1rem;
+            align-items: center;
+            padding: 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .candidate-row:hover {
+            border-color: var(--accent);
+            box-shadow: 0 2px 8px var(--accent-dim);
+        }
+
+        .candidate-avatar-sm {
+            width: 40px; height: 40px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .candidate-info h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.15rem;
+            color: var(--text-primary);
+        }
+
+        .candidate-info p {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+
+        .candidate-compliance {
+            display: flex;
+            gap: 0.3rem;
+        }
+
+        .mini-badge {
+            width: 20px; height: 20px;
+            background: var(--accent-dim);
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.65rem;
+        }
+
+        .mini-badge.verified {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .candidate-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        /* Right Panel */
+        .right-panel {
+            background: var(--bg-primary);
+            border-left: 1px solid var(--border);
+            padding: 1.5rem 1rem;
+            overflow-y: auto;
+            max-height: calc(100vh - 56px);
+        }
+
+        .panel-section {
+            margin-bottom: 1.5rem;
+        }
+
+        .panel-title {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            margin-bottom: 0.75rem;
+        }
+
+        /* Summary Card */
+        .summary-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .summary-big {
+            text-align: center;
+            padding-bottom: 0.75rem;
+            margin-bottom: 0.75rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .summary-big .number {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .summary-big .label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .summary-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.4rem 0;
+            font-size: 0.85rem;
+        }
+
+        .summary-row .label {
+            color: var(--text-secondary);
+        }
+
+        .summary-row .value {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-primary);
+        }
+
+        .summary-row .value.accent {
+            color: var(--accent);
+        }
+
+        /* Verification Status */
+        .verification-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .verification-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 0;
+            font-size: 0.85rem;
+        }
+
+        .verification-item:not(:last-child) {
+            border-bottom: 1px solid var(--border);
+        }
+
+        .verification-icon {
+            width: 24px; height: 24px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+        }
+
+        .verification-icon.pass {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .verification-icon.pending {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .verification-label {
+            flex: 1;
+            color: var(--text-secondary);
+        }
+
+        .verification-status {
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .verification-status.pass {
+            color: var(--accent);
+        }
+
+        .verification-status.pending {
+            color: var(--warning);
+        }
+
+        /* Share Panel */
+        .share-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .share-input {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .share-input input {
+            flex: 1;
+            padding: 0.5rem 0.75rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+        }
+
+        .share-input input:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        .share-input button {
+            padding: 0.5rem 0.75rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .share-note {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        /* Diversity Card */
+        .diversity-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+        }
+
+        .diversity-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0;
+        }
+
+        .diversity-label {
+            flex: 0 0 90px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .diversity-bar {
+            flex: 1;
+            height: 6px;
+            background: var(--bg-secondary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .diversity-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 3px;
+        }
+
+        .diversity-value {
+            flex: 0 0 50px;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            text-align: right;
+        }
+
+        .diversity-note {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        /* Account Manager */
+        .am-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .am-avatar {
+            width: 40px; height: 40px;
+            background: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: white;
+            font-size: 0.85rem;
+        }
+
+        .am-info {
+            flex: 1;
+        }
+
+        .am-name {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .am-status {
+            font-size: 0.75rem;
+            color: var(--accent);
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .am-status .dot {
+            width: 6px; height: 6px;
+            background: var(--success);
+            border-radius: 50%;
+        }
+
+        .am-call {
+            padding: 0.5rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 6px;
+            color: white;
+            cursor: pointer;
+            font-size: 1rem;
+            text-decoration: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .main {
+                grid-template-columns: 1fr;
+            }
+            .right-panel {
+                border-left: none;
+                border-top: 1px solid var(--border);
+            }
+            .top-picks-grid {
+                grid-template-columns: 1fr;
+            }
+            .pipeline-columns {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+
+        @media (max-width: 600px) {
+            .left-panel {
+                padding: 1rem;
+            }
+            .success-header {
+                flex-direction: column;
+                text-align: center;
+            }
+            .quick-actions-bar {
+                flex-direction: column;
+            }
+            .quick-action {
+                width: 100%;
+                justify-content: center;
+            }
+            .pipeline-columns {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-left">
+            <a href="index-light.html" class="logo" style="text-decoration: none; color: inherit;">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="white" stroke-width="2.5">
+                        <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                </div>
+                <span>Tener</span>
+            </a>
+            <div class="nav-job">
+                <span>⚡</span>
+                <span>Senior Electrician • Midland, TX</span>
+            </div>
+        </div>
+        <div class="nav-right">
+            <div class="theme-toggle">
+                <button class="theme-btn" onclick="window.location.href='results.html'">🌙</button>
+                <button class="theme-btn active">☀️</button>
+            </div>
+            <button class="nav-btn">📊 Export</button>
+            <button class="nav-btn">🔗 Share</button>
+            <button class="nav-btn primary" onclick="window.location.href='index-light.html'">+ New Search</button>
+        </div>
+    </nav>
+
+    <div class="main">
+        <div class="left-panel">
+            <!-- Success Header -->
+            <div class="success-header">
+                <div class="success-icon">✓</div>
+                <div class="success-content">
+                    <h1>23 Qualified Workers Found</h1>
+                    <div class="success-meta">
+                        <span>Screened <strong>147</strong> in 2 min</span>
+                        <span>•</span>
+                        <span><strong>8</strong> top matches</span>
+                        <span>•</span>
+                        <span>All ISNetworld verified</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="quick-actions-bar">
+                <button class="quick-action">📞 Call Top 3 Now</button>
+                <button class="quick-action secondary">📅 Schedule Interviews</button>
+                <button class="quick-action secondary">📧 Email Shortlist</button>
+                <button class="quick-action secondary">📋 Send to Hiring Manager</button>
+            </div>
+
+            <!-- View Toggle -->
+            <div class="view-toggle">
+                <button class="view-btn active" onclick="showView('cards')">🃏 Cards</button>
+                <button class="view-btn" onclick="showView('pipeline')">📊 Pipeline</button>
+                <button class="view-btn" onclick="showView('list')">📋 List</button>
+            </div>
+
+            <!-- Pipeline View (hidden by default) -->
+            <div class="pipeline-view" id="pipeline-view" style="display: none;">
+                <div class="pipeline-columns">
+                    <div class="pipeline-column">
+                        <div class="pipeline-header">
+                            <span class="pipeline-title">New</span>
+                            <span class="pipeline-count">23</span>
+                        </div>
+                        <div class="pipeline-cards">
+                            <div class="pipeline-card">
+                                <span class="p-avatar">JM</span>
+                                <span class="p-name">James Mitchell</span>
+                                <span class="p-score">97%</span>
+                            </div>
+                            <div class="pipeline-card">
+                                <span class="p-avatar">RG</span>
+                                <span class="p-name">Roberto Garcia</span>
+                                <span class="p-score">94%</span>
+                            </div>
+                            <div class="pipeline-card">
+                                <span class="p-avatar">DW</span>
+                                <span class="p-name">David Williams</span>
+                                <span class="p-score">89%</span>
+                            </div>
+                            <div class="pipeline-more">+20 more</div>
+                        </div>
+                    </div>
+                    <div class="pipeline-column">
+                        <div class="pipeline-header">
+                            <span class="pipeline-title">Screening</span>
+                            <span class="pipeline-count">0</span>
+                        </div>
+                        <div class="pipeline-empty">Drag candidates here</div>
+                    </div>
+                    <div class="pipeline-column">
+                        <div class="pipeline-header">
+                            <span class="pipeline-title">Interview</span>
+                            <span class="pipeline-count">0</span>
+                        </div>
+                        <div class="pipeline-empty">Drag candidates here</div>
+                    </div>
+                    <div class="pipeline-column">
+                        <div class="pipeline-header">
+                            <span class="pipeline-title">Offer</span>
+                            <span class="pipeline-count">0</span>
+                        </div>
+                        <div class="pipeline-empty">Drag candidates here</div>
+                    </div>
+                    <div class="pipeline-column">
+                        <div class="pipeline-header hired">
+                            <span class="pipeline-title">Hired</span>
+                            <span class="pipeline-count">0</span>
+                        </div>
+                        <div class="pipeline-empty">Drag candidates here</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Top 3 Picks -->
+            <div class="top-picks">
+                <h3 class="section-title">🏆 Top 3 Picks — Start Here</h3>
+                <div class="top-picks-grid">
+                    <!-- Pick 1 -->
+                    <div class="top-pick-card">
+                        <div class="pick-rank">1</div>
+                        <div class="pick-avatar">JM</div>
+                        <div class="pick-name">James Mitchell</div>
+                        <div class="pick-title">Master Electrician • 14 yrs</div>
+                        <div class="pick-meta">
+                            <span>📍 Odessa, TX (42 mi)</span>
+                            <span>💰 Expects $52/hr</span>
+                            <span>✓ Available now</span>
+                        </div>
+                        <div class="compliance-row">
+                            <span class="compliance-badge verified">✓ ISN</span>
+                            <span class="compliance-badge verified">✓ Drug</span>
+                            <span class="compliance-badge verified">✓ BG</span>
+                            <span class="compliance-badge verified">✓ OSHA30</span>
+                        </div>
+                        <div class="safety-row">
+                            <span class="safety-badge">ISN: 400285712</span>
+                            <span class="safety-badge good">TRIR: 0.0</span>
+                            <span class="safety-badge good">0 incidents</span>
+                        </div>
+                        <div class="pick-score">
+                            <span class="score-badge">97%</span>
+                            <a href="tel:+14325551234" class="pick-phone">📞 Call</a>
+                        </div>
+                    </div>
+
+                    <!-- Pick 2 -->
+                    <div class="top-pick-card">
+                        <div class="pick-rank">2</div>
+                        <div class="pick-avatar">RG</div>
+                        <div class="pick-name">Roberto Garcia</div>
+                        <div class="pick-title">Senior Electrician • 11 yrs</div>
+                        <div class="pick-meta">
+                            <span>📍 Midland, TX (8 mi)</span>
+                            <span>💰 Expects $48/hr</span>
+                            <span>✓ Available now</span>
+                        </div>
+                        <div class="compliance-row">
+                            <span class="compliance-badge verified">✓ ISN</span>
+                            <span class="compliance-badge verified">✓ Drug</span>
+                            <span class="compliance-badge verified">✓ BG</span>
+                            <span class="compliance-badge verified">✓ OSHA30</span>
+                        </div>
+                        <div class="safety-row">
+                            <span class="safety-badge">ISN: 400193845</span>
+                            <span class="safety-badge good">TRIR: 0.0</span>
+                            <span class="safety-badge good">0 incidents</span>
+                        </div>
+                        <div class="pick-score">
+                            <span class="score-badge">94%</span>
+                            <a href="tel:+14325552345" class="pick-phone">📞 Call</a>
+                        </div>
+                    </div>
+
+                    <!-- Pick 3 -->
+                    <div class="top-pick-card">
+                        <div class="pick-rank">3</div>
+                        <div class="pick-avatar">DW</div>
+                        <div class="pick-name">David Williams</div>
+                        <div class="pick-title">Electrician • 8 yrs</div>
+                        <div class="pick-meta">
+                            <span>📍 Andrews, TX (35 mi)</span>
+                            <span>💰 Expects $45/hr</span>
+                            <span>⏳ 2 wk notice</span>
+                        </div>
+                        <div class="compliance-row">
+                            <span class="compliance-badge verified">✓ ISN</span>
+                            <span class="compliance-badge verified">✓ Drug</span>
+                            <span class="compliance-badge verified">✓ BG</span>
+                            <span class="compliance-badge warning">⏳ OSHA exp 30d</span>
+                        </div>
+                        <div class="safety-row">
+                            <span class="safety-badge">ISN: 400156723</span>
+                            <span class="safety-badge caution">TRIR: 0.8</span>
+                            <span class="safety-badge caution">1 recordable</span>
+                        </div>
+                        <div class="pick-score">
+                            <span class="score-badge">89%</span>
+                            <a href="tel:+14325553456" class="pick-phone">📞 Call</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- All Candidates -->
+            <div class="all-candidates">
+                <h3 class="section-title">All Qualified Candidates (23)</h3>
+                
+                <div class="candidate-row">
+                    <div class="candidate-avatar-sm">MJ</div>
+                    <div class="candidate-info">
+                        <h4>Michael Johnson</h4>
+                        <p>Electrician • 6 yrs • Big Spring, TX</p>
+                    </div>
+                    <div class="candidate-compliance">
+                        <span class="mini-badge verified">✓</span>
+                        <span class="mini-badge verified">✓</span>
+                        <span class="mini-badge verified">✓</span>
+                    </div>
+                    <span class="candidate-score">85%</span>
+                </div>
+
+                <div class="candidate-row">
+                    <div class="candidate-avatar-sm">TH</div>
+                    <div class="candidate-info">
+                        <h4>Thomas Harris</h4>
+                        <p>Electrician • 9 yrs • Lubbock, TX</p>
+                    </div>
+                    <div class="candidate-compliance">
+                        <span class="mini-badge verified">✓</span>
+                        <span class="mini-badge verified">✓</span>
+                        <span class="mini-badge verified">✓</span>
+                    </div>
+                    <span class="candidate-score">83%</span>
+                </div>
+
+                <div class="candidate-row">
+                    <div class="candidate-avatar-sm">CR</div>
+                    <div class="candidate-info">
+                        <h4>Carlos Ramirez</h4>
+                        <p>Electrician • 5 yrs • Monahans, TX</p>
+                    </div>
+                    <div class="candidate-compliance">
+                        <span class="mini-badge verified">✓</span>
+                        <span class="mini-badge verified">✓</span>
+                        <span class="mini-badge verified">✓</span>
+                    </div>
+                    <span class="candidate-score">81%</span>
+                </div>
+
+                <div class="candidate-row">
+                    <div class="candidate-avatar-sm">BT</div>
+                    <div class="candidate-info">
+                        <h4>Brian Thompson</h4>
+                        <p>Electrician • 7 yrs • Pecos, TX</p>
+                    </div>
+                    <div class="candidate-compliance">
+                        <span class="mini-badge verified">✓</span>
+                        <span class="mini-badge verified">✓</span>
+                        <span class="mini-badge verified">✓</span>
+                    </div>
+                    <span class="candidate-score">79%</span>
+                </div>
+
+                <button class="quick-action secondary" style="width: 100%; margin-top: 0.5rem;">
+                    View All 23 Candidates →
+                </button>
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="right-panel">
+            <!-- Account Manager -->
+            <div class="panel-section">
+                <div class="panel-title">Your Account Manager</div>
+                <div class="am-card">
+                    <div class="am-avatar">MR</div>
+                    <div class="am-info">
+                        <div class="am-name">Maria Rodriguez</div>
+                        <div class="am-status">
+                            <span class="dot"></span>
+                            Online now
+                        </div>
+                    </div>
+                    <a href="tel:+18005551234" class="am-call">📞</a>
+                </div>
+            </div>
+
+            <!-- Summary -->
+            <div class="panel-section">
+                <div class="panel-title">Search Summary</div>
+                <div class="summary-card">
+                    <div class="summary-big">
+                        <div class="number">147 → 23</div>
+                        <div class="label">Screened to qualified</div>
+                    </div>
+                    <div class="summary-row">
+                        <span class="label">Time saved</span>
+                        <span class="value accent">~40 hrs</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="label">Avg. match score</span>
+                        <span class="value">86%</span>
+                    </div>
+                    <div class="summary-row">
+                        <span class="label">Available now</span>
+                        <span class="value">18 of 23</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Verification Status -->
+            <div class="panel-section">
+                <div class="panel-title">Verification Status</div>
+                <div class="verification-card">
+                    <div class="verification-item">
+                        <div class="verification-icon pass">✓</div>
+                        <span class="verification-label">ISNetworld</span>
+                        <span class="verification-status pass">23/23</span>
+                    </div>
+                    <div class="verification-item">
+                        <div class="verification-icon pass">✓</div>
+                        <span class="verification-label">Background Check</span>
+                        <span class="verification-status pass">23/23</span>
+                    </div>
+                    <div class="verification-item">
+                        <div class="verification-icon pass">✓</div>
+                        <span class="verification-label">Drug Test (30d)</span>
+                        <span class="verification-status pass">21/23</span>
+                    </div>
+                    <div class="verification-item">
+                        <div class="verification-icon pending">⏳</div>
+                        <span class="verification-label">OSHA 30</span>
+                        <span class="verification-status pending">20/23</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Share with Team -->
+            <div class="panel-section">
+                <div class="panel-title">Share with Team</div>
+                <div class="share-card">
+                    <div class="share-input">
+                        <input type="email" placeholder="Hiring manager email">
+                        <button>Send</button>
+                    </div>
+                    <p class="share-note">They'll get view-only access to shortlist + can leave feedback</p>
+                </div>
+            </div>
+
+            <!-- Diversity Stats -->
+            <div class="panel-section">
+                <div class="panel-title">Diversity Summary</div>
+                <div class="diversity-card">
+                    <div class="diversity-row">
+                        <span class="diversity-label">Veteran Status</span>
+                        <div class="diversity-bar">
+                            <div class="diversity-fill" style="width: 26%;"></div>
+                        </div>
+                        <span class="diversity-value">26% (6)</span>
+                    </div>
+                    <div class="diversity-row">
+                        <span class="diversity-label">Hispanic/Latino</span>
+                        <div class="diversity-bar">
+                            <div class="diversity-fill" style="width: 35%;"></div>
+                        </div>
+                        <span class="diversity-value">35% (8)</span>
+                    </div>
+                    <div class="diversity-row">
+                        <span class="diversity-label">Self-ID Provided</span>
+                        <div class="diversity-bar">
+                            <div class="diversity-fill" style="width: 78%;"></div>
+                        </div>
+                        <span class="diversity-value">78% (18)</span>
+                    </div>
+                    <p class="diversity-note">EEO/OFCCP compliant • Export for audit</p>
+                </div>
+            </div>
+
+            <!-- Guarantee -->
+            <div class="panel-section">
+                <div class="summary-card" style="background: var(--accent-dim); border-color: rgba(13, 148, 136, 0.3);">
+                    <div style="text-align: center; color: var(--accent);">
+                        <div style="font-size: 1.5rem; margin-bottom: 0.25rem;">🛡️</div>
+                        <div style="font-weight: 600; font-size: 0.9rem;">90-Day Guarantee</div>
+                        <div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                            If they don't work out, replacement is free
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showView(view) {
+            // Update buttons
+            document.querySelectorAll('.view-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            // Toggle views
+            const pipelineView = document.getElementById('pipeline-view');
+            const topPicks = document.querySelector('.top-picks');
+            const allCandidates = document.querySelector('.all-candidates');
+            
+            if (view === 'pipeline') {
+                pipelineView.style.display = 'block';
+                topPicks.style.display = 'none';
+                allCandidates.style.display = 'none';
+            } else if (view === 'cards') {
+                pipelineView.style.display = 'none';
+                topPicks.style.display = 'block';
+                allCandidates.style.display = 'block';
+            } else if (view === 'list') {
+                pipelineView.style.display = 'none';
+                topPicks.style.display = 'none';
+                allCandidates.style.display = 'block';
+            }
+        }
+    </script>
+</body>
+</html>

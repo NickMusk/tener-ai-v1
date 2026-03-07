@@ -7,32 +7,40 @@
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg-primary: #ffffff;
-            --bg-secondary: #f8f9fb;
-            --bg-card: #ffffff;
-            --bg-card-hover: #f3f4f6;
-            --accent: #0d9488;
-            --accent-light: #14b8a6;
-            --accent-dim: rgba(13, 148, 136, 0.08);
-            --accent-glow: rgba(13, 148, 136, 0.15);
-            --text-primary: #111827;
-            --text-secondary: #6b7280;
-            --text-dim: #9ca3af;
-            --border: #e5e7eb;
-            --border-strong: #d1d5db;
-            --danger: #ef4444;
-            --warning: #f59e0b;
-            --success: #10b981;
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-card-hover: #22222e;
+            --accent: #00d4aa;
+            --accent-dim: rgba(0, 212, 170, 0.1);
+            --accent-glow: rgba(0, 212, 170, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #8a8a9a;
+            --text-dim: #5a5a6a;
+            --border: #2a2a3a;
+            --danger: #ff4757;
+            --warning: #ffa502;
+            --success: #00d4aa;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
             font-family: 'Outfit', sans-serif;
-            background: var(--bg-secondary);
+            background: var(--bg-primary);
             color: var(--text-primary);
             min-height: 100vh;
             overflow-x: hidden;
+        }
+
+        /* Ambient */
+        .ambient-bg {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 0;
+            background: radial-gradient(circle at 30% 20%, rgba(0, 212, 170, 0.06) 0%, transparent 50%);
         }
 
         /* Nav */
@@ -44,7 +52,7 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(10, 10, 15, 0.95);
             backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--border);
         }
@@ -55,7 +63,6 @@
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            color: var(--text-primary);
         }
 
         .logo-icon {
@@ -78,7 +85,7 @@
             align-items: center;
             gap: 0.5rem;
             padding: 0.4rem;
-            background: var(--bg-secondary);
+            background: var(--bg-card);
             border: 1px solid var(--border);
             border-radius: 8px;
         }
@@ -95,7 +102,7 @@
 
         .theme-btn.active {
             background: var(--accent);
-            color: white;
+            color: var(--bg-primary);
         }
 
         .nav-phone {
@@ -117,16 +124,11 @@
             background: var(--accent);
             border: none;
             border-radius: 8px;
-            color: white;
+            color: var(--bg-primary);
             font-family: 'Outfit', sans-serif;
             font-size: 0.9rem;
             font-weight: 600;
             cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        .nav-btn:hover {
-            background: var(--accent-light);
         }
 
         /* Hero */
@@ -175,12 +177,11 @@
             font-weight: 800;
             line-height: 1.1;
             margin-bottom: 1rem;
-            color: var(--text-primary);
             animation: fadeIn 0.5s ease-out 0.1s both;
         }
 
         .hero-title .highlight {
-            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            background: linear-gradient(135deg, var(--accent), #00a8cc);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -202,7 +203,6 @@
             padding: 2rem;
             width: 100%;
             max-width: 600px;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
             animation: fadeIn 0.5s ease-out 0.3s both;
         }
 
@@ -210,7 +210,6 @@
             font-size: 1.1rem;
             font-weight: 600;
             margin-bottom: 1.5rem;
-            color: var(--text-primary);
         }
 
         /* Simple Form */
@@ -234,21 +233,20 @@
             color: var(--text-primary);
             font-family: 'Outfit', sans-serif;
             font-size: 1rem;
-            transition: border-color 0.2s, box-shadow 0.2s;
+            transition: border-color 0.2s;
         }
 
         .form-select:focus, .form-input:focus {
             outline: none;
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-dim);
         }
 
         .submit-btn {
             padding: 1rem;
-            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            background: linear-gradient(135deg, var(--accent), #00a8cc);
             border: none;
             border-radius: 12px;
-            color: white;
+            color: var(--bg-primary);
             font-family: 'Outfit', sans-serif;
             font-size: 1.1rem;
             font-weight: 600;
@@ -300,8 +298,8 @@
             gap: 0.5rem;
             margin-top: 1rem;
             padding: 0.75rem;
-            background: var(--accent-dim);
-            border: 1px solid rgba(13, 148, 136, 0.2);
+            background: rgba(0, 212, 170, 0.08);
+            border: 1px solid rgba(0, 212, 170, 0.2);
             border-radius: 10px;
             font-size: 0.9rem;
             color: var(--accent);
@@ -354,7 +352,6 @@
         .job-textarea:focus {
             outline: none;
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-dim);
         }
 
         .upload-row {
@@ -367,20 +364,18 @@
             flex: 1;
             padding: 0.75rem;
             background: var(--bg-secondary);
-            border: 1px dashed var(--border-strong);
+            border: 1px dashed var(--border);
             border-radius: 8px;
             color: var(--text-secondary);
             font-family: 'Outfit', sans-serif;
             font-size: 0.9rem;
             cursor: pointer;
             text-align: center;
-            transition: all 0.2s;
         }
 
         .upload-btn:hover {
             border-color: var(--accent);
             color: var(--accent);
-            background: var(--accent-dim);
         }
 
         /* Human Support Banner */
@@ -395,7 +390,6 @@
             border-radius: 14px;
             width: 100%;
             max-width: 600px;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
             animation: fadeIn 0.5s ease-out 0.4s both;
         }
 
@@ -407,7 +401,7 @@
             align-items: center;
             justify-content: center;
             font-weight: 600;
-            color: white;
+            color: var(--bg-primary);
             flex-shrink: 0;
         }
 
@@ -418,7 +412,6 @@
         .support-name {
             font-weight: 600;
             font-size: 0.95rem;
-            color: var(--text-primary);
         }
 
         .support-title {
@@ -444,7 +437,6 @@
             display: flex;
             align-items: center;
             gap: 0.3rem;
-            transition: all 0.2s;
         }
 
         .support-btn:hover {
@@ -455,11 +447,7 @@
         .support-btn.call {
             background: var(--accent);
             border-color: var(--accent);
-            color: white;
-        }
-
-        .support-btn.call:hover {
-            background: var(--accent-light);
+            color: var(--bg-primary);
         }
 
         /* Two Column Layout */
@@ -478,7 +466,6 @@
             border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.5rem;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
         }
 
         .compliance-title {
@@ -516,7 +503,6 @@
             border: 1px solid var(--border);
             border-radius: 16px;
             padding: 1.5rem;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
         }
 
         .stats-title {
@@ -579,7 +565,6 @@
             border: 1px solid var(--border);
             border-radius: 14px;
             padding: 1.25rem;
-            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
         }
 
         .testimonial-text {
@@ -598,7 +583,6 @@
         .testimonial-name {
             font-weight: 600;
             font-size: 0.9rem;
-            color: var(--text-primary);
         }
 
         .testimonial-role {
@@ -610,8 +594,8 @@
         .agency-banner {
             margin-top: 3rem;
             padding: 1.5rem;
-            background: linear-gradient(135deg, var(--accent-dim), rgba(13, 148, 136, 0.04));
-            border: 1px solid rgba(13, 148, 136, 0.2);
+            background: linear-gradient(135deg, rgba(0, 212, 170, 0.08), rgba(0, 100, 200, 0.05));
+            border: 1px solid rgba(0, 212, 170, 0.2);
             border-radius: 14px;
             display: flex;
             align-items: center;
@@ -632,7 +616,6 @@
         .agency-content h4 {
             font-size: 1rem;
             margin-bottom: 0.25rem;
-            color: var(--text-primary);
         }
 
         .agency-content p {
@@ -644,7 +627,6 @@
             color: var(--accent);
             text-decoration: none;
             font-size: 0.9rem;
-            font-weight: 500;
             white-space: nowrap;
         }
 
@@ -669,7 +651,7 @@
 
         .pulse-dot {
             width: 8px; height: 8px;
-            background: var(--success);
+            background: var(--accent);
             border-radius: 50%;
             animation: pulse 2s infinite;
         }
@@ -702,7 +684,6 @@
             border-radius: 10px;
             font-size: 0.9rem;
             color: var(--text-secondary);
-            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
         }
 
         .feed-item strong {
@@ -723,16 +704,6 @@
             text-align: center;
             color: var(--text-dim);
             font-size: 0.85rem;
-            background: var(--bg-primary);
-        }
-
-        footer a {
-            color: var(--text-secondary);
-            text-decoration: none;
-        }
-
-        footer a:hover {
-            color: var(--accent);
         }
 
         /* Responsive */
@@ -755,10 +726,12 @@
     </style>
 </head>
 <body>
+    <div class="ambient-bg"></div>
+
     <nav>
         <div class="logo">
             <div class="logo-icon">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2.5">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0a0a0f" stroke-width="2.5">
                     <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
                 </svg>
             </div>
@@ -766,8 +739,8 @@
         </div>
         <div class="nav-right">
             <div class="theme-toggle">
-                <button class="theme-btn" onclick="window.location.href='index-dark.html'">🌙</button>
-                <button class="theme-btn active">☀️</button>
+                <button class="theme-btn active">🌙</button>
+                <button class="theme-btn" onclick="window.location.href='index-light.html'">☀️</button>
             </div>
             <div class="nav-phone">
                 <span>📞</span>
@@ -832,7 +805,7 @@
                     </select>
                 </div>
 
-                <button class="submit-btn" onclick="window.location.href='searching-light.html'">
+                <button class="submit-btn" onclick="window.location.href='searching.html'">
                     Find Workers Now
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                         <line x1="5" y1="12" x2="19" y2="12"/>
@@ -970,7 +943,7 @@
                 <h4>Are you a staffing agency?</h4>
                 <p>White-label our AI sourcing. Integrate with Bullhorn, JobDiva, Avionte. Your branding, your candidates.</p>
             </div>
-            <a href="agency-light.html" class="agency-link">Tener for Agencies →</a>
+            <a href="agency.html" class="agency-link">Tener for Agencies →</a>
         </div>
 
         <!-- Live Feed -->
@@ -1000,7 +973,7 @@
     </main>
 
     <footer>
-        © 2026 Tener AI. All rights reserved. | <a href="#">Privacy</a> | <a href="#">Terms</a>
+        © 2026 Tener AI. All rights reserved. | <a href="#" style="color: var(--text-secondary)">Privacy</a> | <a href="#" style="color: var(--text-secondary)">Terms</a>
     </footer>
 
     <script>

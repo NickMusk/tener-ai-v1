@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener for Agencies | White-Label AI Sourcing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-card-hover: #22222e;
+            --accent: #00d4aa;
+            --accent-dim: rgba(0, 212, 170, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: #8a8a9a;
+            --text-dim: #5a5a6a;
+            --border: #2a2a3a;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        /* Nav */
+        nav {
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 1.4rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-icon {
+            width: 32px; height: 32px;
+            background: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-badge {
+            font-size: 0.7rem;
+            padding: 0.2rem 0.5rem;
+            background: var(--accent-dim);
+            border: 1px solid rgba(0,212,170,0.3);
+            border-radius: 4px;
+            color: var(--accent);
+            margin-left: 0.5rem;
+        }
+
+        .nav-btn {
+            padding: 0.6rem 1.2rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 8px;
+            color: var(--bg-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* Hero */
+        .hero {
+            padding: 4rem 2rem;
+            max-width: 1100px;
+            margin: 0 auto;
+            text-align: center;
+        }
+
+        .hero h1 {
+            font-size: clamp(2rem, 5vw, 3.5rem);
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 1rem;
+        }
+
+        .hero h1 .highlight {
+            background: linear-gradient(135deg, var(--accent), #00a8cc);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            margin: 0 auto 2rem;
+        }
+
+        /* Integration Logos */
+        .integrations {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 3rem;
+            flex-wrap: wrap;
+        }
+
+        .integration-logo {
+            padding: 0.75rem 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .integration-logo .check {
+            color: var(--accent);
+        }
+
+        /* Features Grid */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 4rem;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            text-align: left;
+        }
+
+        .feature-icon {
+            width: 48px; height: 48px;
+            background: var(--accent-dim);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .feature-card h3 {
+            font-size: 1.1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .feature-card p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        /* White Label Demo */
+        .demo-section {
+            background: var(--bg-secondary);
+            border-radius: 20px;
+            padding: 3rem;
+            margin-bottom: 4rem;
+        }
+
+        .demo-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .demo-header h2 {
+            font-size: 1.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .demo-header p {
+            color: var(--text-secondary);
+        }
+
+        .demo-preview {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        .demo-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        .demo-card-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .demo-card-header .logo-placeholder {
+            width: 32px; height: 32px;
+            background: #ff6b6b;
+            border-radius: 8px;
+        }
+
+        .demo-card-header span {
+            font-weight: 600;
+        }
+
+        .demo-card-body {
+            padding: 1.5rem;
+        }
+
+        .demo-candidate {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+        }
+
+        .demo-avatar {
+            width: 36px; height: 36px;
+            background: var(--bg-card);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .demo-name {
+            flex: 1;
+            font-size: 0.9rem;
+        }
+
+        .demo-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent);
+        }
+
+        .demo-label {
+            text-align: center;
+            margin-top: 1rem;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+
+        /* Pricing */
+        .pricing-section {
+            text-align: center;
+            margin-bottom: 4rem;
+        }
+
+        .pricing-section h2 {
+            font-size: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.5rem;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .pricing-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem 1.5rem;
+        }
+
+        .pricing-card.popular {
+            border-color: var(--accent);
+            position: relative;
+        }
+
+        .pricing-card.popular::before {
+            content: 'Most Popular';
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 0.25rem 0.75rem;
+            background: var(--accent);
+            color: var(--bg-primary);
+            font-size: 0.7rem;
+            font-weight: 600;
+            border-radius: 4px;
+        }
+
+        .pricing-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .pricing-price {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 0.25rem;
+        }
+
+        .pricing-period {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-bottom: 1.5rem;
+        }
+
+        .pricing-features {
+            text-align: left;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .pricing-features li {
+            padding: 0.4rem 0;
+            list-style: none;
+        }
+
+        .pricing-features li::before {
+            content: '✓ ';
+            color: var(--accent);
+        }
+
+        .pricing-btn {
+            width: 100%;
+            margin-top: 1.5rem;
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .pricing-card.popular .pricing-btn {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: var(--bg-primary);
+            font-weight: 600;
+        }
+
+        /* Data Policy */
+        .policy-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 4rem;
+        }
+
+        .policy-section h3 {
+            font-size: 1.1rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .policy-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .policy-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+        }
+
+        .policy-icon {
+            width: 32px; height: 32px;
+            background: var(--accent-dim);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+
+        .policy-text h4 {
+            font-size: 0.9rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .policy-text p {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        /* CTA */
+        .cta-section {
+            text-align: center;
+            padding: 3rem;
+            background: linear-gradient(135deg, rgba(0,212,170,0.1), rgba(0,100,200,0.05));
+            border: 1px solid rgba(0,212,170,0.2);
+            border-radius: 20px;
+        }
+
+        .cta-section h2 {
+            font-size: 1.8rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .cta-section p {
+            color: var(--text-secondary);
+            margin-bottom: 1.5rem;
+        }
+
+        .cta-btn {
+            padding: 1rem 2rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 10px;
+            color: var(--bg-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 4rem;
+            padding: 2rem;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .features, .pricing-grid, .demo-preview, .policy-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .hero { padding: 2rem 1rem; }
+            .demo-section { padding: 1.5rem; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#0a0a0f" stroke-width="2.5">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+            </div>
+            <span>Tener</span>
+            <span class="logo-badge">for Agencies</span>
+        </div>
+        <button class="nav-btn">Book Demo</button>
+    </nav>
+
+    <main class="hero">
+        <h1>
+            Your branding.<br>
+            <span class="highlight">Our AI sourcing.</span>
+        </h1>
+        <p>
+            White-label our AI skilled trades sourcing. Integrate with Bullhorn, JobDiva, Avionte. Your candidates stay yours. Zero competitive exposure.
+        </p>
+
+        <div class="integrations">
+            <div class="integration-logo"><span class="check">✓</span> Bullhorn</div>
+            <div class="integration-logo"><span class="check">✓</span> JobDiva</div>
+            <div class="integration-logo"><span class="check">✓</span> Avionte</div>
+            <div class="integration-logo"><span class="check">✓</span> Crelate</div>
+        </div>
+
+        <!-- Features -->
+        <div class="features">
+            <div class="feature-card">
+                <div class="feature-icon">🏷️</div>
+                <h3>Full White Label</h3>
+                <p>Your logo, your colors, your domain. Clients never see "Tener". Candidate communications come from your brand.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔗</div>
+                <h3>Native ATS Sync</h3>
+                <p>Two-way sync with Bullhorn, JobDiva, Avionte. AI enriches YOUR database. Push candidates directly to jobs.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">📊</div>
+                <h3>Recruiter Dashboard</h3>
+                <p>Activity tracking, placement metrics, commission reports. Everything your team needs to stay productive.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">👥</div>
+                <h3>Multi-Client Workspace</h3>
+                <p>Separate pools per client. Bulk job posting. Client-specific pipelines. One login for all accounts.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🔒</div>
+                <h3>Your Candidates = Yours</h3>
+                <p>We never share your candidate data with competitors. Export anytime. Full data portability.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon">🛡️</div>
+                <h3>Competitive Firewall</h3>
+                <p>Your searches, job orders, and candidate pools are completely isolated. No cross-agency visibility.</p>
+            </div>
+        </div>
+
+        <!-- White Label Demo -->
+        <div class="demo-section">
+            <div class="demo-header">
+                <h2>See the White Label in Action</h2>
+                <p>Same AI, completely different branding</p>
+            </div>
+            <div class="demo-preview">
+                <div class="demo-card">
+                    <div class="demo-card-header">
+                        <div class="logo-placeholder" style="background: #ff6b6b;"></div>
+                        <span>Allied Staffing Portal</span>
+                    </div>
+                    <div class="demo-card-body">
+                        <div class="demo-candidate">
+                            <div class="demo-avatar">JM</div>
+                            <span class="demo-name">James Mitchell</span>
+                            <span class="demo-score">97%</span>
+                        </div>
+                        <div class="demo-candidate">
+                            <div class="demo-avatar">RG</div>
+                            <span class="demo-name">Roberto Garcia</span>
+                            <span class="demo-score">94%</span>
+                        </div>
+                        <div class="demo-candidate">
+                            <div class="demo-avatar">DW</div>
+                            <span class="demo-name">David Williams</span>
+                            <span class="demo-score">89%</span>
+                        </div>
+                    </div>
+                    <div class="demo-label">Your brand, your portal</div>
+                </div>
+                <div class="demo-card">
+                    <div class="demo-card-header">
+                        <div class="logo-placeholder" style="background: #4ecdc4;"></div>
+                        <span>Premier Technical Portal</span>
+                    </div>
+                    <div class="demo-card-body">
+                        <div class="demo-candidate">
+                            <div class="demo-avatar">SK</div>
+                            <span class="demo-name">Steve Kim</span>
+                            <span class="demo-score">95%</span>
+                        </div>
+                        <div class="demo-candidate">
+                            <div class="demo-avatar">MH</div>
+                            <span class="demo-name">Mike Hansen</span>
+                            <span class="demo-score">91%</span>
+                        </div>
+                        <div class="demo-candidate">
+                            <div class="demo-avatar">TJ</div>
+                            <span class="demo-name">Tony Jackson</span>
+                            <span class="demo-score">88%</span>
+                        </div>
+                    </div>
+                    <div class="demo-label">Different agency, same AI power</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Pricing -->
+        <div class="pricing-section">
+            <h2>Agency Pricing</h2>
+            <div class="pricing-grid">
+                <div class="pricing-card">
+                    <div class="pricing-name">Starter</div>
+                    <div class="pricing-price">$299</div>
+                    <div class="pricing-period">per month</div>
+                    <ul class="pricing-features">
+                        <li>Up to 5 recruiters</li>
+                        <li>100 AI searches/month</li>
+                        <li>Basic white label</li>
+                        <li>Bullhorn integration</li>
+                        <li>Email support</li>
+                    </ul>
+                    <button class="pricing-btn">Start Free Trial</button>
+                </div>
+                <div class="pricing-card popular">
+                    <div class="pricing-name">Growth</div>
+                    <div class="pricing-price">$799</div>
+                    <div class="pricing-period">per month</div>
+                    <ul class="pricing-features">
+                        <li>Up to 20 recruiters</li>
+                        <li>500 AI searches/month</li>
+                        <li>Full white label + custom domain</li>
+                        <li>All ATS integrations</li>
+                        <li>Multi-client workspace</li>
+                        <li>Priority support</li>
+                    </ul>
+                    <button class="pricing-btn">Start Free Trial</button>
+                </div>
+                <div class="pricing-card">
+                    <div class="pricing-name">Enterprise</div>
+                    <div class="pricing-price">Custom</div>
+                    <div class="pricing-period">contact us</div>
+                    <ul class="pricing-features">
+                        <li>Unlimited recruiters</li>
+                        <li>Unlimited searches</li>
+                        <li>Dedicated infrastructure</li>
+                        <li>Custom integrations</li>
+                        <li>SLA guarantee</li>
+                        <li>Dedicated success manager</li>
+                    </ul>
+                    <button class="pricing-btn">Contact Sales</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data Policy -->
+        <div class="policy-section">
+            <h3>🔒 Your Data, Your Rules</h3>
+            <div class="policy-grid">
+                <div class="policy-item">
+                    <div class="policy-icon">🚫</div>
+                    <div class="policy-text">
+                        <h4>No Cross-Agency Sharing</h4>
+                        <p>We never share your candidates, searches, or job orders with other agencies using Tener.</p>
+                    </div>
+                </div>
+                <div class="policy-item">
+                    <div class="policy-icon">📤</div>
+                    <div class="policy-text">
+                        <h4>Full Data Export</h4>
+                        <p>Export all your data anytime. CSV, JSON, direct API. Cancel and take everything with you.</p>
+                    </div>
+                </div>
+                <div class="policy-item">
+                    <div class="policy-icon">🔐</div>
+                    <div class="policy-text">
+                        <h4>SOC 2 Compliant</h4>
+                        <p>Enterprise-grade security. Data encrypted at rest and in transit. Annual third-party audits.</p>
+                    </div>
+                </div>
+                <div class="policy-item">
+                    <div class="policy-icon">📋</div>
+                    <div class="policy-text">
+                        <h4>Clear Ownership</h4>
+                        <p>Candidates you source through Tener belong to you. We don't place them elsewhere.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA -->
+        <div class="cta-section">
+            <h2>Ready to supercharge your sourcing?</h2>
+            <p>14-day free trial. No credit card required. Full white-label from day one.</p>
+            <button class="cta-btn">Start Free Trial</button>
+        </div>
+    </main>
+
+    <footer>
+        © 2026 Tener AI. All rights reserved. | <a href="#" style="color: var(--text-secondary)">Privacy</a> | <a href="#" style="color: var(--text-secondary)">Terms</a> | <a href="#" style="color: var(--text-secondary)">Agency Agreement</a>
+    </footer>
+</body>
+</html>

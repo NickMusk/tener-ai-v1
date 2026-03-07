@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Finding Your Crew...</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-card: #1a1a24;
+            --bg-card-hover: #22222e;
+            --accent: #00d4aa;
+            --accent-dim: rgba(0, 212, 170, 0.1);
+            --accent-glow: rgba(0, 212, 170, 0.3);
+            --text-primary: #ffffff;
+            --text-secondary: #8a8a9a;
+            --text-dim: #5a5a6a;
+            --border: #2a2a3a;
+            --danger: #ff4757;
+            --warning: #ffa502;
+            --success: #00d4aa;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Ambient background with more activity */
+        .ambient-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .ambient-bg::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 50% 50%, rgba(0, 212, 170, 0.15) 0%, transparent 40%),
+                        radial-gradient(circle at 20% 80%, rgba(0, 100, 200, 0.08) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 20%, rgba(0, 212, 170, 0.05) 0%, transparent 50%);
+            animation: ambientPulse 4s ease-in-out infinite;
+        }
+
+        @keyframes ambientPulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.02); }
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 1.5rem 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .logo-icon svg {
+            width: 20px;
+            height: 20px;
+        }
+
+        .nav-status {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            color: var(--accent);
+        }
+
+        .processing-spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--accent-dim);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Main container */
+        .search-container {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 8rem 3rem 4rem;
+        }
+
+        /* Job summary card */
+        .job-summary {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 3rem;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            max-width: 600px;
+            width: 100%;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .job-icon {
+            width: 50px;
+            height: 50px;
+            background: var(--accent-dim);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .job-details h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        .job-details p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Main progress area */
+        .progress-area {
+            text-align: center;
+            max-width: 700px;
+            width: 100%;
+        }
+
+        .main-title {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            animation: fadeIn 0.5s ease-out 0.1s both;
+        }
+
+        .main-subtitle {
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+            animation: fadeIn 0.5s ease-out 0.2s both;
+        }
+
+        /* AI Activity Feed */
+        .activity-feed {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2rem;
+            text-align: left;
+            animation: fadeIn 0.5s ease-out 0.3s both;
+        }
+
+        .feed-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .feed-header-left {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .ai-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.8rem;
+            background: var(--accent-dim);
+            border-radius: 100px;
+            font-size: 0.8rem;
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .ai-badge .pulse-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .feed-timer {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        /* Activity items */
+        .activity-list {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .activity-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            opacity: 0;
+            transform: translateX(-20px);
+            animation: slideIn 0.4s ease-out forwards;
+        }
+
+        .activity-item:nth-child(1) { animation-delay: 0.5s; }
+        .activity-item:nth-child(2) { animation-delay: 1.2s; }
+        .activity-item:nth-child(3) { animation-delay: 1.9s; }
+        .activity-item:nth-child(4) { animation-delay: 2.6s; }
+        .activity-item:nth-child(5) { animation-delay: 3.3s; }
+        .activity-item:nth-child(6) { animation-delay: 4.0s; }
+        .activity-item:nth-child(7) { animation-delay: 4.7s; }
+        .activity-item:nth-child(8) { animation-delay: 5.4s; }
+
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .activity-icon {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+
+        .activity-icon.search {
+            background: rgba(0, 150, 255, 0.15);
+            color: #00a8ff;
+        }
+
+        .activity-icon.check {
+            background: rgba(0, 212, 170, 0.15);
+            color: var(--accent);
+        }
+
+        .activity-icon.filter {
+            background: rgba(255, 165, 2, 0.15);
+            color: var(--warning);
+        }
+
+        .activity-icon.flag {
+            background: rgba(255, 71, 87, 0.15);
+            color: var(--danger);
+        }
+
+        .activity-icon.ai {
+            background: rgba(147, 51, 234, 0.15);
+            color: #a855f7;
+        }
+
+        .activity-content {
+            flex: 1;
+        }
+
+        .activity-text {
+            font-size: 0.95rem;
+            margin-bottom: 0.25rem;
+        }
+
+        .activity-text strong {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .activity-meta {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Progress bar */
+        .progress-container {
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .progress-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
+        }
+
+        .progress-label {
+            color: var(--text-secondary);
+        }
+
+        .progress-value {
+            color: var(--accent);
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .progress-bar {
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 100px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent) 0%, #00a8cc 100%);
+            border-radius: 100px;
+            width: 0%;
+            animation: progressFill 6s ease-out forwards;
+        }
+
+        @keyframes progressFill {
+            0% { width: 0%; }
+            15% { width: 15%; }
+            30% { width: 35%; }
+            50% { width: 55%; }
+            70% { width: 75%; }
+            85% { width: 88%; }
+            100% { width: 95%; }
+        }
+
+        /* Stats preview */
+        .stats-preview {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+
+        .stat-mini {
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            padding: 1rem;
+            text-align: center;
+            opacity: 0;
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+
+        .stat-mini:nth-child(1) { animation-delay: 2s; }
+        .stat-mini:nth-child(2) { animation-delay: 3s; }
+        .stat-mini:nth-child(3) { animation-delay: 4s; }
+
+        .stat-mini-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .stat-mini-label {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        /* View Results Button (appears after animation) */
+        .view-results-btn {
+            margin-top: 2rem;
+            padding: 1rem 3rem;
+            background: linear-gradient(135deg, var(--accent) 0%, #00a8cc 100%);
+            border: none;
+            border-radius: 12px;
+            color: var(--bg-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            opacity: 0;
+            animation: fadeIn 0.5s ease-out 6.5s forwards;
+            transition: all 0.3s ease;
+        }
+
+        .view-results-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px var(--accent-glow);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            nav {
+                padding: 1rem 1.5rem;
+            }
+
+            .search-container {
+                padding: 6rem 1.5rem 3rem;
+            }
+
+            .main-title {
+                font-size: 1.8rem;
+            }
+
+            .activity-feed {
+                padding: 1.5rem;
+            }
+
+            .stats-preview {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-bg"></div>
+
+    <nav>
+        <div class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" fill="#0a0a0f" stroke="#0a0a0f"/>
+                </svg>
+            </div>
+            <span>Tener</span>
+        </div>
+        <div class="nav-status">
+            <div class="processing-spinner"></div>
+            Processing...
+        </div>
+    </nav>
+
+    <main class="search-container">
+        <div class="job-summary">
+            <div class="job-icon">⚡</div>
+            <div class="job-details">
+                <h3>Senior Electrician</h3>
+                <p>Midland, TX • OSHA 30 required • Starting ASAP</p>
+            </div>
+        </div>
+
+        <div class="progress-area">
+            <h1 class="main-title">Finding your crew...</h1>
+            <p class="main-subtitle">AI is scanning our network and external sources</p>
+
+            <div class="activity-feed">
+                <div class="feed-header">
+                    <div class="feed-header-left">
+                        <div class="ai-badge">
+                            <div class="pulse-dot"></div>
+                            AI Agent Active
+                        </div>
+                    </div>
+                    <div class="feed-timer" id="timer">00:00</div>
+                </div>
+
+                <div class="activity-list">
+                    <div class="activity-item">
+                        <div class="activity-icon search">🔍</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Scanning <strong>Indeed</strong> for electricians in Texas...</div>
+                            <div class="activity-meta">Source 1 of 4</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon check">✓</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Found <strong>147</strong> potential matches</div>
+                            <div class="activity-meta">Indeed, LinkedIn, internal database</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon search">🔍</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Verifying <strong>OSHA certifications</strong>...</div>
+                            <div class="activity-meta">Cross-referencing OSHA database</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon check">✓</div>
+                        <div class="activity-content">
+                            <div class="activity-text"><strong>89 candidates</strong> have valid OSHA 30</div>
+                            <div class="activity-meta">58 candidates filtered out</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon ai">🧠</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Analyzing <strong>experience patterns</strong>...</div>
+                            <div class="activity-meta">Matching against job requirements</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon filter">⚡</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Filtering by <strong>location & availability</strong>...</div>
+                            <div class="activity-meta">Within 50 miles of Midland, TX</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon flag">🚩</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Flagged <strong>4 candidates</strong> with expired certifications</div>
+                            <div class="activity-meta">Moved to review queue</div>
+                        </div>
+                    </div>
+
+                    <div class="activity-item">
+                        <div class="activity-icon ai">🧠</div>
+                        <div class="activity-content">
+                            <div class="activity-text">Ranking <strong>23 qualified candidates</strong> by match score...</div>
+                            <div class="activity-meta">Generating shortlist</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="progress-container">
+                    <div class="progress-header">
+                        <span class="progress-label">Processing candidates</span>
+                        <span class="progress-value" id="progress-text">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill"></div>
+                    </div>
+                </div>
+
+                <div class="stats-preview">
+                    <div class="stat-mini">
+                        <div class="stat-mini-value">147</div>
+                        <div class="stat-mini-label">Scanned</div>
+                    </div>
+                    <div class="stat-mini">
+                        <div class="stat-mini-value">23</div>
+                        <div class="stat-mini-label">Qualified</div>
+                    </div>
+                    <div class="stat-mini">
+                        <div class="stat-mini-value">8</div>
+                        <div class="stat-mini-label">Top matches</div>
+                    </div>
+                </div>
+            </div>
+
+            <button class="view-results-btn" onclick="window.location.href='results.html'">
+                View Candidates
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                    <line x1="5" y1="12" x2="19" y2="12"/>
+                    <polyline points="12 5 19 12 12 19"/>
+                </svg>
+            </button>
+        </div>
+    </main>
+
+    <script>
+        // Timer
+        let seconds = 0;
+        const timerEl = document.getElementById('timer');
+        const progressText = document.getElementById('progress-text');
+        const mainTitle = document.querySelector('.main-title');
+        const mainSubtitle = document.querySelector('.main-subtitle');
+        const viewBtn = document.querySelector('.view-results-btn');
+        const aiBadge = document.querySelector('.ai-badge');
+        
+        const timerInterval = setInterval(() => {
+            seconds++;
+            const mins = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const secs = (seconds % 60).toString().padStart(2, '0');
+            timerEl.textContent = `${mins}:${secs}`;
+            
+            // Update progress text
+            let progress = Math.min(95, Math.floor(seconds * 15));
+            progressText.textContent = `${progress}%`;
+            
+            if (seconds >= 7) {
+                clearInterval(timerInterval);
+                progressText.textContent = '100%';
+                
+                // Success state
+                mainTitle.innerHTML = '✓ Found 23 qualified workers';
+                mainTitle.style.color = '#00d4aa';
+                mainSubtitle.textContent = 'Screened 147 candidates in 2 minutes. Your shortlist is ready.';
+                aiBadge.innerHTML = '<span style="color:#00d4aa">✓</span> Complete';
+                aiBadge.style.background = 'rgba(0, 212, 170, 0.15)';
+                
+                // Make button more prominent
+                viewBtn.style.transform = 'scale(1.05)';
+                viewBtn.style.boxShadow = '0 10px 40px rgba(0, 212, 170, 0.4)';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
