@@ -106,6 +106,20 @@ class JobArchivingTests(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(str(items[0].get("title") or ""), "Manual QA Engineer")
 
+    def test_jobs_api_archive_bulk_archives_specific_job_ids(self) -> None:
+        status_archive, payload_archive = self._request(
+            "POST",
+            "/api/jobs/archive-bulk",
+            {"job_ids": [self.backend_job_id]},
+        )
+        self.assertEqual(status_archive, 200)
+        self.assertEqual(int(payload_archive.get("updated") or 0), 1)
+
+        status_jobs, payload_jobs = self._request("GET", "/api/jobs")
+        self.assertEqual(status_jobs, 200)
+        visible_titles = [str(item.get("title") or "") for item in (payload_jobs.get("items") or [])]
+        self.assertEqual(visible_titles, ["Frontend Engineer", "Manual QA Engineer"])
+
     def test_dual_write_archive_jobs_mirrors_archived_at(self) -> None:
         class _Mirror:
             def __init__(self) -> None:

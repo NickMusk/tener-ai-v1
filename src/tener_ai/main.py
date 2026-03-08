@@ -2058,15 +2058,21 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
                 return
+            job_ids_raw = body.get("job_ids")
             exclude_titles_raw = body.get("exclude_titles")
             exclude_job_ids_raw = body.get("exclude_job_ids")
+            if job_ids_raw is not None and not isinstance(job_ids_raw, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "job_ids must be an array"})
+                return
             if exclude_titles_raw is not None and not isinstance(exclude_titles_raw, list):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "exclude_titles must be an array"})
                 return
             if exclude_job_ids_raw is not None and not isinstance(exclude_job_ids_raw, list):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "exclude_job_ids must be an array"})
                 return
+            normalized_job_ids = [int(item) for item in (job_ids_raw or []) if self._safe_int(item, None) is not None]
             result = SERVICES["db"].archive_jobs(
+                job_ids=normalized_job_ids,
                 exclude_titles=[str(item or "").strip() for item in (exclude_titles_raw or []) if str(item or "").strip()],
                 exclude_job_ids=exclude_job_ids_raw or [],
             )
@@ -2077,6 +2083,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 entity_id="bulk",
                 details={
                     "updated": int(result.get("updated") or 0),
+                    "job_ids": normalized_job_ids,
                     "exclude_titles": [str(item or "").strip() for item in (exclude_titles_raw or []) if str(item or "").strip()],
                     "exclude_job_ids": [int(item) for item in (exclude_job_ids_raw or []) if self._safe_int(item, None) is not None],
                 },

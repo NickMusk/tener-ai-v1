@@ -486,6 +486,9 @@
       text-align: left;
       vertical-align: top;
     }
+    #jobs-tbody tr.job-row { cursor: pointer; }
+    #jobs-tbody tr.job-row:hover { background: rgba(66, 153, 225, 0.10); }
+    #jobs-tbody tr.job-row.active { background: rgba(0, 255, 135, 0.08); }
     #candidates-tbody tr.candidate-row { cursor: pointer; }
     #candidates-tbody tr.candidate-row:hover { background: rgba(66, 153, 225, 0.10); }
     .candidate-linkedin-link {
@@ -508,6 +511,18 @@
     }
 
     .muted { color: var(--text-secondary); }
+    .jobs-toolbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      margin-top: 14px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .jobs-toolbar .button-row {
+      margin-left: auto;
+    }
 
     .verify-list {
       display: grid;
@@ -702,6 +717,26 @@
             </label>
           </div>
         </div>
+        <div class="jobs-toolbar">
+          <div class="muted">Active jobs. Click row to open details. Use checkboxes for bulk actions. <span class="mono" id="jobs-selected-count">0 selected</span></div>
+          <div class="button-row">
+            <button id="jobs-archive-selected-btn" disabled>Archive Selected</button>
+          </div>
+        </div>
+        <table id="jobs-table">
+          <thead>
+            <tr>
+              <th style="width:32px;"><input id="jobs-select-all" type="checkbox" aria-label="Select all jobs"></th>
+              <th>ID</th>
+              <th>Title</th>
+              <th>Company</th>
+              <th>Routing</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="jobs-tbody"></tbody>
+        </table>
       </div>
     </section>
 
@@ -1195,6 +1230,7 @@
       jobId: null,
       agentJobId: null,
       opsJobId: null,
+      selectedJobIds: [],
       jobs: [],
       testMode: true,
       candidatesOverallFilter: "all",
@@ -1798,6 +1834,7 @@
         localStorage.removeItem(SELECTED_JOB_STORAGE_KEY);
       }
       syncJobSelectors();
+      renderJobsTable();
       if (!state.jobId) {
         syncJobMeta(null);
         await loadJobProgress(null);
@@ -1872,6 +1909,7 @@
       if (agentSelect) agentSelect.innerHTML = '';
       if (opsSelect) opsSelect.innerHTML = '';
       state.jobs = Array.isArray(data.items) ? data.items : [];
+      state.selectedJobIds = normalizeJobSelection(state.selectedJobIds || []);
 
       if (!state.jobs.length) {
         const opt = document.createElement('option');
@@ -1886,6 +1924,7 @@
         $("job-label").textContent = 'none';
         $("job-meta").textContent = 'Create a job from modal window to start manual pipeline.';
         setAgentJobMeta(null);
+        renderJobsTable();
         await refreshAgentAccounts();
         await refreshOutreachOps();
         return;
@@ -1937,8 +1976,7 @@
       state.jobs.forEach((job) => {
         const opt = document.createElement('option');
         opt.value = job.id;
-        const company = String(job.company || "").trim();
-        opt.textContent = company ? `#${job.id} ${job.title} • ${company}` : `#${job.id} ${job.title}`;
+        opt.textContent = formatJobOptionLabel(job);
         if (pipelineSelect) {
           const clone = opt.cloneNode(true);
           if (Number(job.id) === preferredJobId) clone.selected = true;
@@ -1959,6 +1997,7 @@
       state.agentJobId = preferredAgentJobId;
       state.opsJobId = preferredOpsJobId;
       syncJobSelectors();
+      renderJobsTable();
       const selected = getJobById(state.jobId);
       syncJobMeta(selected || null);
       const selectedAgent = getJobById(state.agentJobId);
@@ -1978,6 +2017,110 @@
       parts.push(job.seniority || 'auto');
       parts.push(job.location || 'anywhere');
       $("job-meta").textContent = parts.join(' • ');
+    }
+
+    function formatJobOptionLabel(job) {
+      const company = String(job.company || "").trim();
+      return company ? `#${job.id} ${job.title} • ${company}` : `#${job.id} ${job.title}`;
+    }
+
+    function formatJobCreatedAt(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "-";
+      return raw.replace("T", " ").slice(0, 16);
+    }
+
+    function normalizeJobSelection(ids) {
+      const available = new Set((state.jobs || []).map((job) => Number(job.id || 0)).filter(Boolean));
+      const out = [];
+      const seen = new Set();
+      (ids || []).forEach((raw) => {
+        const value = Number(raw || 0) || 0;
+        if (!value || seen.has(value) || !available.has(value)) return;
+        seen.add(value);
+        out.push(value);
+      });
+      return out;
+    }
+
+    function selectedJobIdsSet() {
+      return new Set(normalizeJobSelection(state.selectedJobIds || []));
+    }
+
+    function setSelectedJobIds(ids) {
+      state.selectedJobIds = normalizeJobSelection(ids);
+      renderJobsTable();
+    }
+
+    function toggleSelectedJobId(jobId, checked) {
+      const current = selectedJobIdsSet();
+      if (checked) current.add(Number(jobId || 0));
+      else current.delete(Number(jobId || 0));
+      setSelectedJobIds(Array.from(current));
+    }
+
+    function renderJobsTable() {
+      const body = $("jobs-tbody");
+      const selectAll = $("jobs-select-all");
+      const count = $("jobs-selected-count");
+      const archiveBtn = $("jobs-archive-selected-btn");
+      if (!body || !selectAll || !count || !archiveBtn) return;
+      const jobs = Array.isArray(state.jobs) ? state.jobs : [];
+      const selected = selectedJobIdsSet();
+      if (!jobs.length) {
+        body.innerHTML = '<tr><td colspan="7" class="muted">No active jobs</td></tr>';
+        selectAll.checked = false;
+        selectAll.indeterminate = false;
+        count.textContent = '0 selected';
+        archiveBtn.disabled = true;
+        return;
+      }
+
+      body.innerHTML = jobs.map((job) => {
+        const jobId = Number(job.id || 0) || 0;
+        const isChecked = selected.has(jobId);
+        const isActive = Number(state.jobId || 0) === jobId;
+        const company = escapeHtml(job.company || '-');
+        const routing = escapeHtml(job.linkedin_routing_mode || 'auto');
+        const created = escapeHtml(formatJobCreatedAt(job.created_at));
+        return `
+          <tr class="job-row${isActive ? ' active' : ''}" data-job-id="${jobId}" title="Open job details">
+            <td><input type="checkbox" class="job-select-checkbox" data-job-id="${jobId}" ${isChecked ? 'checked' : ''} aria-label="Select job #${jobId}"></td>
+            <td class="mono">#${jobId}</td>
+            <td>${escapeHtml(job.title || '-')}</td>
+            <td>${company}</td>
+            <td class="mono">${routing}</td>
+            <td class="mono">${created}</td>
+            <td><button class="job-archive-btn" data-job-id="${jobId}">Archive</button></td>
+          </tr>
+        `;
+      }).join('');
+
+      const selectedCount = selected.size;
+      count.textContent = `${selectedCount} selected`;
+      selectAll.checked = jobs.length > 0 && selectedCount === jobs.length;
+      selectAll.indeterminate = selectedCount > 0 && selectedCount < jobs.length;
+      archiveBtn.disabled = selectedCount === 0;
+    }
+
+    async function archiveJobs(jobIds) {
+      const normalized = normalizeJobSelection(jobIds);
+      if (!normalized.length) return;
+      const selectedJobs = (state.jobs || []).filter((job) => normalized.includes(Number(job.id || 0)));
+      const labels = selectedJobs.map((job) => formatJobOptionLabel(job));
+      const prompt = normalized.length === 1
+        ? `Archive ${labels[0] || `job #${normalized[0]}`}?`
+        : `Archive ${normalized.length} selected jobs?`;
+      if (!window.confirm(prompt)) return;
+      const currentJobArchived = normalized.includes(Number(state.jobId || 0));
+      const out = await api('/api/jobs/archive-bulk', {
+        method: 'POST',
+        body: JSON.stringify({ job_ids: normalized }),
+      });
+      snapshot('jobs.archived', out);
+      state.selectedJobIds = [];
+      await loadJobs();
+      await onSelectedJobChanged(currentJobArchived ? state.jobId : state.jobId);
     }
 
     async function createJob() {
@@ -3113,6 +3256,37 @@
 
       $("job-select").addEventListener('change', async (e) => {
         await onSelectedJobChanged(Number(e.target.value || '0') || null);
+      });
+      $("jobs-select-all").addEventListener('change', (e) => {
+        if (e.target.checked) {
+          setSelectedJobIds((state.jobs || []).map((job) => Number(job.id || 0)).filter(Boolean));
+        } else {
+          setSelectedJobIds([]);
+        }
+      });
+      $("jobs-archive-selected-btn").addEventListener('click', () => archiveJobs(state.selectedJobIds).catch(e => alert(e.message)));
+      $("jobs-tbody").addEventListener('change', (event) => {
+        const checkbox = event.target.closest(".job-select-checkbox");
+        if (!checkbox) return;
+        const jobId = Number(checkbox.dataset.jobId || 0) || null;
+        if (!jobId) return;
+        toggleSelectedJobId(jobId, Boolean(checkbox.checked));
+      });
+      $("jobs-tbody").addEventListener('click', (event) => {
+        const archiveButton = event.target.closest(".job-archive-btn");
+        if (archiveButton) {
+          const jobId = Number(archiveButton.dataset.jobId || 0) || null;
+          if (!jobId) return;
+          event.stopPropagation();
+          archiveJobs([jobId]).catch(e => alert(e.message));
+          return;
+        }
+        if (event.target.closest("input, button, a, select, label")) return;
+        const row = event.target.closest("tr[data-job-id]");
+        if (!row) return;
+        const jobId = Number(row.dataset.jobId || 0) || null;
+        if (!jobId) return;
+        onSelectedJobChanged(jobId).catch(e => alert(e.message));
       });
 
       $("agent-job-select").addEventListener('change', async (e) => {

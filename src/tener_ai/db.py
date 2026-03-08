@@ -470,9 +470,22 @@ class Database:
     def archive_jobs(
         self,
         *,
+        job_ids: Optional[List[int]] = None,
         exclude_job_ids: Optional[List[int]] = None,
         exclude_titles: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
+        explicit_ids: List[int] = []
+        explicit_seen: set[int] = set()
+        for raw in job_ids or []:
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if value <= 0 or value in explicit_seen:
+                continue
+            explicit_seen.add(value)
+            explicit_ids.append(value)
+
         normalized_ids: List[int] = []
         seen_ids: set[int] = set()
         for raw in exclude_job_ids or []:
@@ -498,6 +511,8 @@ class Database:
             job_id = int(row["id"] or 0)
             title = str(row["title"] or "").strip()
             if job_id <= 0:
+                continue
+            if explicit_ids and job_id not in explicit_seen:
                 continue
             if job_id in seen_ids:
                 continue
