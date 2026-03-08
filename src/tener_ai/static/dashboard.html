@@ -433,10 +433,40 @@
 
     .step-actions { display: flex; gap: 8px; }
     .step-actions button { flex: 1; font-size: 12px; padding: 9px; }
+    .source-filters-panel {
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      background: #111722;
+    }
+    .source-filters-panel summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .source-filters-panel summary::-webkit-details-marker {
+      display: none;
+    }
+    .source-filters-toggle-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .source-filters-toggle-meta {
+      color: var(--text-secondary);
+      font-size: 12px;
+      text-align: right;
+      max-width: 65%;
+      line-height: 1.4;
+    }
     .source-filters-box {
-      margin-top: 8px;
       border-top: 1px solid var(--border-color);
-      padding-top: 10px;
+      padding: 14px;
       display: grid;
       gap: 10px;
     }
@@ -464,6 +494,8 @@
       color: var(--text-secondary);
       font-size: 12px;
       line-height: 1.5;
+      max-height: 260px;
+      overflow: auto;
     }
     .source-filters-queries li + li {
       margin-top: 5px;
@@ -862,17 +894,6 @@
         <div class="step-actions">
           <button id="run-source-btn">Run</button>
         </div>
-        <div id="source-filters-box" class="source-filters-box">
-          <div class="panel-title" style="margin:0;">
-            <span>Source Filters</span>
-            <span class="mono">GET /api/jobs/{id}/source-filters</span>
-          </div>
-          <div id="source-filters-summary" class="source-filters-summary">Select a job to inspect sourcing filters.</div>
-          <div id="source-filter-chips" class="source-filter-chips"></div>
-          <ol id="source-filters-queries" class="source-filters-queries">
-            <li class="muted">No generated queries yet.</li>
-          </ol>
-        </div>
       </article>
 
       <article class="step-card">
@@ -942,6 +963,25 @@
         </div>
         <div id="snapshot-box" class="log-box"></div>
       </div>
+    </section>
+
+    <section class="card">
+      <details id="source-filters-panel" class="source-filters-panel">
+        <summary>
+          <div class="source-filters-toggle-title">
+            <span>Source Filters</span>
+            <span class="mono">GET /api/jobs/{id}/source-filters</span>
+          </div>
+          <div id="source-filters-toggle-summary" class="source-filters-toggle-meta">Select a job to inspect sourcing filters.</div>
+        </summary>
+        <div id="source-filters-box" class="source-filters-box">
+          <div id="source-filters-summary" class="source-filters-summary">Select a job to inspect sourcing filters.</div>
+          <div id="source-filter-chips" class="source-filter-chips"></div>
+          <ol id="source-filters-queries" class="source-filters-queries">
+            <li class="muted">No generated queries yet.</li>
+          </ol>
+        </div>
+      </details>
     </section>
 
     <section class="card">
@@ -1830,20 +1870,23 @@
     }
 
     function renderSourceFilters() {
+      const toggleSummaryEl = $("source-filters-toggle-summary");
       const summaryEl = $("source-filters-summary");
       const chipsEl = $("source-filter-chips");
       const queriesEl = $("source-filters-queries");
-      if (!summaryEl || !chipsEl || !queriesEl) return;
+      if (!summaryEl || !chipsEl || !queriesEl || !toggleSummaryEl) return;
       const selected = selectedJobId();
       const preview = state.sourceFiltersPreview || {};
       const filters = preview.filters || {};
       if (!selected) {
+        toggleSummaryEl.textContent = "Select a job to inspect sourcing filters.";
         summaryEl.textContent = "Select a job to inspect sourcing filters.";
         chipsEl.innerHTML = "";
         queriesEl.innerHTML = '<li class="muted">No generated queries yet.</li>';
         return;
       }
       if (String(preview.status || "").trim().toLowerCase() === "error") {
+        toggleSummaryEl.textContent = "Source filters unavailable";
         summaryEl.textContent = String(preview.error || "Failed to load source filters");
         chipsEl.innerHTML = "";
         queriesEl.innerHTML = '<li class="muted">Source filters unavailable.</li>';
@@ -1856,6 +1899,13 @@
       const company = String(preview.job_company || "").trim();
       const location = String(filters.location || "").trim();
       const seniority = String(filters.seniority || "").trim();
+      const compactParts = [
+        `${queries.length} quer${queries.length === 1 ? "y" : "ies"}`,
+        location || "",
+        seniority || "",
+        languages.length ? languages.join(", ") : "",
+      ].filter(Boolean);
+      toggleSummaryEl.textContent = compactParts.join(" • ");
       const summaryParts = [
         company ? `${jobTitle} • ${company}` : jobTitle,
         location ? `location: ${location}` : "",
