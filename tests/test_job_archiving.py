@@ -120,6 +120,64 @@ class JobArchivingTests(unittest.TestCase):
         visible_titles = [str(item.get("title") or "") for item in (payload_jobs.get("items") or [])]
         self.assertEqual(visible_titles, ["Frontend Engineer", "Manual QA Engineer"])
 
+    def test_archive_job_stops_pending_outreach_and_pre_resume_followups(self) -> None:
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "archive-candidate-1",
+                "full_name": "Archive Candidate",
+                "headline": "QA",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["testing"],
+                "years_experience": 2,
+            }
+        )
+        self.db.create_candidate_match(
+            job_id=self.backend_job_id,
+            candidate_id=candidate_id,
+            score=0.91,
+            status="needs_resume",
+            verification_notes={},
+        )
+        conversation_id = self.db.create_conversation(job_id=self.backend_job_id, candidate_id=candidate_id)
+        action_id = self.db.create_outbound_action(
+            job_id=self.backend_job_id,
+            candidate_id=candidate_id,
+            conversation_id=conversation_id,
+            action_type="outreach_message",
+            payload={"message": "Hello"},
+        )
+        self.db.upsert_pre_resume_session(
+            session_id=f"pre-{conversation_id}",
+            conversation_id=conversation_id,
+            job_id=self.backend_job_id,
+            candidate_id=candidate_id,
+            state={
+                "status": "awaiting_reply",
+                "language": "en",
+                "followups_sent": 1,
+                "next_followup_at": "2026-03-09T10:00:00+00:00",
+            },
+            instruction="follow up",
+        )
+
+        result = self.db.archive_jobs(job_ids=[self.backend_job_id])
+        self.assertEqual(int(result.get("updated") or 0), 1)
+
+        action_row = self.db.get_outbound_action(action_id) or {}
+        self.assertEqual(str(action_row.get("status") or ""), "failed")
+        self.assertEqual(str(action_row.get("last_error") or ""), "job_archived")
+
+        pending_for_archived = self.db.list_pending_outbound_actions(limit=20, job_id=self.backend_job_id)
+        self.assertEqual(pending_for_archived, [])
+
+        pre_resume_row = self.db.get_pre_resume_session(f"pre-{conversation_id}") or {}
+        self.assertEqual(str(pre_resume_row.get("status") or ""), "stalled")
+        self.assertEqual(pre_resume_row.get("next_followup_at"), None)
+        state_json = pre_resume_row.get("state_json") if isinstance(pre_resume_row.get("state_json"), dict) else {}
+        self.assertEqual(str(state_json.get("status") or ""), "stalled")
+        self.assertEqual(state_json.get("next_followup_at"), None)
+
     def test_dual_write_archive_jobs_mirrors_archived_at(self) -> None:
         class _Mirror:
             def __init__(self) -> None:

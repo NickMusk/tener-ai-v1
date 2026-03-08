@@ -533,6 +533,65 @@ class Database:
                 f"UPDATE jobs SET archived_at = ? WHERE id IN ({placeholders})",
                 (now, *target_ids),
             )
+            conn.execute(
+                f"""
+                UPDATE outbound_actions
+                SET
+                    status = 'failed',
+                    result_json = ?,
+                    last_error = ?,
+                    updated_at = ?
+                WHERE job_id IN ({placeholders})
+                  AND status IN ('pending', 'running')
+                """,
+                (
+                    json.dumps({"reason": "job_archived"}),
+                    "job_archived",
+                    now,
+                    *target_ids,
+                ),
+            )
+            pre_resume_rows = conn.execute(
+                f"""
+                SELECT session_id, state_json, last_error
+                FROM pre_resume_sessions
+                WHERE job_id IN ({placeholders})
+                  AND status NOT IN ('resume_received', 'not_interested', 'unreachable', 'stalled')
+                """,
+                tuple(target_ids),
+            ).fetchall()
+            for row in pre_resume_rows:
+                state_payload: Dict[str, Any] = {}
+                raw_state = row["state_json"]
+                if raw_state:
+                    try:
+                        state_payload = json.loads(raw_state)
+                    except json.JSONDecodeError:
+                        state_payload = {}
+                state_payload["status"] = "stalled"
+                state_payload["next_followup_at"] = None
+                state_payload["updated_at"] = now
+                if not str(state_payload.get("last_error") or "").strip():
+                    state_payload["last_error"] = "job_archived"
+                existing_error = str(row["last_error"] or "").strip() or None
+                conn.execute(
+                    """
+                    UPDATE pre_resume_sessions
+                    SET
+                        status = 'stalled',
+                        last_error = ?,
+                        next_followup_at = NULL,
+                        state_json = ?,
+                        updated_at = ?
+                    WHERE session_id = ?
+                    """,
+                    (
+                        existing_error or "job_archived",
+                        json.dumps(state_payload),
+                        now,
+                        str(row["session_id"]),
+                    ),
+                )
         return {"updated": len(target_ids), "archived_jobs": archived_jobs, "archived_at": now}
 
     def upsert_job_culture_profile(
@@ -1680,21 +1739,23 @@ class Database:
     ) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 100), 2000))
         args: List[Any] = [utc_now_iso()]
-        where_parts = ["status = 'pending'", "not_before <= ?"]
+        where_parts = ["outbound_actions.status = 'pending'", "outbound_actions.not_before <= ?"]
         if job_id is not None:
-            where_parts.append("job_id = ?")
+            where_parts.append("outbound_actions.job_id = ?")
             args.append(int(job_id))
         if action_ids:
             valid_ids = [int(x) for x in action_ids if int(x) > 0]
             if valid_ids:
                 placeholders = ",".join(["?"] * len(valid_ids))
-                where_parts.append(f"id IN ({placeholders})")
+                where_parts.append(f"outbound_actions.id IN ({placeholders})")
                 args.extend(valid_ids)
         query = f"""
-        SELECT *
+        SELECT outbound_actions.*
         FROM outbound_actions
+        JOIN jobs ON jobs.id = outbound_actions.job_id
         WHERE {' AND '.join(where_parts)}
-        ORDER BY priority DESC, id ASC
+          AND jobs.archived_at IS NULL
+        ORDER BY outbound_actions.priority DESC, outbound_actions.id ASC
         LIMIT ?
         """
         args.append(safe_limit)

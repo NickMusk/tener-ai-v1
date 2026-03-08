@@ -3039,6 +3039,9 @@ class WorkflowService:
         safe_limit = max(1, min(int(limit or 500), 2000))
         job_ids: List[int] = []
         if job_id is not None:
+            job_row = self.db.get_job(int(job_id))
+            if not job_row or bool(job_row.get("is_archived")):
+                return []
             job_ids = [int(job_id)]
         else:
             for job in self.db.list_jobs(limit=300):
