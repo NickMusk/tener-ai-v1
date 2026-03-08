@@ -1517,6 +1517,7 @@ class WorkflowService:
                     mime_type=None,
                     file_size_bytes=None,
                     remote_url=normalized_url,
+                    attachment_provider_file_id=None,
                     observed_at=observed_at,
                     inbound_message_id=inbound_message_id,
                     rank=idx,
@@ -1546,6 +1547,7 @@ class WorkflowService:
                     mime_type=str(descriptor.mime_type or "").strip().lower() or None,
                     file_size_bytes=descriptor.size_bytes,
                     remote_url=url,
+                    attachment_provider_file_id=source_identity if str(source_identity).strip() else None,
                     observed_at=observed_at,
                     inbound_message_id=inbound_message_id,
                     rank=rank_base + idx,
@@ -1573,6 +1575,7 @@ class WorkflowService:
         mime_type: str | None,
         file_size_bytes: int | None,
         remote_url: str | None,
+        attachment_provider_file_id: str | None,
         observed_at: str,
         inbound_message_id: int,
         rank: int,
@@ -1594,7 +1597,50 @@ class WorkflowService:
         resolved_mime = str(mime_type or "").strip().lower() or None
         resolved_size = file_size_bytes
 
-        if remote_url and self._skip_remote_resume_fetch(remote_url):
+        if (
+            remote_url
+            and remote_url.startswith("att://")
+            and provider in {"unipile", "unipile_poll"}
+            and provider_message_id
+            and attachment_provider_file_id
+        ):
+            try:
+                payload, downloaded_mime = self._download_provider_attachment_payload(
+                    provider=provider,
+                    provider_message_id=provider_message_id,
+                    attachment_id=attachment_provider_file_id,
+                )
+                if not resolved_mime:
+                    resolved_mime = downloaded_mime
+                resolved_size = len(payload)
+                storage_path, content_sha256 = self._persist_resume_payload(
+                    candidate_id=candidate_id,
+                    job_id=job_id,
+                    asset_key=asset_key,
+                    file_name=file_name,
+                    mime_type=resolved_mime,
+                    payload=payload,
+                )
+                extracted_text, extractor_hint, parse_error = self._extract_resume_text(
+                    payload=payload,
+                    file_name=file_name,
+                    mime_type=resolved_mime,
+                )
+                parsed_payload = {
+                    "extractor": extractor_hint,
+                    "text_length": len(extracted_text or ""),
+                    "parse_error": parse_error,
+                    "download_source": "provider_attachment",
+                }
+                if extracted_text:
+                    status = "processed"
+                else:
+                    status = "stored_unparsed"
+                    processing_error = parse_error or "resume_text_not_extracted"
+            except Exception as exc:
+                status = "download_failed"
+                processing_error = str(exc)
+        elif remote_url and self._skip_remote_resume_fetch(remote_url):
             status = "stored_unparsed"
             processing_error = "remote_fetch_skipped_for_mock_url"
         elif remote_url:
@@ -1678,6 +1724,7 @@ class WorkflowService:
                 "status": status,
                 "provider": provider,
                 "provider_message_id": provider_message_id,
+                "attachment_provider_file_id": attachment_provider_file_id,
                 "file_name": file_name,
                 "remote_url": remote_url,
                 "storage_path": storage_path,
@@ -1700,9 +1747,47 @@ class WorkflowService:
                 "status": status,
                 "source_type": source_type,
                 "source_id": source_id,
+                "attachment_provider_file_id": attachment_provider_file_id,
                 "error": processing_error,
             },
         )
+
+    def _download_provider_attachment_payload(
+        self,
+        *,
+        provider: str,
+        provider_message_id: str,
+        attachment_id: str,
+    ) -> tuple[bytes, str | None]:
+        normalized_provider = str(provider or "").strip().lower()
+        if normalized_provider not in {"unipile", "unipile_poll"}:
+            raise RuntimeError("provider_attachment_download_unsupported")
+        api_key = str(self.managed_unipile_api_key or "").strip()
+        if not api_key:
+            raise RuntimeError("managed_unipile_api_key_missing")
+        base_url = str(self.managed_unipile_base_url or "https://api.unipile.com").strip().rstrip("/")
+        message_id = str(provider_message_id or "").strip()
+        resolved_attachment_id = str(attachment_id or "").strip()
+        if not message_id or not resolved_attachment_id:
+            raise RuntimeError("provider_attachment_identifiers_missing")
+        url = f"{base_url}/api/v1/messages/{message_id}/attachments/{resolved_attachment_id}"
+        req = urlrequest.Request(
+            url=url,
+            method="GET",
+            headers={
+                "X-API-KEY": api_key,
+                "Accept": "*/*",
+            },
+        )
+        timeout = max(5, int(self.managed_unipile_timeout_seconds or 30))
+        with urlrequest.urlopen(req, timeout=timeout) as resp:
+            payload = resp.read((10 * 1024 * 1024) + 1)
+            if len(payload) > 10 * 1024 * 1024:
+                raise RuntimeError("provider_attachment_too_large")
+            content_type = str(resp.headers.get("Content-Type") or "").strip().lower()
+            if ";" in content_type:
+                content_type = content_type.split(";", 1)[0].strip()
+            return payload, (content_type or None)
 
     @staticmethod
     def _resume_asset_key(
@@ -2084,6 +2169,73 @@ class WorkflowService:
             "ignored": ignored,
             "errors": errors,
             "items": items,
+        }
+
+    def backfill_resume_assets_for_conversation(self, *, conversation_id: int, per_chat_limit: int = 50) -> Dict[str, Any]:
+        conversation = self.db.get_conversation(int(conversation_id))
+        if not conversation:
+            raise ValueError("conversation not found")
+        external_chat_id = str(conversation.get("external_chat_id") or "").strip()
+        if not external_chat_id:
+            return {"conversation_id": int(conversation_id), "processed": 0, "reason": "external_chat_id_missing"}
+        fetch_fn = getattr(self.sourcing_agent, "fetch_chat_messages", None)
+        if not callable(fetch_fn):
+            return {"conversation_id": int(conversation_id), "processed": 0, "reason": "provider_inbound_poll_not_supported"}
+
+        candidate = self.db.get_candidate(int(conversation.get("candidate_id") or 0))
+        job = self.db.get_job(int(conversation.get("job_id") or 0))
+        if not candidate or not job:
+            return {"conversation_id": int(conversation_id), "processed": 0, "reason": "conversation_context_missing"}
+
+        safe_per_chat = max(1, min(int(per_chat_limit or 50), 200))
+        messages = fetch_fn(external_chat_id, limit=safe_per_chat) or []
+        stored_messages = self.db.list_messages(conversation_id=int(conversation_id))
+        by_provider_message_id: Dict[str, Dict[str, Any]] = {}
+        for row in stored_messages:
+            meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+            provider_message_id = str(meta.get("provider_message_id") or "").strip()
+            if provider_message_id:
+                by_provider_message_id[provider_message_id] = row
+
+        scanned = 0
+        processed = 0
+        for message in messages:
+            if not isinstance(message, dict):
+                continue
+            scanned += 1
+            if not self._is_inbound_provider_message(message=message, candidate=candidate):
+                continue
+            attachments = message.get("attachments") if isinstance(message.get("attachments"), list) else []
+            if not attachments:
+                continue
+            provider_message_id = str(message.get("provider_message_id") or "").strip()
+            text = str(message.get("text") or "").strip()
+            if not text:
+                text = self._extract_attachment_text_from_provider_message(message)
+            stored_row = by_provider_message_id.get(provider_message_id)
+            inbound_message_id = int(stored_row.get("id") or 0) if isinstance(stored_row, dict) else 0
+            self._capture_resume_assets_from_inbound(
+                job=job,
+                candidate=candidate,
+                conversation=conversation,
+                inbound_message_id=inbound_message_id,
+                inbound_text=text,
+                inbound_meta={
+                    "type": "candidate_message",
+                    "provider": "unipile_poll",
+                    "provider_message_id": provider_message_id or None,
+                    "occurred_at": str(message.get("created_at") or "").strip() or None,
+                    "attachments": attachments,
+                    "raw": message.get("raw") if isinstance(message.get("raw"), dict) else message,
+                },
+            )
+            processed += 1
+
+        return {
+            "conversation_id": int(conversation_id),
+            "external_chat_id": external_chat_id,
+            "scanned": scanned,
+            "processed": processed,
         }
 
     def run_due_pre_resume_followups(self, job_id: int | None = None, limit: int = 100) -> Dict[str, Any]:

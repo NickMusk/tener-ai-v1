@@ -34,7 +34,8 @@ class CandidateProfileService:
 
     def list_candidate_resume_links(self, candidate_id: int) -> List[str]:
         sessions = self.db.list_pre_resume_sessions_for_candidate(candidate_id=int(candidate_id), limit=500)
-        return self._collect_resume_links(sessions=sessions)
+        resume_assets = self.db.list_resume_assets_for_candidate(candidate_id=int(candidate_id), limit=500)
+        return [str(item.get("url") or "").strip() for item in self._collect_resume_entries(sessions=sessions, resume_assets=resume_assets)]
 
     def build_candidate_profile(
         self,
@@ -51,6 +52,7 @@ class CandidateProfileService:
         matches = self.db.list_candidate_matches(candidate_id=int(candidate_id))
         assessments_all = self.db.list_candidate_assessments(candidate_id=int(candidate_id))
         sessions = self.db.list_pre_resume_sessions_for_candidate(candidate_id=int(candidate_id), limit=500)
+        resume_assets = self.db.list_resume_assets_for_candidate(candidate_id=int(candidate_id), limit=500)
         conversations = self.db.list_conversations_for_candidate(candidate_id=int(candidate_id), limit=500)
         pre_resume_events = self.db.list_pre_resume_events_for_candidate(candidate_id=int(candidate_id), limit=1000)
         logs = self.db.list_logs_for_candidate(candidate_id=int(candidate_id), limit=500)
@@ -65,6 +67,11 @@ class CandidateProfileService:
             job_id = int(row.get("job_id") or 0)
             sessions_by_job.setdefault(job_id, []).append(row)
 
+        resume_assets_by_job: Dict[int, List[Dict[str, Any]]] = {}
+        for row in resume_assets:
+            job_id = int(row.get("job_id") or 0)
+            resume_assets_by_job.setdefault(job_id, []).append(row)
+
         events_by_job: Dict[int, List[Dict[str, Any]]] = {}
         for row in pre_resume_events:
             job_id = int(row.get("job_id") or 0)
@@ -78,6 +85,17 @@ class CandidateProfileService:
             conversation_id = int(row.get("conversation_id") or 0)
             if conversation_id > 0:
                 conversation_ids_by_job.setdefault(job_id, set()).add(conversation_id)
+
+        conversation_account_ids = {
+            int(row.get("linkedin_account_id") or 0)
+            for row in conversations
+            if int(row.get("linkedin_account_id") or 0) > 0
+        }
+        linkedin_accounts_by_id: Dict[int, Dict[str, Any]] = {}
+        for account_id in conversation_account_ids:
+            row = self.db.get_linkedin_account(account_id)
+            if isinstance(row, dict):
+                linkedin_accounts_by_id[int(account_id)] = row
 
         jobs_payload: List[Dict[str, Any]] = []
         global_signals: List[Dict[str, Any]] = []
@@ -111,7 +129,11 @@ class CandidateProfileService:
             )
             job_events = list(events_by_job.get(job_id, []))
             job_conversations = list(conversations_by_job.get(job_id, []))
-            resumes_for_job = self._collect_resume_links(sessions=sessions_by_job.get(job_id, []))
+            resume_entries_for_job = self._collect_resume_entries(
+                sessions=sessions_by_job.get(job_id, []),
+                resume_assets=resume_assets_by_job.get(job_id, []),
+            )
+            resumes_for_job = [str(item.get("url") or "").strip() for item in resume_entries_for_job]
             fit_breakdown = self._build_fit_breakdown(
                 job=job,
                 candidate=candidate,
@@ -168,7 +190,10 @@ class CandidateProfileService:
                         "created_at": match.get("match_created_at"),
                         "verification_notes": match.get("verification_notes") if isinstance(match.get("verification_notes"), dict) else {},
                     },
-                    "conversation": (conversations_by_job.get(job_id) or [None])[0],
+                    "conversation": self._decorate_conversation(
+                        conversation=(conversations_by_job.get(job_id) or [None])[0],
+                        linkedin_accounts_by_id=linkedin_accounts_by_id,
+                    ),
                     "current_status": {
                         "key": current_status_key,
                         "label": current_status_label,
@@ -180,6 +205,7 @@ class CandidateProfileService:
                     "resumes": {
                         "links": resumes_for_job,
                         "latest_link": resumes_for_job[0] if resumes_for_job else None,
+                        "items": resume_entries_for_job,
                     },
                     "signals_timeline": signals,
                 }
@@ -203,7 +229,8 @@ class CandidateProfileService:
             key=lambda item: self._safe_parse_time(str(item.get("created_at") or "")),
             reverse=True,
         )
-        resume_links = self._collect_resume_links(sessions=sessions)
+        resume_entries = self._collect_resume_entries(sessions=sessions, resume_assets=resume_assets)
+        resume_links = [str(item.get("url") or "").strip() for item in resume_entries]
         payload: Dict[str, Any] = {
             "candidate": candidate,
             "selected_job_id": selected_job,
@@ -1072,9 +1099,39 @@ class CandidateProfileService:
         return out
 
     @staticmethod
-    def _collect_resume_links(sessions: List[Dict[str, Any]]) -> List[str]:
-        out: List[str] = []
+    def _collect_resume_entries(
+        *,
+        sessions: List[Dict[str, Any]],
+        resume_assets: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
         seen: set[str] = set()
+        ordered_assets = sorted(
+            resume_assets,
+            key=lambda item: CandidateProfileService._safe_parse_time(
+                str(item.get("observed_at") or item.get("updated_at") or item.get("created_at") or ""),
+            ),
+            reverse=True,
+        )
+        for row in ordered_assets:
+            link = str(row.get("remote_url") or "").strip()
+            if not link or link in seen:
+                continue
+            seen.add(link)
+            file_name = str(row.get("file_name") or "").strip()
+            label = file_name or link
+            out.append(
+                {
+                    "url": link,
+                    "label": label,
+                    "source": str(row.get("source_type") or "resume_asset").strip().lower() or "resume_asset",
+                    "file_name": file_name or None,
+                    "mime_type": str(row.get("mime_type") or "").strip().lower() or None,
+                    "processing_status": str(row.get("processing_status") or "").strip().lower() or None,
+                    "storage_available": bool(str(row.get("storage_path") or "").strip()),
+                    "observed_at": row.get("observed_at"),
+                }
+            )
         ordered = sorted(
             sessions,
             key=lambda item: CandidateProfileService._safe_parse_time(str(item.get("updated_at") or "")),
@@ -1094,7 +1151,42 @@ class CandidateProfileService:
                 if not link or link in seen:
                     continue
                 seen.add(link)
-                out.append(link)
+                out.append(
+                    {
+                        "url": link,
+                        "label": link,
+                        "source": "pre_resume_session",
+                        "file_name": None,
+                        "mime_type": None,
+                        "processing_status": None,
+                        "storage_available": False,
+                        "observed_at": row.get("updated_at"),
+                    }
+                )
+        return out
+
+    @staticmethod
+    def _decorate_conversation(
+        *,
+        conversation: Dict[str, Any] | None,
+        linkedin_accounts_by_id: Dict[int, Dict[str, Any]],
+    ) -> Dict[str, Any] | None:
+        if not isinstance(conversation, dict):
+            return None
+        out = dict(conversation)
+        conversation_id = int(out.get("conversation_id") or 0)
+        job_id = int(out.get("job_id") or 0)
+        linkedin_account_id = int(out.get("linkedin_account_id") or 0)
+        account = linkedin_accounts_by_id.get(linkedin_account_id) if linkedin_account_id > 0 else None
+        account_label = str((account or {}).get("label") or "").strip()
+        out["linkedin_account_label"] = account_label or (f"Account {linkedin_account_id}" if linkedin_account_id > 0 else None)
+        out["linkedin_account_provider"] = str((account or {}).get("provider") or "").strip() or None
+        out["linkedin_account_provider_account_id"] = str((account or {}).get("provider_account_id") or "").strip() or None
+        out["dashboard_path"] = (
+            f"/dashboard?view=agent&agent_job=all&job_id={job_id}&conversation_id={conversation_id}"
+            if conversation_id > 0
+            else None
+        )
         return out
 
     @staticmethod

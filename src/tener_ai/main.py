@@ -575,6 +575,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "interview_sync": "POST /api/interviews/sync",
                         "interview_followups_run": "POST /api/interviews/followups/run",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
+                        "conversation_resume_backfill": "POST /api/conversations/{conversation_id}/resume-backfill",
                         "chats_overview": "GET /api/chats/overview?limit=200",
                         "outreach_ops": "GET /api/outreach/ops?job_id=...&stale_minutes=45",
                         "outreach_ats_board": "GET /api/outreach/ats-board?job_id=...&limit=600",
@@ -708,7 +709,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if selected_url and selected_url not in allowed:
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "resume url is not linked to candidate"})
                 return
-            if selected_url and not (selected_url.startswith("https://") or selected_url.startswith("http://")):
+            has_local_asset = self._has_local_candidate_resume_asset(candidate_id=int(candidate_id), selected_url=selected_url)
+            if selected_url and not has_local_asset and not (selected_url.startswith("https://") or selected_url.startswith("http://")):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "unsupported resume url scheme"})
                 return
             self._json_response(
@@ -741,10 +743,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if selected_url not in set(links):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "resume url is not linked to candidate"})
                 return
+            if self._serve_local_candidate_resume_asset(candidate_id=int(candidate_id), selected_url=selected_url):
+                return
             if not (selected_url.startswith("https://") or selected_url.startswith("http://")):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "unsupported resume url scheme"})
-                return
-            if self._serve_local_candidate_resume_asset(candidate_id=int(candidate_id), selected_url=selected_url):
                 return
             req = urlrequest.Request(
                 url=selected_url,
@@ -2849,6 +2851,30 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, reply)
             return
 
+        if parsed.path.startswith("/api/conversations/") and parsed.path.endswith("/resume-backfill"):
+            conversation_id = self._extract_id(parsed.path, pattern=r"^/api/conversations/(\d+)/resume-backfill$")
+            if conversation_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid conversation id"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            limit = self._safe_int(body.get("limit"), 50) or 50
+            try:
+                result = SERVICES["workflow"].backfill_resume_assets_for_conversation(
+                    conversation_id=int(conversation_id),
+                    per_chat_limit=limit,
+                )
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "resume backfill failed", "details": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
         if parsed.path == "/api/rules/reload":
             SERVICES["matching_engine"].reload()
             SERVICES["db"].log_operation(
@@ -3171,14 +3197,38 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _has_local_candidate_resume_asset(self, *, candidate_id: int, selected_url: str) -> bool:
+        return self._candidate_local_resume_asset_path(candidate_id=int(candidate_id), selected_url=selected_url) is not None
+
     def _serve_local_candidate_resume_asset(self, *, candidate_id: int, selected_url: str) -> bool:
+        match = self._candidate_local_resume_asset_path(candidate_id=int(candidate_id), selected_url=selected_url)
+        if match is not None:
+            storage_path, mime_type = match
+            try:
+                payload = storage_path.read_bytes()
+            except OSError:
+                return False
+            content_type = self._resume_content_type(storage_path=storage_path, mime_type=mime_type)
+            self._binary_response(
+                status=HTTPStatus.OK,
+                content_type=content_type,
+                payload=payload,
+                extra_headers={
+                    "Content-Disposition": f"inline; filename=\"{storage_path.name}\"",
+                    "Cache-Control": "no-store",
+                },
+            )
+            return True
+        return False
+
+    def _candidate_local_resume_asset_path(self, *, candidate_id: int, selected_url: str) -> Optional[tuple[Path, Any]]:
         db = SERVICES.get("db")
         if db is None:
-            return False
+            return None
         try:
             rows = db.list_resume_assets_for_candidate(candidate_id=int(candidate_id), limit=500)
         except Exception:
-            return False
+            return None
         matching = [
             row
             for row in rows
@@ -3193,25 +3243,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             storage_path = self._validated_resume_storage_path(row.get("storage_path"))
             if storage_path is None:
                 continue
-            try:
-                payload = storage_path.read_bytes()
-            except OSError:
-                continue
-            content_type = self._resume_content_type(
-                storage_path=storage_path,
-                mime_type=row.get("mime_type"),
-            )
-            self._binary_response(
-                status=HTTPStatus.OK,
-                content_type=content_type,
-                payload=payload,
-                extra_headers={
-                    "Content-Disposition": f"inline; filename=\"{storage_path.name}\"",
-                    "Cache-Control": "no-store",
-                },
-            )
-            return True
-        return False
+            return storage_path, row.get("mime_type")
+        return None
 
     @classmethod
     def _validated_resume_storage_path(cls, raw_path: Any) -> Optional[Path]:

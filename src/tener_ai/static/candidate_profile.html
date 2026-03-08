@@ -600,6 +600,19 @@
         </section>
 
         <section class="panel">
+          <h3 class="card-title">LinkedIn Conversation</h3>
+          <div id="conversation-empty" class="muted">No LinkedIn conversation linked yet</div>
+          <div id="conversation-details" style="display:none;">
+            <div id="conversation-summary"></div>
+            <div id="conversation-account" class="muted mono" style="margin-top:8px;"></div>
+            <div id="conversation-chat-id" class="muted mono" style="margin-top:6px;"></div>
+            <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+              <a class="btn" id="conversation-open-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open Conversation</a>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
           <h3 class="card-title">Candidate Timeline</h3>
           <div class="timeline" id="signals-timeline-list"></div>
         </section>
@@ -821,6 +834,40 @@
       }
     }
 
+    function renderConversation() {
+      const item = selectedJobPayload();
+      const conversation = item?.conversation || null;
+      const empty = $("conversation-empty");
+      const details = $("conversation-details");
+      const openLink = $("conversation-open-link");
+      if (!conversation || !Number(conversation.conversation_id || 0)) {
+        empty.style.display = "block";
+        details.style.display = "none";
+        if (openLink) {
+          openLink.removeAttribute("href");
+          openLink.style.display = "none";
+        }
+        return;
+      }
+      empty.style.display = "none";
+      details.style.display = "block";
+      const conversationId = Number(conversation.conversation_id || 0);
+      const status = String(conversation.conversation_status || "").trim() || "unknown";
+      $("conversation-summary").textContent = `Conversation #${conversationId} • ${status}`;
+      $("conversation-account").textContent = `Sent from account: ${String(conversation.linkedin_account_label || "not assigned")}`;
+      $("conversation-chat-id").textContent = `LinkedIn chat id: ${String(conversation.external_chat_id || "not synced yet")}`;
+      const dashboardPath = String(conversation.dashboard_path || "").trim();
+      if (openLink) {
+        if (dashboardPath) {
+          openLink.href = dashboardPath;
+          openLink.style.display = "inline-block";
+        } else {
+          openLink.removeAttribute("href");
+          openLink.style.display = "none";
+        }
+      }
+    }
+
     function renderFit() {
       const item = selectedJobPayload();
       if (!item) return;
@@ -980,7 +1027,10 @@
 
     async function renderResume() {
       const item = selectedJobPayload();
-      const resumes = item?.resumes?.links || [];
+      const resumeItems = Array.isArray(item?.resumes?.items) && item.resumes.items.length
+        ? item.resumes.items
+        : (item?.resumes?.links || []).map((url) => ({ url, label: url }));
+      const resumes = resumeItems.map((entry) => String(entry?.url || "").trim()).filter(Boolean);
       const select = $("resume-select");
       const frame = $("resume-frame");
       const empty = $("resume-empty");
@@ -996,7 +1046,16 @@
       if (!state.selectedResumeUrl || !resumes.includes(state.selectedResumeUrl)) {
         state.selectedResumeUrl = resumes[0];
       }
-      select.innerHTML = resumes.map((url) => `<option value="${encodeURIComponent(url)}">${escapeHtml(url)}</option>`).join("");
+      select.innerHTML = resumeItems.map((entry) => {
+        const url = String(entry?.url || "").trim();
+        if (!url) return "";
+        const label = String(entry?.label || url).trim() || url;
+        const details = [];
+        if (entry?.processing_status) details.push(String(entry.processing_status));
+        if (entry?.storage_available) details.push("cached");
+        const optionLabel = details.length ? `${label} • ${details.join(" • ")}` : label;
+        return `<option value="${encodeURIComponent(url)}">${escapeHtml(optionLabel)}</option>`;
+      }).join("");
       select.value = encodeURIComponent(state.selectedResumeUrl);
       try {
         const out = await api(`/api/candidates/${state.candidateId}/resume-preview?url=${encodeURIComponent(state.selectedResumeUrl)}`);
@@ -1029,6 +1088,7 @@
       renderJobs();
       renderScores();
       renderFit();
+      renderConversation();
       renderSignals();
       renderAudit();
       renderResume().catch(() => null);

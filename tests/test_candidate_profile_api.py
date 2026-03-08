@@ -28,6 +28,8 @@ class CandidateProfileApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
         tmp_path = Path(self._tmp.name)
+        self._previous_resume_storage_dir = os.environ.get("TENER_RESUME_STORAGE_DIR")
+        os.environ["TENER_RESUME_STORAGE_DIR"] = str(tmp_path / "resume-storage")
         self.db = Database(str(tmp_path / "candidate_profile_api.sqlite3"))
         self.db.init_schema()
         matching = MatchingEngine(str(self.root / "config" / "matching_rules.json"))
@@ -53,6 +55,10 @@ class CandidateProfileApiTests(unittest.TestCase):
         self.server.server_close()
         self.server_thread.join(timeout=3)
         api_main.SERVICES = self._previous_services
+        if self._previous_resume_storage_dir is None:
+            os.environ.pop("TENER_RESUME_STORAGE_DIR", None)
+        else:
+            os.environ["TENER_RESUME_STORAGE_DIR"] = self._previous_resume_storage_dir
         self._tmp.cleanup()
 
     def _request(self, method: str, path: str, payload: Optional[Dict[str, Any]] = None) -> Tuple[int, Dict[str, Any]]:
@@ -77,6 +83,19 @@ class CandidateProfileApiTests(unittest.TestCase):
         else:
             body = {}
         return status, body
+
+    def _request_raw(self, method: str, path: str) -> Tuple[int, bytes, Dict[str, str]]:
+        req = request.Request(url=f"{self.base_url}{path}", method=method)
+        try:
+            with request.urlopen(req, timeout=20) as resp:
+                status = int(resp.status)
+                raw = resp.read()
+                headers = {str(k): str(v) for k, v in resp.headers.items()}
+        except error.HTTPError as exc:
+            status = int(exc.code)
+            raw = exc.read()
+            headers = {str(k): str(v) for k, v in exc.headers.items()}
+        return status, raw, headers
 
     def _seed_candidate_context(self) -> Tuple[int, int]:
         job_id = self.db.insert_job(
@@ -148,6 +167,14 @@ class CandidateProfileApiTests(unittest.TestCase):
             details={"technical_score": 84, "soft_skills_score": 83},
         )
         conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+        account_id = self.db.upsert_linkedin_account(
+            provider="unipile",
+            provider_account_id="acc-candidate-profile-1",
+            status="connected",
+            label="Nick Recruiter",
+        )
+        self.db.set_conversation_linkedin_account(conversation_id=conversation_id, account_id=account_id)
+        self.db.set_conversation_external_chat_id(conversation_id=conversation_id, external_chat_id="chat-candidate-profile-1")
         self.db.add_message(
             conversation_id=conversation_id,
             direction="inbound",
@@ -204,8 +231,12 @@ class CandidateProfileApiTests(unittest.TestCase):
         self.assertIsInstance(jobs, list)
         self.assertGreater(len(jobs), 0)
         first = jobs[0]
+        conversation = first.get("conversation") if isinstance(first.get("conversation"), dict) else {}
         self.assertIsNotNone((first.get("overall_scoring") or {}).get("overall_score"))
         self.assertEqual((first.get("fit_explanation") or {}).get("source"), "fallback")
+        self.assertEqual(str(conversation.get("linkedin_account_label") or ""), "Nick Recruiter")
+        self.assertEqual(str(conversation.get("external_chat_id") or ""), "chat-candidate-profile-1")
+        self.assertIn("/dashboard?view=agent", str(conversation.get("dashboard_path") or ""))
         kinds = {str(x.get("kind") or "") for x in (first.get("signals_timeline") or [])}
         self.assertIn("assessment_signal", kinds)
         self.assertIn("pre_resume_event", kinds)
@@ -225,6 +256,79 @@ class CandidateProfileApiTests(unittest.TestCase):
         )
         self.assertEqual(status_bad, 400)
         self.assertIn("error", body_bad)
+
+    def test_resume_preview_uses_resume_asset_when_only_asset_exists(self) -> None:
+        job_id = self.db.insert_job(
+            title="Senior QA Engineer",
+            company="Tener",
+            jd_text="Need Python and Selenium",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="senior",
+        )
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "cand-profile-asset-1",
+                "full_name": "Resume Asset Candidate",
+                "headline": "QA Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python", "selenium"],
+                "years_experience": 5,
+                "raw": {},
+            },
+            source="manual",
+        )
+        self.db.create_candidate_match(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            score=0.71,
+            status="needs_resume",
+            verification_notes={"required_skills": ["python", "selenium"]},
+        )
+        conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+        local_pdf = Path(os.environ["TENER_RESUME_STORAGE_DIR"]) / "resume-asset.pdf"
+        local_pdf.parent.mkdir(parents=True, exist_ok=True)
+        local_pdf.write_bytes(b"%PDF-1.4\n%tener\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF")
+        remote_url = "att://resume-asset-1"
+        self.db.upsert_resume_asset(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            conversation_id=conversation_id,
+            source_type="message_attachment",
+            source_id="attachment:resume-asset-1",
+            provider="unipile",
+            provider_message_id="msg-resume-asset-1",
+            file_name="resume_asset.pdf",
+            mime_type="application/pdf",
+            remote_url=remote_url,
+            storage_path=str(local_pdf),
+            processing_status="processed",
+            observed_at="2026-03-01T10:00:00+00:00",
+        )
+
+        status_profile, payload = self._request("GET", f"/api/candidates/{candidate_id}/profile?job_id={job_id}")
+        self.assertEqual(status_profile, 200)
+        jobs = payload.get("jobs") if isinstance(payload.get("jobs"), list) else []
+        self.assertTrue(jobs)
+        resumes = (jobs[0].get("resumes") or {}).get("links") or []
+        self.assertIn(remote_url, resumes)
+
+        status_preview, preview = self._request(
+            "GET",
+            f"/api/candidates/{candidate_id}/resume-preview?url={remote_url}",
+        )
+        self.assertEqual(status_preview, 200)
+        self.assertTrue(bool(preview.get("available")))
+        self.assertEqual(preview.get("url"), remote_url)
+
+        status_content, raw_content, headers = self._request_raw(
+            "GET",
+            f"/api/candidates/{candidate_id}/resume-preview/content?url={remote_url}",
+        )
+        self.assertEqual(status_content, 200)
+        self.assertTrue(raw_content.startswith(b"%PDF-1.4"))
+        self.assertEqual(str(headers.get("Content-Type") or ""), "application/pdf")
 
     def test_demo_profile_endpoint_seeds_profile(self) -> None:
         status, created = self._request("POST", "/api/candidates/demo-profile", {})

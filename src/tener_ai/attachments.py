@@ -4,13 +4,24 @@ from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence
 
 
-NAME_KEYS: Sequence[str] = ("name", "filename", "file_name", "title")
+NAME_KEYS: Sequence[str] = (
+    "name",
+    "filename",
+    "file_name",
+    "title",
+    "original_name",
+    "original_filename",
+    "display_name",
+)
 URL_KEYS: Sequence[str] = (
     "url",
+    "uri",
     "link",
     "href",
     "download_url",
     "downloadUrl",
+    "download_uri",
+    "downloadUri",
     "signed_url",
     "signedUrl",
     "public_url",
@@ -18,8 +29,8 @@ URL_KEYS: Sequence[str] = (
     "file_url",
     "fileUrl",
 )
-MIME_KEYS: Sequence[str] = ("mime_type", "mimeType", "content_type", "contentType")
-SIZE_KEYS: Sequence[str] = ("size", "size_bytes", "sizeBytes", "content_length", "contentLength")
+MIME_KEYS: Sequence[str] = ("mime_type", "mimeType", "mimetype", "mime", "content_type", "contentType")
+SIZE_KEYS: Sequence[str] = ("size", "file_size", "fileSize", "size_bytes", "sizeBytes", "content_length", "contentLength")
 ID_KEYS: Sequence[str] = ("id", "file_id", "fileId", "document_id", "documentId", "asset_id", "assetId")
 
 RESUME_MARKERS: Sequence[str] = (
@@ -178,7 +189,7 @@ def _pick_url(payload: Dict[str, Any], keys: Sequence[str]) -> Optional[str]:
         raw = payload.get(key)
         if isinstance(raw, str):
             cleaned = raw.strip()
-            if cleaned.startswith("http://") or cleaned.startswith("https://"):
+            if cleaned.startswith("http://") or cleaned.startswith("https://") or cleaned.startswith("att://"):
                 return cleaned
     return None
 
