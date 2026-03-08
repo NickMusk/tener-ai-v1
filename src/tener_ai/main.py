@@ -531,6 +531,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "archive_jobs_bulk": "POST /api/jobs/archive-bulk",
                         "job_progress": "GET /api/jobs/{job_id}/progress",
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
+                        "job_source_filters": "GET /api/jobs/{job_id}/source-filters",
                         "candidate_profile": "GET /api/candidates/{candidate_id}/profile?job_id=...&audit=0|1",
                         "candidate_resume_preview": "GET /api/candidates/{candidate_id}/resume-preview?job_id=...&url=...",
                         "candidate_resume_content": "GET /api/candidates/{candidate_id}/resume-preview/content?url=...",
@@ -742,6 +743,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 return
             if not (selected_url.startswith("https://") or selected_url.startswith("http://")):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "unsupported resume url scheme"})
+                return
+            if self._serve_local_candidate_resume_asset(candidate_id=int(candidate_id), selected_url=selected_url):
                 return
             req = urlrequest.Request(
                 url=selected_url,
@@ -1064,6 +1067,33 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if scoring_formula is not None:
                 rows = [scoring_formula.decorate_candidate_row(row) for row in rows]
             self._json_response(HTTPStatus.OK, {"job_id": job_id, "items": rows})
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/source-filters"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/source-filters$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            job = self._read_db().get_job(job_id)
+            if not job:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            workflow = SERVICES.get("workflow")
+            sourcing_agent = getattr(workflow, "sourcing_agent", None) if workflow is not None else None
+            build_preview = getattr(sourcing_agent, "build_search_preview", None)
+            if not callable(build_preview):
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "sourcing preview unavailable"})
+                return
+            filters = build_preview(job)
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "job_id": int(job_id),
+                    "job_title": str(job.get("title") or "").strip() or None,
+                    "job_company": str(job.get("company") or "").strip() or None,
+                    "filters": filters,
+                },
+            )
             return
 
         if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/signals/live"):
@@ -3140,6 +3170,87 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self.send_header(str(key), str(value))
         self.end_headers()
         self.wfile.write(payload)
+
+    def _serve_local_candidate_resume_asset(self, *, candidate_id: int, selected_url: str) -> bool:
+        db = SERVICES.get("db")
+        if db is None:
+            return False
+        try:
+            rows = db.list_resume_assets_for_candidate(candidate_id=int(candidate_id), limit=500)
+        except Exception:
+            return False
+        matching = [
+            row
+            for row in rows
+            if str(row.get("remote_url") or "").strip() == str(selected_url or "").strip()
+            and str(row.get("storage_path") or "").strip()
+        ]
+        matching.sort(
+            key=lambda row: self._parse_iso_datetime(row.get("observed_at")) or datetime.min.replace(tzinfo=timezone.utc),
+            reverse=True,
+        )
+        for row in matching:
+            storage_path = self._validated_resume_storage_path(row.get("storage_path"))
+            if storage_path is None:
+                continue
+            try:
+                payload = storage_path.read_bytes()
+            except OSError:
+                continue
+            content_type = self._resume_content_type(
+                storage_path=storage_path,
+                mime_type=row.get("mime_type"),
+            )
+            self._binary_response(
+                status=HTTPStatus.OK,
+                content_type=content_type,
+                payload=payload,
+                extra_headers={
+                    "Content-Disposition": f"inline; filename=\"{storage_path.name}\"",
+                    "Cache-Control": "no-store",
+                },
+            )
+            return True
+        return False
+
+    @classmethod
+    def _validated_resume_storage_path(cls, raw_path: Any) -> Optional[Path]:
+        text = str(raw_path or "").strip()
+        if not text:
+            return None
+        candidate = Path(text)
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            return None
+        root_raw = str(os.environ.get("TENER_RESUME_STORAGE_DIR") or "data/resumes").strip()
+        root = Path(root_raw)
+        if not root.is_absolute():
+            root = Path.cwd() / root
+        try:
+            allowed_root = root.resolve()
+        except OSError:
+            return None
+        if resolved != allowed_root and allowed_root not in resolved.parents:
+            return None
+        if not resolved.is_file():
+            return None
+        return resolved
+
+    @staticmethod
+    def _resume_content_type(*, storage_path: Path, mime_type: Any) -> str:
+        normalized = str(mime_type or "").strip().lower()
+        if normalized:
+            return normalized.split(";", 1)[0].strip() or "application/octet-stream"
+        suffix = storage_path.suffix.lower()
+        mapping = {
+            ".pdf": "application/pdf",
+            ".doc": "application/msword",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".txt": "text/plain; charset=utf-8",
+            ".json": "application/json; charset=utf-8",
+        }
+        return mapping.get(suffix, "application/octet-stream")
 
     @staticmethod
     def _extract_id(path: str, pattern: str) -> Optional[int]:

@@ -1,0 +1,106 @@
+from __future__ import annotations
+
+import json
+import os
+import threading
+import unittest
+from http.server import ThreadingHTTPServer
+from pathlib import Path
+from tempfile import TemporaryDirectory, gettempdir
+from typing import Any, Dict, Optional, Tuple
+from urllib import error, request
+
+os.environ.setdefault("TENER_DB_PATH", str(Path(gettempdir()) / "tener_job_source_filters_bootstrap.sqlite3"))
+
+from tener_ai import main as api_main
+from tener_ai.agents import SourcingAgent
+from tener_ai.db import Database
+
+
+class _SourceProvider:
+    def search_profiles(self, query: str, limit: int = 50) -> list[dict[str, Any]]:
+        return []
+
+
+class _WorkflowStub:
+    def __init__(self) -> None:
+        self.sourcing_agent = SourcingAgent(_SourceProvider())
+
+
+class JobSourceFiltersApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = TemporaryDirectory()
+        tmp_path = Path(self._tmp.name)
+        self.db = Database(str(tmp_path / "job_source_filters.sqlite3"))
+        self.db.init_schema()
+        self._previous_services = api_main.SERVICES
+        api_main.SERVICES = {
+            "db": self.db,
+            "workflow": _WorkflowStub(),
+            "interview_api_base": "",
+        }
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), api_main.TenerRequestHandler)
+        self.base_url = f"http://127.0.0.1:{self.server.server_port}"
+        self.server_thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.server_thread.start()
+
+    def tearDown(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.server_thread.join(timeout=3)
+        api_main.SERVICES = self._previous_services
+        self._tmp.cleanup()
+
+    def _request(self, method: str, path: str, payload: Optional[Dict[str, Any]] = None) -> Tuple[int, Dict[str, Any]]:
+        data = None
+        headers: Dict[str, str] = {}
+        if payload is not None:
+            headers["Content-Type"] = "application/json"
+            data = json.dumps(payload).encode("utf-8")
+        req = request.Request(url=f"{self.base_url}{path}", method=method, data=data, headers=headers)
+        try:
+            with request.urlopen(req, timeout=20) as resp:
+                status = int(resp.status)
+                raw = resp.read().decode("utf-8")
+        except error.HTTPError as exc:
+            status = int(exc.code)
+            raw = exc.read().decode("utf-8")
+        body = json.loads(raw) if raw else {}
+        return status, body
+
+    def test_job_source_filters_preview_returns_effective_queries(self) -> None:
+        job_id = self.db.insert_job(
+            title="Senior Backend Engineer",
+            company="Tener",
+            jd_text="Need Python, Django, AWS, Docker and PostgreSQL for backend microservices.",
+            location="Germany",
+            preferred_languages=["en", "de"],
+            seniority="senior",
+        )
+
+        status, payload = self._request("GET", f"/api/jobs/{job_id}/source-filters")
+        self.assertEqual(status, 200)
+        self.assertEqual(int(payload.get("job_id") or 0), job_id)
+        self.assertEqual(str(payload.get("job_title") or ""), "Senior Backend Engineer")
+        self.assertEqual(str(payload.get("job_company") or ""), "Tener")
+
+        filters = payload.get("filters") or {}
+        self.assertEqual(str(filters.get("title") or ""), "Senior Backend Engineer")
+        self.assertEqual(str(filters.get("location") or ""), "Germany")
+        self.assertEqual(str(filters.get("seniority") or ""), "senior")
+        self.assertEqual(filters.get("preferred_languages") or [], ["en", "de"])
+        self.assertIn("python", filters.get("extracted_keywords") or [])
+        self.assertIn("django", filters.get("extracted_keywords") or [])
+        queries = filters.get("queries") or []
+        self.assertTrue(queries)
+        self.assertTrue(any("Senior Backend Engineer" in str(item) for item in queries))
+        self.assertTrue(any("Germany" in str(item) for item in queries))
+
+    def test_job_source_filters_preview_returns_not_found_for_unknown_job(self) -> None:
+        status, payload = self._request("GET", "/api/jobs/999/source-filters")
+        self.assertEqual(status, 404)
+        self.assertIn("job not found", str(payload.get("error") or ""))
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -433,6 +433,41 @@
 
     .step-actions { display: flex; gap: 8px; }
     .step-actions button { flex: 1; font-size: 12px; padding: 9px; }
+    .source-filters-box {
+      margin-top: 8px;
+      border-top: 1px solid var(--border-color);
+      padding-top: 10px;
+      display: grid;
+      gap: 10px;
+    }
+    .source-filters-summary {
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .source-filter-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .source-filter-chip {
+      border: 1px solid var(--border-color);
+      border-radius: 999px;
+      padding: 5px 9px;
+      font-size: 11px;
+      color: var(--text-secondary);
+      background: #0f141c;
+    }
+    .source-filters-queries {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--text-secondary);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .source-filters-queries li + li {
+      margin-top: 5px;
+    }
     .json-nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
     .json-tab { font-size: 11px; padding: 7px 9px; }
     .json-tab.active { border-color: var(--accent-green); color: var(--accent-green); }
@@ -826,6 +861,17 @@
         <div id="step-source-meta" class="step-metrics">Profiles: 0</div>
         <div class="step-actions">
           <button id="run-source-btn">Run</button>
+        </div>
+        <div id="source-filters-box" class="source-filters-box">
+          <div class="panel-title" style="margin:0;">
+            <span>Source Filters</span>
+            <span class="mono">GET /api/jobs/{id}/source-filters</span>
+          </div>
+          <div id="source-filters-summary" class="source-filters-summary">Select a job to inspect sourcing filters.</div>
+          <div id="source-filter-chips" class="source-filter-chips"></div>
+          <ol id="source-filters-queries" class="source-filters-queries">
+            <li class="muted">No generated queries yet.</li>
+          </ol>
         </div>
       </article>
 
@@ -1337,6 +1383,7 @@
       linkedinAccounts: [],
       outreachOps: null,
       outreachAtsBoard: null,
+      sourceFiltersPreview: null,
       jobLinkedinRouting: null,
       linkedinAdminToken: "",
       agentConversationId: null,
@@ -1662,6 +1709,33 @@
       window.location.href = `/candidate/${safeCandidateId}${query ? `?${query}` : ''}`;
     }
 
+    function parseDashboardRoute() {
+      const params = new URLSearchParams(window.location.search || "");
+      const view = String(params.get("view") || "").trim().toLowerCase();
+      const jobId = Number(params.get("job_id") || "0") || null;
+      const conversationId = Number(params.get("conversation_id") || "0") || null;
+      const agentJobRaw = params.has("agent_job") ? String(params.get("agent_job") || "").trim() : null;
+      return {
+        activeView: ["pipeline", "agent", "ops"].includes(view) ? view : null,
+        jobId,
+        conversationId,
+        agentJobRaw,
+      };
+    }
+
+    async function applyDashboardRoute(route) {
+      if (!route) return;
+      if (route.conversationId) {
+        state.agentConversationId = route.conversationId;
+        await onSelectedAgentJobChanged(route.agentJobRaw !== null ? route.agentJobRaw : "all");
+        setActiveView("agent");
+        return;
+      }
+      if (route.activeView) {
+        setActiveView(route.activeView);
+      }
+    }
+
     function normalizeAgentJobId(value) {
       const raw = String(value ?? "").trim().toLowerCase();
       if (!raw || raw === "all" || raw === "0") return null;
@@ -1753,6 +1827,68 @@
       state.outreachItems = [];
       state.stepSnapshots = defaultStepSnapshots();
       state.selectedSnapshotStep = "source";
+    }
+
+    function renderSourceFilters() {
+      const summaryEl = $("source-filters-summary");
+      const chipsEl = $("source-filter-chips");
+      const queriesEl = $("source-filters-queries");
+      if (!summaryEl || !chipsEl || !queriesEl) return;
+      const selected = selectedJobId();
+      const preview = state.sourceFiltersPreview || {};
+      const filters = preview.filters || {};
+      if (!selected) {
+        summaryEl.textContent = "Select a job to inspect sourcing filters.";
+        chipsEl.innerHTML = "";
+        queriesEl.innerHTML = '<li class="muted">No generated queries yet.</li>';
+        return;
+      }
+      if (String(preview.status || "").trim().toLowerCase() === "error") {
+        summaryEl.textContent = String(preview.error || "Failed to load source filters");
+        chipsEl.innerHTML = "";
+        queriesEl.innerHTML = '<li class="muted">Source filters unavailable.</li>';
+        return;
+      }
+      const languages = Array.isArray(filters.preferred_languages) ? filters.preferred_languages : [];
+      const keywords = Array.isArray(filters.extracted_keywords) ? filters.extracted_keywords : [];
+      const queries = Array.isArray(filters.queries) ? filters.queries : [];
+      const jobTitle = String(preview.job_title || filters.title || "").trim() || "Current job";
+      const company = String(preview.job_company || "").trim();
+      const location = String(filters.location || "").trim();
+      const seniority = String(filters.seniority || "").trim();
+      const summaryParts = [
+        company ? `${jobTitle} • ${company}` : jobTitle,
+        location ? `location: ${location}` : "",
+        seniority ? `seniority: ${seniority}` : "",
+        languages.length ? `languages: ${languages.join(", ")}` : "",
+        `${queries.length} generated quer${queries.length === 1 ? "y" : "ies"}`,
+      ].filter(Boolean);
+      summaryEl.textContent = summaryParts.join(" • ");
+      const chips = [];
+      keywords.forEach((item) => chips.push(`<span class="source-filter-chip">${escapeHtml(String(item))}</span>`));
+      languages.forEach((item) => chips.push(`<span class="source-filter-chip">lang:${escapeHtml(String(item))}</span>`));
+      chipsEl.innerHTML = chips.join("") || '<span class="muted">No extracted keywords</span>';
+      queriesEl.innerHTML = queries.length
+        ? queries.map((query) => `<li>${escapeHtml(String(query || ""))}</li>`).join("")
+        : '<li class="muted">No generated queries.</li>';
+    }
+
+    async function refreshSourceFilters(jobId = selectedJobId()) {
+      if (!jobId) {
+        state.sourceFiltersPreview = null;
+        renderSourceFilters();
+        return;
+      }
+      try {
+        state.sourceFiltersPreview = await api(`/api/jobs/${jobId}/source-filters`);
+      } catch (e) {
+        state.sourceFiltersPreview = {
+          status: "error",
+          error: String(e.message || "failed_to_load_source_filters"),
+          filters: {},
+        };
+      }
+      renderSourceFilters();
     }
 
     function applyStepOutput(step, output) {
@@ -1926,6 +2062,7 @@
       renderJobsTable();
       if (!state.jobId) {
         syncJobMeta(null);
+        await refreshSourceFilters(null);
         await loadJobProgress(null);
         await refreshCandidates();
         await refreshLogs();
@@ -1938,6 +2075,7 @@
       } catch {
         syncJobMeta(null);
       }
+      await refreshSourceFilters(state.jobId);
       await loadJobProgress(state.jobId);
       await refreshCandidates();
       await refreshLogs();
@@ -2013,6 +2151,8 @@
         $("job-label").textContent = 'none';
         $("job-meta").textContent = 'Create a job from modal window to start manual pipeline.';
         setAgentJobMeta(null);
+        state.sourceFiltersPreview = null;
+        renderSourceFilters();
         renderJobsTable();
         await refreshAgentAccounts();
         await refreshOutreachOps();
@@ -3525,10 +3665,21 @@
       });
     }
 
+    const initialDashboardRoute = parseDashboardRoute();
+
     bindEvents();
     resetCreateJobForm();
     state.linkedinAdminToken = localStorage.getItem(LINKEDIN_ADMIN_TOKEN_STORAGE_KEY) || "";
-    state.opsJobId = normalizeOpsJobId(localStorage.getItem(OPS_SELECTED_JOB_STORAGE_KEY) || "all");
+    state.jobId = initialDashboardRoute.jobId || Number(localStorage.getItem(SELECTED_JOB_STORAGE_KEY) || "0") || null;
+    state.agentJobId = initialDashboardRoute.agentJobRaw !== null
+      ? normalizeAgentJobId(initialDashboardRoute.agentJobRaw)
+      : normalizeAgentJobId(localStorage.getItem(AGENT_SELECTED_JOB_STORAGE_KEY) || "all");
+    state.opsJobId = initialDashboardRoute.jobId
+      ? normalizeOpsJobId(String(initialDashboardRoute.jobId))
+      : normalizeOpsJobId(localStorage.getItem(OPS_SELECTED_JOB_STORAGE_KEY) || "all");
+    if (initialDashboardRoute.conversationId) {
+      state.agentConversationId = initialDashboardRoute.conversationId;
+    }
     if ($("linkedin-admin-token")) $("linkedin-admin-token").value = state.linkedinAdminToken;
     setTestMode((localStorage.getItem(TEST_MODE_STORAGE_KEY) || "1") !== "0");
     setCandidatesOverallFilter(localStorage.getItem(CANDS_OVERALL_FILTER_STORAGE_KEY) || "all");
@@ -3536,6 +3687,7 @@
     renderSelectedSnapshot();
     renderLinkedinJobRouting();
     renderCaseyOutreachHealth();
+    renderSourceFilters();
     renderOutreachOpsSummary();
     renderOutreachAtsBoard();
     renderOutreachBacklog();
@@ -3545,7 +3697,12 @@
       if (state.activeView !== "agent" && state.activeView !== "ops") return;
       refreshOutreachOps().catch(() => {});
     }, 45000);
-    fullRefresh();
+    if (initialDashboardRoute.activeView) {
+      setActiveView(initialDashboardRoute.activeView);
+    }
+    fullRefresh()
+      .then(() => applyDashboardRoute(initialDashboardRoute))
+      .catch((e) => alert(e.message));
   </script>
 </body>
 </html>

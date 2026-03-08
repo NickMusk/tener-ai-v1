@@ -65,6 +65,28 @@ class SourcingAgent:
             raise RuntimeError("; ".join(search_errors[:5]))
         return collected[:limit]
 
+    def build_search_preview(self, job: Dict[str, Any]) -> Dict[str, Any]:
+        title = str(job.get("title") or "").strip()
+        jd_text = str(job.get("jd_text") or "").strip()
+        location = str(job.get("location") or "").strip() or None
+        seniority = str(job.get("seniority") or "").strip().lower() or None
+        preferred_languages = [
+            str(item).strip().lower()
+            for item in (job.get("preferred_languages") or [])
+            if str(item).strip()
+        ]
+        extracted_keywords = self._extract_keywords(jd_text, max_items=14)
+        queries = self._build_queries(job)
+        return {
+            "title": title or None,
+            "location": location,
+            "seniority": seniority,
+            "preferred_languages": preferred_languages,
+            "jd_excerpt": jd_text[:280] or None,
+            "extracted_keywords": extracted_keywords,
+            "queries": queries,
+        }
+
     def send_outreach(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
         return self.linkedin_provider.send_message(candidate_profile=candidate_profile, message=message)
 
