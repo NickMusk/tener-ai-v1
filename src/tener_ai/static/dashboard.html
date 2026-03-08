@@ -270,6 +270,85 @@
       background: #101620;
     }
 
+    .ats-board {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(220px, 1fr));
+      gap: 12px;
+      overflow-x: auto;
+      align-items: start;
+    }
+
+    .ats-column {
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      background: #0f141c;
+      min-height: 220px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+    }
+
+    .ats-column-header {
+      padding: 10px 12px;
+      border-bottom: 1px solid #242d3b;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      background: #101722;
+      border-top-left-radius: 12px;
+      border-top-right-radius: 12px;
+    }
+
+    .ats-column-body {
+      padding: 10px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      max-height: 560px;
+      overflow: auto;
+    }
+
+    .ats-card {
+      width: 100%;
+      border: 1px solid #2a3441;
+      border-radius: 12px;
+      background: #111722;
+      padding: 10px;
+      text-align: left;
+      color: var(--text-primary);
+      cursor: pointer;
+    }
+
+    .ats-card:hover {
+      border-color: rgba(0, 212, 255, 0.45);
+      background: #151e2b;
+    }
+
+    .ats-card-title {
+      font-weight: 700;
+      font-size: 13px;
+      line-height: 1.35;
+      margin-bottom: 4px;
+    }
+
+    .ats-card-job {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .ats-card-detail {
+      font-size: 12px;
+      margin-bottom: 6px;
+    }
+
+    .ats-card-meta {
+      display: grid;
+      gap: 3px;
+      color: var(--text-secondary);
+      font-size: 11px;
+    }
+
     .ops-summary-grid {
       display: grid;
       grid-template-columns: repeat(6, minmax(120px, 1fr));
@@ -630,6 +709,7 @@
       .grid-3 { grid-template-columns: 1fr; }
       .ops-metrics-grid { grid-template-columns: 1fr 1fr; }
       .ops-summary-grid { grid-template-columns: 1fr 1fr; }
+      .ats-board { grid-template-columns: 1fr; }
       .header { grid-template-columns: 1fr; }
       .button-row { justify-content: flex-start; }
     }
@@ -1092,6 +1172,14 @@
       </section>
 
       <section class="card">
+        <div class="panel-title"><span>ATS Board</span><span class="mono">GET /api/outreach/ats-board</span></div>
+        <div id="ops-ats-summary" class="ops-issues">No ATS candidates in scope.</div>
+        <div id="ops-ats-board" class="ats-board">
+          <div class="muted">Loading ATS board...</div>
+        </div>
+      </section>
+
+      <section class="card">
         <div class="panel-title"><span>Backlog Queue</span><span class="mono">latest auto jobs with open outreach backlog</span></div>
         <div id="ops-backlog-summary" class="ops-issues">No backlog queued.</div>
         <div style="overflow:auto;">
@@ -1248,6 +1336,7 @@
       agentAccounts: [],
       linkedinAccounts: [],
       outreachOps: null,
+      outreachAtsBoard: null,
       jobLinkedinRouting: null,
       linkedinAdminToken: "",
       agentConversationId: null,
@@ -2453,6 +2542,109 @@
       $("ops-summary-issues").textContent = issues.length ? issues.join(" • ") : "No issues detected.";
     }
 
+    function renderOutreachAtsBoard() {
+      const boardEl = $("ops-ats-board");
+      const summaryEl = $("ops-ats-summary");
+      if (!boardEl || !summaryEl) return;
+      const board = state.outreachAtsBoard || {};
+      const summary = board.summary || {};
+      const columns = Array.isArray(board.columns) ? board.columns : [];
+      if (String(board.status || "").trim().toLowerCase() === "error") {
+        summaryEl.textContent = String(board.error || "Failed to load ATS board");
+        boardEl.innerHTML = '<div class="muted">ATS board unavailable.</div>';
+        return;
+      }
+      const summaryParts = [
+        `${Number(summary.total_candidates || 0)} candidates`,
+        `${Number(summary.queued || 0)} queued`,
+        `${Number(summary.connect_sent || 0)} connect sent`,
+        `${Number(summary.dialogue || 0)} dialogue`,
+        `${Number(summary.cv_received || 0)} cv received`,
+        `${Number(summary.interview_pending || 0)} interview pending`,
+        `${Number(summary.interview_passed || 0)} passed`,
+        `${Number(summary.closed || 0)} closed`,
+      ];
+      summaryEl.textContent = summaryParts.join(" • ");
+      if (!columns.length) {
+        boardEl.innerHTML = '<div class="muted">No ATS candidates in scope.</div>';
+        return;
+      }
+      const actionLabel = (kind) => {
+        const normalized = String(kind || "").trim().toLowerCase();
+        if (!normalized) return "";
+        if (normalized === "connect_request") return "Next: connect";
+        if (normalized === "message") return "Next: message";
+        if (normalized === "await_acceptance") return "Next: wait acceptance";
+        if (normalized === "await_reply") return "Next: wait reply";
+        if (normalized === "review_resume") return "Next: review CV";
+        if (normalized === "await_interview") return "Next: wait interview";
+        return `Next: ${normalized.replace(/_/g, " ")}`;
+      };
+      boardEl.innerHTML = columns.map((column) => {
+        const items = Array.isArray(column.items) ? column.items : [];
+        const body = items.length
+          ? items.map((item) => {
+              const candidateId = Number(item.candidate_id || 0);
+              const conversationId = Number(item.conversation_id || 0);
+              const jobId = Number(item.job_id || 0);
+              const assignedAccount = item.assigned_account_label
+                ? escapeHtml(String(item.assigned_account_label))
+                : (Number(item.assigned_account_id || 0) > 0 ? escapeHtml(outreachAccountLabel(item.assigned_account_id)) : "-");
+              const detail = escapeHtml(item.stage_detail || item.current_status_label || "-");
+              const nextAction = escapeHtml(actionLabel(item.next_action_kind));
+              const nextAt = formatTimestampCompact(item.next_action_at);
+              const lastActivity = formatTimestampCompact(item.last_activity_at);
+              const metaParts = [
+                assignedAccount !== "-" ? `acc: ${assignedAccount}` : "",
+                nextAction ? nextAction : "",
+                nextAt !== "-" && nextAction ? nextAt : "",
+                lastActivity !== "-" ? `last: ${lastActivity}` : "",
+              ].filter(Boolean);
+              return `
+                <button
+                  class="ats-card"
+                  data-candidate-id="${candidateId || 0}"
+                  data-job-id="${jobId || 0}"
+                  data-conversation-id="${conversationId || 0}"
+                >
+                  <div class="ats-card-title">${escapeHtml(item.candidate_name || `Candidate ${candidateId || "-"}`)}</div>
+                  <div class="ats-card-job">#${jobId || "-"} ${escapeHtml(item.job_title || "-")}</div>
+                  <div class="ats-card-detail">${detail}</div>
+                  <div class="ats-card-meta">${metaParts.map((part) => `<div>${part}</div>`).join("") || '<div class="muted">No activity yet</div>'}</div>
+                </button>
+              `;
+            }).join("")
+          : '<div class="muted">No candidates</div>';
+        return `
+          <section class="ats-column">
+            <div class="ats-column-header">
+              <span>${escapeHtml(column.label || "-")}</span>
+              <span class="mono">${Number(column.count || 0)}</span>
+            </div>
+            <div class="ats-column-body">${body}</div>
+          </section>
+        `;
+      }).join("");
+
+      document.querySelectorAll(".ats-card").forEach((card) => {
+        card.addEventListener("click", async () => {
+          const conversationId = Number(card.dataset.conversationId || "0");
+          const candidateId = Number(card.dataset.candidateId || "0");
+          const jobId = Number(card.dataset.jobId || "0") || selectedJobId();
+          if (conversationId > 0) {
+            state.agentConversationId = conversationId;
+            setActiveView("agent");
+            await refreshAgentWorkspace();
+            await openAgentConversation(conversationId);
+            return;
+          }
+          if (candidateId > 0) {
+            openCandidateProfile(candidateId, jobId);
+          }
+        });
+      });
+    }
+
     function outreachAccountLabel(accountId) {
       const accounts = Array.isArray((state.outreachOps || {}).accounts) ? state.outreachOps.accounts : [];
       const row = accounts.find((item) => Number(item.account_id || 0) === Number(accountId || 0));
@@ -2651,10 +2843,16 @@
       if (staleInput) staleInput.value = String(staleMinutes);
       const jobId = selectedOpsJobId();
       const scopeQuery = jobId ? `&job_id=${encodeURIComponent(jobId)}` : "";
-      try {
-        const out = await api(`/api/outreach/ops?limit_logs=1000&limit_chats=800&stale_minutes=${staleMinutes}${scopeQuery}`);
-        state.outreachOps = out || {};
-      } catch (e) {
+      const opsPath = `/api/outreach/ops?limit_logs=1000&limit_chats=800&stale_minutes=${staleMinutes}${scopeQuery}`;
+      const atsPath = `/api/outreach/ats-board?limit=600${scopeQuery}`;
+      const [opsResult, atsResult] = await Promise.allSettled([
+        api(opsPath),
+        api(atsPath),
+      ]);
+      if (opsResult.status === "fulfilled") {
+        state.outreachOps = opsResult.value || {};
+      } else {
+        const e = opsResult.reason || {};
         state.outreachOps = {
           summary: {
             health: "critical",
@@ -2676,8 +2874,29 @@
           events: [],
         };
       }
+      if (atsResult.status === "fulfilled") {
+        state.outreachAtsBoard = atsResult.value || {};
+      } else {
+        const e = atsResult.reason || {};
+        state.outreachAtsBoard = {
+          status: "error",
+          summary: {
+            total_candidates: 0,
+            queued: 0,
+            connect_sent: 0,
+            dialogue: 0,
+            cv_received: 0,
+            interview_pending: 0,
+            interview_passed: 0,
+            closed: 0,
+          },
+          columns: [],
+          error: String(e.message || "failed_to_load_outreach_ats_board"),
+        };
+      }
       renderCaseyOutreachHealth();
       renderOutreachOpsSummary();
+      renderOutreachAtsBoard();
       renderOutreachBacklog();
       renderOutreachOpsAccounts();
       renderOutreachOpsEvents();
@@ -3318,6 +3537,8 @@
     renderLinkedinJobRouting();
     renderCaseyOutreachHealth();
     renderOutreachOpsSummary();
+    renderOutreachAtsBoard();
+    renderOutreachBacklog();
     renderOutreachOpsAccounts();
     renderOutreachOpsEvents();
     setInterval(() => {

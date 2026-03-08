@@ -576,6 +576,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "chats_overview": "GET /api/chats/overview?limit=200",
                         "outreach_ops": "GET /api/outreach/ops?job_id=...&stale_minutes=45",
+                        "outreach_ats_board": "GET /api/outreach/ats-board?job_id=...&limit=600",
                         "linkedin_accounts_list": "GET /api/linkedin/accounts?limit=200&status=connected",
                         "linkedin_connect_callback": "GET /api/linkedin/accounts/connect/callback?state=...",
                         "linkedin_connect_start": "POST /api/linkedin/accounts/connect/start",
@@ -1209,6 +1210,19 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 logs_limit=max(100, min(int(logs_limit), 2000)),
                 chats_limit=max(100, min(int(chats_limit), 2000)),
                 stale_minutes=max(10, min(int(stale_minutes), 24 * 60)),
+            )
+            self._json_response(HTTPStatus.OK, report)
+            return
+
+        if parsed.path == "/api/outreach/ats-board":
+            params = parse_qs(parsed.query or "")
+            limit = self._safe_int((params.get("limit") or ["600"])[0], 600)
+            job_id_raw = (params.get("job_id") or [None])[0]
+            job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
+            report = self._build_outreach_ats_board(
+                db=SERVICES["db"],
+                job_id=job_id,
+                limit=max(50, min(int(limit or 600), 2000)),
             )
             self._json_response(HTTPStatus.OK, report)
             return
@@ -3199,6 +3213,92 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         if "trigger" not in result:
             result["trigger"] = trigger
         return result
+
+    @classmethod
+    def _build_outreach_ats_board(
+        cls,
+        *,
+        db: Any,
+        job_id: Optional[int],
+        limit: int,
+    ) -> Dict[str, Any]:
+        now = datetime.now(timezone.utc)
+        items = db.list_outreach_ats_candidates(job_id=job_id, limit=limit)
+        column_defs = [
+            ("queued", "Queued"),
+            ("connect_sent", "Connect Sent"),
+            ("dialogue", "Dialogue"),
+            ("cv_received", "CV Received"),
+            ("interview_pending", "Interview Pending"),
+            ("interview_passed", "Interview Passed"),
+            ("closed", "Closed"),
+        ]
+        columns: List[Dict[str, Any]] = []
+        summary = {
+            "total_candidates": len(items),
+            "queued": 0,
+            "connect_sent": 0,
+            "dialogue": 0,
+            "cv_received": 0,
+            "interview_pending": 0,
+            "interview_passed": 0,
+            "closed": 0,
+        }
+        items_by_stage: Dict[str, List[Dict[str, Any]]] = {key: [] for key, _ in column_defs}
+
+        for item in items:
+            stage_key = str(item.get("ats_stage_key") or "").strip().lower()
+            if stage_key not in items_by_stage:
+                continue
+            card = {
+                "candidate_id": int(item.get("candidate_id") or 0) or None,
+                "candidate_name": str(item.get("full_name") or item.get("candidate_name") or "").strip()
+                or f"Candidate {int(item.get('candidate_id') or 0)}",
+                "job_id": int(item.get("job_id") or 0) or None,
+                "job_title": str(item.get("job_title") or "").strip() or "-",
+                "conversation_id": int(item.get("conversation_id") or 0) or None,
+                "score": float(item.get("score") or 0.0) if item.get("score") is not None else None,
+                "ats_stage_key": stage_key,
+                "ats_stage_label": str(item.get("ats_stage_label") or "").strip() or stage_key.replace("_", " ").title(),
+                "stage_detail": str(item.get("ats_stage_detail") or "").strip() or None,
+                "assigned_account_id": int(item.get("assigned_account_id") or 0) or None,
+                "assigned_account_label": str(item.get("assigned_account_label") or "").strip() or None,
+                "next_action_kind": str(item.get("next_action_kind") or "").strip() or None,
+                "next_action_at": item.get("next_action_at"),
+                "last_activity_at": item.get("last_activity_at"),
+                "current_status_key": str(item.get("current_status_key") or "").strip() or None,
+                "current_status_label": str(item.get("current_status_label") or "").strip() or None,
+                "candidate_lifecycle_key": str(item.get("candidate_lifecycle_key") or "").strip() or None,
+                "candidate_lifecycle_label": str(item.get("candidate_lifecycle_label") or "").strip() or None,
+            }
+            items_by_stage[stage_key].append(card)
+            summary[stage_key] += 1
+
+        for stage_key, stage_label in column_defs:
+            stage_items = list(items_by_stage.get(stage_key) or [])
+            stage_items.sort(
+                key=lambda item: (
+                    str(item.get("last_activity_at") or item.get("next_action_at") or ""),
+                    str(item.get("candidate_name") or ""),
+                ),
+                reverse=True,
+            )
+            columns.append(
+                {
+                    "key": stage_key,
+                    "label": stage_label,
+                    "count": len(stage_items),
+                    "items": stage_items,
+                }
+            )
+
+        return {
+            "status": "ok",
+            "generated_at": now.isoformat(),
+            "job_id": int(job_id) if job_id else None,
+            "summary": summary,
+            "columns": columns,
+        }
 
     @classmethod
     def _build_outreach_ops_report(

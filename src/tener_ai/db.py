@@ -858,6 +858,7 @@ class Database:
         query = """
         SELECT
             m.id AS match_id,
+            m.created_at AS match_created_at,
             m.score,
             m.status,
             m.verification_notes,
@@ -901,6 +902,15 @@ class Database:
                 ORDER BY msg.id DESC
                 LIMIT 1
             ) AS last_outbound_meta,
+            (
+                SELECT oa.account_id
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_account_id,
             (
                 SELECT oa.action_type
                 FROM outbound_actions oa
@@ -974,6 +984,7 @@ class Database:
         SELECT
             m.id AS match_id,
             m.job_id,
+            m.created_at AS match_created_at,
             m.score,
             m.status,
             m.verification_notes,
@@ -1018,6 +1029,15 @@ class Database:
                 ORDER BY msg.id DESC
                 LIMIT 1
             ) AS last_outbound_meta,
+            (
+                SELECT oa.account_id
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_account_id,
             (
                 SELECT oa.action_type
                 FROM outbound_actions oa
@@ -1157,6 +1177,15 @@ class Database:
                 ORDER BY msg.id DESC
                 LIMIT 1
             ) AS last_outbound_meta,
+            (
+                SELECT oa.account_id
+                FROM outbound_actions oa
+                WHERE oa.job_id = m.job_id
+                  AND oa.candidate_id = m.candidate_id
+                  AND oa.status IN ('pending', 'running')
+                ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                LIMIT 1
+            ) AS pending_action_account_id,
             (
                 SELECT oa.action_type
                 FROM outbound_actions oa
@@ -3740,3 +3769,149 @@ class Database:
             "candidate_lifecycle_detail": lifecycle_detail or None,
             "pending_action_status_label": pending_action_status or None,
         }
+
+    @staticmethod
+    def _derive_candidate_ats_stage(item: Dict[str, Any]) -> Dict[str, Any]:
+        current_status_key = str(item.get("current_status_key") or "").strip().lower()
+        current_status_label = str(item.get("current_status_label") or "").strip()
+        lifecycle_key = str(item.get("candidate_lifecycle_key") or "").strip().lower()
+        lifecycle_label = str(item.get("candidate_lifecycle_label") or "").strip()
+        lifecycle_detail = str(item.get("candidate_lifecycle_detail") or "").strip()
+        planned_action_kind = str(item.get("planned_action_kind") or "").strip().lower()
+        planned_action_label = str(item.get("planned_action_label") or "").strip()
+        pending_action_status = str(item.get("pending_action_status") or item.get("pending_action_status_label") or "").strip().lower()
+        pending_action_at = str(item.get("pending_action_not_before") or "").strip() or None
+
+        closed_statuses = {"not_interested", "unreachable", "rejected", "stalled", "interview_failed"}
+        interview_pending_statuses = {"interview_invited", "interview_in_progress", "interview_completed", "interview_scored"}
+
+        stage_key = "queued"
+        stage_label = "Queued"
+        stage_detail = planned_action_label or lifecycle_detail or lifecycle_label or current_status_label or "Ready for outreach"
+        next_action_kind = planned_action_kind or None
+        next_action_at = pending_action_at
+        stage_rank = 10
+
+        if current_status_key in closed_statuses:
+            stage_key = "closed"
+            stage_label = "Closed"
+            stage_detail = current_status_label or lifecycle_label or current_status_key.replace("_", " ").title()
+            next_action_kind = None
+            next_action_at = None
+            stage_rank = 70
+        elif current_status_key == "interview_passed":
+            stage_key = "interview_passed"
+            stage_label = "Interview Passed"
+            stage_detail = lifecycle_detail or current_status_label or "Candidate passed interview"
+            next_action_kind = None
+            next_action_at = None
+            stage_rank = 60
+        elif current_status_key in interview_pending_statuses:
+            stage_key = "interview_pending"
+            stage_label = "Interview Pending"
+            stage_detail = lifecycle_detail or current_status_label or "Awaiting interview progress"
+            next_action_kind = "await_interview"
+            next_action_at = None
+            stage_rank = 50
+        elif current_status_key == "cv_received":
+            stage_key = "cv_received"
+            stage_label = "CV Received"
+            stage_detail = lifecycle_detail or current_status_label or "Resume received"
+            next_action_kind = "review_resume"
+            next_action_at = None
+            stage_rank = 40
+        elif current_status_key in {"in_dialogue", "outreached"} or lifecycle_key in {"dialogue_started", "connected_first_message_sent", "message_sent"}:
+            stage_key = "dialogue"
+            stage_label = "Dialogue"
+            stage_detail = lifecycle_detail or lifecycle_label or current_status_label or "In communication"
+            if not next_action_kind:
+                next_action_kind = "await_reply"
+            stage_rank = 30
+        elif current_status_key == "outreach_pending_connection" or lifecycle_key == "connect_sent_waiting_acceptance":
+            stage_key = "connect_sent"
+            stage_label = "Connect Sent"
+            stage_detail = lifecycle_detail or lifecycle_label or "Waiting for acceptance"
+            next_action_kind = "await_acceptance"
+            next_action_at = None
+            stage_rank = 20
+        elif planned_action_kind in {"connect_request", "message"} or pending_action_status in {"pending", "running"} or current_status_key == "added":
+            stage_key = "queued"
+            stage_label = "Queued"
+            stage_detail = planned_action_label or lifecycle_detail or lifecycle_label or "Queued for delivery"
+            if not next_action_kind:
+                next_action_kind = planned_action_kind or "connect_request"
+            stage_rank = 10
+
+        return {
+            "ats_stage_key": stage_key,
+            "ats_stage_label": stage_label,
+            "ats_stage_detail": stage_detail or None,
+            "ats_stage_rank": stage_rank,
+            "next_action_kind": next_action_kind,
+            "next_action_at": next_action_at,
+        }
+
+    def derive_candidate_ats_stage(self, item: Dict[str, Any]) -> Dict[str, Any]:
+        return self._derive_candidate_ats_stage(item)
+
+    def list_outreach_ats_candidates(
+        self,
+        *,
+        job_id: Optional[int] = None,
+        limit: int = 500,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 500), 2000))
+        account_labels = {
+            int(item.get("id") or 0): str(item.get("label") or "").strip() or f"Account {int(item.get('id') or 0)}"
+            for item in self.list_linkedin_accounts(limit=500)
+            if int(item.get("id") or 0) > 0
+        }
+
+        rows: List[Dict[str, Any]] = []
+        job_refs: List[Dict[str, Any]] = []
+        if job_id is not None:
+            job = self.get_job(int(job_id))
+            if job and not bool(job.get("is_archived")):
+                job_refs = [job]
+        else:
+            job_refs = self.list_jobs(limit=300)
+
+        for job in job_refs:
+            row_job_id = int(job.get("id") or 0)
+            if row_job_id <= 0:
+                continue
+            for row in self.list_candidates_for_job(row_job_id):
+                if not isinstance(row, dict):
+                    continue
+                current_status_key = str(row.get("current_status_key") or "").strip().lower()
+                if current_status_key in {"unknown"}:
+                    continue
+                enriched = dict(row)
+                enriched.update(self._derive_candidate_ats_stage(enriched))
+                assigned_account_id = int(
+                    enriched.get("pending_action_account_id")
+                    or enriched.get("linkedin_account_id")
+                    or 0
+                ) or None
+                enriched["assigned_account_id"] = assigned_account_id
+                enriched["assigned_account_label"] = (
+                    account_labels.get(int(assigned_account_id or 0)) if assigned_account_id else None
+                )
+                enriched["last_activity_at"] = (
+                    enriched.get("pending_action_not_before")
+                    or enriched.get("last_message_created_at")
+                    or enriched.get("last_message_at")
+                    or enriched.get("match_created_at")
+                )
+                rows.append(enriched)
+
+        rows.sort(
+            key=lambda item: (
+                int(item.get("ats_stage_rank") or 999),
+                str(item.get("last_activity_at") or ""),
+                -float(item.get("score") or 0.0),
+                int(item.get("candidate_id") or 0),
+            ),
+            reverse=False,
+        )
+        return rows[:safe_limit]
