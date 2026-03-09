@@ -2384,7 +2384,6 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
             except Exception as exc:
-                self._persist_job_step_progress(job_id=job_id, step="workflow", status="error", output={"error": str(exc)})
                 SERVICES["db"].log_operation(
                     operation="workflow.execute.error",
                     status="error",
@@ -2395,11 +2394,6 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "workflow failed", "details": str(exc)})
                 return
 
-            outreach_status = (
-                "error"
-                if summary.outreach_failed > 0 and summary.outreach_sent == 0 and summary.outreach_pending_connection == 0
-                else "success"
-            )
             workflow_payload = {
                 "job_id": summary.job_id,
                 "searched": summary.searched,
@@ -2413,44 +2407,6 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "conversation_ids": summary.conversation_ids,
                 "test_mode_requested": test_mode,
             }
-            self._persist_job_step_progress(job_id=job_id, step="source", status="success", output={"total": summary.searched})
-            self._persist_job_step_progress(
-                job_id=job_id,
-                step="enrich",
-                status="success",
-                output={"total": summary.searched, "failed": 0},
-            )
-            self._persist_job_step_progress(
-                job_id=job_id,
-                step="verify",
-                status="success",
-                output={
-                    "verified": summary.verified,
-                    "needs_resume": summary.needs_resume,
-                    "rejected": summary.rejected,
-                    "enriched_total": summary.searched,
-                    "enrich_failed": 0,
-                },
-            )
-            self._persist_job_step_progress(
-                job_id=job_id,
-                step="add",
-                status="success",
-                output={"total": summary.verified + summary.needs_resume},
-            )
-            self._persist_job_step_progress(
-                job_id=job_id,
-                step="outreach",
-                status=outreach_status,
-                output={
-                    "total": summary.outreached,
-                    "sent": summary.outreach_sent,
-                    "pending_connection": summary.outreach_pending_connection,
-                    "failed": summary.outreach_failed,
-                    "conversation_ids": summary.conversation_ids,
-                },
-            )
-            self._persist_job_step_progress(job_id=job_id, step="workflow", status="success", output=workflow_payload)
 
             self._json_response(
                 HTTPStatus.OK,

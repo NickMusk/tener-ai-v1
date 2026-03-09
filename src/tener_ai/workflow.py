@@ -143,11 +143,82 @@ class WorkflowService:
         except (TypeError, ValueError):
             self.managed_unipile_timeout_seconds = 30
 
+    def _persist_step_progress(self, *, job_id: int, step: str, status: str, output: Dict[str, Any] | None = None) -> None:
+        self.db.upsert_job_step_progress(
+            job_id=int(job_id),
+            step=str(step),
+            status=str(status),
+            output=output or {},
+        )
+
+    @staticmethod
+    def _is_removed_provider_error(exc: Exception | str) -> bool:
+        text = str(exc or "").lower()
+        return "account not found" in text or ("errors/resource_not_found" in text and "requested resource" in text)
+
+    @staticmethod
+    def _is_operational_linkedin_account(account: Dict[str, Any] | None) -> bool:
+        if not isinstance(account, dict):
+            return False
+        if str(account.get("status") or "").strip().lower() != "connected":
+            return False
+        metadata = account.get("metadata") if isinstance(account.get("metadata"), dict) else {}
+        return not bool(metadata.get("removed_from_provider"))
+
+    def _list_active_linkedin_accounts(self, *, limit: int = 500) -> List[Dict[str, Any]]:
+        return [
+            row
+            for row in self.db.list_linkedin_accounts(limit=limit, status="connected")
+            if self._is_operational_linkedin_account(row)
+        ]
+
+    def _mark_linkedin_account_removed(self, *, account: Dict[str, Any], reason: str) -> None:
+        account_id = int(account.get("id") or 0)
+        if account_id <= 0:
+            return
+        self.db.update_linkedin_account_status(
+            account_id=account_id,
+            status="removed",
+            metadata={
+                "removed_from_provider": True,
+                "removed_from_provider_at": utc_now_iso(),
+                "removed_reason": str(reason or "").strip() or "provider_account_not_found",
+            },
+        )
+
     def source_candidates(self, job_id: int, limit: int = 30, test_mode: bool | None = None) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
         forced_test_ids = self._load_forced_test_identifiers()
         forced_only = self._effective_test_mode(job=job, test_mode=test_mode, forced_identifiers=forced_test_ids)
-        profiles = self.sourcing_agent.find_candidates(job=job, limit=limit)
+        provider = getattr(self.sourcing_agent, "linkedin_provider", None)
+        original_account_id = getattr(provider, "account_id", None) if provider is not None and hasattr(provider, "account_id") else None
+        profiles: List[Dict[str, Any]] = []
+        search_errors: List[str] = []
+        source_accounts = self._list_active_linkedin_accounts(limit=500)
+        if provider is not None and hasattr(provider, "account_id") and source_accounts:
+            try:
+                for account in source_accounts:
+                    provider_account_id = str(account.get("provider_account_id") or "").strip()
+                    if not provider_account_id:
+                        continue
+                    setattr(provider, "account_id", provider_account_id)
+                    try:
+                        profiles = self.sourcing_agent.find_candidates(job=job, limit=limit)
+                    except Exception as exc:
+                        if self._is_removed_provider_error(exc):
+                            self._mark_linkedin_account_removed(account=account, reason=str(exc))
+                        search_errors.append(f"account_id={provider_account_id} error={exc}")
+                        continue
+                    if profiles:
+                        break
+            finally:
+                setattr(provider, "account_id", original_account_id)
+            if not profiles and search_errors:
+                raise RuntimeError("; ".join(search_errors[:5]))
+        elif provider is not None and hasattr(provider, "account_id"):
+            raise RuntimeError("no_active_linkedin_accounts")
+        else:
+            profiles = self.sourcing_agent.find_candidates(job=job, limit=limit)
         profiles = self._inject_forced_test_candidates(
             job=job,
             profiles=profiles,
@@ -189,6 +260,20 @@ class WorkflowService:
         }
 
     def verify_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
+        enrich_result = self.enrich_profiles(job_id=job_id, profiles=profiles)
+        return self._verify_enriched_profiles(
+            job_id=job_id,
+            enriched_profiles=enrich_result["profiles"],
+            enrich_result=enrich_result,
+        )
+
+    def _verify_enriched_profiles(
+        self,
+        *,
+        job_id: int,
+        enriched_profiles: List[Dict[str, Any]],
+        enrich_result: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
         job_culture_profile = (
             job.get("company_culture_profile")
@@ -196,8 +281,7 @@ class WorkflowService:
             else {}
         )
         forced_test_ids = self._load_forced_test_identifiers()
-        enrich_result = self.enrich_profiles(job_id=job_id, profiles=profiles)
-        enriched_profiles = enrich_result["profiles"]
+        enrich_summary = enrich_result or {"total": len(enriched_profiles), "failed": 0}
 
         items: List[Dict[str, Any]] = []
         verified = 0
@@ -266,8 +350,8 @@ class WorkflowService:
             "verified": verified,
             "needs_resume": needs_resume,
             "rejected": rejected,
-            "enriched_total": enrich_result["total"],
-            "enrich_failed": enrich_result["failed"],
+            "enriched_total": enrich_summary["total"],
+            "enrich_failed": enrich_summary["failed"],
             "instruction": self.stage_instructions.get("verification", ""),
         }
 
@@ -1150,20 +1234,72 @@ class WorkflowService:
             entity_id=str(job_id),
             details={"limit": limit, "test_mode_active": effective_test_mode, "test_mode_requested": test_mode},
         )
+        self._persist_step_progress(job_id=job_id, step="workflow", status="running", output={"limit": limit, "test_mode_requested": test_mode})
 
-        source_result = self.source_candidates(job_id=job_id, limit=limit, test_mode=effective_test_mode)
-        verify_result = self.verify_profiles(job_id=job_id, profiles=source_result["profiles"])
+        steps_order = ["source", "enrich", "verify", "add", "outreach"]
+        source_result: Dict[str, Any] = {}
+        enrich_result: Dict[str, Any] = {}
+        verify_result: Dict[str, Any] = {}
+        add_result: Dict[str, Any] = {}
+        outreach_result: Dict[str, Any] = {}
+        current_step = "source"
 
-        if self.contact_all_mode:
-            eligible_items = [item for item in verify_result["items"] if item.get("status") in {"verified", "needs_resume"}]
-        else:
-            eligible_items = [item for item in verify_result["items"] if item.get("status") == "verified"]
-        add_result = self.add_verified_candidates(job_id=job_id, verified_items=eligible_items)
-        outreach_result = self.outreach_candidates(
-            job_id=job_id,
-            candidate_ids=[x["candidate_id"] for x in add_result["added"]],
-            test_mode=effective_test_mode,
-        )
+        try:
+            self._persist_step_progress(job_id=job_id, step="source", status="running", output={})
+            source_result = self.source_candidates(job_id=job_id, limit=limit, test_mode=effective_test_mode)
+            self._persist_step_progress(job_id=job_id, step="source", status="success", output=source_result)
+
+            current_step = "enrich"
+            self._persist_step_progress(job_id=job_id, step="enrich", status="running", output={})
+            enrich_result = self.enrich_profiles(job_id=job_id, profiles=source_result["profiles"])
+            self._persist_step_progress(job_id=job_id, step="enrich", status="success", output=enrich_result)
+
+            current_step = "verify"
+            self._persist_step_progress(job_id=job_id, step="verify", status="running", output={})
+            verify_result = self._verify_enriched_profiles(
+                job_id=job_id,
+                enriched_profiles=enrich_result["profiles"],
+                enrich_result=enrich_result,
+            )
+            self._persist_step_progress(job_id=job_id, step="verify", status="success", output=verify_result)
+
+            if self.contact_all_mode:
+                eligible_items = [item for item in verify_result["items"] if item.get("status") in {"verified", "needs_resume"}]
+            else:
+                eligible_items = [item for item in verify_result["items"] if item.get("status") == "verified"]
+
+            current_step = "add"
+            self._persist_step_progress(job_id=job_id, step="add", status="running", output={})
+            add_result = self.add_verified_candidates(job_id=job_id, verified_items=eligible_items)
+            self._persist_step_progress(job_id=job_id, step="add", status="success", output=add_result)
+
+            current_step = "outreach"
+            self._persist_step_progress(job_id=job_id, step="outreach", status="running", output={})
+            outreach_result = self.outreach_candidates(
+                job_id=job_id,
+                candidate_ids=[x["candidate_id"] for x in add_result["added"]],
+                test_mode=effective_test_mode,
+            )
+            outreach_status = (
+                "error"
+                if outreach_result["failed"] > 0
+                and outreach_result["sent"] == 0
+                and outreach_result.get("pending_connection", 0) == 0
+                else "success"
+            )
+            self._persist_step_progress(job_id=job_id, step="outreach", status=outreach_status, output=outreach_result)
+        except Exception as exc:
+            self._persist_step_progress(job_id=job_id, step=current_step, status="error", output={"error": str(exc)})
+            current_index = steps_order.index(current_step) if current_step in steps_order else -1
+            for step in steps_order[current_index + 1 :]:
+                self._persist_step_progress(
+                    job_id=job_id,
+                    step=step,
+                    status="skipped",
+                    output={"reason": "upstream_step_failed", "failed_step": current_step},
+                )
+            self._persist_step_progress(job_id=job_id, step="workflow", status="error", output={"error": str(exc), "failed_step": current_step})
+            raise
 
         summary = WorkflowSummary(
             job_id=job_id,
@@ -1193,6 +1329,24 @@ class WorkflowService:
                 "outreach_pending_connection": summary.outreach_pending_connection,
                 "outreach_failed": summary.outreach_failed,
                 "test_mode_active": effective_test_mode,
+                "test_mode_requested": test_mode,
+            },
+        )
+        self._persist_step_progress(
+            job_id=job_id,
+            step="workflow",
+            status="success",
+            output={
+                "job_id": summary.job_id,
+                "searched": summary.searched,
+                "verified": summary.verified,
+                "needs_resume": summary.needs_resume,
+                "rejected": summary.rejected,
+                "outreached": summary.outreached,
+                "outreach_sent": summary.outreach_sent,
+                "outreach_pending_connection": summary.outreach_pending_connection,
+                "outreach_failed": summary.outreach_failed,
+                "conversation_ids": summary.conversation_ids,
                 "test_mode_requested": test_mode,
             },
         )
@@ -3986,7 +4140,7 @@ class WorkflowService:
         recovery_per_job: int = 25,
         jobs_scan_limit: int = 40,
     ) -> Dict[str, Any]:
-        connected_accounts = self.db.list_linkedin_accounts(limit=20, status="connected")
+        connected_accounts = self._list_active_linkedin_accounts(limit=20)
         if not connected_accounts:
             return {
                 "status": "ok",
@@ -4749,11 +4903,15 @@ class WorkflowService:
             assigned_ids = self.db.list_job_linkedin_account_ids(job_id=job_id)
             if not assigned_ids:
                 return [], "manual_no_assigned_accounts"
-            rows = self.db.list_job_linkedin_accounts(job_id=job_id, status="connected")
+            rows = [
+                row
+                for row in self.db.list_job_linkedin_accounts(job_id=job_id, status="connected")
+                if self._is_operational_linkedin_account(row)
+            ]
             if not rows:
                 return [], "manual_assigned_accounts_not_connected"
             return rows, None
-        rows = self.db.list_linkedin_accounts(limit=500, status="connected")
+        rows = self._list_active_linkedin_accounts(limit=500)
         if not rows:
             return [], "no_connected_accounts"
         return rows, None

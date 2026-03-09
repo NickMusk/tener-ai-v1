@@ -97,8 +97,11 @@ class WorkflowE2EScenariosTests(unittest.TestCase):
                         candidate_ids=[x["candidate_id"] for x in added["added"]],
                     )
                     self.assertEqual(outreach["total"], added["total"])
-                    self.assertEqual(outreach["sent"], 0)  # Mock provider intentionally does not deliver.
-                    self.assertEqual(outreach["failed"], added["total"])
+                    self.assertEqual(outreach["sent"], 0)  # Mock provider does not deliver direct messages.
+                    self.assertEqual(
+                        int(outreach["sent"]) + int(outreach.get("pending_connection", 0)) + int(outreach["failed"]),
+                        added["total"],
+                    )
 
     def test_full_workflow_and_faq_reply_language(self) -> None:
         # Frontend ES scenario gives an ES-speaking verified candidate (Miguel Santos).

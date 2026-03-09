@@ -3648,6 +3648,7 @@
         ['source', 'enrich', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'error'));
         snapshot('workflow.error', { error: e.message });
       }
+      await loadJobProgress(jobId);
       await refreshCandidates();
       await refreshLogs();
       await refreshOutreachOps();
