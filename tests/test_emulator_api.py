@@ -130,11 +130,11 @@ class EmulatorApiTests(unittest.TestCase):
         status, _body, text = self._request("GET", "/dashboard/emulator")
         self.assertEqual(status, 200)
         self.assertIn("Emulator Mode", text)
+        self.assertIn("Candidate Table", text)
         self.assertIn("Candidate Funnel", text)
-        self.assertIn("Ready to replay sourcing funnel", text)
-        self.assertIn("Sources Being Processed", text)
-        self.assertIn("Top Candidates Emerging", text)
-        self.assertIn("Reject lane", text)
+        self.assertIn("Activity Feed", text)
+        self.assertIn(">List<", text)
+        self.assertIn(">Funnel<", text)
 
     def test_dashboard_signals_live_page_serves(self) -> None:
         status, _body, text = self._request("GET", "/dashboard/signals-live")
