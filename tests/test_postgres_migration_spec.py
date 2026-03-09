@@ -26,6 +26,8 @@ class PostgresMigrationSpecTests(unittest.TestCase):
             "conversations",
             "messages",
             "operation_logs",
+            "newsletter_subscriptions",
+            "contact_requests",
             "pre_resume_sessions",
             "pre_resume_events",
             "webhook_events",

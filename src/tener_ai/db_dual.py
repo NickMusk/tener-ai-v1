@@ -296,6 +296,80 @@ class PostgresMirrorWriter:
                     ),
                 )
 
+    def upsert_newsletter_subscription(self, row: Dict[str, Any]) -> None:
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO newsletter_subscriptions (
+                        id, email, full_name, company_name, notes, source_path, status,
+                        ip_address, user_agent, created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(id) DO UPDATE SET
+                        email = EXCLUDED.email,
+                        full_name = EXCLUDED.full_name,
+                        company_name = EXCLUDED.company_name,
+                        notes = EXCLUDED.notes,
+                        source_path = EXCLUDED.source_path,
+                        status = EXCLUDED.status,
+                        ip_address = EXCLUDED.ip_address,
+                        user_agent = EXCLUDED.user_agent,
+                        created_at = EXCLUDED.created_at,
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        int(row.get("id") or 0),
+                        row.get("email"),
+                        row.get("full_name"),
+                        row.get("company_name"),
+                        row.get("notes"),
+                        row.get("source_path"),
+                        row.get("status") or "active",
+                        row.get("ip_address"),
+                        row.get("user_agent"),
+                        row.get("created_at") or utc_now_iso(),
+                        row.get("updated_at") or utc_now_iso(),
+                    ),
+                )
+
+    def upsert_contact_request(self, row: Dict[str, Any]) -> None:
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO contact_requests (
+                        id, full_name, work_email, company_name, job_title, hiring_need,
+                        source_path, status, ip_address, user_agent, created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(id) DO UPDATE SET
+                        full_name = EXCLUDED.full_name,
+                        work_email = EXCLUDED.work_email,
+                        company_name = EXCLUDED.company_name,
+                        job_title = EXCLUDED.job_title,
+                        hiring_need = EXCLUDED.hiring_need,
+                        source_path = EXCLUDED.source_path,
+                        status = EXCLUDED.status,
+                        ip_address = EXCLUDED.ip_address,
+                        user_agent = EXCLUDED.user_agent,
+                        created_at = EXCLUDED.created_at
+                    """,
+                    (
+                        int(row.get("id") or 0),
+                        row.get("full_name"),
+                        row.get("work_email"),
+                        row.get("company_name"),
+                        row.get("job_title"),
+                        row.get("hiring_need"),
+                        row.get("source_path"),
+                        row.get("status") or "new",
+                        row.get("ip_address"),
+                        row.get("user_agent"),
+                        row.get("created_at") or utc_now_iso(),
+                    ),
+                )
+
     def upsert_pre_resume_session(self, row: Dict[str, Any]) -> None:
         with self._transaction() as conn:
             with conn.cursor() as cur:
@@ -775,6 +849,25 @@ class DualWriteDatabase:
         }
         self._mirror_call("log_operation", lambda: self._mirror.insert_operation_log(payload))
 
+    def create_newsletter_subscription(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        result = self._primary.create_newsletter_subscription(*args, **kwargs)
+        row = result.get("subscription") if isinstance(result, dict) else None
+        if isinstance(row, dict):
+            self._mirror_call(
+                "create_newsletter_subscription",
+                lambda: self._mirror.upsert_newsletter_subscription(row),
+            )
+        return result
+
+    def create_contact_request(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        row = self._primary.create_contact_request(*args, **kwargs)
+        if isinstance(row, dict):
+            self._mirror_call(
+                "create_contact_request",
+                lambda: self._mirror.upsert_contact_request(row),
+            )
+        return row
+
     def upsert_pre_resume_session(self, *args: Any, **kwargs: Any) -> None:
         self._primary.upsert_pre_resume_session(*args, **kwargs)
         session_id = str(kwargs.get("session_id") if "session_id" in kwargs else args[0])
@@ -855,7 +948,7 @@ class DualWriteDatabase:
         conn = getattr(self._primary, "_conn", None)
         if conn is None:
             return None
-        if table_name not in {"messages", "pre_resume_events", "candidate_signals", "resume_assets"}:
+        if table_name not in {"messages", "pre_resume_events", "candidate_signals", "resume_assets", "contact_requests"}:
             return None
         row = conn.execute(f"SELECT * FROM {table_name} WHERE id = ?", (int(row_id),)).fetchone()
         if row is None:

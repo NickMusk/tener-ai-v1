@@ -513,7 +513,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
             return
 
-        if parsed.path in {"/landing", "/landing/"}:
+        if parsed.path in {"/", "/landing", "/landing/"}:
             landing_page = project_root() / "src" / "tener_ai" / "static" / "landing.html"
             if not landing_page.exists():
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "landing file not found"})
@@ -534,7 +534,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if parsed.path in {"/", "/dashboard"}:
+        if parsed.path == "/dashboard":
             dashboard = project_root() / "src" / "tener_ai" / "static" / "dashboard.html"
             if not dashboard.exists():
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "dashboard file not found"})

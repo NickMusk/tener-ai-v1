@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tener.ai | AI Hiring Agency for Critical Skills</title>
+<link rel="icon" type="image/png" href="/favicon.png">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Sora:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0a0a;--bg2:#111111;--bg3:#161616;--bg4:#1a1a1a;
+  --green:#00e676;--green2:#00c853;--green-dim:rgba(0,230,118,0.08);--green-glow:rgba(0,230,118,0.15);
+  --blue:#00b0ff;--blue-dim:rgba(0,176,255,0.08);
+  --text:#f0f0f0;--text2:#a0a0a0;--text3:#666;
+  --border:#222;--border2:#2a2a2a;
+  --mono:'JetBrains Mono',monospace;--sans:'Sora',sans-serif;
+}
+html{scroll-behavior:smooth;font-size:16px}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden;line-height:1.6}
+a{color:inherit;text-decoration:none}
+
+/* NOISE OVERLAY */
+body::before{
+  content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+  background-repeat:repeat;
+}
+
+/* SCROLL ANIMATIONS */
+.reveal{opacity:0;transform:translateY(40px);transition:all 0.8s cubic-bezier(0.16,1,0.3,1)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+.reveal-delay-1{transition-delay:0.1s}
+.reveal-delay-2{transition-delay:0.2s}
+.reveal-delay-3{transition-delay:0.3s}
+
+/* NAV */
+nav{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  padding:1.25rem 3rem;
+  display:flex;justify-content:space-between;align-items:center;
+  background:rgba(10,10,10,0.85);backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(255,255,255,0.04);
+}
+.logo{font-family:var(--mono);font-size:1.5rem;font-weight:700;letter-spacing:-0.5px}
+.logo .dot{color:var(--green)}
+.nav-links{display:flex;gap:2.5rem;align-items:center}
+.nav-links a{font-size:0.85rem;color:var(--text2);letter-spacing:0.5px;transition:color 0.3s}
+.nav-links a:hover{color:var(--green)}
+.nav-cta{
+  padding:0.6rem 1.5rem;background:var(--green);color:var(--bg);
+  font-weight:600;font-size:0.85rem;border-radius:6px;
+  transition:all 0.3s;letter-spacing:0.3px;
+}
+.nav-cta:hover{background:#00ff88;transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,230,118,0.3)}
+
+/* HERO */
+.hero{
+  min-height:100vh;display:flex;flex-direction:column;
+  justify-content:center;align-items:center;text-align:center;
+  padding:8rem 2rem 6rem;position:relative;overflow:hidden;
+}
+.hero-grid{
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(0,230,118,0.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,230,118,0.03) 1px,transparent 1px);
+  background-size:80px 80px;
+  mask-image:radial-gradient(ellipse 60% 50% at 50% 50%,black 20%,transparent 70%);
+}
+.hero-glow{
+  position:absolute;top:20%;left:50%;transform:translate(-50%,-50%);
+  width:800px;height:800px;
+  background:radial-gradient(circle,rgba(0,230,118,0.06) 0%,transparent 60%);
+  pointer-events:none;
+}
+.hero-badge{
+  display:inline-flex;align-items:center;gap:0.5rem;
+  padding:0.5rem 1rem;border-radius:100px;
+  background:var(--green-dim);border:1px solid rgba(0,230,118,0.2);
+  font-family:var(--mono);font-size:0.75rem;color:var(--green);
+  margin-bottom:2rem;letter-spacing:1px;text-transform:uppercase;
+}
+.hero-badge .pulse{
+  width:8px;height:8px;border-radius:50%;background:var(--green);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(1.5)}}
+
+.hero h1{
+  font-size:clamp(3rem,7vw,5.5rem);font-weight:800;
+  line-height:1.05;letter-spacing:-2px;
+  max-width:900px;margin-bottom:1.5rem;
+}
+.hero h1 .accent{
+  background:linear-gradient(135deg,var(--green),var(--blue));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.hero-sub{
+  font-size:clamp(1.1rem,2vw,1.35rem);color:var(--text2);
+  max-width:600px;line-height:1.7;font-weight:300;margin-bottom:3rem;
+}
+.hero-metrics{
+  display:flex;gap:3rem;flex-wrap:wrap;justify-content:center;
+  margin-bottom:3rem;
+}
+.hero-metric{text-align:center}
+.hero-metric .num{
+  font-family:var(--mono);font-size:2rem;font-weight:700;color:var(--green);
+  display:block;line-height:1.2;
+}
+.hero-metric .label{font-size:0.8rem;color:var(--text3);margin-top:0.25rem;letter-spacing:0.5px}
+
+.hero-ctas{display:flex;gap:1rem;flex-wrap:wrap;justify-content:center}
+.newsletter-panel{
+  width:min(720px,100%);margin-top:2rem;padding:1.25rem;
+  background:rgba(17,17,17,0.88);border:1px solid rgba(255,255,255,0.08);
+  border-radius:16px;backdrop-filter:blur(12px);
+}
+.newsletter-copy{
+  font-family:var(--mono);font-size:0.78rem;color:var(--text2);
+  letter-spacing:0.5px;text-transform:uppercase;margin-bottom:0.9rem;
+}
+.newsletter-form{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0.85rem;align-items:center;
+}
+.form-input,.form-textarea{
+  width:100%;border:1px solid var(--border2);border-radius:10px;
+  background:var(--bg3);color:var(--text);font-family:var(--sans);
+  padding:0.95rem 1rem;font-size:0.98rem;outline:none;
+  transition:border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+.form-input:focus,.form-textarea:focus{
+  border-color:rgba(0,230,118,0.45);box-shadow:0 0 0 3px rgba(0,230,118,0.1);
+}
+.form-input::placeholder,.form-textarea::placeholder{color:var(--text3)}
+.form-textarea{min-height:160px;resize:vertical}
+.form-feedback{
+  min-height:1.35rem;margin-top:0.85rem;font-size:0.9rem;color:var(--text2);
+}
+.form-feedback.success{color:var(--green)}
+.form-feedback.error{color:#ff8a80}
+.form-feedback.loading{color:var(--blue)}
+.hp-field{
+  position:absolute !important;left:-10000px !important;opacity:0 !important;
+  pointer-events:none !important;
+}
+.btn-primary{
+  padding:1rem 2.5rem;background:var(--green);color:var(--bg);
+  font-weight:700;font-size:1rem;border-radius:8px;border:none;cursor:pointer;
+  transition:all 0.3s;letter-spacing:0.3px;
+}
+.btn-primary:hover{background:#00ff88;transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,230,118,0.25)}
+.btn-secondary{
+  padding:1rem 2.5rem;background:transparent;color:var(--text);
+  font-weight:600;font-size:1rem;border-radius:8px;border:1px solid var(--border2);cursor:pointer;
+  transition:all 0.3s;
+}
+.btn-secondary:hover{border-color:var(--green);color:var(--green)}
+
+/* LOGOS BAR */
+.logos-bar{
+  padding:3rem 2rem;border-top:1px solid var(--border);border-bottom:1px solid var(--border);
+  text-align:center;
+}
+.logos-bar .label{font-size:0.7rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-bottom:1.5rem}
+.logos-row{
+  display:flex;justify-content:center;align-items:center;gap:3rem;flex-wrap:wrap;
+  opacity:0.5;
+}
+.logos-row span{font-family:var(--mono);font-size:1.1rem;font-weight:700;color:var(--text2);letter-spacing:1px}
+
+/* SECTION HEADERS */
+.section{padding:7rem 2rem;max-width:1200px;margin:0 auto}
+.section-tag{
+  font-family:var(--mono);font-size:0.7rem;color:var(--green);
+  letter-spacing:3px;text-transform:uppercase;margin-bottom:1rem;
+}
+.section-title{
+  font-size:clamp(2rem,4vw,3.2rem);font-weight:700;
+  line-height:1.15;letter-spacing:-1px;max-width:700px;margin-bottom:1.5rem;
+}
+.section-desc{font-size:1.05rem;color:var(--text2);max-width:550px;line-height:1.8;font-weight:300}
+
+/* PROBLEM */
+.problem{
+  padding:7rem 2rem;
+  background:linear-gradient(180deg,var(--bg) 0%,var(--bg2) 100%);
+}
+.problem-inner{max-width:1200px;margin:0 auto}
+.problem-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:4rem;align-items:center;margin-top:3rem;
+}
+.problem-stat{
+  padding:2rem;background:var(--bg);border:1px solid var(--border);border-radius:12px;
+  margin-bottom:1.5rem;transition:all 0.3s;
+}
+.problem-stat:hover{border-color:rgba(0,230,118,0.3);transform:translateX(4px)}
+.problem-stat .num{
+  font-family:var(--mono);font-size:2.5rem;font-weight:700;
+  background:linear-gradient(135deg,#ff5252,#ff8a80);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  line-height:1;margin-bottom:0.5rem;
+}
+.problem-stat .desc{color:var(--text2);font-size:0.95rem;line-height:1.6}
+
+.solution-preview{
+  background:var(--bg3);border:1px solid var(--border);border-radius:16px;
+  padding:2rem;overflow:hidden;
+}
+.terminal-bar{
+  display:flex;gap:6px;margin-bottom:1.5rem;padding-bottom:1rem;
+  border-bottom:1px solid var(--border);
+}
+.terminal-dot{width:10px;height:10px;border-radius:50%}
+.terminal-dot:nth-child(1){background:#ff5f57}
+.terminal-dot:nth-child(2){background:#febc2e}
+.terminal-dot:nth-child(3){background:#28c840}
+.terminal-line{
+  font-family:var(--mono);font-size:0.85rem;color:var(--text2);
+  padding:0.3rem 0;line-height:1.8;
+}
+.terminal-line .cmd{color:var(--green)}
+.terminal-line .result{color:var(--text)}
+.terminal-line .highlight{color:var(--blue)}
+
+/* HOW IT WORKS */
+.how-it-works{background:var(--bg)}
+.agents-grid{
+  display:grid;grid-template-columns:repeat(5,1fr);gap:1px;
+  background:var(--border);border-radius:16px;overflow:hidden;margin-top:3rem;
+}
+.agent-card{
+  background:var(--bg2);padding:2rem 1.5rem;
+  display:flex;flex-direction:column;transition:all 0.4s;position:relative;
+}
+.agent-card:hover{background:var(--bg3)}
+.agent-card::after{
+  content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:var(--green);transform:scaleX(0);transition:transform 0.4s;
+}
+.agent-card:hover::after{transform:scaleX(1)}
+.agent-step{
+  font-family:var(--mono);font-size:0.65rem;color:var(--green);
+  letter-spacing:2px;text-transform:uppercase;margin-bottom:1rem;
+}
+.agent-avatar{
+  width:48px;height:48px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-weight:700;font-size:1.1rem;
+  margin-bottom:1rem;color:var(--bg);
+}
+.agent-card:nth-child(1) .agent-avatar{background:linear-gradient(135deg,#00e676,#00c853)}
+.agent-card:nth-child(2) .agent-avatar{background:linear-gradient(135deg,#00b0ff,#0091ea)}
+.agent-card:nth-child(3) .agent-avatar{background:linear-gradient(135deg,#7c4dff,#651fff)}
+.agent-card:nth-child(4) .agent-avatar{background:linear-gradient(135deg,#ff6d00,#ff9100)}
+.agent-card:nth-child(5) .agent-avatar{background:linear-gradient(135deg,#f50057,#ff1744)}
+.agent-name{font-size:1.1rem;font-weight:700;margin-bottom:0.5rem}
+.agent-role{font-size:0.8rem;color:var(--text3);font-family:var(--mono);margin-bottom:1rem}
+.agent-desc{font-size:0.88rem;color:var(--text2);line-height:1.7;flex:1}
+
+/* VERTICALS */
+.verticals{background:var(--bg2)}
+.verticals-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;margin-top:3rem}
+.vertical-card{
+  background:var(--bg);padding:3rem 2.5rem;position:relative;overflow:hidden;
+  transition:all 0.4s;
+}
+.vertical-card:hover{background:var(--bg3)}
+.vertical-status{
+  display:inline-flex;align-items:center;gap:0.4rem;
+  padding:0.35rem 0.8rem;border-radius:100px;font-family:var(--mono);
+  font-size:0.65rem;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:1.5rem;
+}
+.status-live{background:rgba(0,230,118,0.15);color:var(--green);border:1px solid rgba(0,230,118,0.3)}
+.status-live .dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+.status-launching{background:rgba(0,176,255,0.12);color:var(--blue);border:1px solid rgba(0,176,255,0.3)}
+.status-next{background:rgba(124,77,255,0.12);color:#b388ff;border:1px solid rgba(124,77,255,0.3)}
+.vertical-name{font-size:1.8rem;font-weight:700;margin-bottom:0.5rem;letter-spacing:-0.5px}
+.vertical-market{font-family:var(--mono);font-size:1.5rem;font-weight:700;color:var(--green);margin-bottom:1.5rem}
+.vertical-details{list-style:none;display:flex;flex-direction:column;gap:0.75rem}
+.vertical-details li{
+  font-size:0.9rem;color:var(--text2);padding-left:1.5rem;position:relative;line-height:1.5;
+}
+.vertical-details li::before{
+  content:'';position:absolute;left:0;top:8px;
+  width:6px;height:6px;border-radius:50%;background:var(--green);
+}
+
+/* COMPARISON */
+.comparison{background:var(--bg)}
+.comparison-table{
+  margin-top:3rem;border:1px solid var(--border);border-radius:16px;overflow:hidden;
+}
+.comp-row{
+  display:grid;grid-template-columns:1fr 1fr 1fr;
+  border-bottom:1px solid var(--border);
+}
+.comp-row:last-child{border-bottom:none}
+.comp-cell{padding:1.25rem 2rem;font-size:0.92rem}
+.comp-header{background:var(--bg3);font-weight:600;color:var(--text)}
+.comp-header:first-child{color:var(--text3)}
+.comp-old{color:var(--text3)}
+.comp-new{color:var(--green);font-weight:500}
+
+/* DATA MOAT */
+.data-moat{background:var(--bg2)}
+.moat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5rem;margin-top:3rem}
+.moat-card{
+  background:var(--bg);border:1px solid var(--border);border-radius:12px;padding:2rem;
+  transition:all 0.3s;
+}
+.moat-card:hover{border-color:rgba(0,230,118,0.2);transform:translateY(-4px)}
+.moat-num{
+  font-family:var(--mono);font-size:2.5rem;font-weight:700;color:var(--green);
+  line-height:1;margin-bottom:0.75rem;
+}
+.moat-label{font-size:0.85rem;color:var(--text3);font-family:var(--mono);letter-spacing:0.5px;margin-bottom:0.75rem}
+.moat-desc{font-size:0.92rem;color:var(--text2);line-height:1.6}
+
+/* TEAM */
+.team{background:var(--bg)}
+.team-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2rem;margin-top:3rem}
+.team-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:16px;
+  padding:2.5rem 2rem;text-align:center;transition:all 0.3s;
+}
+.team-card:hover{border-color:rgba(0,230,118,0.2);transform:translateY(-4px)}
+.team-avatar{
+  width:80px;height:80px;border-radius:50%;margin:0 auto 1.5rem;
+  display:flex;align-items:center;justify-content:center;
+  font-size:1.5rem;font-weight:700;color:var(--bg);
+}
+.team-card:nth-child(1) .team-avatar{background:linear-gradient(135deg,var(--green),#00c853)}
+.team-card:nth-child(2) .team-avatar{background:linear-gradient(135deg,var(--blue),#0091ea)}
+.team-card:nth-child(3) .team-avatar{background:linear-gradient(135deg,#7c4dff,#651fff)}
+.team-name{font-size:1.2rem;font-weight:700;margin-bottom:0.25rem}
+.team-role{font-family:var(--mono);font-size:0.75rem;color:var(--green);letter-spacing:1px;text-transform:uppercase;margin-bottom:1rem}
+.team-bio{font-size:0.88rem;color:var(--text2);line-height:1.7}
+
+/* CTA */
+.final-cta{
+  padding:8rem 2rem;text-align:center;position:relative;overflow:hidden;
+  background:linear-gradient(180deg,var(--bg2) 0%,var(--bg) 100%);
+}
+.final-cta .glow{
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:600px;height:400px;
+  background:radial-gradient(ellipse,rgba(0,230,118,0.08),transparent 70%);
+  pointer-events:none;
+}
+.final-cta h2{
+  font-size:clamp(2.5rem,5vw,4rem);font-weight:800;
+  line-height:1.1;letter-spacing:-1.5px;margin-bottom:1.5rem;position:relative;
+}
+.final-cta p{font-size:1.1rem;color:var(--text2);max-width:500px;margin:0 auto 3rem;line-height:1.7;position:relative}
+.cta-shell{
+  max-width:1200px;margin:0 auto;position:relative;z-index:1;
+}
+.cta-grid{
+  display:grid;grid-template-columns:0.95fr 1.05fr;gap:2rem;align-items:start;
+  margin-top:3rem;text-align:left;
+}
+.cta-card,.contact-card{
+  background:rgba(17,17,17,0.88);border:1px solid rgba(255,255,255,0.08);
+  border-radius:18px;padding:2rem;backdrop-filter:blur(14px);
+}
+.cta-card h3,.contact-card h3{
+  font-size:1.35rem;font-weight:700;margin-bottom:0.8rem;
+}
+.cta-card p,.contact-card p{
+  max-width:none;margin:0;color:var(--text2);font-size:0.98rem;
+}
+.cta-list{
+  list-style:none;display:grid;gap:0.9rem;margin-top:1.5rem;
+}
+.cta-list li{
+  padding-left:1.35rem;position:relative;color:var(--text2);line-height:1.6;
+}
+.cta-list li::before{
+  content:'';position:absolute;left:0;top:0.6rem;width:7px;height:7px;border-radius:50%;
+  background:var(--green);
+}
+.contact-form{
+  display:grid;gap:1rem;margin-top:1.5rem;
+}
+.contact-grid{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1rem;
+}
+.field-label{
+  display:flex;flex-direction:column;gap:0.5rem;color:var(--text2);font-size:0.88rem;
+}
+.field-label.full{grid-column:1 / -1}
+.field-label span{
+  font-family:var(--mono);font-size:0.72rem;letter-spacing:1px;text-transform:uppercase;color:var(--text3);
+}
+.contact-actions{
+  display:flex;gap:1rem;align-items:center;flex-wrap:wrap;
+}
+.btn-link{
+  display:inline-flex;align-items:center;justify-content:center;
+  padding:1rem 2rem;border-radius:8px;border:1px solid var(--border2);
+  color:var(--text);font-weight:600;transition:all 0.3s;
+}
+.btn-link:hover{border-color:var(--green);color:var(--green)}
+
+/* FOOTER */
+footer{
+  padding:3rem;border-top:1px solid var(--border);
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:0.8rem;color:var(--text3);
+}
+footer .logo{font-size:1.1rem}
+
+/* RESPONSIVE */
+@media(max-width:1024px){
+  .agents-grid{grid-template-columns:repeat(3,1fr)}
+  .verticals-grid{grid-template-columns:1fr}
+  .problem-grid{grid-template-columns:1fr}
+  .cta-grid{grid-template-columns:1fr}
+}
+@media(max-width:768px){
+  nav{padding:1rem 1.5rem}
+  .nav-links{display:none}
+  .agents-grid{grid-template-columns:1fr 1fr}
+  .moat-grid{grid-template-columns:1fr}
+  .team-grid{grid-template-columns:1fr}
+  .comp-cell{padding:0.75rem 1rem;font-size:0.8rem}
+  .hero-metrics{gap:1.5rem}
+  .logos-row{gap:1.5rem}
+  .newsletter-form{grid-template-columns:1fr}
+  .contact-grid{grid-template-columns:1fr}
+  footer{flex-direction:column;gap:1rem;text-align:center}
+}
+@media(max-width:480px){
+  .agents-grid{grid-template-columns:1fr}
+  .hero h1{letter-spacing:-1px}
+  .newsletter-panel,.cta-card,.contact-card{padding:1.25rem}
+  .contact-actions{flex-direction:column;align-items:stretch}
+  .btn-primary,.btn-secondary,.btn-link{width:100%}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">tener<span class="dot">.</span>ai</div>
+  <div class="nav-links">
+    <a href="#how">How It Works</a>
+    <a href="#verticals">Verticals</a>
+    <a href="#data">Data Advantage</a>
+    <a href="#team">Team</a>
+    <a href="#cta" class="nav-cta">Start Hiring</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-grid"></div>
+  <div class="hero-glow"></div>
+  <div class="hero-badge"><span class="pulse"></span> Now accepting pilot partners</div>
+  <h1>The <span class="accent">AI Recruiting Agency</span> for Critical Skills</h1>
+  <p class="hero-sub">
+    From job description to vetted candidates in 10 days. No recruiter needed. No agency fees. Just the right people, fast.
+  </p>
+  <div class="hero-metrics">
+    <div class="hero-metric"><span class="num">10</span><span class="label">Days to shortlist</span></div>
+    <div class="hero-metric"><span class="num">5</span><span class="label">AI agents working 24/7</span></div>
+    <div class="hero-metric"><span class="num">80%</span><span class="label">Cost reduction vs agencies</span></div>
+    <div class="hero-metric"><span class="num">50K+</span><span class="label">Candidates processed</span></div>
+  </div>
+  <div class="hero-ctas">
+    <button class="btn-primary" onclick="document.getElementById('cta').scrollIntoView({behavior:'smooth'})">Get Started Free</button>
+    <button class="btn-secondary" onclick="document.getElementById('how').scrollIntoView({behavior:'smooth'})">See How It Works</button>
+  </div>
+  <div class="newsletter-panel reveal">
+    <div class="newsletter-copy">Product updates, pilot openings, and launch notes</div>
+    <form id="newsletter-form" class="newsletter-form">
+      <input class="form-input" type="email" name="email" placeholder="Work email" autocomplete="email" required>
+      <input class="hp-field" type="text" name="website" tabindex="-1" autocomplete="off">
+      <button class="btn-primary" type="submit">Subscribe to News</button>
+    </form>
+    <div id="newsletter-feedback" class="form-feedback" aria-live="polite"></div>
+  </div>
+</section>
+
+<!-- LOGOS -->
+<div class="logos-bar">
+  <div class="label">Trusted by industry leaders</div>
+  <div class="logos-row">
+    <span>Fiverr</span>
+    <span>Zalando</span>
+    <span>Nabors</span>
+    <span>BlaBlaCar</span>
+    <span>HubSpot</span>
+    <span>Danone</span>
+    <span>AstraZeneca</span>
+    <span>Unilever</span>
+  </div>
+</div>
+
+<!-- PROBLEM -->
+<section class="problem">
+  <div class="problem-inner">
+    <div class="section-tag reveal">The Problem</div>
+    <div class="section-title reveal">Hiring critical talent is broken. Agencies are slow, expensive, and guessing.</div>
+    <div class="problem-grid">
+      <div>
+        <div class="problem-stat reveal">
+          <div class="num">45 days</div>
+          <div class="desc">Average time to fill a technical role through traditional agencies. Your project stalls, your team burns out.</div>
+        </div>
+        <div class="problem-stat reveal reveal-delay-1">
+          <div class="num">$25K+</div>
+          <div class="desc">Average cost per hire through staffing agencies. 20% of first year salary, regardless of outcome.</div>
+        </div>
+        <div class="problem-stat reveal reveal-delay-2">
+          <div class="num">40%</div>
+          <div class="desc">Of hires made through agencies churn within 12 months. The recruiter already got paid. You start over.</div>
+        </div>
+      </div>
+      <div class="solution-preview reveal">
+        <div class="terminal-bar">
+          <div class="terminal-dot"></div>
+          <div class="terminal-dot"></div>
+          <div class="terminal-dot"></div>
+        </div>
+        <div class="terminal-line"><span class="cmd">$</span> tener deploy <span class="highlight">"Senior ML Engineer"</span></div>
+        <div class="terminal-line">&nbsp;</div>
+        <div class="terminal-line"><span class="result">&#9654; Harper AI analyzing company culture...</span></div>
+        <div class="terminal-line"><span class="result">&#9654; Spencer AI refining job specification...</span></div>
+        <div class="terminal-line"><span class="result">&#9654; Reed AI sourcing 2,400 candidates...</span></div>
+        <div class="terminal-line"><span class="result">&#9654; Casey AI conducting interviews...</span></div>
+        <div class="terminal-line"><span class="result">&#9654; Jordan AI scoring &amp; ranking finalists...</span></div>
+        <div class="terminal-line">&nbsp;</div>
+        <div class="terminal-line"><span class="cmd">&#10003;</span> <span class="result">5 vetted candidates ready</span></div>
+        <div class="terminal-line"><span class="cmd">&#10003;</span> <span class="result">Technical scores: 87 92 79 91 85</span></div>
+        <div class="terminal-line"><span class="cmd">&#10003;</span> <span class="result">Culture fit: verified</span></div>
+        <div class="terminal-line"><span class="cmd">&#10003;</span> <span class="result">Time elapsed: 8 days</span></div>
+        <div class="terminal-line">&nbsp;</div>
+        <div class="terminal-line" style="color:var(--green)">Ready for your final interview. Zero recruiter hours spent.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section how-it-works" id="how">
+  <div class="section-tag reveal">How It Works</div>
+  <div class="section-title reveal">Five AI agents. One complete recruiting team.</div>
+  <div class="section-desc reveal">Each agent specializes in a critical part of the hiring funnel. Together, they replace an entire recruiting department.</div>
+  <div class="agents-grid">
+    <div class="agent-card reveal">
+      <div class="agent-step">Step 01</div>
+      <div class="agent-avatar">H</div>
+      <div class="agent-name">Harper AI</div>
+      <div class="agent-role">Company Analyst</div>
+      <div class="agent-desc">Scans your website, LinkedIn, Glassdoor, and social profiles. Builds a deep cultural profile of your company to ensure every candidate is a true fit, not just a skills match.</div>
+    </div>
+    <div class="agent-card reveal reveal-delay-1">
+      <div class="agent-step">Step 02</div>
+      <div class="agent-avatar">S</div>
+      <div class="agent-name">Spencer AI</div>
+      <div class="agent-role">Job Architect</div>
+      <div class="agent-desc">Validates and refines your job description with domain expertise. Adjusts salary ranges, skills requirements, and scope to maximize candidate quality and market fit.</div>
+    </div>
+    <div class="agent-card reveal reveal-delay-2">
+      <div class="agent-step">Step 03</div>
+      <div class="agent-avatar">R</div>
+      <div class="agent-name">Reed AI</div>
+      <div class="agent-role">Talent Sourcer</div>
+      <div class="agent-desc">Searches across LinkedIn and professional networks to find the best candidates. Handles outreach, answers questions, collects CVs, and pushes candidates into the vetting pipeline.</div>
+    </div>
+    <div class="agent-card reveal reveal-delay-3">
+      <div class="agent-step">Step 04</div>
+      <div class="agent-avatar">C</div>
+      <div class="agent-name">Casey AI</div>
+      <div class="agent-role">Interviewer</div>
+      <div class="agent-desc">Generates unique interview questions based on your company profile and job requirements. Conducts async video interviews and evaluates hard skills, soft skills, and cultural fit.</div>
+    </div>
+    <div class="agent-card reveal">
+      <div class="agent-step">Step 05</div>
+      <div class="agent-avatar">J</div>
+      <div class="agent-name">Jordan AI</div>
+      <div class="agent-role">Hiring Advisor</div>
+      <div class="agent-desc">Runs a roundtable analysis across all agent scores. Delivers a final shortlist of 3 to 5 candidates with detailed profiles, assessment summaries, and clear hiring recommendations.</div>
+    </div>
+  </div>
+</section>
+
+<!-- COMPARISON -->
+<section class="section comparison">
+  <div class="section-tag reveal">Why Tener</div>
+  <div class="section-title reveal">Traditional agency vs Tener.ai</div>
+  <div class="comparison-table reveal">
+    <div class="comp-row">
+      <div class="comp-cell comp-header"></div>
+      <div class="comp-cell comp-header">Traditional Agency</div>
+      <div class="comp-cell comp-header" style="color:var(--green)">Tener.ai</div>
+    </div>
+    <div class="comp-row">
+      <div class="comp-cell comp-old">Time to shortlist</div>
+      <div class="comp-cell comp-old">30 to 60 days</div>
+      <div class="comp-cell comp-new">10 days</div>
+    </div>
+    <div class="comp-row">
+      <div class="comp-cell comp-old">Cost per hire</div>
+      <div class="comp-cell comp-old">20% of annual salary</div>
+      <div class="comp-cell comp-new">Flat subscription, 80% less</div>
+    </div>
+    <div class="comp-row">
+      <div class="comp-cell comp-old">Candidates reviewed</div>
+      <div class="comp-cell comp-old">50 to 100 manually</div>
+      <div class="comp-cell comp-new">2,000+ AI screened</div>
+    </div>
+    <div class="comp-row">
+      <div class="comp-cell comp-old">Interview depth</div>
+      <div class="comp-cell comp-old">Phone screen, gut feeling</div>
+      <div class="comp-cell comp-new">10 question structured + scoring</div>
+    </div>
+    <div class="comp-row">
+      <div class="comp-cell comp-old">Cultural fit analysis</div>
+      <div class="comp-cell comp-old">Subjective notes</div>
+      <div class="comp-cell comp-new">AI driven company profile matching</div>
+    </div>
+    <div class="comp-row">
+      <div class="comp-cell comp-old">Availability</div>
+      <div class="comp-cell comp-old">Business hours</div>
+      <div class="comp-cell comp-new">24/7 across all time zones</div>
+    </div>
+    <div class="comp-row">
+      <div class="comp-cell comp-old">Positions at once</div>
+      <div class="comp-cell comp-old">5 to 6 per recruiter</div>
+      <div class="comp-cell comp-new">Unlimited, parallel processing</div>
+    </div>
+  </div>
+</section>
+
+<!-- VERTICALS -->
+<section class="section verticals" id="verticals" style="padding-left:0;padding-right:0;max-width:100%">
+  <div style="max-width:1200px;margin:0 auto;padding:0 2rem">
+    <div class="section-tag reveal">Three Verticals</div>
+    <div class="section-title reveal">One technology. Three massive markets where hiring is broken.</div>
+    <div class="section-desc reveal">Same agent architecture. Same intelligence. Different data, different verticals. $20B+ combined addressable market with zero AI competition in two of them.</div>
+  </div>
+  <div class="verticals-grid" style="max-width:1200px;margin:3rem auto 0;border-radius:16px;overflow:hidden">
+    <div class="vertical-card reveal">
+      <div class="vertical-status status-live"><span class="dot"></span> Live</div>
+      <div class="vertical-name">Software Engineering</div>
+      <div class="vertical-market">$4B SOM</div>
+      <ul class="vertical-details">
+        <li>Entry wedge with proven traction and paying customers</li>
+        <li>Remote first US and EU companies hiring developers</li>
+        <li>400K+ companies in addressable market</li>
+        <li>Fiverr (NYSE: FVRR) as design partner</li>
+        <li>50K+ candidates processed, 5K+ completed searches</li>
+        <li>Proprietary outcome data no competitor has</li>
+      </ul>
+    </div>
+    <div class="vertical-card reveal reveal-delay-1">
+      <div class="vertical-status status-launching">Launching</div>
+      <div class="vertical-name">Life Sciences</div>
+      <div class="vertical-market">$5B SOM</div>
+      <ul class="vertical-details">
+        <li>Pharma, biotech, medical devices recruiting</li>
+        <li>Zero AI solutions on the market today</li>
+        <li>35% talent deficit across the sector</li>
+        <li>133K new professionals needed by 2030</li>
+        <li>Regulatory complexity creates natural barrier to entry</li>
+        <li>Customer discovery completed, pilots in progress</li>
+      </ul>
+    </div>
+    <div class="vertical-card reveal reveal-delay-2">
+      <div class="vertical-status status-next">Next</div>
+      <div class="vertical-name">Skilled Trades</div>
+      <div class="vertical-market">$11B SOM</div>
+      <ul class="vertical-details">
+        <li>Data centers, construction, HVAC specialists</li>
+        <li>439K worker shortage in 2025 alone</li>
+        <li>Data center construction up 30% YoY reaching $45B</li>
+        <li>Single projects requiring 4,000+ workers</li>
+        <li>Zero recruiting automation in the entire sector</li>
+        <li>AI and infrastructure boom driving demand</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- DATA MOAT -->
+<section class="section data-moat" id="data">
+  <div class="section-tag reveal">Unfair Advantage</div>
+  <div class="section-title reveal">The data moat no competitor can replicate.</div>
+  <div class="section-desc reveal">A decade of recruiting operations turned into structured intelligence. This is not training data from the internet. This is proprietary outcome data from real hiring journeys.</div>
+  <div class="moat-grid">
+    <div class="moat-card reveal">
+      <div class="moat-num">50K+</div>
+      <div class="moat-label">Candidate Journeys</div>
+      <div class="moat-desc">Full funnel tracking from first LinkedIn message through placement and performance. Every touchpoint, every decision, every outcome recorded.</div>
+    </div>
+    <div class="moat-card reveal reveal-delay-1">
+      <div class="moat-num">5K+</div>
+      <div class="moat-label">Completed Searches</div>
+      <div class="moat-desc">End to end recruiting processes with documented results. Who got hired, who stayed, who churned, and why. Outcome data that even LinkedIn does not have.</div>
+    </div>
+    <div class="moat-card reveal reveal-delay-2">
+      <div class="moat-num">10 yrs</div>
+      <div class="moat-label">Domain Expertise</div>
+      <div class="moat-desc">Built on a decade of running Digis, a 200 person recruiting agency acquired by Fiverr. Cognitive interviews with recruiting teams turned into structured playbooks for AI agents.</div>
+    </div>
+  </div>
+</section>
+
+<!-- TEAM -->
+<section class="section team" id="team">
+  <div class="section-tag reveal">The Team</div>
+  <div class="section-title reveal">Second time founders. Built and exited before.</div>
+  <div class="team-grid">
+    <div class="team-card reveal">
+      <div class="team-avatar">NN</div>
+      <div class="team-name">Nick Nagatkin</div>
+      <div class="team-role">CEO &amp; Co-founder</div>
+      <div class="team-bio">Founded Digis (IT recruiting, 200+ employees) at 19. Scaled to $XXM ARR and exited to Fiverr. Forbes 30u30. Coding since 14. Deep domain expertise across recruiting operations and enterprise sales.</div>
+    </div>
+    <div class="team-card reveal reveal-delay-1">
+      <div class="team-avatar">AB</div>
+      <div class="team-name">Alon Belan</div>
+      <div class="team-role">CTO &amp; Co-founder</div>
+      <div class="team-bio">Unit 8200 alumnus. 12+ years in software engineering for scaleups. MBA. Built the five agent framework powering Tener's intelligence layer from the ground up.</div>
+    </div>
+    <div class="team-card reveal reveal-delay-2">
+      <div class="team-avatar">AG</div>
+      <div class="team-name">Alex Galaktionov</div>
+      <div class="team-role">CRO &amp; Co-founder</div>
+      <div class="team-bio">15 years in B2B sales. Grew a UK IT recruiting firm from zero to £5M ARR. Strong enterprise network across UK and EU markets. Drives partnerships and revenue growth.</div>
+    </div>
+  </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final-cta" id="cta">
+  <div class="glow"></div>
+  <div class="cta-shell">
+    <div class="section-tag reveal">Ready?</div>
+    <h2 class="reveal">Stop paying agencies.<br>Start hiring <span style="color:var(--green)">smarter</span>.</h2>
+    <p class="reveal">Submit your role details and we will follow up with pilot fit, next steps, and how Tener can handle the search end to end.</p>
+    <div class="cta-grid reveal">
+      <div class="cta-card">
+        <h3>What happens next</h3>
+        <p>We review your role, confirm whether Tener is a fit, and map the right starting point for a pilot or production rollout.</p>
+        <ul class="cta-list">
+          <li>Role review and vertical fit check within one business day</li>
+          <li>Clear plan for sourcing, outreach, interviews, and shortlist delivery</li>
+          <li>Direct founder follow-up for qualified teams and pilot partners</li>
+        </ul>
+      </div>
+      <div class="contact-card">
+        <h3>Start your search</h3>
+        <p>Tell us who you need to hire and what success looks like.</p>
+        <form id="contact-form" class="contact-form">
+          <div class="contact-grid">
+            <label class="field-label">
+              <span>Full name</span>
+              <input class="form-input" type="text" name="full_name" placeholder="Jane Doe" autocomplete="name" required>
+            </label>
+            <label class="field-label">
+              <span>Work email</span>
+              <input class="form-input" type="email" name="work_email" placeholder="jane@company.com" autocomplete="email" required>
+            </label>
+            <label class="field-label">
+              <span>Company</span>
+              <input class="form-input" type="text" name="company_name" placeholder="Acme Labs" autocomplete="organization" required>
+            </label>
+            <label class="field-label">
+              <span>Role title</span>
+              <input class="form-input" type="text" name="job_title" placeholder="Senior ML Engineer">
+            </label>
+            <label class="field-label full">
+              <span>Hiring need</span>
+              <textarea class="form-textarea" name="hiring_need" placeholder="Share the job description, market, urgency, location, and any must-have requirements." required></textarea>
+            </label>
+          </div>
+          <input class="hp-field" type="text" name="website" tabindex="-1" autocomplete="off">
+          <div class="contact-actions">
+            <button class="btn-primary" type="submit">Start Hiring Now</button>
+            <a class="btn-link" href="mailto:nick@tener.ai?subject=Book%20a%20Demo">Book a Demo</a>
+          </div>
+          <div id="contact-feedback" class="form-feedback" aria-live="polite"></div>
+        </form>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="logo">tener<span class="dot">.</span>ai</div>
+  <div>AI Hiring Agency for Critical Skills</div>
+  <div>nick@tener.ai</div>
+</footer>
+
+<script>
+// Scroll reveal
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1, rootMargin: '0px 0px -50px 0px' });
+
+document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+// Smooth nav background
+let lastScroll = 0;
+window.addEventListener('scroll', () => {
+  const nav = document.querySelector('nav');
+  const scroll = window.scrollY;
+  if (scroll > 100) {
+    nav.style.borderBottomColor = 'rgba(255,255,255,0.06)';
+  } else {
+    nav.style.borderBottomColor = 'rgba(255,255,255,0.04)';
+  }
+  lastScroll = scroll;
+});
+
+// Terminal typing effect
+const terminalLines = document.querySelectorAll('.terminal-line');
+const termObserver = new IntersectionObserver((entries) => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      terminalLines.forEach((line, i) => {
+        line.style.opacity = '0';
+        line.style.transform = 'translateX(-10px)';
+        line.style.transition = 'all 0.4s ease';
+        setTimeout(() => {
+          line.style.opacity = '1';
+          line.style.transform = 'translateX(0)';
+        }, i * 150);
+      });
+      termObserver.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.3 });
+
+const terminalEl = document.querySelector('.solution-preview');
+if (terminalEl) termObserver.observe(terminalEl);
+
+function setFeedback(el, message, tone) {
+  if (!el) return;
+  el.textContent = message || '';
+  el.className = `form-feedback${tone ? ` ${tone}` : ''}`;
+}
+
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  let data = {};
+  try {
+    data = await response.json();
+  } catch (err) {
+    data = {};
+  }
+  if (!response.ok) {
+    const fieldErrors = data.field_errors && typeof data.field_errors === 'object'
+      ? Object.values(data.field_errors).join(' ')
+      : '';
+    const message = fieldErrors || data.error || 'Request failed.';
+    throw new Error(message);
+  }
+  return data;
+}
+
+const newsletterForm = document.getElementById('newsletter-form');
+const newsletterFeedback = document.getElementById('newsletter-feedback');
+if (newsletterForm) {
+  newsletterForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submitButton = newsletterForm.querySelector('button[type="submit"]');
+    const formData = new FormData(newsletterForm);
+    const payload = Object.fromEntries(formData.entries());
+    if (submitButton) submitButton.disabled = true;
+    setFeedback(newsletterFeedback, 'Submitting...', 'loading');
+    try {
+      const data = await postJson('/api/landing/newsletter', payload);
+      newsletterForm.reset();
+      setFeedback(newsletterFeedback, data.message || 'You are on the list.', 'success');
+    } catch (error) {
+      setFeedback(newsletterFeedback, error.message || 'Subscription failed.', 'error');
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+}
+
+const contactForm = document.getElementById('contact-form');
+const contactFeedback = document.getElementById('contact-feedback');
+if (contactForm) {
+  contactForm.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const submitButton = contactForm.querySelector('button[type="submit"]');
+    const formData = new FormData(contactForm);
+    const payload = Object.fromEntries(formData.entries());
+    if (submitButton) submitButton.disabled = true;
+    setFeedback(contactFeedback, 'Sending your request...', 'loading');
+    try {
+      const data = await postJson('/api/landing/contact', payload);
+      contactForm.reset();
+      setFeedback(contactFeedback, data.message || 'Request received.', 'success');
+    } catch (error) {
+      setFeedback(contactFeedback, error.message || 'Request failed.', 'error');
+    } finally {
+      if (submitButton) submitButton.disabled = false;
+    }
+  });
+}
+</script>
+</body>
+</html>
