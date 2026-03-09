@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Candidate Outreach</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #ffffff;
+            --bg-secondary: #f9fafb;
+            --bg-tertiary: #f3f4f6;
+            --accent: #0d9488;
+            --accent-hover: #0f766e;
+            --accent-bg: #f0fdfa;
+            --text: #111827;
+            --text-secondary: #6b7280;
+            --text-muted: #9ca3af;
+            --border: #e5e7eb;
+            --green: #10b981;
+            --green-bg: #ecfdf5;
+            --yellow: #f59e0b;
+            --yellow-bg: #fffbeb;
+            --red: #ef4444;
+            --purple: #8b5cf6;
+            --purple-bg: rgba(139,92,246,0.06);
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        header {
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 56px;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .back-btn {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            color: var(--text);
+        }
+
+        .logo-mark {
+            width: 24px; height: 24px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .header-job {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .header-job strong { color: var(--text); }
+
+        main {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        .page-header { margin-bottom: 24px; }
+
+        .page-title {
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        .page-subtitle {
+            font-size: 15px;
+            color: var(--text-secondary);
+        }
+
+        .content-grid {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            gap: 24px;
+        }
+
+        .candidates-section {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .section-title { font-size: 14px; font-weight: 600; }
+
+        .section-badge {
+            font-size: 12px;
+            padding: 4px 10px;
+            background: var(--accent-bg);
+            color: var(--accent);
+            border-radius: 12px;
+            font-weight: 500;
+        }
+
+        .candidate-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .candidate-item:last-child { border-bottom: none; }
+
+        .candidate-avatar {
+            width: 40px; height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+
+        .candidate-info { flex: 1; }
+
+        .candidate-name {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+
+        .candidate-meta {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .candidate-channel {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+            margin-right: 8px;
+        }
+
+        .channel-linkedin { background: rgba(0,119,181,0.08); color: #0077B5; }
+        .channel-email { background: rgba(13,148,136,0.08); color: var(--accent); }
+
+        .candidate-status {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 500;
+            padding: 6px 12px;
+            border-radius: 20px;
+        }
+
+        .status-dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+        }
+
+        .candidate-status.pending {
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
+        }
+        .candidate-status.pending .status-dot { background: var(--text-muted); }
+
+        .candidate-status.sent {
+            background: var(--yellow-bg);
+            color: var(--yellow);
+        }
+        .candidate-status.sent .status-dot { background: var(--yellow); }
+
+        .candidate-status.interested {
+            background: var(--green-bg);
+            color: var(--green);
+        }
+        .candidate-status.interested .status-dot { background: var(--green); }
+
+        .candidate-status.declined {
+            background: rgba(239,68,68,0.06);
+            color: var(--red);
+        }
+        .candidate-status.declined .status-dot { background: var(--red); }
+
+        /* Timeline */
+        .timeline-section {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-top: 16px;
+            overflow: hidden;
+        }
+
+        .timeline-list { padding: 8px 16px; }
+
+        .timeline-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--bg-secondary);
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .timeline-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 11px;
+            color: var(--text-muted);
+            width: 32px;
+            flex-shrink: 0;
+            padding-top: 2px;
+        }
+
+        .timeline-icon {
+            width: 24px; height: 24px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            flex-shrink: 0;
+        }
+
+        .timeline-icon.sent { background: var(--yellow-bg); }
+        .timeline-icon.interested { background: var(--green-bg); }
+        .timeline-icon.declined { background: rgba(239,68,68,0.06); }
+
+        .timeline-content { flex: 1; }
+
+        .timeline-name {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .timeline-response {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* Right panel */
+        .message-section {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .message-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .message-tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .message-tab.active {
+            color: var(--accent);
+            border-bottom-color: var(--accent);
+        }
+
+        .message-preview { padding: 16px; }
+
+        .message-label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+        }
+
+        .message-bubble {
+            padding: 14px;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+
+        .message-meta {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 10px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .edit-link {
+            color: var(--accent);
+            cursor: pointer;
+            margin-left: auto;
+        }
+
+        .action-panel { padding: 0 16px 16px; }
+
+        .send-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent);
+            border: none;
+            border-radius: 10px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .send-btn:hover { background: var(--accent-hover); }
+
+        .send-hint {
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 8px;
+        }
+
+        .stats-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+            margin-top: 16px;
+        }
+
+        .stat-card {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 24px;
+            font-weight: 700;
+        }
+
+        .stat-value.green { color: var(--green); }
+        .stat-value.yellow { color: var(--yellow); }
+        .stat-value.gray { color: var(--text-muted); }
+
+        .stat-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .modal-overlay.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .modal-card {
+            background: var(--bg);
+            border-radius: 16px;
+            width: 90%;
+            max-width: 480px;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.15);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .modal-title { font-weight: 600; font-size: 15px; }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 18px;
+            cursor: pointer;
+            color: var(--text-muted);
+        }
+
+        .modal-body { padding: 20px; }
+
+        .modal-actions {
+            display: flex;
+            gap: 10px;
+            padding: 16px 20px;
+            border-top: 1px solid var(--border);
+        }
+
+        .modal-btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+        }
+
+        .modal-btn.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .modal-btn.secondary {
+            background: var(--bg);
+            color: var(--text-secondary);
+        }
+
+        .success-icon {
+            width: 56px; height: 56px;
+            background: var(--green);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            margin: 0 auto 16px;
+        }
+
+        .success-title {
+            font-size: 20px;
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .success-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            text-align: center;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="header-left">
+            <a class="back-btn" href="searching.html">← Back</a>
+            <a class="logo" href="index.html">
+                <div class="logo-mark">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                </div>
+                Tener
+            </a>
+        </div>
+        <span class="header-job"><strong>Senior ML Engineer</strong> · Zalando SE · Berlin</span>
+    </header>
+
+    <main>
+        <div class="page-header">
+            <div class="page-title">Engage Top Candidates</div>
+            <div class="page-subtitle">Personalized outreach via LinkedIn InMail and email. AI generates unique messages for each candidate.</div>
+        </div>
+
+        <div class="content-grid">
+            <div>
+                <div class="candidates-section">
+                    <div class="section-header">
+                        <span class="section-title">Top 5 Shortlisted</span>
+                        <span class="section-badge">Score 90+</span>
+                    </div>
+
+                    <div class="candidate-item">
+                        <div class="candidate-avatar" style="background:#8b5cf6;">LW</div>
+                        <div class="candidate-info">
+                            <div class="candidate-name">Dr. Lena Weber</div>
+                            <div class="candidate-meta">ML Lead · 9 yrs · TU Munich → Spotify → Freelance · Score: 96</div>
+                        </div>
+                        <span class="candidate-channel channel-linkedin">LinkedIn</span>
+                        <div class="candidate-status pending"><span class="status-dot"></span> Ready</div>
+                    </div>
+
+                    <div class="candidate-item">
+                        <div class="candidate-avatar" style="background:var(--accent);">AK</div>
+                        <div class="candidate-info">
+                            <div class="candidate-name">Dr. Aisha Kovacs</div>
+                            <div class="candidate-meta">Senior ML Eng · 7 yrs · ETH Zurich → DeepMind → Booking · Score: 94</div>
+                        </div>
+                        <span class="candidate-channel channel-email">Email</span>
+                        <div class="candidate-status pending"><span class="status-dot"></span> Ready</div>
+                    </div>
+
+                    <div class="candidate-item">
+                        <div class="candidate-avatar" style="background:#f59e0b;">MP</div>
+                        <div class="candidate-info">
+                            <div class="candidate-name">Marcus Petrov</div>
+                            <div class="candidate-meta">Staff ML Eng · 11 yrs · KTH → Spotify → SoundCloud · Score: 93</div>
+                        </div>
+                        <span class="candidate-channel channel-linkedin">LinkedIn</span>
+                        <div class="candidate-status pending"><span class="status-dot"></span> Ready</div>
+                    </div>
+
+                    <div class="candidate-item">
+                        <div class="candidate-avatar" style="background:#ec4899;">SN</div>
+                        <div class="candidate-info">
+                            <div class="candidate-name">Dr. Sofia Nakamura</div>
+                            <div class="candidate-meta">ML Research Eng · 6 yrs · EPFL → Amazon Science · Score: 91</div>
+                        </div>
+                        <span class="candidate-channel channel-linkedin">LinkedIn</span>
+                        <div class="candidate-status pending"><span class="status-dot"></span> Ready</div>
+                    </div>
+
+                    <div class="candidate-item">
+                        <div class="candidate-avatar" style="background:#6366f1;">JH</div>
+                        <div class="candidate-info">
+                            <div class="candidate-name">Jonas Hoffmann</div>
+                            <div class="candidate-meta">Senior ML Eng · 8 yrs · TU Berlin → Delivery Hero · Score: 90</div>
+                        </div>
+                        <span class="candidate-channel channel-email">Email</span>
+                        <div class="candidate-status pending"><span class="status-dot"></span> Ready</div>
+                    </div>
+                </div>
+
+                <div class="timeline-section" style="display:none;">
+                    <div class="section-header">
+                        <span class="section-title">Response Timeline</span>
+                    </div>
+                    <div class="timeline-list">
+                        <div class="timeline-item">
+                            <span class="timeline-time">0:00</span>
+                            <div class="timeline-icon sent">📤</div>
+                            <div class="timeline-content">
+                                <div class="timeline-name">All candidates</div>
+                                <div class="timeline-response">Outreach sent to 5 candidates via LinkedIn InMail and email</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div class="message-section">
+                    <div class="message-tabs">
+                        <div class="message-tab active">LinkedIn InMail</div>
+                        <div class="message-tab">Email</div>
+                    </div>
+                    <div class="message-preview">
+                        <div class="message-label">AI Generated Message (personalized per candidate)</div>
+                        <div class="message-bubble">
+                            Hi Dr. Weber,<br><br>
+                            I came across your NeurIPS workshop paper on fairness-aware recommendation systems and was impressed by your approach to debiasing collaborative filtering.<br><br>
+                            I'm reaching out from Zalando's Personalization team in Berlin. We're building large-scale ML systems for fashion discovery serving 50M+ customers, and your expertise in recommendation systems and responsible AI aligns perfectly with what we're working on.<br><br>
+                            Would you be open to a brief conversation about the role? Happy to share more details about the team and the technical challenges we're tackling.<br><br>
+                            Best,<br>Tener AI on behalf of Zalando SE
+                        </div>
+                        <div class="message-meta">
+                            <span>💼 Via LinkedIn InMail</span>
+                            <span>Personalized</span>
+                            <a class="edit-link" onclick="document.getElementById('success-modal').classList.add('visible')">Edit message</a>
+                        </div>
+                    </div>
+                    <div class="action-panel">
+                        <button class="send-btn" id="send-btn" onclick="sendMessages()">
+                            📨 Send Outreach to 5 Candidates
+                        </button>
+                        <div class="send-hint">AI personalizes each message based on candidate's background</div>
+                    </div>
+                </div>
+
+                <div class="stats-row">
+                    <div class="stat-card">
+                        <div class="stat-value green" id="stat-interested">0</div>
+                        <div class="stat-label">Interested</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value yellow" id="stat-waiting">0</div>
+                        <div class="stat-label">Waiting</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value gray" id="stat-declined">0</div>
+                        <div class="stat-label">Declined</div>
+                    </div>
+                </div>
+
+                <div class="stat-card" style="margin-top:16px;text-align:left;" id="next-steps">
+                    <div class="message-label">Next Steps</div>
+                    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+                        <button class="send-btn" style="background:var(--green);" onclick="document.getElementById('schedule-modal').classList.add('visible')">
+                            📅 Schedule Interviews (<span id="interested-count">0</span> interested)
+                        </button>
+                        <button class="send-btn" style="background:var(--bg-tertiary);color:var(--text-secondary);border:1px solid var(--border);" onclick="window.location.href='results.html'">
+                            📊 View Full Candidate Report
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal-overlay" id="schedule-modal" onclick="if(event.target===this)this.classList.remove('visible')">
+        <div class="modal-card" onclick="event.stopPropagation()">
+            <div class="modal-body" style="padding:32px;">
+                <div class="success-icon">✓</div>
+                <div class="success-title">Interviews Scheduled!</div>
+                <div class="success-text">
+                    Interview invitations sent to interested candidates. They'll receive calendar invites with time slot options.
+                    <br><br>
+                    All scheduling syncs with your Workday calendar. Candidates can pick their preferred slot.
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn primary" onclick="window.location.href='results.html'" style="flex:1;">
+                    View Full Results →
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let messagesSent = false;
+
+        function sendMessages() {
+            if (messagesSent) return;
+            messagesSent = true;
+
+            const btn = document.getElementById('send-btn');
+            btn.innerHTML = '⏳ Sending personalized messages...';
+            btn.disabled = true;
+
+            setTimeout(() => {
+                btn.innerHTML = '✓ All Messages Sent';
+                btn.style.background = 'var(--green)';
+                document.getElementById('stat-waiting').textContent = '5';
+                document.querySelector('.timeline-section').style.display = 'block';
+                simulateResponses();
+            }, 2000);
+        }
+
+        function simulateResponses() {
+            const statuses = document.querySelectorAll('.candidate-status');
+            const timeline = document.querySelector('.timeline-list');
+
+            // Response 1: Dr. Lena Weber interested (4s)
+            setTimeout(() => {
+                statuses[0].className = 'candidate-status interested';
+                statuses[0].innerHTML = '<span class="status-dot"></span> Interested';
+                document.getElementById('stat-interested').textContent = '1';
+                document.getElementById('stat-waiting').textContent = '4';
+                document.getElementById('interested-count').textContent = '1';
+                addTimeline(timeline, '0:04', 'interested', 'Dr. Lena Weber', '"Very interesting! I've been following Zalando's ML blog. Would love to learn more about the team."');
+            }, 4000);
+
+            // Response 2: Marcus Petrov interested (7s)
+            setTimeout(() => {
+                statuses[2].className = 'candidate-status interested';
+                statuses[2].innerHTML = '<span class="status-dot"></span> Interested';
+                document.getElementById('stat-interested').textContent = '2';
+                document.getElementById('stat-waiting').textContent = '3';
+                document.getElementById('interested-count').textContent = '2';
+                addTimeline(timeline, '0:07', 'interested', 'Marcus Petrov', '"Thanks for reaching out. The RecSys challenges at Zalando scale sound compelling. Happy to chat."');
+            }, 7000);
+
+            // Response 3: Dr. Sofia Nakamura interested (10s)
+            setTimeout(() => {
+                statuses[3].className = 'candidate-status interested';
+                statuses[3].innerHTML = '<span class="status-dot"></span> Interested';
+                document.getElementById('stat-interested').textContent = '3';
+                document.getElementById('stat-waiting').textContent = '2';
+                document.getElementById('interested-count').textContent = '3';
+                addTimeline(timeline, '0:10', 'interested', 'Dr. Sofia Nakamura', '"I'm open to exploring this. Berlin has been on my radar. Could we schedule a call next week?"');
+            }, 10000);
+
+            // Response 4: Jonas Hoffmann declines (13s)
+            setTimeout(() => {
+                statuses[4].className = 'candidate-status declined';
+                statuses[4].innerHTML = '<span class="status-dot"></span> Not now';
+                document.getElementById('stat-declined').textContent = '1';
+                document.getElementById('stat-waiting').textContent = '1';
+                addTimeline(timeline, '0:13', 'declined', 'Jonas Hoffmann', '"Appreciate it, but I just started a new role at Delivery Hero. Maybe in 6 months."');
+            }, 13000);
+        }
+
+        function addTimeline(container, time, type, name, response) {
+            const icon = type === 'interested' ? '✓' : '✗';
+            const entry = document.createElement('div');
+            entry.className = 'timeline-item';
+            entry.innerHTML = `
+                <span class="timeline-time">${time}</span>
+                <div class="timeline-icon ${type}">${icon}</div>
+                <div class="timeline-content">
+                    <div class="timeline-name">${name}</div>
+                    <div class="timeline-response">${response}</div>
+                </div>
+            `;
+            container.insertBefore(entry, container.firstChild);
+        }
+    </script>
+</body>
+</html>

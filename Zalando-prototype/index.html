@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Enterprise AI Sourcing for Zalando</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fb;
+            --bg-card: #ffffff;
+            --accent: #0d9488;
+            --accent-light: #14b8a6;
+            --accent-dim: rgba(13, 148, 136, 0.08);
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --text-dim: #9ca3af;
+            --border: #e5e7eb;
+            --border-strong: #d1d5db;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+            --zalando-orange: #ff6900;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        nav {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 1.4rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo-icon {
+            width: 32px; height: 32px;
+            background: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .nav-badge {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.4rem 0.8rem;
+            background: var(--accent-dim);
+            border: 1px solid rgba(13,148,136,0.2);
+            border-radius: 8px;
+            font-size: 0.8rem;
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .nav-btn {
+            padding: 0.6rem 1.2rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .hero {
+            padding: 7rem 2rem 3rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        .trust-bar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .trust-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .trust-item .check { color: var(--accent); font-weight: bold; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .hero-title {
+            font-size: clamp(2.5rem, 6vw, 3.8rem);
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 1rem;
+            animation: fadeIn 0.5s ease-out 0.1s both;
+        }
+
+        .hero-title .highlight {
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-subtitle {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            max-width: 640px;
+            margin-bottom: 2rem;
+            animation: fadeIn 0.5s ease-out 0.2s both;
+        }
+
+        .main-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 640px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+            animation: fadeIn 0.5s ease-out 0.3s both;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-secondary);
+        }
+
+        .simple-form { display: flex; flex-direction: column; gap: 0.75rem; }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .form-select, .form-input {
+            padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-select:focus, .form-input:focus {
+            border-color: var(--accent);
+        }
+
+        .diversity-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem;
+            background: linear-gradient(135deg, rgba(255,105,0,0.04), rgba(13,148,136,0.04));
+            border: 1px solid rgba(255,105,0,0.15);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .diversity-toggle:hover {
+            border-color: var(--zalando-orange);
+        }
+
+        .toggle-switch {
+            width: 44px; height: 24px;
+            background: var(--border-strong);
+            border-radius: 12px;
+            position: relative;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+
+        .toggle-switch.active { background: var(--accent); }
+
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 18px; height: 18px;
+            background: white;
+            border-radius: 50%;
+            top: 3px; left: 3px;
+            transition: transform 0.2s;
+        }
+
+        .toggle-switch.active::after { transform: translateX(20px); }
+
+        .toggle-label {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .toggle-sub {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .jd-section { margin-top: 0.25rem; }
+
+        .job-textarea {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+            resize: vertical;
+            min-height: 80px;
+            outline: none;
+        }
+
+        .upload-row {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+        }
+
+        .upload-btn {
+            padding: 0.5rem 0.8rem;
+            background: var(--bg-secondary);
+            border: 1px dashed var(--border-strong);
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .submit-btn {
+            width: 100%;
+            padding: 1rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.05rem;
+            font-weight: 700;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 0.5rem;
+            transition: background 0.2s;
+        }
+
+        .submit-btn:hover { background: var(--accent-light); }
+
+        .compliance-bar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0.75rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .compliance-tag {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            padding: 0.3rem 0.6rem;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            max-width: 640px;
+            width: 100%;
+            margin-top: 1.5rem;
+            animation: fadeIn 0.5s ease-out 0.5s both;
+        }
+
+        .info-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.5rem;
+        }
+
+        .info-card h4 {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+        }
+
+        .info-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .info-item {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            padding: 0.35rem 0.6rem;
+            background: var(--bg-secondary);
+            border-radius: 6px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .stat-item { text-align: center; }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        .partner-banner {
+            max-width: 640px;
+            width: 100%;
+            margin-top: 1.5rem;
+            padding: 1.25rem 1.5rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            animation: fadeIn 0.5s ease-out 0.6s both;
+        }
+
+        .partner-logo {
+            font-size: 1.6rem;
+            width: 48px; height: 48px;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .partner-info { flex: 1; }
+        .partner-info h4 { font-size: 0.95rem; font-weight: 600; }
+        .partner-info p { font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem; }
+
+        .partner-status {
+            padding: 0.4rem 0.8rem;
+            background: rgba(16, 185, 129, 0.08);
+            color: var(--success);
+            border-radius: 8px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        footer {
+            text-align: center;
+            padding: 2rem;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+
+        footer a { color: var(--accent); text-decoration: none; }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">
+            <div class="logo-icon">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            </div>
+            Tener
+        </div>
+        <div class="nav-right">
+            <div class="nav-badge">🏢 Zalando SE Design Partner</div>
+            <button class="nav-btn">Contact Us</button>
+        </div>
+    </nav>
+
+    <main>
+        <div class="hero">
+            <div class="trust-bar">
+                <div class="trust-item"><span class="check">✓</span> EU AI Act Compliant</div>
+                <div class="trust-item"><span class="check">✓</span> GDPR Ready</div>
+                <div class="trust-item"><span class="check">✓</span> Workday Integration</div>
+                <div class="trust-item"><span class="check">✓</span> Works Council Approved Flow</div>
+            </div>
+
+            <h1 class="hero-title">
+                Diverse, <span class="highlight">top 0.01% talent</span><br>in 10 days
+            </h1>
+            <p class="hero-subtitle">
+                AI sourcing across 6+ channels simultaneously. Multi step behavioral analysis beyond keywords. Built for enterprise hiring teams who need quality and diversity at scale.
+            </p>
+
+            <div class="main-card">
+                <h3 class="card-title">Start a sourcing request</h3>
+
+                <div class="simple-form">
+                    <div class="form-row">
+                        <select class="form-select">
+                            <option value="">Role category...</option>
+                            <option selected>🧠 Machine Learning</option>
+                            <option>💻 Software Engineering</option>
+                            <option>📊 Data Science</option>
+                            <option>🎨 Product Design</option>
+                            <option>📦 Supply Chain Tech</option>
+                            <option>🔒 Security Engineering</option>
+                        </select>
+                        <select class="form-select">
+                            <option value="">Seniority...</option>
+                            <option selected>Senior (5+ years)</option>
+                            <option>Staff / Principal</option>
+                            <option>Lead / Manager</option>
+                            <option>Mid level (3+ years)</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <select class="form-select">
+                            <option value="">Location...</option>
+                            <option selected>🇩🇪 Berlin, Germany</option>
+                            <option>🇫🇮 Helsinki, Finland</option>
+                            <option>🇮🇪 Dublin, Ireland</option>
+                            <option>🇸🇪 Stockholm, Sweden</option>
+                            <option>🇨🇭 Zurich, Switzerland</option>
+                            <option>🌍 Remote (EU)</option>
+                        </select>
+                        <select class="form-select">
+                            <option value="">How many positions?</option>
+                            <option selected>1 position</option>
+                            <option>2 positions</option>
+                            <option>3 to 5 positions</option>
+                            <option>6 to 10 positions</option>
+                            <option>10+ (mass hire)</option>
+                        </select>
+                    </div>
+
+                    <div class="diversity-toggle" onclick="this.querySelector('.toggle-switch').classList.toggle('active')">
+                        <div class="toggle-switch active"></div>
+                        <div>
+                            <div class="toggle-label">Diversity sourcing mode</div>
+                            <div class="toggle-sub">Target 40% women in candidate slate. Source from Women in Tech EU, She Sharp, academic networks and 4 other channels.</div>
+                        </div>
+                    </div>
+
+                    <div class="jd-section">
+                        <label style="display:block;font-size:0.9rem;font-weight:500;margin-bottom:0.5rem;color:var(--text-secondary);">Job Description</label>
+                        <textarea class="job-textarea" placeholder="Paste job description or import from Workday...">Senior Machine Learning Engineer — Zalando SE, Berlin
+
+We are looking for a Senior ML Engineer to join our Personalization & Recommendations team. You will design and deploy large-scale ML systems powering fashion discovery for 50M+ active customers.
+
+Requirements:
+• 5+ years in ML/AI engineering
+• Production experience with recommendation systems
+• Python, PyTorch/TensorFlow, cloud infrastructure (AWS/GCP)
+• Experience with A/B testing at scale
+• Strong publication record or open-source contributions preferred
+
+Nice to have:
+• Experience in e-commerce or fashion tech
+• Familiarity with LLMs and generative AI
+• German language skills</textarea>
+                        <div class="upload-row">
+                            <button class="upload-btn">📎 Upload JD (PDF/Word)</button>
+                            <button class="upload-btn">🔗 Import from Workday</button>
+                        </div>
+                    </div>
+
+                    <button class="submit-btn" onclick="window.location.href='searching.html'">
+                        Start AI Sourcing
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <line x1="5" y1="12" x2="19" y2="12"/>
+                            <polyline points="12 5 19 12 12 19"/>
+                        </svg>
+                    </button>
+
+                    <div class="compliance-bar">
+                        <div class="compliance-tag">🛡️ EU AI Act</div>
+                        <div class="compliance-tag">🔒 GDPR</div>
+                        <div class="compliance-tag">👥 Works Council Ready</div>
+                        <div class="compliance-tag">⚖️ Bias Audit Included</div>
+                        <div class="compliance-tag">📊 Workday API</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="two-col">
+                <div class="info-card">
+                    <h4>Sourcing Channels</h4>
+                    <div class="info-grid">
+                        <div class="info-item">💼 LinkedIn</div>
+                        <div class="info-item">🐙 GitHub</div>
+                        <div class="info-item">📊 Kaggle</div>
+                        <div class="info-item">👩‍💻 Women in Tech EU</div>
+                        <div class="info-item">🎓 Academic Networks</div>
+                        <div class="info-item">🎤 Conference Speakers</div>
+                    </div>
+                </div>
+                <div class="info-card">
+                    <h4>Pilot Performance</h4>
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <div class="stat-value">42%</div>
+                            <div class="stat-label">Women in Slate</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">8 days</div>
+                            <div class="stat-label">Avg. Time to Slate</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">50+</div>
+                            <div class="stat-label">Behavioral Signals</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-value">6</div>
+                            <div class="stat-label">Parallel Channels</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="partner-banner">
+                <div class="partner-logo">Z</div>
+                <div class="partner-info">
+                    <h4>Zalando SE — Design Partner</h4>
+                    <p>Custom workflows for diversity hiring, Workday integration, and EU compliance. Dedicated engineering team.</p>
+                </div>
+                <div class="partner-status">✓ Active</div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        © 2026 Tener AI. All rights reserved. | <a href="#">Privacy</a> | <a href="#">Terms</a> | <a href="#">EU AI Act Compliance</a>
+    </footer>
+</body>
+</html>

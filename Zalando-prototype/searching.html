@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Sourcing in Progress</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #ffffff;
+            --bg-secondary: #f9fafb;
+            --bg-tertiary: #f3f4f6;
+            --accent: #0d9488;
+            --accent-bg: #f0fdfa;
+            --text: #111827;
+            --text-secondary: #6b7280;
+            --text-muted: #9ca3af;
+            --border: #e5e7eb;
+            --green: #10b981;
+            --purple: #8b5cf6;
+            --orange: #f59e0b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        header {
+            background: var(--bg);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 56px;
+        }
+
+        .logo {
+            font-weight: 700;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-mark {
+            width: 24px; height: 24px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .header-info {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+
+        .job-title {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .job-title strong { color: var(--text); }
+
+        .diversity-badge {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            background: rgba(139,92,246,0.08);
+            color: var(--purple);
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .timer {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        main {
+            display: grid;
+            grid-template-columns: 1fr 380px;
+            height: calc(100vh - 56px);
+            overflow: hidden;
+        }
+
+        .main-area {
+            display: grid;
+            grid-template-rows: 90px 1fr 150px;
+            overflow: hidden;
+            padding-bottom: 16px;
+        }
+
+        .status-header {
+            padding: 24px 48px;
+            text-align: center;
+        }
+
+        .status-text {
+            font-size: 24px;
+            font-weight: 600;
+            line-height: 1.3;
+        }
+
+        .status-text .highlight { color: var(--accent); }
+
+        .status-sub {
+            font-size: 14px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        .funnel-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 80px;
+            overflow: hidden;
+        }
+
+        .funnel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 560px;
+        }
+
+        .funnel-stage {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            padding: 8px 0;
+        }
+
+        .funnel-bar {
+            height: 68px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            transition: all 0.3s ease;
+        }
+
+        .funnel-stage[data-stage="sourced"] .funnel-bar { width: 100%; }
+        .funnel-stage[data-stage="screening"] .funnel-bar { width: 78%; }
+        .funnel-stage[data-stage="signals"] .funnel-bar { width: 55%; }
+        .funnel-stage[data-stage="shortlist"] .funnel-bar { width: 38%; }
+
+        .funnel-stage.pending .funnel-bar {
+            background: var(--bg-tertiary);
+            border-color: var(--border);
+        }
+
+        .funnel-stage.active .funnel-bar {
+            background: var(--accent-bg);
+            border-color: var(--accent);
+        }
+
+        .funnel-stage.complete .funnel-bar {
+            background: var(--bg);
+            border-color: var(--border);
+        }
+
+        .funnel-label {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .funnel-icon {
+            width: 36px; height: 36px;
+            border-radius: 8px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+            transition: all 0.3s ease;
+        }
+
+        .funnel-stage.active .funnel-icon {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .funnel-stage.complete .funnel-icon {
+            background: var(--green);
+            border-color: var(--green);
+        }
+
+        .funnel-name {
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: color 0.3s ease;
+        }
+
+        .funnel-stage.active .funnel-name,
+        .funnel-stage.complete .funnel-name { color: var(--text); }
+
+        .funnel-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-muted);
+            min-width: 70px;
+            text-align: right;
+            transition: color 0.3s ease;
+        }
+
+        .funnel-stage.active .funnel-count { color: var(--accent); }
+        .funnel-stage.complete .funnel-count { color: var(--text); }
+
+        .funnel-connector {
+            width: 2px;
+            height: 18px;
+            background: var(--border);
+            transition: background 0.3s ease;
+        }
+
+        .funnel-connector.complete { background: var(--green); }
+
+        /* Bottom preview */
+        .candidates-preview {
+            padding: 0 80px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .candidates-preview.visible { opacity: 1; }
+
+        .preview-label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .preview-row {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        .preview-card {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 16px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            min-width: 200px;
+        }
+
+        .preview-avatar {
+            width: 36px; height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 600;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .preview-name {
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .preview-detail {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .preview-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--accent);
+            margin-left: auto;
+        }
+
+        /* Right panel: Activity log */
+        .activity-panel {
+            background: var(--bg);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .activity-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .activity-title {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .source-grid {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .source-grid-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .sources {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 6px;
+        }
+
+        .source-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 10px;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            font-size: 12px;
+            transition: all 0.3s ease;
+        }
+
+        .source-item.active {
+            background: var(--accent-bg);
+            border: 1px solid rgba(13,148,136,0.2);
+        }
+
+        .source-item.complete {
+            background: var(--bg-secondary);
+        }
+
+        .source-icon { font-size: 14px; }
+
+        .source-name {
+            flex: 1;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .source-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .source-item.active .source-count { color: var(--accent); }
+        .source-item.complete .source-count { color: var(--green); }
+
+        .log-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 16px;
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 10px;
+            padding: 6px 0;
+            font-size: 12px;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--bg-secondary);
+            animation: logIn 0.3s ease;
+        }
+
+        @keyframes logIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .log-time {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-muted);
+            flex-shrink: 0;
+            width: 32px;
+        }
+
+        .log-text { flex: 1; line-height: 1.4; }
+        .log-text .num { color: var(--accent); font-weight: 600; }
+
+        /* CTA */
+        .cta-bar {
+            padding: 12px 16px;
+            border-top: 1px solid var(--border);
+        }
+
+        .cta-btn {
+            width: 100%;
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .cta-btn.ready {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+            cursor: pointer;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            vertical-align: middle;
+            margin-right: 4px;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <a class="logo" href="index.html">
+            <div class="logo-mark">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+            </div>
+            Tener
+        </a>
+        <div class="header-info">
+            <span class="job-title"><strong>Senior ML Engineer</strong> · Zalando SE · Berlin</span>
+            <span class="diversity-badge">♀ Diversity Mode: 40%</span>
+            <span class="timer" id="timer">0:00</span>
+        </div>
+    </header>
+
+    <main>
+        <div class="main-area">
+            <div class="status-header">
+                <div class="status-text" id="status-text">Initializing <span class="highlight">AI sourcing</span>...</div>
+                <div class="status-sub" id="status-sub">Connecting to talent sources</div>
+            </div>
+
+            <div class="funnel-container">
+                <div class="funnel">
+                    <div class="funnel-stage pending" data-stage="sourced" id="stage-sourced">
+                        <div class="funnel-bar">
+                            <div class="funnel-label">
+                                <div class="funnel-icon">🔍</div>
+                                <span class="funnel-name">Multi Channel Sourcing</span>
+                            </div>
+                            <span class="funnel-count" id="count-sourced">—</span>
+                        </div>
+                    </div>
+                    <div class="funnel-connector" id="conn-1"></div>
+                    
+                    <div class="funnel-stage pending" data-stage="screening" id="stage-screening">
+                        <div class="funnel-bar">
+                            <div class="funnel-label">
+                                <div class="funnel-icon">⚡</div>
+                                <span class="funnel-name">Skills & Fit Screening</span>
+                            </div>
+                            <span class="funnel-count" id="count-screening">—</span>
+                        </div>
+                    </div>
+                    <div class="funnel-connector" id="conn-2"></div>
+
+                    <div class="funnel-stage pending" data-stage="signals" id="stage-signals">
+                        <div class="funnel-bar">
+                            <div class="funnel-label">
+                                <div class="funnel-icon">🧠</div>
+                                <span class="funnel-name">Behavioral Signal Analysis</span>
+                            </div>
+                            <span class="funnel-count" id="count-signals">—</span>
+                        </div>
+                    </div>
+                    <div class="funnel-connector" id="conn-3"></div>
+
+                    <div class="funnel-stage pending" data-stage="shortlist" id="stage-shortlist">
+                        <div class="funnel-bar">
+                            <div class="funnel-label">
+                                <div class="funnel-icon">⭐</div>
+                                <span class="funnel-name">Final Shortlist</span>
+                            </div>
+                            <span class="funnel-count" id="count-shortlist">—</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="candidates-preview" id="top-candidates">
+                <div class="preview-label">Top candidates emerging</div>
+                <div class="preview-row">
+                    <div class="preview-card">
+                        <div class="preview-avatar" style="background:#8b5cf6;">LW</div>
+                        <div>
+                            <div class="preview-name">Dr. Lena Weber</div>
+                            <div class="preview-detail">ML Lead · 9 yrs · NeurIPS speaker</div>
+                        </div>
+                        <div class="preview-score">96</div>
+                    </div>
+                    <div class="preview-card">
+                        <div class="preview-avatar" style="background:var(--accent);">AK</div>
+                        <div>
+                            <div class="preview-name">Dr. Aisha Kovacs</div>
+                            <div class="preview-detail">Senior ML · 7 yrs · PyTorch contrib</div>
+                        </div>
+                        <div class="preview-score">94</div>
+                    </div>
+                    <div class="preview-card">
+                        <div class="preview-avatar" style="background:#f59e0b;">MP</div>
+                        <div>
+                            <div class="preview-name">Marcus Petrov</div>
+                            <div class="preview-detail">Staff ML · 11 yrs · ex Spotify</div>
+                        </div>
+                        <div class="preview-score">93</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="activity-panel">
+            <div class="activity-header">
+                <span class="activity-title">Activity Feed</span>
+                <span class="timer" id="timer2">0:00</span>
+            </div>
+
+            <div class="source-grid">
+                <div class="source-grid-title">Sourcing Channels</div>
+                <div class="sources">
+                    <div class="source-item pending" data-source="linkedin">
+                        <span class="source-icon">💼</span>
+                        <span class="source-name">LinkedIn</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="github">
+                        <span class="source-icon">🐙</span>
+                        <span class="source-name">GitHub</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="kaggle">
+                        <span class="source-icon">📊</span>
+                        <span class="source-name">Kaggle</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="wit">
+                        <span class="source-icon">👩‍💻</span>
+                        <span class="source-name">Women in Tech</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="academic">
+                        <span class="source-icon">🎓</span>
+                        <span class="source-name">Academic</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="conferences">
+                        <span class="source-icon">🎤</span>
+                        <span class="source-name">Conferences</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="workday">
+                        <span class="source-icon">🔗</span>
+                        <span class="source-name">Workday API</span>
+                        <span class="source-count">—</span>
+                    </div>
+                    <div class="source-item pending" data-source="compliance">
+                        <span class="source-icon">🛡️</span>
+                        <span class="source-name">EU AI Check</span>
+                        <span class="source-count">—</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="log-area" id="log-area"></div>
+
+            <div class="cta-bar">
+                <button class="cta-btn" id="cta-btn" onclick="if(this.classList.contains('ready')) window.location.href='outreach.html'">
+                    <span class="spinner"></span> Processing...
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let totalSourced = 0;
+        let seconds = 0;
+
+        const timerInterval = setInterval(() => {
+            seconds++;
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            const t = `${m}:${s.toString().padStart(2, '0')}`;
+            document.getElementById('timer').textContent = t;
+            document.getElementById('timer2').textContent = t;
+        }, 1000);
+
+        const sources = [
+            { id: 'linkedin', name: 'LinkedIn', count: 127 },
+            { id: 'github', name: 'GitHub', count: 84 },
+            { id: 'kaggle', name: 'Kaggle', count: 31 },
+            { id: 'wit', name: 'Women in Tech EU', count: 46 },
+            { id: 'academic', name: 'Academic Networks', count: 38 },
+            { id: 'conferences', name: 'NeurIPS / ICML / RecSys', count: 22 },
+        ];
+
+        function addLog(text) {
+            const area = document.getElementById('log-area');
+            const m = Math.floor(seconds / 60);
+            const s = seconds % 60;
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">${m}:${s.toString().padStart(2, '0')}</span><span class="log-text">${text}</span>`;
+            area.prepend(entry);
+        }
+
+        function setStatus(text, sub) {
+            document.getElementById('status-text').innerHTML = text;
+            document.getElementById('status-sub').textContent = sub;
+        }
+
+        function updateSource(id, count, active) {
+            const item = document.querySelector(`[data-source="${id}"]`);
+            item.classList.remove('pending');
+            item.classList.add(active ? 'active' : 'complete');
+            item.querySelector('.source-count').textContent = count;
+        }
+
+        function setStage(id, state) {
+            const el = document.getElementById(`stage-${id}`);
+            el.classList.remove('pending', 'active', 'complete');
+            el.classList.add(state);
+        }
+
+        function setConnector(num, state) {
+            const el = document.getElementById(`conn-${num}`);
+            el.classList.remove('complete');
+            if (state === 'complete') el.classList.add('complete');
+        }
+
+        // ===== PHASE 1: SOURCING (0-16s) =====
+        setTimeout(() => {
+            setStage('sourced', 'active');
+            setStatus('Connecting to <span class="highlight">talent sources</span>...', 'Initializing API connections');
+            addLog('Initializing search parameters...');
+        }, 500);
+
+        setTimeout(() => {
+            addLog('Job: Senior ML Engineer, Berlin');
+            addLog('Diversity mode: ON — target 40% women');
+        }, 1200);
+
+        sources.forEach((source, i) => {
+            const startTime = 2000 + i * 2000;
+            setTimeout(() => {
+                updateSource(source.id, '...', true);
+                setStatus(`Sourcing from <span class="highlight">${source.name}</span>...`, 'Scanning profiles and repositories');
+            }, startTime);
+            setTimeout(() => {
+                updateSource(source.id, source.count);
+                totalSourced += source.count;
+                document.getElementById('count-sourced').textContent = totalSourced;
+                addLog(`Found <span class="num">${source.count}</span> profiles from <strong>${source.name}</strong>`);
+            }, startTime + 1200);
+        });
+
+        // Workday API
+        setTimeout(() => {
+            updateSource('workday', '...', true);
+            setStatus('Connecting to <span class="highlight">Workday</span>...', 'Checking internal talent pool');
+        }, 15000);
+        setTimeout(() => {
+            const item = document.querySelector('[data-source="workday"]');
+            item.classList.remove('pending', 'active');
+            item.classList.add('complete');
+            item.querySelector('.source-count').textContent = '✓';
+            addLog('Connected to <strong>Workday</strong> — no internal matches for this role');
+        }, 16000);
+
+        // EU AI compliance check
+        setTimeout(() => {
+            updateSource('compliance', '...', true);
+        }, 16500);
+        setTimeout(() => {
+            const item = document.querySelector('[data-source="compliance"]');
+            item.classList.remove('pending', 'active');
+            item.classList.add('complete');
+            item.querySelector('.source-count').textContent = '✓';
+            addLog('<strong>EU AI Act</strong> compliance check passed');
+        }, 17000);
+
+        // ===== PHASE 2: SCREENING (17-26s) =====
+        setTimeout(() => {
+            setStage('sourced', 'complete');
+            setConnector(1, 'complete');
+            setStage('screening', 'active');
+            setStatus(`Screening <span class="highlight">${totalSourced} profiles</span>...`, 'Matching against job requirements');
+            addLog(`Aggregated <span class="num">${totalSourced}</span> candidate profiles from 6 channels`);
+        }, 17500);
+
+        setTimeout(() => {
+            setStatus('Matching <span class="highlight">ML skills</span>...', 'PyTorch, TensorFlow, recommendation systems');
+            addLog('Filtering by core ML skills...');
+        }, 18500);
+        setTimeout(() => { addLog('<span class="num">214</span> have required ML engineering skills'); }, 19500);
+
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">experience level</span>...', 'Minimum 5 years, production systems');
+            addLog('Filtering by seniority: 5+ years production ML...');
+        }, 20000);
+        setTimeout(() => { addLog('<span class="num">156</span> meet experience threshold'); }, 21000);
+
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">EU work authorization</span>...', 'EU/EEA citizens and work permit holders');
+            addLog('Verifying EU work authorization...');
+        }, 21500);
+        setTimeout(() => { addLog('<span class="num">128</span> authorized to work in Germany'); }, 22500);
+
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">domain relevance</span>...', 'E-commerce, recommendations, personalization');
+            addLog('Scoring domain relevance: e-commerce, RecSys...');
+        }, 23000);
+        setTimeout(() => { addLog('<span class="num">97</span> have relevant domain experience'); }, 24000);
+
+        setTimeout(() => {
+            setStatus('Analyzing <span class="highlight">diversity metrics</span>...', 'Gender identification from public signals');
+            addLog('Applying diversity sourcing criteria...');
+        }, 24500);
+        setTimeout(() => {
+            document.getElementById('count-screening').textContent = '97';
+            addLog('<span class="num">97</span> pass all screening criteria — <span class="num">41</span> women identified (42%)');
+        }, 25500);
+
+        // ===== PHASE 3: BEHAVIORAL SIGNALS (26-36s) =====
+        setTimeout(() => {
+            setStage('screening', 'complete');
+            setConnector(2, 'complete');
+            setStage('signals', 'active');
+            setStatus('Analyzing <span class="highlight">behavioral signals</span>...', 'Deep multi-source intelligence');
+            addLog('Starting behavioral signal analysis across 50+ dimensions...');
+        }, 26000);
+
+        setTimeout(() => {
+            setStatus('Scanning <span class="highlight">GitHub contributions</span>...', 'Code quality, commit patterns, collaboration');
+            addLog('Analyzing GitHub: commit frequency, PR reviews, code quality...');
+        }, 27000);
+        setTimeout(() => { addLog('<span class="num">73</span> have active open source contributions'); }, 28200);
+
+        setTimeout(() => {
+            setStatus('Analyzing <span class="highlight">publication record</span>...', 'Papers, citations, research impact');
+            addLog('Scanning publications: arXiv, Google Scholar...');
+        }, 28700);
+        setTimeout(() => { addLog('<span class="num">34</span> have peer-reviewed publications in ML'); }, 29900);
+
+        setTimeout(() => {
+            setStatus('Detecting <span class="highlight">hidden leadership</span>...', 'Conference talks, mentoring, community roles');
+            addLog('Identifying leadership signals: talks, mentoring, OSS maintainership...');
+        }, 30400);
+        setTimeout(() => { addLog('<span class="num">28</span> show strong leadership signals'); }, 31600);
+
+        setTimeout(() => {
+            setStatus('Checking <span class="highlight">career trajectory</span>...', 'Growth patterns, promotion velocity');
+            addLog('Mapping career trajectories and growth velocity...');
+        }, 32100);
+        setTimeout(() => { addLog('<span class="num">52</span> show upward career trajectory'); }, 33300);
+
+        setTimeout(() => {
+            setStatus('Running <span class="highlight">bias audit</span>...', 'EU AI Act Article 10 compliance');
+            addLog('Running mandatory bias audit on scoring model...');
+        }, 33800);
+        setTimeout(() => { addLog('Bias audit passed — scoring model within EU AI Act thresholds'); }, 35000);
+
+        setTimeout(() => {
+            document.getElementById('count-signals').textContent = '47';
+            addLog('<span class="num">47</span> candidates scored across all behavioral dimensions');
+        }, 36000);
+
+        // ===== PHASE 4: RANKING (36-41s) =====
+        setTimeout(() => {
+            setStage('signals', 'complete');
+            setConnector(3, 'complete');
+            setStage('shortlist', 'active');
+            setStatus('Building <span class="highlight">final shortlist</span>...', 'Ranking by composite score');
+            addLog('Computing composite match scores...');
+        }, 37000);
+
+        setTimeout(() => { addLog('Weighting: skills (30%), signals (25%), experience (20%), diversity (15%), domain (10%)'); }, 37800);
+        setTimeout(() => { addLog('Ranking by overall fit score...'); }, 38800);
+        setTimeout(() => { addLog('Applying diversity balance: ensuring 40%+ women in final slate...'); }, 39600);
+        setTimeout(() => { addLog('Generating candidate intelligence reports...'); }, 40200);
+
+        // ===== COMPLETE =====
+        setTimeout(() => {
+            document.getElementById('count-shortlist').textContent = '12';
+            setStage('shortlist', 'complete');
+            setStatus('✓ Found <span class="highlight">12 exceptional candidates</span>', '5 women, 7 men — 42% diversity ratio achieved');
+            addLog('<span class="num">12</span> top candidates ready for review — diversity target met');
+
+            document.getElementById('top-candidates').classList.add('visible');
+
+            const btn = document.getElementById('cta-btn');
+            btn.classList.add('ready');
+            btn.innerHTML = 'View All 12 Candidates →';
+
+            clearInterval(timerInterval);
+        }, 41500);
+    </script>
+</body>
+</html>

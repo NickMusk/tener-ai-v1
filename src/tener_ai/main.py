@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import hashlib
 import ipaddress
+import mimetypes
 import os
 import re
 import threading
@@ -484,6 +485,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if not self._require_request_auth(method="GET", path=parsed.path):
             return
+
+        if parsed.path == "/zalando":
+            self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/zalando/")
+            return
+
+        if parsed.path.startswith("/zalando/"):
+            if self._serve_static_directory(prefix="/zalando/", directory=project_root() / "Zalando-prototype", path=parsed.path):
+                return
 
         if parsed.path == "/dashboard/emulator":
             dashboard = project_root() / "src" / "tener_ai" / "static" / "emulator_dashboard.html"
@@ -3173,6 +3182,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(encoded)
 
+    def _redirect_response(self, status: HTTPStatus, location: str) -> None:
+        self.send_response(status.value)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
     def _json_response(self, status: HTTPStatus, payload: Dict[str, Any]) -> None:
         encoded = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status.value)
@@ -3197,6 +3212,28 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self.send_header(str(key), str(value))
         self.end_headers()
         self.wfile.write(payload)
+
+    def _serve_static_directory(self, *, prefix: str, directory: Path, path: str) -> bool:
+        relative_path = str(path or "")[len(prefix):]
+        if not relative_path:
+            relative_path = "index.html"
+        root = directory.resolve()
+        requested = (root / relative_path).resolve()
+        if requested != root and root not in requested.parents:
+            self._json_response(HTTPStatus.NOT_FOUND, {"error": "static asset not found"})
+            return True
+        if requested.is_dir():
+            requested = requested / "index.html"
+        if not requested.is_file():
+            self._json_response(HTTPStatus.NOT_FOUND, {"error": "static asset not found"})
+            return True
+        content_type, _ = mimetypes.guess_type(str(requested))
+        self._binary_response(
+            status=HTTPStatus.OK,
+            content_type=content_type or "application/octet-stream",
+            payload=requested.read_bytes(),
+        )
+        return True
 
     def _has_local_candidate_resume_asset(self, *, candidate_id: int, selected_url: str) -> bool:
         return self._candidate_local_resume_asset_path(candidate_id=int(candidate_id), selected_url=selected_url) is not None
@@ -4115,6 +4152,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     def _is_public_path(*, method: str, path: str) -> bool:
         normalized = str(path or "").strip()
         if normalized in {"/", "/dashboard", "/dashboard/emulator", "/dashboard/signals-live", "/health", "/api"}:
+            return True
+        if normalized == "/zalando" or normalized.startswith("/zalando/"):
             return True
         if normalized.startswith("/candidate/"):
             return True

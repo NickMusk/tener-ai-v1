@@ -1,0 +1,1109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Candidate Results — Zalando</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fb;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f3f4f6;
+            --accent: #0d9488;
+            --accent-light: #14b8a6;
+            --accent-dim: rgba(13, 148, 136, 0.08);
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --text-dim: #9ca3af;
+            --border: #e5e7eb;
+            --border-strong: #d1d5db;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --purple: #8b5cf6;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        nav {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .logo {
+            font-size: 1.3rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .logo-icon {
+            width: 28px; height: 28px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-job {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.8rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .nav-btn {
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+        .nav-btn.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        /* Main */
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            min-height: 100vh;
+            padding-top: 56px;
+        }
+
+        .left-panel {
+            padding: 1.5rem;
+            overflow-y: auto;
+            max-height: calc(100vh - 56px);
+        }
+
+        /* Success header */
+        .success-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, var(--accent-dim), rgba(13,148,136,0.03));
+            border: 1px solid rgba(13,148,136,0.2);
+            border-radius: 14px;
+        }
+
+        .success-icon {
+            width: 48px; height: 48px;
+            background: var(--accent);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+        }
+
+        .success-content h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .success-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .success-meta strong { color: var(--accent); }
+
+        /* Quick actions */
+        .quick-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .quick-action {
+            padding: 0.6rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .quick-action:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* Candidate cards */
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            margin-bottom: 0.75rem;
+        }
+
+        .candidates-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+        }
+
+        .candidate-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .candidate-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 4px 16px rgba(13,148,136,0.08);
+        }
+
+        .candidate-card.selected {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        .card-top {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+
+        .card-avatar {
+            width: 48px; height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .card-info { flex: 1; }
+
+        .card-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 0.15rem;
+        }
+
+        .card-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .card-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .card-score-label {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .card-checkbox {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 22px; height: 22px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .card-checkbox.checked {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .card-checkbox.checked::after {
+            content: '✓';
+            color: white;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        /* Behavioral signals */
+        .signals-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .signal-tag {
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+
+        .signal-green {
+            background: rgba(16,185,129,0.08);
+            color: var(--success);
+        }
+
+        .signal-purple {
+            background: rgba(139,92,246,0.08);
+            color: var(--purple);
+        }
+
+        .signal-accent {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .signal-orange {
+            background: rgba(245,158,11,0.08);
+            color: var(--warning);
+        }
+
+        /* Source + details row */
+        .card-details {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        .detail-item {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .card-details .expand-btn {
+            margin-left: auto;
+            padding: 0.3rem 0.6rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.7rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        /* Right panel */
+        .right-panel {
+            background: var(--bg-card);
+            border-left: 1px solid var(--border);
+            padding: 1.25rem;
+            overflow-y: auto;
+            max-height: calc(100vh - 56px);
+            position: sticky;
+            top: 56px;
+        }
+
+        .panel-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+        }
+
+        /* Diversity meter */
+        .diversity-card {
+            padding: 1rem;
+            background: rgba(139,92,246,0.04);
+            border: 1px solid rgba(139,92,246,0.15);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+        }
+
+        .diversity-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .diversity-bar-bg {
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .diversity-bar-fill {
+            height: 100%;
+            background: var(--purple);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .diversity-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .diversity-stats strong { color: var(--purple); }
+
+        /* Funnel summary */
+        .funnel-summary {
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+        }
+
+        .funnel-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            font-size: 0.8rem;
+        }
+
+        .funnel-row + .funnel-row { border-top: 1px solid var(--border); }
+
+        .funnel-label { color: var(--text-secondary); }
+
+        .funnel-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+        }
+
+        /* Source breakdown */
+        .source-breakdown {
+            margin-bottom: 1rem;
+        }
+
+        .source-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0;
+            font-size: 0.8rem;
+        }
+
+        .source-icon { font-size: 14px; width: 20px; text-align: center; }
+        .source-name { flex: 1; color: var(--text-secondary); }
+
+        .source-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+
+        /* Compliance */
+        .compliance-section { margin-bottom: 1rem; }
+
+        .compliance-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .compliance-check { color: var(--success); font-weight: bold; }
+
+        /* Action buttons */
+        .panel-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .panel-btn {
+            padding: 0.75rem;
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .panel-btn.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .panel-btn.secondary {
+            background: var(--bg-card);
+            color: var(--text-secondary);
+        }
+
+        .panel-btn:hover { opacity: 0.9; }
+
+        /* Selection bar */
+        .selection-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 320px;
+            padding: 1rem 1.5rem;
+            background: var(--accent);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 50;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+        }
+
+        .selection-bar.visible { transform: translateY(0); }
+
+        .selection-info { font-weight: 600; font-size: 0.95rem; }
+
+        .selection-actions { display: flex; gap: 0.5rem; }
+
+        .sel-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+        }
+
+        .sel-btn.white { background: white; color: var(--accent); }
+        .sel-btn.ghost { background: rgba(255,255,255,0.15); color: white; }
+
+        /* Popup */
+        .popup-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .popup-overlay.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .popup-card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            width: 90%;
+            max-width: 520px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.15);
+        }
+
+        .popup-header {
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .popup-avatar {
+            width: 56px; height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 20px;
+        }
+
+        .popup-name { font-size: 1.2rem; font-weight: 700; }
+        .popup-subtitle { font-size: 0.85rem; color: var(--text-secondary); }
+
+        .popup-score {
+            margin-left: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .popup-body { padding: 1.5rem; }
+
+        .popup-section {
+            margin-bottom: 1.25rem;
+        }
+
+        .popup-section-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            margin-bottom: 0.5rem;
+        }
+
+        .popup-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .popup-field-label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .popup-field-value {
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .popup-signals {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .popup-signal {
+            padding: 0.35rem 0.7rem;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .popup-signal.positive {
+            background: rgba(16,185,129,0.08);
+            color: var(--success);
+        }
+
+        .popup-signal.highlight {
+            background: rgba(139,92,246,0.08);
+            color: var(--purple);
+        }
+
+        .popup-signal.neutral {
+            background: rgba(245,158,11,0.08);
+            color: var(--warning);
+        }
+
+        .popup-actions {
+            display: flex;
+            gap: 0.75rem;
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .popup-btn {
+            flex: 1;
+            padding: 0.75rem;
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            border: 1px solid var(--border);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .popup-btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+        .popup-btn.secondary { background: var(--bg-card); color: var(--text-secondary); }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-left">
+            <a class="logo" href="index.html">
+                <div class="logo-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                </div>
+                Tener
+            </a>
+            <div class="nav-job">🧠 Senior ML Engineer · Zalando SE · Berlin</div>
+        </div>
+        <div class="nav-right">
+            <button class="nav-btn" onclick="window.location.href='outreach.html'">← Back to Outreach</button>
+            <button class="nav-btn">📥 Export to Workday</button>
+            <button class="nav-btn primary">📅 Schedule Interviews</button>
+        </div>
+    </nav>
+
+    <div class="main">
+        <div class="left-panel">
+            <div class="success-header">
+                <div class="success-icon">✓</div>
+                <div class="success-content">
+                    <h1>12 Candidates Ready for Review</h1>
+                    <div class="success-meta">
+                        <span>Sourced from <strong>6 channels</strong></span>
+                        <span>·</span>
+                        <span><strong>42%</strong> women in slate</span>
+                        <span>·</span>
+                        <span>Processed in <strong>41 seconds</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="quick-actions">
+                <button class="quick-action">⬇ Export PDF Report</button>
+                <button class="quick-action">📧 Share with Hiring Manager</button>
+                <button class="quick-action">🔗 Push to Workday</button>
+                <button class="quick-action">📊 Bias Audit Report</button>
+            </div>
+
+            <div class="section-title">Top Candidates — Sorted by Composite Score</div>
+
+            <div class="candidates-grid" id="candidates">
+
+                <div class="candidate-card" onclick="openPopup(0)" data-idx="0">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(0,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#8b5cf6;">LW</div>
+                        <div class="card-info">
+                            <div class="card-name">Dr. Lena Weber</div>
+                            <div class="card-title">ML Lead · 9 years · TU Munich → Spotify → Independent Consultant</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="card-score">96%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ NeurIPS Workshop Speaker</span>
+                        <span class="signal-tag signal-purple">✓ Hidden Leadership: OSS Maintainer</span>
+                        <span class="signal-tag signal-accent">✓ RecSys Domain Expert</span>
+                        <span class="signal-tag signal-green">✓ 3 Peer-Reviewed Papers</span>
+                        <span class="signal-tag signal-orange">⚡ Career Growth: 2 promotions in 3 yrs</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">💼 LinkedIn + 🎤 Conference</div>
+                        <div class="detail-item">📍 Munich (relocatable)</div>
+                        <div class="detail-item">💬 Interested</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(1)" data-idx="1">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(1,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:var(--accent);">AK</div>
+                        <div class="card-info">
+                            <div class="card-name">Dr. Aisha Kovacs</div>
+                            <div class="card-title">Senior ML Engineer · 7 years · ETH Zurich → DeepMind → Booking.com</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="card-score">94%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ PyTorch Core Contributor</span>
+                        <span class="signal-tag signal-purple">✓ Women in AI EU Board Member</span>
+                        <span class="signal-tag signal-accent">✓ A/B Testing at Scale (Booking)</span>
+                        <span class="signal-tag signal-green">✓ 5 Publications, 200+ Citations</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">🐙 GitHub + 🎓 Academic</div>
+                        <div class="detail-item">📍 Amsterdam (open to Berlin)</div>
+                        <div class="detail-item">⏳ Awaiting Response</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(2)" data-idx="2">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(2,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#f59e0b;">MP</div>
+                        <div class="card-info">
+                            <div class="card-name">Marcus Petrov</div>
+                            <div class="card-title">Staff ML Engineer · 11 years · KTH Stockholm → Spotify → SoundCloud</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="card-score">93%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ Built RecSys serving 400M users</span>
+                        <span class="signal-tag signal-purple">✓ Mentors 3 junior engineers</span>
+                        <span class="signal-tag signal-accent">✓ E-commerce side project (fashion)</span>
+                        <span class="signal-tag signal-orange">⚡ Open to new challenges</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">💼 LinkedIn</div>
+                        <div class="detail-item">📍 Berlin (already based)</div>
+                        <div class="detail-item">💬 Interested</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(3)" data-idx="3">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(3,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#ec4899;">SN</div>
+                        <div class="card-info">
+                            <div class="card-name">Dr. Sofia Nakamura</div>
+                            <div class="card-title">ML Research Engineer · 6 years · EPFL → Amazon Science Berlin</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="card-score">91%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ Kaggle Grandmaster (top 0.1%)</span>
+                        <span class="signal-tag signal-purple">✓ She Sharp Community Lead</span>
+                        <span class="signal-tag signal-accent">✓ Fashion AI Patent (Amazon)</span>
+                        <span class="signal-tag signal-green">✓ ICML 2025 Paper Accepted</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">📊 Kaggle + 👩‍💻 Women in Tech</div>
+                        <div class="detail-item">📍 Berlin (local)</div>
+                        <div class="detail-item">💬 Interested</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(4)" data-idx="4">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(4,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#6366f1;">JH</div>
+                        <div class="card-info">
+                            <div class="card-name">Jonas Hoffmann</div>
+                            <div class="card-title">Senior ML Engineer · 8 years · TU Berlin → Delivery Hero</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="card-score">90%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ Real-time ML at 1M+ orders/day</span>
+                        <span class="signal-tag signal-accent">✓ E-commerce Recommendation Expert</span>
+                        <span class="signal-tag signal-orange">⚡ Recently started new role</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">💼 LinkedIn + 🐙 GitHub</div>
+                        <div class="detail-item">📍 Berlin (local)</div>
+                        <div class="detail-item">❌ Not now</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(5)" data-idx="5">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(5,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#14b8a6;">CM</div>
+                        <div class="card-info">
+                            <div class="card-name">Dr. Clara Martinez</div>
+                            <div class="card-title">Senior ML Engineer · 7 years · UCL → Meta AI → Glovo</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="card-score">89%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ Built personalization for 25M users</span>
+                        <span class="signal-tag signal-purple">✓ Conference Speaker (RecSys 2025)</span>
+                        <span class="signal-tag signal-accent">✓ Bilingual: EN + DE</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">🎤 Conference + 💼 LinkedIn</div>
+                        <div class="detail-item">📍 Barcelona (open to relocate)</div>
+                        <div class="detail-item">⏳ Awaiting</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(6)" data-idx="6">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(6,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#0ea5e9;">AZ</div>
+                        <div class="card-info">
+                            <div class="card-name">Aleksandr Zheng</div>
+                            <div class="card-title">ML Engineer · 6 years · TU Delft → Adyen → N26</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div class="card-score">87%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ Fraud detection ML at scale</span>
+                        <span class="signal-tag signal-accent">✓ Strong GitHub: 2.1k stars</span>
+                        <span class="signal-tag signal-orange">⚡ Actively looking</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">🐙 GitHub</div>
+                        <div class="detail-item">📍 Berlin (local)</div>
+                        <div class="detail-item">⏳ Awaiting</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="right-panel">
+            <div class="panel-title">Search Summary</div>
+
+            <div class="diversity-card">
+                <div class="diversity-title">♀ Diversity Target</div>
+                <div class="diversity-bar-bg">
+                    <div class="diversity-bar-fill" style="width:42%;"></div>
+                </div>
+                <div class="diversity-stats">
+                    <span>5 women / 7 men</span>
+                    <strong>42% achieved</strong>
+                    <span>Target: 40%</span>
+                </div>
+            </div>
+
+            <div class="funnel-summary">
+                <div class="funnel-row">
+                    <span class="funnel-label">🔍 Profiles sourced</span>
+                    <span class="funnel-value">348</span>
+                </div>
+                <div class="funnel-row">
+                    <span class="funnel-label">⚡ Passed screening</span>
+                    <span class="funnel-value">97</span>
+                </div>
+                <div class="funnel-row">
+                    <span class="funnel-label">🧠 Signal analyzed</span>
+                    <span class="funnel-value">47</span>
+                </div>
+                <div class="funnel-row">
+                    <span class="funnel-label">⭐ Final shortlist</span>
+                    <span class="funnel-value" style="color:var(--accent);">12</span>
+                </div>
+            </div>
+
+            <div class="panel-title">Source Breakdown</div>
+            <div class="source-breakdown">
+                <div class="source-row"><span class="source-icon">💼</span><span class="source-name">LinkedIn</span><span class="source-count">127</span></div>
+                <div class="source-row"><span class="source-icon">🐙</span><span class="source-name">GitHub</span><span class="source-count">84</span></div>
+                <div class="source-row"><span class="source-icon">👩‍💻</span><span class="source-name">Women in Tech EU</span><span class="source-count">46</span></div>
+                <div class="source-row"><span class="source-icon">🎓</span><span class="source-name">Academic Networks</span><span class="source-count">38</span></div>
+                <div class="source-row"><span class="source-icon">📊</span><span class="source-name">Kaggle</span><span class="source-count">31</span></div>
+                <div class="source-row"><span class="source-icon">🎤</span><span class="source-name">Conferences</span><span class="source-count">22</span></div>
+            </div>
+
+            <div class="panel-title">Compliance</div>
+            <div class="compliance-section">
+                <div class="compliance-item"><span class="compliance-check">✓</span> EU AI Act Article 10 — Bias audit passed</div>
+                <div class="compliance-item"><span class="compliance-check">✓</span> GDPR — All data processing lawful</div>
+                <div class="compliance-item"><span class="compliance-check">✓</span> Works Council — Notification ready</div>
+                <div class="compliance-item"><span class="compliance-check">✓</span> Workday API — Export configured</div>
+                <div class="compliance-item"><span class="compliance-check">✓</span> No demographic data used in scoring</div>
+            </div>
+
+            <div class="panel-actions">
+                <button class="panel-btn primary">📥 Export All to Workday</button>
+                <button class="panel-btn secondary">📧 Email Report to Rad Fluttert</button>
+                <button class="panel-btn secondary">📊 Download Bias Audit PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Selection bar -->
+    <div class="selection-bar" id="selection-bar">
+        <span class="selection-info"><span id="selected-count">0</span> candidates selected</span>
+        <div class="selection-actions">
+            <button class="sel-btn white">📅 Schedule Interviews</button>
+            <button class="sel-btn white">📥 Export to Workday</button>
+            <button class="sel-btn ghost" onclick="clearAll()">Clear</button>
+        </div>
+    </div>
+
+    <!-- Detail popup -->
+    <div class="popup-overlay" id="popup" onclick="if(event.target===this)closePopup()">
+        <div class="popup-card">
+            <div class="popup-header">
+                <div class="popup-avatar" id="p-avatar" style="background:var(--accent);">LW</div>
+                <div>
+                    <div class="popup-name" id="p-name">Dr. Lena Weber</div>
+                    <div class="popup-subtitle" id="p-subtitle">ML Lead · 9 years experience</div>
+                </div>
+                <div class="popup-score" id="p-score">96%</div>
+            </div>
+            <div class="popup-body">
+                <div class="popup-section">
+                    <div class="popup-section-title">Contact & Location</div>
+                    <div class="popup-grid">
+                        <div><div class="popup-field-label">LinkedIn</div><div class="popup-field-value" id="p-linkedin">linkedin.com/in/lenaweber</div></div>
+                        <div><div class="popup-field-label">Location</div><div class="popup-field-value" id="p-location">Munich, Germany</div></div>
+                        <div><div class="popup-field-label">Languages</div><div class="popup-field-value" id="p-langs">German (native), English (fluent)</div></div>
+                        <div><div class="popup-field-label">Salary Range</div><div class="popup-field-value" id="p-salary">€95k–€115k (est.)</div></div>
+                    </div>
+                </div>
+                <div class="popup-section">
+                    <div class="popup-section-title">Behavioral Signals Detected</div>
+                    <div class="popup-signals" id="p-signals">
+                        <span class="popup-signal positive">✓ NeurIPS Workshop Speaker 2024</span>
+                        <span class="popup-signal highlight">✓ OSS Maintainer: fairml-toolkit (800+ stars)</span>
+                        <span class="popup-signal positive">✓ 3 Peer-Reviewed Papers on Fairness in RecSys</span>
+                        <span class="popup-signal positive">✓ Active mentor at Women in AI Munich</span>
+                        <span class="popup-signal highlight">✓ Career: IC → Lead in 3 years at Spotify</span>
+                        <span class="popup-signal neutral">⚡ Currently freelancing — open to full time</span>
+                    </div>
+                </div>
+                <div class="popup-section">
+                    <div class="popup-section-title">Why This Candidate Scores High</div>
+                    <div style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6;" id="p-why">
+                        Dr. Weber combines deep technical expertise in recommendation systems with a strong research track record in fairness and debiasing, directly relevant to Zalando's diversity objectives. Her open source work on fairml-toolkit demonstrates both engineering capability and commitment to responsible AI. The NeurIPS workshop talk on fairness-aware collaborative filtering is uniquely aligned with the team's mission. Leadership signals from her Spotify trajectory and current mentoring activity suggest readiness for a senior role with influence beyond individual contribution.
+                    </div>
+                </div>
+            </div>
+            <div class="popup-actions">
+                <button class="popup-btn primary">📅 Schedule Interview</button>
+                <button class="popup-btn secondary" onclick="closePopup()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const selected = new Set();
+
+        const candidates = [
+            { avatar:'LW', color:'#8b5cf6', name:'Dr. Lena Weber', subtitle:'ML Lead · 9 years experience', score:'96%', linkedin:'linkedin.com/in/lenaweber', location:'Munich, Germany (relocatable)', langs:'German (native), English (fluent)', salary:'€95k–€115k (est.)', signals:['✓ NeurIPS Workshop Speaker 2024','✓ OSS Maintainer: fairml-toolkit (800+ stars)','✓ 3 Peer-Reviewed Papers on Fairness in RecSys','✓ Active mentor at Women in AI Munich','✓ Career: IC → Lead in 3 years at Spotify','⚡ Currently freelancing — open to full time'], why:'Dr. Weber combines deep technical expertise in recommendation systems with a strong research track record in fairness and debiasing, directly relevant to Zalando\'s diversity objectives. Her open source work on fairml-toolkit demonstrates both engineering capability and commitment to responsible AI. Leadership signals from her Spotify trajectory suggest readiness for a senior role with broad influence.' },
+            { avatar:'AK', color:'var(--accent)', name:'Dr. Aisha Kovacs', subtitle:'Senior ML Engineer · 7 years experience', score:'94%', linkedin:'linkedin.com/in/aishakovacs', location:'Amsterdam (open to Berlin)', langs:'English (native), Dutch, Hungarian', salary:'€100k–€120k (est.)', signals:['✓ PyTorch Core Contributor (47 merged PRs)','✓ Women in AI EU Board Member','✓ A/B Testing at Scale: 50M+ users at Booking','✓ 5 Publications, 200+ Citations','✓ PhD ETH Zurich: Distributed ML Systems','⚡ Seeking new challenge after 3 years at Booking'], why:'Dr. Kovacs brings rare combination of world-class engineering (PyTorch core contributor) and enterprise production experience (Booking.com A/B testing at scale). Her DeepMind research background adds depth. Community leadership at Women in AI EU demonstrates values alignment with Zalando\'s diversity mission.' },
+            { avatar:'MP', color:'#f59e0b', name:'Marcus Petrov', subtitle:'Staff ML Engineer · 11 years experience', score:'93%', linkedin:'linkedin.com/in/marcuspetrov', location:'Berlin (local)', langs:'English, Swedish, German (B2)', salary:'€110k–€130k (est.)', signals:['✓ Built RecSys serving 400M users at Spotify','✓ Mentors 3 junior engineers','✓ E-commerce fashion side project','✓ KTH MSc: thesis on neural collaborative filtering','⚡ Open to new challenges after SoundCloud'], why:'Marcus is the most senior candidate with proven track record building recommendation systems at massive scale (Spotify, 400M users). His fashion e-commerce side project shows genuine domain interest. Already based in Berlin. Mentoring activity signals leadership maturity for a staff-level role.' },
+            { avatar:'SN', color:'#ec4899', name:'Dr. Sofia Nakamura', subtitle:'ML Research Engineer · 6 years experience', score:'91%', linkedin:'linkedin.com/in/sofianakamura', location:'Berlin (local)', langs:'English, Japanese, German (B1)', salary:'€90k–€110k (est.)', signals:['✓ Kaggle Grandmaster (top 0.1%)','✓ She Sharp Community Lead Berlin','✓ Fashion AI Patent (Amazon)','✓ ICML 2025 Paper: Multimodal Fashion Understanding','⚡ Interested in moving from research to production ML'], why:'Dr. Nakamura brings unique fashion AI expertise from Amazon (patent holder) combined with world-class competitive ML skills (Kaggle Grandmaster). Her ICML paper on multimodal fashion understanding is directly applicable to Zalando\'s product. Already in Berlin with strong community engagement through She Sharp.' },
+            { avatar:'JH', color:'#6366f1', name:'Jonas Hoffmann', subtitle:'Senior ML Engineer · 8 years experience', score:'90%', linkedin:'linkedin.com/in/jonashoffmann', location:'Berlin (local)', langs:'German (native), English (fluent)', salary:'€90k–€110k (est.)', signals:['✓ Real-time ML at 1M+ orders/day (Delivery Hero)','✓ E-commerce Recommendation Expert','⚡ Recently started new role — revisit in 6 months'], why:'Jonas has directly relevant e-commerce recommendation experience at Delivery Hero. However, he recently started a new position and indicated he\'s not open to moves right now. Recommend adding to talent pool for future outreach in Q3/Q4 2026.' },
+            { avatar:'CM', color:'#14b8a6', name:'Dr. Clara Martinez', subtitle:'Senior ML Engineer · 7 years experience', score:'89%', linkedin:'linkedin.com/in/claramartinez', location:'Barcelona (open to relocate)', langs:'Spanish (native), English, German (A2)', salary:'€85k–€105k (est.)', signals:['✓ Built personalization for 25M users (Glovo)','✓ RecSys 2025 Conference Speaker','✓ Meta AI Research: LLM-powered recommendations','⚡ Actively exploring Berlin opportunities'], why:'Clara brings strong personalization engineering experience from Glovo and cutting-edge LLM research from Meta AI. Her RecSys conference talk demonstrates thought leadership. She is actively exploring Berlin, making her a high-probability conversion candidate.' },
+            { avatar:'AZ', color:'#0ea5e9', name:'Aleksandr Zheng', subtitle:'ML Engineer · 6 years experience', score:'87%', linkedin:'linkedin.com/in/aleksandrzheng', location:'Berlin (local)', langs:'English, Mandarin, German (B2)', salary:'€80k–€100k (est.)', signals:['✓ Fraud detection ML at scale (Adyen, N26)','✓ Strong GitHub: 2.1k stars, ML toolkit','⚡ Actively looking — available immediately'], why:'Aleksandr brings solid production ML experience from fintech (Adyen, N26) with strong open source presence. His GitHub toolkit popularity shows community recognition. Based in Berlin and actively looking, he represents the lowest risk in terms of availability and conversion.' },
+        ];
+
+        function openPopup(idx) {
+            const c = candidates[idx];
+            document.getElementById('p-avatar').textContent = c.avatar;
+            document.getElementById('p-avatar').style.background = c.color;
+            document.getElementById('p-name').textContent = c.name;
+            document.getElementById('p-subtitle').textContent = c.subtitle;
+            document.getElementById('p-score').textContent = c.score;
+            document.getElementById('p-linkedin').textContent = c.linkedin;
+            document.getElementById('p-location').textContent = c.location;
+            document.getElementById('p-langs').textContent = c.langs;
+            document.getElementById('p-salary').textContent = c.salary;
+            document.getElementById('p-signals').innerHTML = c.signals.map(s => {
+                const cls = s.startsWith('⚡') ? 'neutral' : (s.includes('Women') || s.includes('She Sharp') || s.includes('Career') || s.includes('Mentor') || s.includes('Board') ? 'highlight' : 'positive');
+                return `<span class="popup-signal ${cls}">${s}</span>`;
+            }).join('');
+            document.getElementById('p-why').textContent = c.why;
+            document.getElementById('popup').classList.add('visible');
+        }
+
+        function closePopup() {
+            document.getElementById('popup').classList.remove('visible');
+        }
+
+        function toggleSelect(idx, el) {
+            if (selected.has(idx)) {
+                selected.delete(idx);
+                el.classList.remove('checked');
+                el.closest('.candidate-card').classList.remove('selected');
+            } else {
+                selected.add(idx);
+                el.classList.add('checked');
+                el.closest('.candidate-card').classList.add('selected');
+            }
+            document.getElementById('selected-count').textContent = selected.size;
+            document.getElementById('selection-bar').classList.toggle('visible', selected.size > 0);
+        }
+
+        function clearAll() {
+            selected.clear();
+            document.querySelectorAll('.card-checkbox').forEach(cb => cb.classList.remove('checked'));
+            document.querySelectorAll('.candidate-card').forEach(c => c.classList.remove('selected'));
+            document.getElementById('selection-bar').classList.remove('visible');
+        }
+    </script>
+</body>
+</html>
