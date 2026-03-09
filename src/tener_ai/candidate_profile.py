@@ -50,12 +50,19 @@ class CandidateProfileService:
             raise ValueError("candidate not found")
 
         matches = self.db.list_candidate_matches(candidate_id=int(candidate_id))
+        selected_job = selected_job_id if selected_job_id is not None else None
+        selected_exists = False
+        if selected_job is not None:
+            selected_exists = any(int(item.get("job_id") or 0) == int(selected_job) for item in matches)
+        if not selected_exists:
+            selected_job = int(matches[0].get("job_id") or 0) if matches else None
+
         assessments_all = self.db.list_candidate_assessments(candidate_id=int(candidate_id))
         sessions = self.db.list_pre_resume_sessions_for_candidate(candidate_id=int(candidate_id), limit=500)
         resume_assets = self.db.list_resume_assets_for_candidate(candidate_id=int(candidate_id), limit=500)
         conversations = self.db.list_conversations_for_candidate(candidate_id=int(candidate_id), limit=500)
         pre_resume_events = self.db.list_pre_resume_events_for_candidate(candidate_id=int(candidate_id), limit=1000)
-        logs = self.db.list_logs_for_candidate(candidate_id=int(candidate_id), limit=500)
+        logs = self.db.list_logs_for_candidate(candidate_id=int(candidate_id), limit=500) if include_audit else []
 
         assessments_by_job: Dict[int, List[Dict[str, Any]]] = {}
         for item in assessments_all:
@@ -102,6 +109,7 @@ class CandidateProfileService:
 
         for match in matches:
             job_id = int(match.get("job_id") or 0)
+            is_selected_job = selected_job is not None and int(job_id) == int(selected_job)
             job = {
                 "id": job_id,
                 "title": str(match.get("job_title") or "").strip(),
@@ -127,12 +135,12 @@ class CandidateProfileService:
                 scorecard=scorecard,
                 current_status_key=current_status_key,
             )
-            job_events = list(events_by_job.get(job_id, []))
-            job_conversations = list(conversations_by_job.get(job_id, []))
+            job_events = list(events_by_job.get(job_id, [])) if is_selected_job else []
+            job_conversations = list(conversations_by_job.get(job_id, [])) if is_selected_job else []
             resume_entries_for_job = self._collect_resume_entries(
                 sessions=sessions_by_job.get(job_id, []),
                 resume_assets=resume_assets_by_job.get(job_id, []),
-            )
+            ) if is_selected_job else []
             resumes_for_job = [str(item.get("url") or "").strip() for item in resume_entries_for_job]
             fit_breakdown = self._build_fit_breakdown(
                 job=job,
@@ -142,45 +150,49 @@ class CandidateProfileService:
                 pre_resume_events=job_events,
                 conversations=job_conversations,
                 resume_links=resumes_for_job,
-            )
-            job_conversation_ids = conversation_ids_by_job.get(job_id, set())
-            job_logs = self._filter_logs_for_job(logs=logs, job_id=job_id, conversation_ids=job_conversation_ids)
-            signals = self._build_signals_timeline(
-                job_id=job_id,
-                scorecard=scorecard,
-                overall_scoring=overall_scoring,
-                assessments=candidate_assessments,
-                pre_resume_events=job_events,
-                logs=job_logs,
-            )
-            culture_analysis = fit_breakdown.get("culture_fit") if isinstance(fit_breakdown.get("culture_fit"), dict) else {}
-            if culture_analysis:
-                signals.insert(
-                    0,
-                    {
-                        "kind": "culture_analysis",
-                        "job_id": job_id,
-                        "created_at": datetime.now(UTC).isoformat(),
-                        "agent_key": "culture_analyst",
-                        "agent_name": AGENT_DEFAULT_NAMES.get("culture_analyst", "Harper AI (Culture Analyst)"),
-                        "status": "generated",
-                        "reason": str((culture_analysis.get("analysis") or {}).get("summary") or "Culture fit analysis updated."),
-                        "signals": {
-                            "alignment_highlights": culture_analysis.get("alignment_highlights") or [],
-                            "concerns": culture_analysis.get("concerns") or [],
-                            "predictive_signals": culture_analysis.get("predictive_signals") or [],
-                        },
-                    },
+            ) if is_selected_job else {}
+            if is_selected_job:
+                job_conversation_ids = conversation_ids_by_job.get(job_id, set())
+                job_logs = self._filter_logs_for_job(logs=logs, job_id=job_id, conversation_ids=job_conversation_ids)
+                signals = self._build_signals_timeline(
+                    job_id=job_id,
+                    scorecard=scorecard,
+                    overall_scoring=overall_scoring,
+                    assessments=candidate_assessments,
+                    pre_resume_events=job_events,
+                    logs=job_logs,
                 )
-            global_signals.extend(signals)
-            explanation = self._build_fit_explanation(
-                candidate=candidate,
-                job=job,
-                overall_scoring=overall_scoring,
-                fit_breakdown=fit_breakdown,
-                signals=signals[:25],
-                include_explanation=include_explanation,
-            )
+                culture_analysis = fit_breakdown.get("culture_fit") if isinstance(fit_breakdown.get("culture_fit"), dict) else {}
+                if culture_analysis:
+                    signals.insert(
+                        0,
+                        {
+                            "kind": "culture_analysis",
+                            "job_id": job_id,
+                            "created_at": datetime.now(UTC).isoformat(),
+                            "agent_key": "culture_analyst",
+                            "agent_name": AGENT_DEFAULT_NAMES.get("culture_analyst", "Harper AI (Culture Analyst)"),
+                            "status": "generated",
+                            "reason": str((culture_analysis.get("analysis") or {}).get("summary") or "Culture fit analysis updated."),
+                            "signals": {
+                                "alignment_highlights": culture_analysis.get("alignment_highlights") or [],
+                                "concerns": culture_analysis.get("concerns") or [],
+                                "predictive_signals": culture_analysis.get("predictive_signals") or [],
+                            },
+                        },
+                    )
+                global_signals.extend(signals)
+                explanation = self._build_fit_explanation(
+                    candidate=candidate,
+                    job=job,
+                    overall_scoring=overall_scoring,
+                    fit_breakdown=fit_breakdown,
+                    signals=signals[:25],
+                    include_explanation=include_explanation,
+                )
+            else:
+                signals = []
+                explanation = {"source": "deferred", "text": "", "cached": False}
             jobs_payload.append(
                 {
                     "job": job,
@@ -217,13 +229,6 @@ class CandidateProfileService:
             ),
             reverse=True,
         )
-
-        selected_job = selected_job_id if selected_job_id is not None else None
-        selected_exists = False
-        if selected_job is not None:
-            selected_exists = any(int((item.get("job") or {}).get("id") or 0) == int(selected_job) for item in jobs_payload)
-        if not selected_exists:
-            selected_job = int((jobs_payload[0].get("job") or {}).get("id") or 0) if jobs_payload else None
 
         global_signals.sort(
             key=lambda item: self._safe_parse_time(str(item.get("created_at") or "")),

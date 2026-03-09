@@ -127,6 +127,24 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
             meta={},
         )
 
+        queued_delivery_candidate = self._create_candidate("queued-delivery", "Queued Delivery Candidate")
+        self._attach_match(job_id=job_id, candidate_id=queued_delivery_candidate, status="outreached")
+        queued_delivery_conversation = self.db.create_conversation(job_id=job_id, candidate_id=queued_delivery_candidate, channel="linkedin")
+        self.db.update_candidate_match_status(
+            job_id=job_id,
+            candidate_id=queued_delivery_candidate,
+            status="outreached",
+        )
+        self.db.create_outbound_action(
+            job_id=job_id,
+            candidate_id=queued_delivery_candidate,
+            conversation_id=queued_delivery_conversation,
+            action_type="send_message",
+            payload={"delivery_mode": "message_first", "planned_action_kind": "message"},
+            priority=50,
+            not_before=utc_now_iso(),
+        )
+
         cv_candidate = self._create_candidate("cv", "CV Candidate")
         self._attach_match(job_id=job_id, candidate_id=cv_candidate, status="resume_received")
         cv_conversation = self.db.create_conversation(job_id=job_id, candidate_id=cv_candidate, channel="linkedin")
@@ -172,9 +190,10 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
 
         summary = payload.get("summary") or {}
-        self.assertEqual(int(summary.get("total_candidates") or 0), 8)
+        self.assertEqual(int(summary.get("total_candidates") or 0), 9)
         self.assertEqual(int(summary.get("queued") or 0), 1)
         self.assertEqual(int(summary.get("connect_sent") or 0), 1)
+        self.assertEqual(int(summary.get("queued_delivery") or 0), 1)
         self.assertEqual(int(summary.get("dialogue") or 0), 1)
         self.assertEqual(int(summary.get("cv_received") or 0), 1)
         self.assertEqual(int(summary.get("interview_pending") or 0), 1)
@@ -190,6 +209,10 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.assertEqual(
             [str(item.get("candidate_name") or "") for item in (columns.get("connect_sent") or {}).get("items", [])],
             ["Connect Candidate"],
+        )
+        self.assertEqual(
+            [str(item.get("candidate_name") or "") for item in (columns.get("queued_delivery") or {}).get("items", [])],
+            ["Queued Delivery Candidate"],
         )
         self.assertEqual(
             [str(item.get("candidate_name") or "") for item in (columns.get("dialogue") or {}).get("items", [])],

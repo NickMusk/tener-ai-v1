@@ -1100,7 +1100,7 @@
       const qp = new URLSearchParams();
       if (state.selectedJobId) qp.set("job_id", String(state.selectedJobId));
       qp.set("audit", state.audit ? "1" : "0");
-      qp.set("explain", "1");
+      qp.set("explain", "0");
       const out = await api(`/api/candidates/${state.candidateId}/profile?${qp.toString()}`);
       state.profile = out;
       const jobs = Array.isArray(out.jobs) ? out.jobs : [];

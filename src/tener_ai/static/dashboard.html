@@ -2913,10 +2913,12 @@
         `${Number(summary.total_candidates || 0)} candidates`,
         `${Number(summary.queued || 0)} queued`,
         `${Number(summary.connect_sent || 0)} connect sent`,
-        `${Number(summary.dialogue || 0)} dialogue`,
+        `${Number(summary.queued_delivery || 0)} queued delivery`,
+        `${Number(summary.dialogue || 0)} active dialogue`,
         `${Number(summary.cv_received || 0)} cv received`,
         `${Number(summary.interview_pending || 0)} interview pending`,
         `${Number(summary.interview_passed || 0)} passed`,
+        `${Number(summary.interview_failed || 0)} failed`,
         `${Number(summary.closed || 0)} closed`,
       ];
       summaryEl.textContent = summaryParts.join(" • ");
@@ -2983,16 +2985,8 @@
 
       document.querySelectorAll(".ats-card").forEach((card) => {
         card.addEventListener("click", async () => {
-          const conversationId = Number(card.dataset.conversationId || "0");
           const candidateId = Number(card.dataset.candidateId || "0");
           const jobId = Number(card.dataset.jobId || "0") || selectedJobId();
-          if (conversationId > 0) {
-            state.agentConversationId = conversationId;
-            setActiveView("agent");
-            await refreshAgentWorkspace();
-            await openAgentConversation(conversationId);
-            return;
-          }
           if (candidateId > 0) {
             openCandidateProfile(candidateId, jobId);
           }

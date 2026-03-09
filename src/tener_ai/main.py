@@ -3550,6 +3550,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         column_defs = [
             ("queued", "Queued"),
             ("connect_sent", "Connect Sent"),
+            ("queued_delivery", "Queued for Delivery"),
             ("dialogue", "Dialogue"),
             ("cv_received", "CV Received"),
             ("interview_pending", "Interview Pending"),
@@ -3562,6 +3563,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             "total_candidates": len(items),
             "queued": 0,
             "connect_sent": 0,
+            "queued_delivery": 0,
             "dialogue": 0,
             "cv_received": 0,
             "interview_pending": 0,

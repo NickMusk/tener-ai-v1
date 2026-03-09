@@ -4120,7 +4120,19 @@ class Database:
             next_action_kind = "review_resume"
             next_action_at = None
             stage_rank = 40
-        elif current_status_key in {"in_dialogue", "outreached"} or lifecycle_key in {"dialogue_started", "connected_first_message_sent", "message_sent"}:
+        elif lifecycle_key == "planned_message" or (
+            current_status_key == "outreached"
+            and planned_action_kind == "message"
+            and pending_action_status in {"pending", "running"}
+        ):
+            stage_key = "queued_delivery"
+            stage_label = "Queued for Delivery"
+            stage_detail = lifecycle_detail or planned_action_label or "Queued for delivery"
+            next_action_kind = "message"
+            if not next_action_at:
+                next_action_at = pending_action_at
+            stage_rank = 25
+        elif current_status_key == "in_dialogue" or lifecycle_key in {"dialogue_started", "connected_first_message_sent", "message_sent"}:
             stage_key = "dialogue"
             stage_label = "Dialogue"
             stage_detail = lifecycle_detail or lifecycle_label or current_status_label or "In communication"
