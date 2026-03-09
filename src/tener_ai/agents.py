@@ -19,7 +19,8 @@ class SourcingAgent:
         limit = max(1, min(int(limit or 1), 200))
         spec = self.build_search_spec(job)
         queries = list(spec.get("fallback_queries") or [])
-        per_query_limit = max(10, min(limit, 50))
+        collection_target = min(limit * 4, 400)
+        per_query_limit = max(25, min(100, max(limit, collection_target // max(len(queries) + 4, 1))))
 
         seen: set[str] = set()
         collected: List[Dict[str, Any]] = []
@@ -27,61 +28,44 @@ class SourcingAgent:
 
         structured_search = getattr(self.linkedin_provider, "search_profiles_structured", None)
         if callable(structured_search):
-            try:
-                profiles = structured_search(spec=spec, limit=per_query_limit)
-            except Exception as exc:
-                search_errors.append(f"structured_search error={exc}")
-            else:
-                for profile in profiles or []:
-                    key = self._candidate_key(profile)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    collected.append(profile)
-                    if len(collected) >= limit:
-                        return collected[:limit]
+            for stage in self._build_structured_search_stages(spec):
+                if len(collected) >= collection_target:
+                    break
+                try:
+                    profiles = structured_search(spec=stage, limit=per_query_limit)
+                except Exception as exc:
+                    search_errors.append(f"structured_search[{stage.get('stage_key')}] error={exc}")
+                    continue
+                self._extend_unique_profiles(collected=collected, seen=seen, profiles=profiles or [])
 
-        # Pass 1: broad query set with a larger per-query window.
+        # Pass 1: text fallback query set.
         for query in queries:
-            if len(collected) >= limit:
+            if len(collected) >= collection_target:
                 break
             try:
                 profiles = self.linkedin_provider.search_profiles(query=query, limit=per_query_limit)
             except Exception as exc:
                 search_errors.append(f"query={query[:120]} error={exc}")
                 continue
-            for profile in profiles:
-                key = self._candidate_key(profile)
-                if key in seen:
-                    continue
-                seen.add(key)
-                collected.append(profile)
-                if len(collected) >= limit:
-                    break
+            self._extend_unique_profiles(collected=collected, seen=seen, profiles=profiles)
 
-        # Pass 2: if still below target, rerun with wider windows to reduce duplicate-heavy tops.
-        if len(collected) < limit:
+        # Pass 2: widen query windows if still below target.
+        if len(collected) < collection_target:
             expanded_limit = min(100, max(per_query_limit + 25, int(limit)))
             for query in queries:
-                if len(collected) >= limit:
+                if len(collected) >= collection_target:
                     break
                 try:
                     profiles = self.linkedin_provider.search_profiles(query=query, limit=expanded_limit)
                 except Exception as exc:
                     search_errors.append(f"query={query[:120]} error={exc}")
                     continue
-                for profile in profiles:
-                    key = self._candidate_key(profile)
-                    if key in seen:
-                        continue
-                    seen.add(key)
-                    collected.append(profile)
-                    if len(collected) >= limit:
-                        break
+                self._extend_unique_profiles(collected=collected, seen=seen, profiles=profiles)
 
         if not collected and search_errors:
             raise RuntimeError("; ".join(search_errors[:5]))
-        return collected[:limit]
+        reranked = self._rerank_profiles(job=job, profiles=collected)
+        return reranked[:limit]
 
     def build_search_preview(self, job: Dict[str, Any]) -> Dict[str, Any]:
         spec = self.build_search_spec(job)
@@ -188,6 +172,125 @@ class SourcingAgent:
         spec = self.build_search_spec(job)
         return list(spec.get("fallback_queries") or [])
 
+    @staticmethod
+    def _extend_unique_profiles(
+        *,
+        collected: List[Dict[str, Any]],
+        seen: set[str],
+        profiles: List[Dict[str, Any]],
+    ) -> None:
+        for profile in profiles or []:
+            key = SourcingAgent._candidate_key(profile)
+            if key in seen:
+                continue
+            seen.add(key)
+            collected.append(profile)
+
+    def _build_structured_search_stages(self, spec: Dict[str, Any]) -> List[Dict[str, Any]]:
+        filters = spec.get("filters") if isinstance(spec.get("filters"), dict) else {}
+        location = str(filters.get("location") or "").strip()
+        skills = [str(item).strip() for item in (filters.get("skills") or []) if str(item).strip()]
+        profile_language = [str(item).strip() for item in (filters.get("profile_language") or []) if str(item).strip()]
+
+        def stage(stage_key: str, *, include_location: bool, include_languages: bool, stage_skills: List[str]) -> Dict[str, Any]:
+            next_filters: Dict[str, Any] = {}
+            if include_location and location:
+                next_filters["location"] = location
+            if include_languages and profile_language:
+                next_filters["profile_language"] = profile_language[:2]
+            if stage_skills:
+                next_filters["skills"] = stage_skills[:3]
+            return {
+                **spec,
+                "filters": next_filters,
+                "stage_key": stage_key,
+            }
+
+        stages = [
+            stage("strict", include_location=True, include_languages=True, stage_skills=skills[:3]),
+            stage("focused", include_location=True, include_languages=True, stage_skills=skills[:1]),
+            stage("location_lang", include_location=True, include_languages=True, stage_skills=[]),
+            stage("location_only", include_location=True, include_languages=False, stage_skills=[]),
+            stage("title_only", include_location=False, include_languages=False, stage_skills=[]),
+        ]
+        out: List[Dict[str, Any]] = []
+        seen_keys: set[str] = set()
+        for item in stages:
+            signature = json.dumps(item.get("filters") or {}, sort_keys=True)
+            if signature in seen_keys:
+                continue
+            seen_keys.add(signature)
+            out.append(item)
+        return out
+
+    def _rerank_profiles(self, *, job: Dict[str, Any], profiles: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not profiles:
+            return []
+
+        scored: List[Tuple[int, float, int, Dict[str, Any]]] = []
+        for index, profile in enumerate(profiles):
+            bucket, score = self._source_rank(job=job, profile=profile)
+            scored.append((bucket, score, -index, profile))
+
+        scored.sort(key=lambda item: (item[0], item[1], item[2]), reverse=True)
+        return [item[3] for item in scored]
+
+    def _source_rank(self, *, job: Dict[str, Any], profile: Dict[str, Any]) -> Tuple[int, float]:
+        base_score = 0.0
+        must_have_match = 0.0
+        if self.matching_engine is not None and hasattr(self.matching_engine, "verify"):
+            try:
+                result = self.matching_engine.verify(job=job, profile=profile)
+            except Exception:
+                result = None
+            if result is not None:
+                base_score = float(getattr(result, "score", 0.0) or 0.0)
+                notes = getattr(result, "notes", {}) or {}
+                components = notes.get("components") if isinstance(notes.get("components"), dict) else {}
+                try:
+                    must_have_match = float(components.get("must_have_match") or 0.0)
+                except (TypeError, ValueError):
+                    must_have_match = 0.0
+
+        location_ok = True
+        seniority_ok = True
+        if self.matching_engine is not None and hasattr(self.matching_engine, "is_preferred_location"):
+            location_ok = bool(
+                self.matching_engine.is_preferred_location(
+                    job_location=job.get("location"),
+                    candidate_location=profile.get("location"),
+                )
+            )
+        if self.matching_engine is not None and hasattr(self.matching_engine, "is_preferred_seniority"):
+            try:
+                years = int(profile.get("years_experience") or 0)
+            except (TypeError, ValueError):
+                years = 0
+            seniority_ok = bool(
+                self.matching_engine.is_preferred_seniority(
+                    target=job.get("seniority"),
+                    years=years,
+                )
+            )
+
+        if location_ok and seniority_ok:
+            bucket = 3
+        elif location_ok:
+            bucket = 2
+        elif seniority_ok:
+            bucket = 1
+        else:
+            bucket = 0
+
+        adjusted_score = base_score
+        if not location_ok:
+            adjusted_score -= 1.25
+        if not seniority_ok:
+            adjusted_score -= 0.85
+        if must_have_match < 0.3:
+            adjusted_score -= 0.35
+        return bucket, adjusted_score
+
     def _core_skills(self, job: Dict[str, Any], max_items: int = 4) -> List[str]:
         if self.matching_engine is not None:
             try:
@@ -206,8 +309,8 @@ class SourcingAgent:
         candidates = [
             title.strip(),
             f"{title} {location or ''}".strip(),
-            f"{title} {' '.join(keywords[:2])}".strip(),
-            f"{title} {location or ''} {' '.join(keywords[:2])}".strip(),
+            f"{title} {keywords[0] if keywords else ''}".strip(),
+            f"{title} {location or ''} {keywords[0] if keywords else ''}".strip(),
         ]
         out: List[str] = []
         seen: set[str] = set()

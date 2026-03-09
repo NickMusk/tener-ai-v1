@@ -55,6 +55,34 @@ class _AlwaysFailSourceProvider:
         return {"provider": "stub", "sent": False, "reason": "stub_no_delivery"}
 
 
+class _PriorityAwareProvider:
+    def __init__(self) -> None:
+        self.account_id: str | None = None
+        self.seen_accounts: List[str] = []
+
+    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        account_id = str(self.account_id or "")
+        self.seen_accounts.append(account_id)
+        return [
+            {
+                "linkedin_id": f"{account_id}-candidate",
+                "full_name": "Priority Candidate",
+                "headline": "Manual QA Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["qa", "manual testing"],
+                "years_experience": 4,
+                "raw": {"query": query, "account_id": account_id},
+            }
+        ]
+
+    def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        return dict(profile)
+
+    def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+        return {"provider": "stub", "sent": False, "reason": "stub_no_delivery"}
+
+
 class WorkflowPipelineProgressTests(unittest.TestCase):
     def _build_workflow(self, work_dir: Path, provider: Any) -> Tuple[Database, WorkflowService]:
         root = Path(__file__).resolve().parents[1]
@@ -126,6 +154,31 @@ class WorkflowPipelineProgressTests(unittest.TestCase):
             self.assertEqual(str((by_step.get("add") or {}).get("status") or ""), "skipped")
             self.assertEqual(str((by_step.get("outreach") or {}).get("status") or ""), "skipped")
             self.assertEqual(str((by_step.get("workflow") or {}).get("status") or ""), "error")
+
+    def test_source_candidates_prefers_recruiter_capable_account(self) -> None:
+        with TemporaryDirectory() as td:
+            provider = _PriorityAwareProvider()
+            db, workflow = self._build_workflow(Path(td), provider)
+            job_id = self._insert_job(db)
+            db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-normal",
+                status="connected",
+                metadata={},
+                connected_at=utc_now_iso(),
+            )
+            db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-recruiter",
+                status="connected",
+                metadata={"connection_params": {"im": {"premiumFeatures": ["recruiter"]}}},
+                connected_at=utc_now_iso(),
+            )
+
+            out = workflow.source_candidates(job_id=job_id, limit=1)
+            self.assertEqual(int(out.get("total") or 0), 1)
+            self.assertTrue(provider.seen_accounts)
+            self.assertEqual(provider.seen_accounts[0], "acc-recruiter")
 
 
 if __name__ == "__main__":

@@ -119,6 +119,8 @@ class CandidateProfileService:
                 "location": str(match.get("job_location") or "").strip() or None,
                 "preferred_languages": match.get("job_preferred_languages") if isinstance(match.get("job_preferred_languages"), list) else [],
                 "seniority": str(match.get("job_seniority") or "").strip() or None,
+                "must_have_skills": match.get("job_must_have_skills") if isinstance(match.get("job_must_have_skills"), list) else [],
+                "nice_to_have_skills": match.get("job_nice_to_have_skills") if isinstance(match.get("job_nice_to_have_skills"), list) else [],
                 "company_culture_profile": (
                     match.get("job_company_culture_profile")
                     if isinstance(match.get("job_company_culture_profile"), dict)
@@ -274,6 +276,13 @@ class CandidateProfileService:
                 location="Remote",
                 preferred_languages=["en"],
                 seniority="senior",
+                must_have_skills=["python", "aws", "docker", "kubernetes"],
+                nice_to_have_skills=[
+                    "frontend leadership",
+                    "core web vitals optimization",
+                    "mentoring and coaching",
+                    "cross team release coordination",
+                ],
             )
             chosen_job = self.db.get_job(new_job_id) or {}
 
@@ -572,34 +581,29 @@ class CandidateProfileService:
         job_requirements = self.matching_engine.build_job_requirements(job) if self.matching_engine is not None else {}
         candidate_skills = [str(item).strip() for item in (candidate.get("skills") or []) if str(item).strip()]
         candidate_skills_norm = {item.lower() for item in candidate_skills}
+        current_required_skills = [
+            str(item).strip()
+            for item in (job_requirements.get("must_have_skills") or [])
+            if str(item).strip()
+        ]
         required_skills_raw = notes.get("required_skills") if isinstance(notes.get("required_skills"), list) else []
-        required_skills = [str(item).strip() for item in required_skills_raw if str(item).strip()]
-        if not required_skills:
-            required_skills = [
-                str(item).strip()
-                for item in ((job_requirements.get("must_have_skills") or core_profile.get("core_skills") or []))
-                if str(item).strip()
-            ]
-        matched_from_notes = notes.get("matched_skills") if isinstance(notes.get("matched_skills"), list) else []
-        matched_skills = [str(item).strip() for item in matched_from_notes if str(item).strip()]
-        if not matched_skills:
-            matched_skills = [item for item in required_skills if item.lower() in candidate_skills_norm]
+        fallback_required_skills = [str(item).strip() for item in required_skills_raw if str(item).strip()]
+        required_skills = current_required_skills or fallback_required_skills
+        matched_skills = [item for item in required_skills if item.lower() in candidate_skills_norm]
         required_norm = {item.lower(): item for item in required_skills}
         matched_norm = {item.lower(): item for item in matched_skills}
         missing_must_have = [label for key, label in required_norm.items() if key not in matched_norm]
+        current_nice_to_have = [
+            str(item).strip()
+            for item in (job_requirements.get("nice_to_have_skills") or [])
+            if str(item).strip()
+        ]
         nice_raw = notes.get("nice_to_have_skills") if isinstance(notes.get("nice_to_have_skills"), list) else []
-        nice_to_have = [str(item).strip() for item in nice_raw if str(item).strip()]
+        fallback_nice = [str(item).strip() for item in nice_raw if str(item).strip()]
+        nice_to_have = current_nice_to_have or fallback_nice
         if not nice_to_have:
-            explicit_nice = [
-                str(item).strip()
-                for item in (job_requirements.get("nice_to_have_skills") or core_profile.get("nice_to_have_skills") or [])
-                if str(item).strip()
-            ]
-            if explicit_nice:
-                nice_to_have = explicit_nice
-            else:
-                core_skills = [str(item).strip() for item in (core_profile.get("core_skills") or []) if str(item).strip()]
-                nice_to_have = [item for item in core_skills if item.lower() not in required_norm]
+            core_skills = [str(item).strip() for item in (core_profile.get("core_skills") or []) if str(item).strip()]
+            nice_to_have = [item for item in core_skills if item.lower() not in required_norm]
         missing_nice = [item for item in nice_to_have if item.lower() not in candidate_skills_norm]
         matched_nice = [item for item in nice_to_have if item.lower() in candidate_skills_norm]
         culture_fit = self._build_culture_fit(

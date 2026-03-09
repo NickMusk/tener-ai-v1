@@ -361,6 +361,58 @@ class CandidateProfileApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertIn("<!doctype html>", str(body.get("raw_text") or "").lower())
 
+    def test_profile_prefers_current_job_requirements_over_legacy_verification_notes(self) -> None:
+        job_id = self.db.insert_job(
+            title="Manual QA Engineer",
+            company="Tener",
+            jd_text=(
+                "About Tener.ai recruiting platform. Requirements: manual testing, api testing, regression testing. "
+                "Nice to have: ci/cd and go."
+            ),
+            location="Eastern Europe",
+            preferred_languages=["en"],
+            seniority="middle",
+            must_have_skills=["manual testing", "api testing", "regression testing"],
+            nice_to_have_skills=["sql", "postman"],
+        )
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "cand-profile-requirements-1",
+                "full_name": "Romulus Candidate",
+                "headline": "Senior QA Automation & Manual Engineer",
+                "location": "Iasi, Romania",
+                "languages": ["en"],
+                "skills": ["manual testing", "api testing", "regression testing", "sql"],
+                "years_experience": 5,
+                "raw": {},
+            },
+            source="manual",
+        )
+        self.db.create_candidate_match(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            score=0.71,
+            status="review",
+            verification_notes={
+                "required_skills": ["go", "recruiting", "ci/cd"],
+                "matched_skills": [],
+                "nice_to_have_skills": ["go"],
+            },
+        )
+
+        status, payload = self._request("GET", f"/api/candidates/{candidate_id}/profile?job_id={job_id}")
+        self.assertEqual(status, 200)
+        jobs = payload.get("jobs") if isinstance(payload.get("jobs"), list) else []
+        self.assertTrue(jobs)
+        fit_breakdown = jobs[0].get("fit_breakdown") if isinstance(jobs[0].get("fit_breakdown"), dict) else {}
+        must_have = fit_breakdown.get("must_have") if isinstance(fit_breakdown.get("must_have"), dict) else {}
+        self.assertEqual(
+            must_have.get("required"),
+            ["manual testing", "api testing", "regression testing"],
+        )
+        self.assertNotIn("go", must_have.get("required") or [])
+        self.assertNotIn("recruiting", must_have.get("required") or [])
+
 
 if __name__ == "__main__":
     unittest.main()

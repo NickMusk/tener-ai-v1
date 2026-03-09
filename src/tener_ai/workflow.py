@@ -172,6 +172,24 @@ class WorkflowService:
             if self._is_operational_linkedin_account(row)
         ]
 
+    @staticmethod
+    def _source_account_priority(account: Dict[str, Any]) -> int:
+        metadata = account.get("metadata") if isinstance(account.get("metadata"), dict) else {}
+        connection_params = metadata.get("connection_params") if isinstance(metadata.get("connection_params"), dict) else {}
+        im_params = connection_params.get("im") if isinstance(connection_params.get("im"), dict) else {}
+        premium_features = im_params.get("premiumFeatures")
+        features: List[str] = []
+        if isinstance(premium_features, list):
+            features.extend(str(item or "").strip().lower() for item in premium_features if str(item or "").strip())
+        if isinstance(metadata.get("premium_features"), list):
+            features.extend(str(item or "").strip().lower() for item in (metadata.get("premium_features") or []) if str(item or "").strip())
+        joined = " ".join(features)
+        if "recruiter" in joined:
+            return 0
+        if any(token in joined for token in ("sales", "navigator", "premium")):
+            return 1
+        return 2
+
     def _mark_linkedin_account_removed(self, *, account: Dict[str, Any], reason: str) -> None:
         account_id = int(account.get("id") or 0)
         if account_id <= 0:
@@ -194,7 +212,10 @@ class WorkflowService:
         original_account_id = getattr(provider, "account_id", None) if provider is not None and hasattr(provider, "account_id") else None
         profiles: List[Dict[str, Any]] = []
         search_errors: List[str] = []
-        source_accounts = self._list_active_linkedin_accounts(limit=500)
+        source_accounts = sorted(
+            self._list_active_linkedin_accounts(limit=500),
+            key=self._source_account_priority,
+        )
         if provider is not None and hasattr(provider, "account_id") and source_accounts:
             try:
                 for account in source_accounts:

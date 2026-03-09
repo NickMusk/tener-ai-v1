@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Set
@@ -139,17 +140,24 @@ class MatchingEngine:
         if explicit_must_have:
             must_have_skills = explicit_must_have[:max_must_have]
         else:
-            extracted_required = sorted(self._extract_required_skills(jd_text))
+            extracted_required = self._extract_required_skills(jd_text=jd_text, title=title)
             must_have_skills = (
                 extracted_required[:max_must_have]
                 if extracted_required
-                else self._extract_jd_keywords(jd_text, max_items=max_must_have)
+                else self._extract_jd_keywords(
+                    self._fallback_requirement_text(jd_text=jd_text, title=title),
+                    max_items=max_must_have,
+                )
             )
 
         if explicit_nice_to_have:
             nice_to_have_skills = explicit_nice_to_have[:max_nice_to_have]
         else:
-            fallback_keywords = self._extract_jd_keywords(jd_text, max_items=max_must_have + max_nice_to_have)
+            fallback_keywords = self._extract_nice_to_have_skills(
+                jd_text=jd_text,
+                title=title,
+                max_items=max_must_have + max_nice_to_have,
+            )
             must_set = {item.lower() for item in must_have_skills}
             nice_to_have_skills = [item for item in fallback_keywords if item.lower() not in must_set][:max_nice_to_have]
 
@@ -241,10 +249,62 @@ class MatchingEngine:
         title = job.get("title") or "the role"
         return f"key requirements from {title}"
 
-    def _extract_required_skills(self, jd_text: str) -> Set[str]:
+    def _extract_required_skills(self, jd_text: str, title: str = "") -> List[str]:
         dictionary = [s.lower() for s in self.rules.get("skill_dictionary", [])]
-        found = {skill for skill in dictionary if skill in jd_text}
+        dictionary.extend(
+            [
+                "manual testing",
+                "api testing",
+                "regression testing",
+                "bug reporting",
+                "bug triage",
+                "postman",
+                "selenium",
+                "playwright",
+                "cypress",
+                "sql",
+                "jira",
+                "test case design",
+            ]
+        )
+        requirement_text = self._extract_requirement_scope(jd_text=jd_text, title=title)
+        seen: Set[str] = set()
+        found: List[str] = []
+        for skill in dictionary:
+            if skill in requirement_text and skill not in seen:
+                seen.add(skill)
+                found.append(skill)
         return found
+
+    def _extract_nice_to_have_skills(self, jd_text: str, title: str = "", max_items: int = 12) -> List[str]:
+        dictionary = [s.lower() for s in self.rules.get("skill_dictionary", [])]
+        dictionary.extend(
+            [
+                "manual testing",
+                "api testing",
+                "regression testing",
+                "bug reporting",
+                "postman",
+                "selenium",
+                "playwright",
+                "cypress",
+                "sql",
+                "jira",
+                "test case design",
+            ]
+        )
+        nice_scope = self._extract_nice_to_have_scope(jd_text=jd_text, title=title)
+        found: List[str] = []
+        seen: Set[str] = set()
+        for skill in dictionary:
+            if skill in nice_scope and skill not in seen:
+                seen.add(skill)
+                found.append(skill)
+            if len(found) >= max_items:
+                break
+        if found:
+            return found
+        return self._extract_jd_keywords(nice_scope, max_items=max_items)
 
     @staticmethod
     def _normalize_skill_list(values: Any) -> List[str]:
@@ -280,9 +340,28 @@ class MatchingEngine:
         max_years = int(target_band.get("max_years", 99))
         if min_years <= years <= max_years:
             return 1.0
-        if years + 1 >= min_years:
-            return 0.7
-        return 0.3
+        if years < min_years:
+            gap = min_years - years
+            return 0.65 if gap == 1 else 0.3
+        overage = years - max_years
+        if target in {"junior", "middle"}:
+            return 0.35 if overage == 1 else 0.15
+        return 0.75
+
+    def is_preferred_seniority(self, target: str | None, years: int) -> bool:
+        bands = self.rules.get("seniority_bands", {})
+        target_band = bands.get(str(target or "").lower())
+        if not target_band:
+            return True
+        min_years = int(target_band.get("min_years", 0))
+        max_years = int(target_band.get("max_years", 99))
+        if years < min_years:
+            return False
+        if years <= max_years:
+            return True
+        if str(target or "").lower() in {"junior", "middle"}:
+            return False
+        return True
 
     def _location_match(self, job_location: str | None, candidate_location: str | None) -> float:
         if not job_location:
@@ -291,15 +370,26 @@ class MatchingEngine:
         if any(token in jl for token in ("remote", "anywhere", "global", "worldwide")):
             return 1.0
         if not candidate_location:
-            return 0.4
+            return 0.15
 
-        cl = candidate_location.lower()
-        if jl in cl or cl in jl:
+        if self.is_preferred_location(job_location=job_location, candidate_location=candidate_location):
             return 1.0
+        return 0.15
 
-        job_parts = {x.strip() for x in jl.replace("/", ",").split(",") if x.strip()}
-        cand_parts = {x.strip() for x in cl.replace("/", ",").split(",") if x.strip()}
-        return 0.8 if job_parts.intersection(cand_parts) else 0.4
+    def is_preferred_location(self, job_location: str | None, candidate_location: str | None) -> bool:
+        if not job_location:
+            return True
+        jl = str(job_location or "").strip().lower()
+        if any(token in jl for token in ("remote", "anywhere", "global", "worldwide")):
+            return True
+        if not candidate_location:
+            return False
+        cl = str(candidate_location or "").strip().lower()
+        if jl in cl or cl in jl:
+            return True
+        job_tokens = self._location_tokens(jl)
+        cand_tokens = self._location_tokens(cl)
+        return bool(job_tokens.intersection(cand_tokens))
 
     def _language_match(self, preferred_languages: List[str] | None, candidate_languages: List[str] | None) -> float:
         if not preferred_languages:
@@ -385,6 +475,126 @@ class MatchingEngine:
             if len(result) >= max_items:
                 break
         return result
+
+    @staticmethod
+    def _split_jd_fragments(jd_text: str) -> List[str]:
+        parts = re.split(r"[\n\r•]+|(?<=[.!?])\s+", jd_text.lower())
+        return [part.strip(" -:\t") for part in parts if part and part.strip(" -:\t")]
+
+    def _extract_requirement_scope(self, jd_text: str, title: str = "") -> str:
+        required_markers = (
+            "requirements",
+            "qualification",
+            "must have",
+            "what you'll need",
+            "what you will need",
+            "you have",
+            "responsibilities",
+            "what you'll do",
+            "what you will do",
+            "experience with",
+            "hands-on",
+            "required",
+        )
+        nice_markers = ("nice to have", "preferred", "bonus", "plus", "good to have")
+        ignore_markers = (
+            "about us",
+            "about tener",
+            "company",
+            "our platform",
+            "who we are",
+            "recruiting platform",
+            "why join",
+            "benefits",
+            "culture",
+        )
+        fragments = self._split_jd_fragments(jd_text)
+        required_fragments: List[str] = []
+        neutral_fragments: List[str] = []
+        current_section = "neutral"
+        for fragment in fragments:
+            if any(marker in fragment for marker in ignore_markers):
+                current_section = "ignore"
+                continue
+            if any(marker in fragment for marker in nice_markers):
+                current_section = "nice"
+                continue
+            if any(marker in fragment for marker in required_markers):
+                current_section = "required"
+                required_fragments.append(fragment)
+                continue
+            if current_section == "required":
+                required_fragments.append(fragment)
+                continue
+            if current_section == "nice" or current_section == "ignore":
+                continue
+            if any(token in fragment for token in ("must", "required", "experience with", "testing", "qa", "quality assurance")):
+                required_fragments.append(fragment)
+            else:
+                neutral_fragments.append(fragment)
+        scope = " ".join(required_fragments).strip()
+        if scope:
+            return scope
+        fallback = " ".join(neutral_fragments).strip()
+        title_hint = str(title or "").strip().lower()
+        return f"{title_hint} {fallback}".strip()
+
+    def _extract_nice_to_have_scope(self, jd_text: str, title: str = "") -> str:
+        nice_markers = ("nice to have", "preferred", "bonus", "plus", "good to have")
+        fragments = self._split_jd_fragments(jd_text)
+        nice_fragments: List[str] = []
+        current_section = "neutral"
+        for fragment in fragments:
+            if any(marker in fragment for marker in nice_markers):
+                current_section = "nice"
+                nice_fragments.append(fragment)
+                continue
+            if current_section == "nice":
+                nice_fragments.append(fragment)
+        scope = " ".join(nice_fragments).strip()
+        if scope:
+            return scope
+        return self._fallback_requirement_text(jd_text=jd_text, title=title)
+
+    def _fallback_requirement_text(self, jd_text: str, title: str = "") -> str:
+        title_hint = str(title or "").strip().lower()
+        requirement_scope = self._extract_requirement_scope(jd_text=jd_text, title=title)
+        return f"{title_hint} {requirement_scope}".strip()
+
+    @staticmethod
+    def _location_tokens(value: str) -> Set[str]:
+        raw_parts = [part.strip() for part in re.split(r"[,/|-]", value) if part.strip()]
+        tokens: Set[str] = set(raw_parts)
+        region_aliases = {
+            "eastern europe": {
+                "eastern europe",
+                "romania",
+                "ukraine",
+                "poland",
+                "czech republic",
+                "czechia",
+                "slovakia",
+                "hungary",
+                "bulgaria",
+                "moldova",
+                "estonia",
+                "latvia",
+                "lithuania",
+                "croatia",
+                "serbia",
+                "slovenia",
+                "bosnia",
+                "montenegro",
+                "north macedonia",
+                "albania",
+                "georgia",
+                "armenia",
+            },
+        }
+        for region, aliases in region_aliases.items():
+            if region in value:
+                tokens.update(aliases)
+        return {token for token in tokens if token}
 
     def _load_rules(self) -> Dict[str, Any]:
         path = Path(self.rules_path)

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import re
 import unittest
+from pathlib import Path
 from typing import Any, Dict, List
 
 from tener_ai.agents import SourcingAgent
+from tener_ai.matching import MatchingEngine
 
 
 class _DuplicateHeavyProvider:
@@ -100,7 +102,67 @@ class _MatchingEngineStub:
         }
 
 
+class _WideStructuredProvider:
+    def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
+        return [
+            {
+                "linkedin_id": "ee-mid-1",
+                "full_name": "EE Mid One",
+                "headline": "Manual QA Engineer",
+                "location": "Iasi, Romania",
+                "languages": ["en"],
+                "skills": ["manual testing", "api testing", "regression testing"],
+                "years_experience": 4,
+                "raw": {"stage": spec.get("stage_key")},
+            },
+            {
+                "linkedin_id": "ee-mid-2",
+                "full_name": "EE Mid Two",
+                "headline": "Manual QA Engineer",
+                "location": "Warsaw, Poland",
+                "languages": ["en"],
+                "skills": ["manual testing", "api testing", "regression testing", "sql"],
+                "years_experience": 3,
+                "raw": {"stage": spec.get("stage_key")},
+            },
+            {
+                "linkedin_id": "ee-senior-1",
+                "full_name": "EE Senior One",
+                "headline": "Senior QA Engineer",
+                "location": "Kyiv, Ukraine",
+                "languages": ["en"],
+                "skills": ["manual testing", "api testing", "regression testing", "sql"],
+                "years_experience": 9,
+                "raw": {"stage": spec.get("stage_key")},
+            },
+            {
+                "linkedin_id": "us-mid-1",
+                "full_name": "US Mid One",
+                "headline": "Manual QA Engineer",
+                "location": "San Francisco, California",
+                "languages": ["en"],
+                "skills": ["manual testing", "api testing", "regression testing", "sql"],
+                "years_experience": 4,
+                "raw": {"stage": spec.get("stage_key")},
+            },
+        ]
+
+    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        return []
+
+    def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        return dict(profile)
+
+    def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+        return {"sent": False}
+
+
 class SourcingAgentLimitTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        root = Path(__file__).resolve().parents[1]
+        cls.matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+
     def test_find_candidates_can_reach_high_limit_with_duplicate_heavy_provider(self) -> None:
         agent = SourcingAgent(_DuplicateHeavyProvider())
         job = {
@@ -163,6 +225,21 @@ class SourcingAgentLimitTests(unittest.TestCase):
         self.assertLessEqual(len(fallback_queries), 4)
         self.assertEqual(fallback_queries[0], "Manual QA Engineer")
         self.assertFalse(any("about tener.ai" in str(item).lower() for item in fallback_queries))
+
+    def test_find_candidates_prefers_location_and_matching_seniority_in_final_shortlist(self) -> None:
+        agent = SourcingAgent(_WideStructuredProvider(), matching_engine=self.matching)
+        job = {
+            "title": "Manual QA Engineer",
+            "location": "Eastern Europe",
+            "seniority": "middle",
+            "preferred_languages": ["en"],
+            "jd_text": "Requirements: manual testing, api testing, regression testing",
+            "must_have_skills": ["manual testing", "api testing", "regression testing"],
+        }
+
+        out = agent.find_candidates(job=job, limit=2)
+        ids = [str(item.get("linkedin_id") or "") for item in out]
+        self.assertEqual(ids, ["ee-mid-1", "ee-mid-2"])
 
 
 if __name__ == "__main__":

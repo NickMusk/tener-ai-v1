@@ -109,8 +109,8 @@ class JobSourceFiltersApiTests(unittest.TestCase):
         self.assertEqual(filters.get("fallback_queries") or [], [
             "Senior Backend Engineer",
             "Senior Backend Engineer Germany",
-            "Senior Backend Engineer python django",
-            "Senior Backend Engineer Germany python django",
+            "Senior Backend Engineer python",
+            "Senior Backend Engineer Germany python",
         ])
 
     def test_job_source_filters_preview_returns_not_found_for_unknown_job(self) -> None:
