@@ -462,6 +462,12 @@ class Database:
         self._attach_job_culture_profile(item=item, profile=profile)
         return item
 
+    def _job_is_archived(self, job_id: int) -> bool:
+        row = self._conn.execute("SELECT archived_at FROM jobs WHERE id = ?", (int(job_id),)).fetchone()
+        if not row:
+            return False
+        return bool(str(row["archived_at"] or "").strip())
+
     def update_job_jd_text(self, job_id: int, jd_text: str) -> bool:
         with self.transaction() as conn:
             cur = conn.execute(
@@ -1043,6 +1049,8 @@ class Database:
         return items
 
     def list_job_outreach_candidates(self, job_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        if self._job_is_archived(job_id):
+            return []
         safe_limit = max(1, min(int(limit or 200), 2000))
         query = """
         SELECT
@@ -1542,11 +1550,12 @@ class Database:
 
     def list_conversations_overview(self, limit: int = 200, job_id: Optional[int] = None) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(limit, 2000))
-        where = ""
+        where_parts = ["j.archived_at IS NULL"]
         args: List[Any] = []
         if job_id is not None:
-            where = "WHERE conv.job_id = ?"
-            args.append(job_id)
+            where_parts.append("conv.job_id = ?")
+            args.append(int(job_id))
+        where = f"WHERE {' AND '.join(where_parts)}"
         query = f"""
         SELECT
             conv.id AS conversation_id,
@@ -2016,9 +2025,12 @@ class Database:
         limit: int = 200,
         job_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
+        if job_id is not None and self._job_is_archived(job_id):
+            return []
         safe_limit = max(1, min(int(limit or 200), 2000))
         where_parts = [
             "prs.status = 'awaiting_reply'",
+            "j.archived_at IS NULL",
             "COALESCE(conv.linkedin_account_id, 0) = 0",
             "COALESCE(conv.external_chat_id, '') = ''",
             "conv.status IN ('active', 'waiting_connection')",

@@ -253,11 +253,12 @@ class PostgresReadDatabase:
 
     def list_conversations_overview(self, limit: int = 200, job_id: Optional[int] = None) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 200), 2000))
-        where = ""
+        where_parts = ["j.archived_at IS NULL"]
         args: List[Any] = []
         if job_id is not None:
-            where = "WHERE conv.job_id = %s"
+            where_parts.append("conv.job_id = %s")
             args.append(int(job_id))
+        where = f"WHERE {' AND '.join(where_parts)}"
         args.append(safe_limit)
         query = f"""
         SELECT

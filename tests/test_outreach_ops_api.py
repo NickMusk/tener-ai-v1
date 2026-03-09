@@ -387,6 +387,59 @@ class OutreachOpsApiTests(unittest.TestCase):
         self.assertEqual(str(items[0].get("planned_action_kind") or ""), "connect_request")
         self.assertEqual(str(items[0].get("planned_action_label") or ""), "Connect planned")
 
+    def test_outreach_ops_hides_archived_job_backlog_from_global_and_job_views(self) -> None:
+        job_id = self.db.insert_job(
+            title="Archived Auto Job",
+            jd_text="Need QA experience.",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="junior",
+            linkedin_routing_mode="auto",
+        )
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "ops-archived-job-backlog",
+                "full_name": "Archived Backlog Candidate",
+                "headline": "QA",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["qa"],
+                "years_experience": 4,
+                "raw": {},
+            },
+            source="linkedin",
+        )
+        self.db.create_candidate_match(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            score=0.88,
+            status="verified",
+            verification_notes={},
+        )
+        conversation_id = self.db.create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+        self.db.update_conversation_status(conversation_id=conversation_id, status="waiting_connection")
+
+        backlog_before = self._request("GET", "/api/outreach/ops?stale_minutes=45")[1].get("backlog") or {}
+        waiting_before = [item for item in (backlog_before.get("items") or []) if int(item.get("job_id") or 0) == job_id]
+        self.assertTrue(waiting_before)
+
+        archive_result = self.db.archive_jobs(job_ids=[job_id])
+        self.assertEqual(int(archive_result.get("updated") or 0), 1)
+
+        status_global, payload_global = self._request("GET", "/api/outreach/ops?stale_minutes=45")
+        self.assertEqual(status_global, 200)
+        backlog_global = payload_global.get("backlog") or {}
+        self.assertTrue(all(int(item.get("job_id") or 0) != job_id for item in (backlog_global.get("items") or [])))
+        self.assertTrue(all(int(item.get("job_id") or 0) != job_id for item in (backlog_global.get("jobs") or [])))
+
+        status_job, payload_job = self._request("GET", f"/api/outreach/ops?job_id={job_id}&stale_minutes=45")
+        self.assertEqual(status_job, 200)
+        backlog_job = payload_job.get("backlog") or {}
+        self.assertEqual(backlog_job.get("items") or [], [])
+        self.assertEqual(backlog_job.get("jobs") or [], [])
+        backlog_summary = backlog_job.get("summary") or {}
+        self.assertEqual(int(backlog_summary.get("selected_jobs") or 0), 0)
+
     def test_outreach_ops_includes_account_funnel_summary_and_recent_candidates(self) -> None:
         account_id = self.db.upsert_linkedin_account(
             provider="unipile",

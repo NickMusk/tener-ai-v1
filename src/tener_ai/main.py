@@ -4024,7 +4024,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         selected_jobs_payload: List[Dict[str, Any]] = []
         if job_id:
             job = db.get_job(int(job_id))
-            if job:
+            if job and not bool(job.get("is_archived")):
                 selected_jobs_payload = [job]
         else:
             selected_jobs_payload = db.list_jobs(limit=backlog_job_scan_limit)

@@ -195,6 +195,51 @@ class JobArchivingTests(unittest.TestCase):
         self.assertEqual(str(state_json.get("status") or ""), "stalled")
         self.assertEqual(state_json.get("next_followup_at"), None)
 
+    def test_archive_job_hides_backlog_reads_for_archived_job(self) -> None:
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "archive-backlog-candidate-1",
+                "full_name": "Archive Backlog Candidate",
+                "headline": "QA",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["testing"],
+                "years_experience": 3,
+            }
+        )
+        self.db.create_candidate_match(
+            job_id=self.backend_job_id,
+            candidate_id=candidate_id,
+            score=0.95,
+            status="verified",
+            verification_notes={},
+        )
+        conversation_id = self.db.create_conversation(
+            job_id=self.backend_job_id,
+            candidate_id=candidate_id,
+            channel="linkedin",
+        )
+        self.db.update_conversation_status(conversation_id=conversation_id, status="waiting_connection")
+        self.db.upsert_pre_resume_session(
+            session_id=f"pre-backlog-{conversation_id}",
+            conversation_id=conversation_id,
+            job_id=self.backend_job_id,
+            candidate_id=candidate_id,
+            state={"status": "awaiting_reply", "language": "en"},
+            instruction="follow up",
+        )
+
+        self.assertTrue(self.db.list_job_outreach_candidates(job_id=self.backend_job_id, limit=20))
+        self.assertTrue(self.db.list_unassigned_outreach_conversations(job_id=self.backend_job_id, limit=20))
+        self.assertTrue(self.db.list_conversations_overview(job_id=self.backend_job_id, limit=20))
+
+        result = self.db.archive_jobs(job_ids=[self.backend_job_id])
+        self.assertEqual(int(result.get("updated") or 0), 1)
+
+        self.assertEqual(self.db.list_job_outreach_candidates(job_id=self.backend_job_id, limit=20), [])
+        self.assertEqual(self.db.list_unassigned_outreach_conversations(job_id=self.backend_job_id, limit=20), [])
+        self.assertEqual(self.db.list_conversations_overview(job_id=self.backend_job_id, limit=20), [])
+
     def test_dual_write_archive_jobs_mirrors_archived_at(self) -> None:
         class _Mirror:
             def __init__(self) -> None:
