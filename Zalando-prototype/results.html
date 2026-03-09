@@ -116,7 +116,7 @@
         /* Main */
         .main {
             display: grid;
-            grid-template-columns: 1fr 320px;
+            grid-template-columns: minmax(0, 1fr) 320px;
             min-height: 100vh;
             padding-top: 56px;
         }
@@ -125,6 +125,7 @@
             padding: 1.5rem;
             overflow-y: auto;
             max-height: calc(100vh - 56px);
+            min-width: 0;
         }
 
         /* Success header */
@@ -232,6 +233,7 @@
             align-items: flex-start;
             gap: 1rem;
             margin-bottom: 1rem;
+            min-width: 0;
         }
 
         .card-avatar {
@@ -246,7 +248,10 @@
             flex-shrink: 0;
         }
 
-        .card-info { flex: 1; }
+        .card-info {
+            flex: 1;
+            min-width: 0;
+        }
 
         .card-name {
             font-size: 1.05rem;
@@ -257,6 +262,14 @@
         .card-title {
             font-size: 0.85rem;
             color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .card-score-wrap {
+            text-align: right;
+            min-width: 88px;
+            padding-right: 3rem;
+            flex-shrink: 0;
         }
 
         .card-score {
@@ -303,6 +316,7 @@
             flex-wrap: wrap;
             gap: 0.4rem;
             margin-bottom: 0.75rem;
+            min-width: 0;
         }
 
         .signal-tag {
@@ -336,17 +350,21 @@
         .card-details {
             display: flex;
             align-items: center;
+            flex-wrap: wrap;
             gap: 0.75rem;
+            row-gap: 0.5rem;
             padding-top: 0.75rem;
             border-top: 1px solid var(--border);
             font-size: 0.75rem;
             color: var(--text-dim);
+            min-width: 0;
         }
 
         .detail-item {
             display: flex;
             align-items: center;
             gap: 0.3rem;
+            min-width: 0;
         }
 
         .card-details .expand-btn {
@@ -693,6 +711,45 @@
 
         .popup-btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
         .popup-btn.secondary { background: var(--bg-card); color: var(--text-secondary); }
+
+        @media (max-width: 1280px) {
+            .main {
+                grid-template-columns: 1fr;
+            }
+
+            .right-panel {
+                position: static;
+                max-height: none;
+                border-left: none;
+                border-top: 1px solid var(--border);
+            }
+
+            .selection-bar {
+                right: 0;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .nav-left,
+            .nav-right,
+            .success-header,
+            .success-meta,
+            .card-top {
+                flex-wrap: wrap;
+            }
+
+            .card-score-wrap {
+                padding-right: 0;
+                min-width: 0;
+                width: 100%;
+                text-align: left;
+            }
+
+            .card-checkbox {
+                top: 1rem;
+                right: 1rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -748,7 +805,7 @@
                             <div class="card-name">Dr. Lena Weber</div>
                             <div class="card-title">ML Lead · 9 years · TU Munich → Spotify → Independent Consultant</div>
                         </div>
-                        <div style="text-align:right;">
+                        <div class="card-score-wrap">
                             <div class="card-score">96%</div>
                             <div class="card-score-label">match</div>
                         </div>
@@ -776,7 +833,7 @@
                             <div class="card-name">Dr. Aisha Kovacs</div>
                             <div class="card-title">Senior ML Engineer · 7 years · ETH Zurich → DeepMind → Booking.com</div>
                         </div>
-                        <div style="text-align:right;">
+                        <div class="card-score-wrap">
                             <div class="card-score">94%</div>
                             <div class="card-score-label">match</div>
                         </div>
@@ -803,7 +860,7 @@
                             <div class="card-name">Marcus Petrov</div>
                             <div class="card-title">Staff ML Engineer · 11 years · KTH Stockholm → Spotify → SoundCloud</div>
                         </div>
-                        <div style="text-align:right;">
+                        <div class="card-score-wrap">
                             <div class="card-score">93%</div>
                             <div class="card-score-label">match</div>
                         </div>
@@ -830,7 +887,7 @@
                             <div class="card-name">Dr. Sofia Nakamura</div>
                             <div class="card-title">ML Research Engineer · 6 years · EPFL → Amazon Science Berlin</div>
                         </div>
-                        <div style="text-align:right;">
+                        <div class="card-score-wrap">
                             <div class="card-score">91%</div>
                             <div class="card-score-label">match</div>
                         </div>
@@ -857,7 +914,7 @@
                             <div class="card-name">Jonas Hoffmann</div>
                             <div class="card-title">Senior ML Engineer · 8 years · TU Berlin → Delivery Hero</div>
                         </div>
-                        <div style="text-align:right;">
+                        <div class="card-score-wrap">
                             <div class="card-score">90%</div>
                             <div class="card-score-label">match</div>
                         </div>
@@ -883,7 +940,7 @@
                             <div class="card-name">Dr. Clara Martinez</div>
                             <div class="card-title">Senior ML Engineer · 7 years · UCL → Meta AI → Glovo</div>
                         </div>
-                        <div style="text-align:right;">
+                        <div class="card-score-wrap">
                             <div class="card-score">89%</div>
                             <div class="card-score-label">match</div>
                         </div>
@@ -909,7 +966,7 @@
                             <div class="card-name">Aleksandr Zheng</div>
                             <div class="card-title">ML Engineer · 6 years · TU Delft → Adyen → N26</div>
                         </div>
-                        <div style="text-align:right;">
+                        <div class="card-score-wrap">
                             <div class="card-score">87%</div>
                             <div class="card-score-label">match</div>
                         </div>
