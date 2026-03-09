@@ -15,14 +15,24 @@ class SourcingAgent:
         self.instruction = instruction
         self.matching_engine = matching_engine
 
-    def find_candidates(self, job: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
+    def find_candidates(
+        self,
+        job: Dict[str, Any],
+        limit: int = 50,
+        *,
+        exclude_profile_keys: set[str] | None = None,
+    ) -> List[Dict[str, Any]]:
         limit = max(1, min(int(limit or 1), 200))
         spec = self.build_search_spec(job)
         queries = list(spec.get("fallback_queries") or [])
         collection_target = min(limit * 4, 400)
         per_query_limit = max(25, min(100, max(limit, collection_target // max(len(queries) + 4, 1))))
 
-        seen: set[str] = set()
+        seen: set[str] = {
+            str(item or "").strip().lower()
+            for item in (exclude_profile_keys or set())
+            if str(item or "").strip()
+        }
         collected: List[Dict[str, Any]] = []
         search_errors: List[str] = []
 

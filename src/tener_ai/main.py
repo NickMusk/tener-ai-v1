@@ -567,6 +567,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "job_progress": "GET /api/jobs/{job_id}/progress",
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
                         "job_source_filters": "GET /api/jobs/{job_id}/source-filters",
+                        "job_source_top_up": "POST /api/jobs/{job_id}/source-top-up",
                         "candidate_profile": "GET /api/candidates/{candidate_id}/profile?job_id=...&audit=0|1",
                         "candidate_resume_preview": "GET /api/candidates/{candidate_id}/resume-preview?job_id=...&url=...",
                         "candidate_resume_content": "GET /api/candidates/{candidate_id}/resume-preview/content?url=...",
@@ -2412,6 +2413,34 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 HTTPStatus.OK,
                 workflow_payload,
             )
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/source-top-up"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/source-top-up$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                body = {}
+            limit = self._safe_int(body.get("limit"), 30)
+            test_mode = self._safe_bool(body.get("test_mode"), None)
+            try:
+                out = SERVICES["workflow"].top_up_job_candidates(job_id=job_id, limit=limit, test_mode=test_mode)
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except Exception as exc:
+                SERVICES["db"].log_operation(
+                    operation="workflow.source_top_up.error",
+                    status="error",
+                    entity_type="job",
+                    entity_id=str(job_id),
+                    details={"error": str(exc), "limit": limit},
+                )
+                self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "source top up failed", "details": str(exc)})
+                return
+            self._json_response(HTTPStatus.OK, out)
             return
 
         if parsed.path == "/api/steps/source":

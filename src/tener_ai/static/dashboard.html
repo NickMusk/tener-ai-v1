@@ -936,6 +936,7 @@
         <div id="step-source-meta" class="step-metrics">Profiles: 0</div>
         <div class="step-actions">
           <button id="run-source-btn">Run</button>
+          <button id="run-source-topup-btn">Top Up</button>
         </div>
       </article>
 
@@ -2112,6 +2113,18 @@
         return;
       }
       if (step === "workflow") {
+        if (out.mode === "source_top_up") {
+          $("step-source-meta").textContent = `Profiles: ${out.searched || 0}`;
+          $("step-enrich-meta").textContent = `Profiles: ${out.searched || 0}, Failed: 0`;
+          $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Needs resume: ${out.needs_resume || 0}, Rejected: ${out.rejected || 0}`;
+          $("step-add-meta").textContent = `Added: ${out.added || 0}`;
+          setMetrics({
+            searched: out.searched || 0,
+            verified: out.verified || 0,
+            outreached: state.outreachItems.length
+          });
+          return;
+        }
         $("step-source-meta").textContent = `Profiles: ${out.searched || 0}`;
         $("step-enrich-meta").textContent = `Profiles: ${out.searched || 0}, Failed: 0`;
         $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Needs resume: ${out.needs_resume || 0}, Rejected: ${out.rejected || 0}`;
@@ -3654,6 +3667,27 @@
       await refreshOutreachOps();
     }
 
+    async function runSourceTopUp() {
+      const jobId = selectedJobId();
+      if (!jobId) return alert('Select a job');
+      ['source', 'enrich', 'verify', 'add'].forEach(s => setStepStatus(s, 'running'));
+      try {
+        const limit = Number($("source-limit").value || '10');
+        const out = await api(`/api/jobs/${jobId}/source-top-up`, {
+          method: 'POST',
+          body: JSON.stringify({ limit, test_mode: isTestModeEnabled() })
+        });
+        snapshot('workflow.source_top_up', out);
+      } catch (e) {
+        ['source', 'enrich', 'verify', 'add'].forEach(s => setStepStatus(s, 'error'));
+        snapshot('workflow.source_top_up.error', { error: e.message });
+      }
+      await loadJobProgress(jobId);
+      await refreshCandidates();
+      await refreshLogs();
+      await refreshOutreachOps();
+    }
+
     async function refreshLogs() {
       const limit = Number($("logs-limit").value || '60');
       try {
@@ -3771,6 +3805,7 @@
       $("close-create-modal-btn").addEventListener('click', () => closeCreateModal());
       $("create-job-modal-backdrop").addEventListener('click', () => closeCreateModal());
       $("run-source-btn").addEventListener('click', () => runSource());
+      $("run-source-topup-btn").addEventListener('click', () => runSourceTopUp());
       $("run-enrich-btn").addEventListener('click', () => runEnrich());
       $("run-verify-btn").addEventListener('click', () => runVerify());
       $("run-add-btn").addEventListener('click', () => runAdd());

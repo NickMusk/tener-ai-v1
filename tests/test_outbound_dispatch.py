@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Dict, List
@@ -74,6 +75,24 @@ class _LimitExceededManagedStubProvider:
             "sent": False,
             "provider": "unipile",
             "error": 'Unipile HTTP error 422: {"status":422,"type":"errors/limit_exceeded","title":"Limit exceeded"}',
+        }
+
+
+class _CannotResendManagedStubProvider:
+    def __init__(self, *, account_ref: str) -> None:
+        self.account_ref = account_ref
+        self.connect_messages: List[str] = []
+
+    def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+        return {"sent": False, "provider": "unipile", "reason": "connect_first"}
+
+    def send_connection_request(self, candidate_profile: Dict[str, Any], message: str | None = None) -> Dict[str, Any]:
+        self.connect_messages.append(message or "")
+        return {
+            "sent": False,
+            "provider": "unipile",
+            "reason": "connection_request_failed",
+            "error": 'Unipile HTTP error 422: {"status":422,"type":"errors/cannot_resend_yet","title":"Cannot resend yet"}',
         }
 
 
@@ -262,6 +281,38 @@ class OutboundDispatchTests(unittest.TestCase):
             self.assertEqual(int(dispatched_action["account_id"]), account_2)
             self.assertEqual(len(providers["acc-owner-1"].connect_messages), 0)
             self.assertEqual(len(providers["acc-owner-2"].connect_messages), 1)
+
+    def test_connect_request_cannot_resend_yet_releases_action_with_cooldown(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_dispatch_cooldown.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            account_id = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-cooldown",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            provider = _CannotResendManagedStubProvider(account_ref="acc-cooldown")
+            workflow._build_managed_provider = lambda account_id: provider  # type: ignore[method-assign]
+
+            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="cooldown")
+            queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            action_id = int(queued["items"][0]["action_id"])
+            self.assertEqual(int(queued["items"][0].get("linkedin_account_id") or 0), account_id)
+
+            dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
+            self.assertEqual(dispatched["processed"], 1)
+            self.assertEqual(dispatched["deferred"], 1)
+            self.assertEqual(dispatched["failed"], 0)
+            self.assertEqual(str((dispatched["items"][0] or {}).get("delivery_status") or ""), "deferred")
+
+            action = db.get_outbound_action(action_id)
+            self.assertEqual(str((action or {}).get("status") or ""), "pending")
+            self.assertIn("cannot_resend_yet", str((action or {}).get("last_error") or ""))
+            not_before = datetime.fromisoformat(str((action or {}).get("not_before") or "").replace("Z", "+00:00"))
+            self.assertGreater(not_before, datetime.now(timezone.utc))
 
     def test_recovery_backfill_assigns_owner_from_lower_workload_account(self) -> None:
         with TemporaryDirectory() as td:

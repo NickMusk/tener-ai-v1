@@ -204,7 +204,22 @@ class WorkflowService:
             },
         )
 
-    def source_candidates(self, job_id: int, limit: int = 30, test_mode: bool | None = None) -> Dict[str, Any]:
+    def _job_candidate_profile_keys(self, *, job_id: int) -> set[str]:
+        keys: set[str] = set()
+        for row in self.db.list_candidates_for_job(job_id):
+            linkedin_id = str(row.get("linkedin_id") or "").strip().lower()
+            if linkedin_id:
+                keys.add(f"id:{linkedin_id}")
+        return keys
+
+    def source_candidates(
+        self,
+        job_id: int,
+        limit: int = 30,
+        test_mode: bool | None = None,
+        *,
+        exclude_profile_keys: set[str] | None = None,
+    ) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
         forced_test_ids = self._load_forced_test_identifiers()
         forced_only = self._effective_test_mode(job=job, test_mode=test_mode, forced_identifiers=forced_test_ids)
@@ -224,7 +239,11 @@ class WorkflowService:
                         continue
                     setattr(provider, "account_id", provider_account_id)
                     try:
-                        profiles = self.sourcing_agent.find_candidates(job=job, limit=limit)
+                        profiles = self.sourcing_agent.find_candidates(
+                            job=job,
+                            limit=limit,
+                            exclude_profile_keys=exclude_profile_keys,
+                        )
                     except Exception as exc:
                         if self._is_removed_provider_error(exc):
                             self._mark_linkedin_account_removed(account=account, reason=str(exc))
@@ -239,7 +258,11 @@ class WorkflowService:
         elif provider is not None and hasattr(provider, "account_id"):
             raise RuntimeError("no_active_linkedin_accounts")
         else:
-            profiles = self.sourcing_agent.find_candidates(job=job, limit=limit)
+            profiles = self.sourcing_agent.find_candidates(
+                job=job,
+                limit=limit,
+                exclude_profile_keys=exclude_profile_keys,
+            )
         profiles = self._inject_forced_test_candidates(
             job=job,
             profiles=profiles,
@@ -269,6 +292,7 @@ class WorkflowService:
                 "forced_test_ids_included": included,
                 "test_mode_active": forced_only,
                 "test_mode_requested": test_mode,
+                "excluded_profile_keys": len(exclude_profile_keys or set()),
             },
         )
         return {
@@ -279,6 +303,114 @@ class WorkflowService:
             "test_mode_requested": test_mode,
             "instruction": self.stage_instructions.get("sourcing", ""),
         }
+
+    def top_up_job_candidates(self, job_id: int, limit: int = 30, test_mode: bool | None = None) -> Dict[str, Any]:
+        job = self._get_job_or_raise(job_id)
+        forced_test_ids = self._load_forced_test_identifiers()
+        effective_test_mode = self._effective_test_mode(
+            job=job,
+            test_mode=test_mode,
+            forced_identifiers=forced_test_ids,
+        )
+        exclude_profile_keys = self._job_candidate_profile_keys(job_id=job_id)
+
+        self.db.log_operation(
+            operation="workflow.source_top_up.start",
+            status="ok",
+            entity_type="job",
+            entity_id=str(job_id),
+            details={
+                "limit": limit,
+                "existing_candidates": len(exclude_profile_keys),
+                "test_mode_active": effective_test_mode,
+                "test_mode_requested": test_mode,
+            },
+        )
+        self._persist_step_progress(
+            job_id=job_id,
+            step="workflow",
+            status="running",
+            output={"mode": "source_top_up", "limit": limit, "test_mode_requested": test_mode},
+        )
+
+        steps_order = ["source", "enrich", "verify", "add"]
+        source_result: Dict[str, Any] = {}
+        enrich_result: Dict[str, Any] = {}
+        verify_result: Dict[str, Any] = {}
+        add_result: Dict[str, Any] = {}
+        current_step = "source"
+
+        try:
+            self._persist_step_progress(job_id=job_id, step="source", status="running", output={})
+            source_result = self.source_candidates(
+                job_id=job_id,
+                limit=limit,
+                test_mode=effective_test_mode,
+                exclude_profile_keys=exclude_profile_keys,
+            )
+            self._persist_step_progress(job_id=job_id, step="source", status="success", output=source_result)
+
+            current_step = "enrich"
+            self._persist_step_progress(job_id=job_id, step="enrich", status="running", output={})
+            enrich_result = self.enrich_profiles(job_id=job_id, profiles=source_result["profiles"])
+            self._persist_step_progress(job_id=job_id, step="enrich", status="success", output=enrich_result)
+
+            current_step = "verify"
+            self._persist_step_progress(job_id=job_id, step="verify", status="running", output={})
+            verify_result = self._verify_enriched_profiles(
+                job_id=job_id,
+                enriched_profiles=enrich_result["profiles"],
+                enrich_result=enrich_result,
+            )
+            self._persist_step_progress(job_id=job_id, step="verify", status="success", output=verify_result)
+
+            if self.contact_all_mode:
+                eligible_items = [item for item in verify_result["items"] if item.get("status") in {"verified", "needs_resume"}]
+            else:
+                eligible_items = [item for item in verify_result["items"] if item.get("status") == "verified"]
+
+            current_step = "add"
+            self._persist_step_progress(job_id=job_id, step="add", status="running", output={})
+            add_result = self.add_verified_candidates(job_id=job_id, verified_items=eligible_items)
+            self._persist_step_progress(job_id=job_id, step="add", status="success", output=add_result)
+        except Exception as exc:
+            self._persist_step_progress(job_id=job_id, step=current_step, status="error", output={"error": str(exc)})
+            current_index = steps_order.index(current_step) if current_step in steps_order else -1
+            for step in steps_order[current_index + 1 :]:
+                self._persist_step_progress(
+                    job_id=job_id,
+                    step=step,
+                    status="skipped",
+                    output={"reason": "upstream_step_failed", "failed_step": current_step, "mode": "source_top_up"},
+                )
+            self._persist_step_progress(
+                job_id=job_id,
+                step="workflow",
+                status="error",
+                output={"error": str(exc), "failed_step": current_step, "mode": "source_top_up"},
+            )
+            raise
+
+        result = {
+            "job_id": job_id,
+            "mode": "source_top_up",
+            "searched": int(source_result.get("total") or 0),
+            "verified": int(verify_result.get("verified") or 0),
+            "needs_resume": int(verify_result.get("needs_resume") or 0),
+            "rejected": int(verify_result.get("rejected") or 0),
+            "added": int(add_result.get("total") or 0),
+            "candidate_ids": [int(item.get("candidate_id") or 0) for item in (add_result.get("added") or []) if int(item.get("candidate_id") or 0) > 0],
+            "test_mode_requested": test_mode,
+        }
+        self.db.log_operation(
+            operation="workflow.source_top_up.finish",
+            status="ok",
+            entity_type="job",
+            entity_id=str(job_id),
+            details=result,
+        )
+        self._persist_step_progress(job_id=job_id, step="workflow", status="success", output=result)
+        return result
 
     def verify_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
         enrich_result = self.enrich_profiles(job_id=job_id, profiles=profiles)
@@ -4553,6 +4685,39 @@ class WorkflowService:
                     },
                 )
             else:
+                connect_retry_error = self._connect_request_retry_error(connect_request)
+                if connect_retry_error:
+                    retry_at = (datetime.now(timezone.utc) + timedelta(hours=12)).isoformat()
+                    self.db.release_outbound_action(
+                        action_id=action_id,
+                        not_before=retry_at,
+                        error=connect_retry_error,
+                    )
+                    self.db.log_operation(
+                        operation="agent.outreach.connect_request",
+                        status="partial",
+                        entity_type="candidate",
+                        entity_id=str(candidate_id),
+                        details={
+                            "job_id": job_id,
+                            "connect_request": connect_request,
+                            "delivery": delivery,
+                            "retry_at": retry_at,
+                            "reason": connect_retry_error,
+                        },
+                    )
+                    return {
+                        "action_id": action_id,
+                        "conversation_id": conversation_id,
+                        "candidate_id": candidate_id,
+                        "delivery_status": "deferred",
+                        "error": connect_retry_error,
+                        "retry_at": retry_at,
+                        "delivery_mode": delivery_mode,
+                        "planned_action_kind": planned_action_kind,
+                        "connect_request": connect_request,
+                        "linkedin_account_id": account_id,
+                    }
                 delivery_status = "failed"
                 self.db.log_operation(
                     operation="agent.outreach.connect_request",
@@ -5675,6 +5840,19 @@ class WorkflowService:
             "too many requests",
         )
         return any(token in text for token in needles)
+
+    @staticmethod
+    def _connect_request_retry_error(connect_request: Dict[str, Any]) -> str | None:
+        if not isinstance(connect_request, dict):
+            return None
+        if connect_request.get("sent"):
+            return None
+        reason = str(connect_request.get("reason") or "").lower()
+        error = str(connect_request.get("error") or "").lower()
+        text = f"{reason} {error}"
+        if "cannot_resend_yet" in text or "cannot resend yet" in text:
+            return "cannot_resend_yet"
+        return None
 
     def _deliver_pending_outreach_message(self, conversation_id: int, candidate: Dict[str, Any]) -> Dict[str, Any]:
         messages = self.db.list_messages(conversation_id=conversation_id)

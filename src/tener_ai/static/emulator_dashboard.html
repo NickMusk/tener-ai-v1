@@ -6,7 +6,7 @@
   <title>Tener.ai Emulator Mode</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <style>
     :root {
       --bg: #08131e;
@@ -27,7 +27,7 @@
     body {
       margin: 0;
       min-height: 100vh;
-      font-family: 'Manrope', sans-serif;
+      font-family: 'Outfit', sans-serif;
       color: var(--text);
       background:
         radial-gradient(circle at 12% 18%, rgba(45, 194, 255, 0.16), transparent 36%),
@@ -75,7 +75,7 @@
       gap: 8px;
       color: var(--muted);
       font-size: 12px;
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'JetBrains Mono', monospace;
     }
 
     .controls {
@@ -147,7 +147,7 @@
     }
 
     .mono {
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'JetBrains Mono', monospace;
       font-size: 12px;
       color: var(--muted);
     }
@@ -166,11 +166,12 @@
       text-transform: uppercase;
     }
 
-    .grid {
+    .command-grid {
       display: grid;
-      grid-template-columns: 2.2fr 1fr;
+      grid-template-columns: 0.95fr 1.45fr 1fr;
       gap: 12px;
-      min-height: 540px;
+      align-items: start;
+      min-height: 640px;
     }
 
     .panel-title {
@@ -375,7 +376,7 @@
     }
 
     .feed-item .delta {
-      font-family: 'IBM Plex Mono', monospace;
+      font-family: 'JetBrains Mono', monospace;
       font-size: 11px;
       padding: 1px 5px;
       border-radius: 999px;
@@ -510,9 +511,748 @@
       border-color: rgba(38, 208, 124, 0.48);
     }
 
+    .activity-panel,
+    .focus-panel {
+      min-height: 640px;
+    }
+
+    .funnel-panel {
+      min-height: 640px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .funnel-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 240px;
+      gap: 12px;
+      align-items: start;
+    }
+
+    .funnel-stages {
+      position: relative;
+      display: grid;
+      gap: 10px;
+      padding-left: 18px;
+    }
+
+    .funnel-stages::before {
+      content: '';
+      position: absolute;
+      left: 21px;
+      top: 14px;
+      bottom: 14px;
+      width: 2px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(45, 194, 255, 0.95), rgba(38, 208, 124, 0.28));
+      box-shadow: 0 0 18px rgba(45, 194, 255, 0.24);
+    }
+
+    .status-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(220px, 0.8fr);
+      gap: 12px;
+      margin-bottom: 14px;
+      padding: 16px 18px;
+      border-radius: 18px;
+      border: 1px solid rgba(45, 194, 255, 0.26);
+      background:
+        radial-gradient(circle at top left, rgba(45, 194, 255, 0.2), transparent 36%),
+        linear-gradient(135deg, rgba(17, 36, 52, 0.98), rgba(10, 21, 32, 0.96));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+    }
+
+    .status-copy {
+      display: grid;
+      gap: 7px;
+      align-content: start;
+    }
+
+    .status-kicker {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .status-headline {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 34px);
+      line-height: 1.05;
+      letter-spacing: -0.04em;
+    }
+
+    .status-subline {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+      max-width: 700px;
+    }
+
+    .hero-stats {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+    }
+
+    .hero-stat {
+      border: 1px solid rgba(53, 88, 120, 0.9);
+      border-radius: 14px;
+      background: rgba(14, 29, 43, 0.88);
+      padding: 11px 12px;
+    }
+
+    .hero-stat strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1;
+      margin-bottom: 4px;
+      letter-spacing: -0.04em;
+    }
+
+    .hero-stat span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+
+    .funnel-stage-card {
+      position: relative;
+      width: min(100%, var(--stage-width, 100%));
+      margin: 0 auto;
+      border: 1px solid rgba(50, 88, 120, 0.9);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(11, 24, 37, 0.98), rgba(15, 28, 41, 0.92));
+      padding: 14px 14px 14px 44px;
+      min-height: 96px;
+      transition: transform 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, background 0.22s ease;
+    }
+
+    .funnel-stage-card::before {
+      content: '';
+      position: absolute;
+      left: -2px;
+      top: 26px;
+      width: 28px;
+      height: 2px;
+      background: linear-gradient(90deg, rgba(45, 194, 255, 0.92), rgba(45, 194, 255, 0.16));
+    }
+
+    .funnel-stage-card.active {
+      transform: translateY(-1px);
+      border-color: rgba(45, 194, 255, 0.92);
+      box-shadow: 0 0 0 1px rgba(45, 194, 255, 0.32), 0 18px 28px rgba(5, 12, 19, 0.28);
+      background: linear-gradient(180deg, rgba(14, 31, 45, 1), rgba(18, 36, 50, 0.96));
+    }
+
+    .funnel-stage-card.active .stage-badge {
+      border-color: rgba(45, 194, 255, 0.95);
+      color: #e8f5ff;
+      background: rgba(45, 194, 255, 0.16);
+      box-shadow: 0 0 18px rgba(45, 194, 255, 0.26);
+    }
+
+    .funnel-stage-head {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+    }
+
+    .stage-badge {
+      width: 32px;
+      height: 32px;
+      border-radius: 10px;
+      border: 1px solid rgba(56, 92, 126, 0.95);
+      background: rgba(18, 35, 51, 0.95);
+      color: #bed7ee;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+    }
+
+    .stage-title {
+      font-size: 15px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      margin: 0;
+    }
+
+    .stage-copy {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .stage-count {
+      display: grid;
+      gap: 2px;
+      text-align: right;
+    }
+
+    .stage-count strong {
+      font-size: 24px;
+      line-height: 1;
+      letter-spacing: -0.04em;
+    }
+
+    .stage-count span {
+      color: var(--muted);
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .stage-lane {
+      margin-top: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      min-height: 42px;
+      align-items: flex-start;
+    }
+
+    .stage-meter {
+      margin-top: 12px;
+      height: 8px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(9, 18, 27, 0.85);
+      border: 1px solid rgba(45, 74, 102, 0.92);
+    }
+
+    .stage-meter > span {
+      display: block;
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, rgba(45, 194, 255, 0.95), rgba(38, 208, 124, 0.9));
+      transition: width 0.28s ease;
+    }
+
+    .stage-empty {
+      color: rgba(156, 183, 208, 0.72);
+      font-size: 12px;
+      padding: 10px 12px;
+      border: 1px dashed rgba(52, 82, 111, 0.85);
+      border-radius: 12px;
+      width: 100%;
+      background: rgba(11, 21, 32, 0.5);
+    }
+
+    .funnel-chip {
+      border: 1px solid rgba(53, 88, 120, 0.92);
+      border-radius: 12px;
+      background: rgba(18, 37, 53, 0.94);
+      color: var(--text);
+      padding: 8px 10px;
+      min-width: 148px;
+      display: grid;
+      gap: 4px;
+      cursor: pointer;
+      transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+      animation: chip-arrive 0.26s ease;
+    }
+
+    .funnel-chip:hover {
+      transform: translateY(-1px);
+      border-color: rgba(45, 194, 255, 0.7);
+    }
+
+    .funnel-chip.fresh {
+      border-color: rgba(38, 208, 124, 0.78);
+      box-shadow: 0 0 0 1px rgba(38, 208, 124, 0.24), 0 8px 16px rgba(5, 12, 19, 0.18);
+    }
+
+    .funnel-chip.recommended {
+      min-width: 100%;
+      background: linear-gradient(180deg, rgba(19, 42, 48, 0.98), rgba(14, 31, 36, 0.96));
+      border-color: rgba(38, 208, 124, 0.62);
+    }
+
+    .funnel-chip-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .chip-name {
+      font-size: 12px;
+      font-weight: 800;
+      color: #f1f7ff;
+    }
+
+    .chip-meta {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .chip-tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 44px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(56, 92, 126, 0.9);
+      background: rgba(11, 21, 33, 0.72);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #d3e7fa;
+    }
+
+    .chip-signal {
+      font-size: 11px;
+      color: #dcecff;
+      line-height: 1.45;
+    }
+
+    .chip-signal.negative {
+      color: #ffd8d8;
+    }
+
+    .reject-panel {
+      border: 1px solid rgba(76, 50, 66, 0.9);
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(34, 15, 24, 0.96), rgba(23, 12, 19, 0.98));
+      padding: 12px;
+      min-height: 100%;
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .reject-panel h3 {
+      margin: 0;
+      font-size: 13px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #ffd9dc;
+    }
+
+    .reject-panel p {
+      margin: 0;
+      color: #eab9bf;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .reject-items {
+      display: grid;
+      gap: 8px;
+    }
+
+    .reject-item {
+      border: 1px solid rgba(130, 66, 76, 0.78);
+      border-radius: 12px;
+      background: rgba(55, 20, 30, 0.58);
+      padding: 9px 10px;
+      display: grid;
+      gap: 4px;
+      animation: reject-enter 0.28s ease;
+    }
+
+    .reject-item strong {
+      font-size: 12px;
+      color: #fff1f2;
+    }
+
+    .reject-item span {
+      font-size: 11px;
+      color: #f3c7cd;
+      line-height: 1.45;
+    }
+
+    .reject-summary {
+      display: grid;
+      gap: 6px;
+    }
+
+    .reject-summary-item {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: #ffd8df;
+      border-top: 1px solid rgba(120, 62, 72, 0.6);
+      padding-top: 6px;
+    }
+
+    .focus-stack {
+      display: grid;
+      gap: 14px;
+      align-content: start;
+    }
+
+    .mission-brief,
+    .focus-card,
+    .queue-list {
+      border: 1px solid rgba(45, 74, 102, 0.92);
+      border-radius: 14px;
+      background: rgba(13, 26, 39, 0.94);
+      padding: 12px;
+    }
+
+    .mission-lede {
+      display: grid;
+      gap: 4px;
+      margin-bottom: 10px;
+    }
+
+    .mission-lede strong {
+      font-size: 16px;
+      line-height: 1.25;
+    }
+
+    .mission-lede span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .mission-group {
+      display: grid;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
+    .mission-group-title {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 800;
+    }
+
+    .mission-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .mission-tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      border: 1px solid rgba(49, 80, 109, 0.95);
+      background: rgba(18, 38, 55, 0.9);
+      color: #d9ebfe;
+    }
+
+    .focus-card {
+      display: grid;
+      gap: 10px;
+    }
+
+    .focus-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: flex-start;
+    }
+
+    .focus-head strong {
+      font-size: 16px;
+      line-height: 1.2;
+    }
+
+    .focus-head span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .focus-metrics {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .focus-metric {
+      border: 1px solid rgba(48, 79, 108, 0.95);
+      border-radius: 11px;
+      background: rgba(18, 38, 56, 0.86);
+      padding: 7px 9px;
+      min-width: 92px;
+    }
+
+    .focus-metric strong {
+      display: block;
+      font-size: 16px;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .focus-metric span {
+      font-size: 10px;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .focus-signals {
+      display: grid;
+      gap: 7px;
+    }
+
+    .focus-signal {
+      border-left: 3px solid rgba(45, 194, 255, 0.72);
+      padding-left: 9px;
+      font-size: 12px;
+      line-height: 1.45;
+      color: #deeeff;
+    }
+
+    .focus-signal.negative {
+      border-left-color: rgba(255, 95, 95, 0.82);
+      color: #ffd9d9;
+    }
+
+    .queue-list {
+      display: grid;
+      gap: 8px;
+      padding: 0;
+      background: transparent;
+      border: 0;
+    }
+
+    .queue-item {
+      border: 1px solid rgba(45, 74, 102, 0.92);
+      border-radius: 14px;
+      background: rgba(13, 26, 39, 0.94);
+      padding: 11px 12px;
+      display: grid;
+      gap: 6px;
+      cursor: pointer;
+      transition: border-color 0.18s ease, transform 0.18s ease;
+    }
+
+    .queue-item:hover {
+      border-color: rgba(45, 194, 255, 0.72);
+      transform: translateY(-1px);
+    }
+
+    .queue-item.selected {
+      border-color: rgba(38, 208, 124, 0.72);
+      box-shadow: 0 0 0 1px rgba(38, 208, 124, 0.24);
+    }
+
+    .queue-item-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .queue-item-name {
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .queue-item-copy {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .source-grid {
+      border: 1px solid rgba(45, 74, 102, 0.92);
+      border-radius: 14px;
+      background: rgba(13, 26, 39, 0.94);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .source-grid-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: baseline;
+    }
+
+    .source-grid-title {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .source-grid-summary {
+      color: var(--muted);
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .sources {
+      display: grid;
+      gap: 8px;
+    }
+
+    .source-item {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      border: 1px solid rgba(45, 74, 102, 0.92);
+      border-radius: 12px;
+      background: rgba(18, 38, 56, 0.78);
+      padding: 10px 11px;
+      transition: border-color 0.22s ease, background 0.22s ease, transform 0.22s ease;
+    }
+
+    .source-item.pending {
+      opacity: 0.72;
+    }
+
+    .source-item.active {
+      border-color: rgba(45, 194, 255, 0.85);
+      background: rgba(19, 46, 62, 0.94);
+      transform: translateY(-1px);
+      box-shadow: 0 0 0 1px rgba(45, 194, 255, 0.2);
+    }
+
+    .source-item.complete {
+      border-color: rgba(38, 208, 124, 0.6);
+      background: rgba(16, 38, 42, 0.9);
+    }
+
+    .source-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(54, 88, 119, 0.9);
+      background: rgba(11, 21, 32, 0.7);
+      color: #d7ebff;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      flex-shrink: 0;
+    }
+
+    .source-body {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+
+    .source-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #f1f7ff;
+    }
+
+    .source-note {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .source-count {
+      text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      font-weight: 700;
+      color: #d8e9fa;
+    }
+
+    .preview-strip {
+      margin-top: 14px;
+      border: 1px solid rgba(45, 74, 102, 0.92);
+      border-radius: 16px;
+      background: rgba(11, 24, 37, 0.92);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .preview-strip-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: baseline;
+    }
+
+    .preview-strip-head strong {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .preview-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .preview-card {
+      border: 1px solid rgba(45, 74, 102, 0.92);
+      border-radius: 14px;
+      background: rgba(16, 31, 46, 0.92);
+      padding: 10px 11px;
+      display: grid;
+      gap: 8px;
+    }
+
+    .preview-card-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .preview-card-name {
+      font-size: 13px;
+      font-weight: 800;
+      color: #f3f8ff;
+    }
+
+    .preview-card-meta {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .preview-card-copy {
+      font-size: 11px;
+      color: #d6e8fb;
+      line-height: 1.45;
+    }
+
+    @keyframes chip-arrive {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes reject-enter {
+      from { opacity: 0; transform: translateX(10px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+
     @media (max-width: 1120px) {
       .topbar { grid-template-columns: 1fr; }
-      .grid { grid-template-columns: 1fr; }
+      .command-grid { grid-template-columns: 1fr; }
+      .status-hero { grid-template-columns: 1fr; }
+      .funnel-grid { grid-template-columns: 1fr; }
+      .preview-grid { grid-template-columns: 1fr; }
       .detail-grid { grid-template-columns: 1fr; }
       .compare { grid-template-columns: 1fr; }
       select { min-width: 200px; }
@@ -558,34 +1298,94 @@
       </div>
     </section>
 
-    <section class="grid">
-      <section class="card">
+    <section class="command-grid">
+      <section class="card funnel-panel">
         <h2 class="panel-title">
-          <span>Candidate Table</span>
-          <span class="mono" id="candidate-count">0 active</span>
+          <span>Candidate Funnel</span>
+          <span class="mono" id="funnel-summary">0 live candidates</span>
         </h2>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Score</th>
-                <th>Confidence</th>
-                <th>Stage</th>
-                <th>Signals</th>
-              </tr>
-            </thead>
-            <tbody id="candidate-rows"></tbody>
-          </table>
+        <section class="status-hero">
+          <div class="status-copy">
+            <span class="status-kicker">Realtime Mock Replay</span>
+            <h3 class="status-headline" id="status-headline">Ready to replay sourcing funnel</h3>
+            <p class="status-subline" id="status-subline">Select a project and start the replay to watch candidates move through sourcing, screening, outreach, and shortlist formation.</p>
+          </div>
+          <div class="hero-stats">
+            <div class="hero-stat">
+              <strong id="hero-stage-count">5</strong>
+              <span>Funnel Stages</span>
+            </div>
+            <div class="hero-stat">
+              <strong id="hero-live-count">0</strong>
+              <span>Visible Candidates</span>
+            </div>
+            <div class="hero-stat">
+              <strong id="hero-source-count">0</strong>
+              <span>Sources Processing</span>
+            </div>
+          </div>
+        </section>
+        <div class="funnel-grid">
+          <div id="funnel-stages" class="funnel-stages"></div>
+          <aside class="reject-panel">
+            <div>
+              <h3>Reject lane</h3>
+              <p>See who drops out, and why, while the shortlist tightens in real time.</p>
+            </div>
+            <div id="reject-items" class="reject-items"></div>
+            <div id="reject-summary" class="reject-summary detail-empty">No removals yet.</div>
+          </aside>
         </div>
+        <section class="preview-strip">
+          <div class="preview-strip-head">
+            <strong>Top Candidates Emerging</strong>
+            <span class="mono" id="preview-count">0 visible</span>
+          </div>
+          <div id="preview-candidates" class="preview-grid"></div>
+        </section>
       </section>
 
-      <section class="card">
+      <section class="card activity-panel">
         <h2 class="panel-title">
-          <span>Activity Feed</span>
+          <span>Live Activity Stream</span>
           <span class="mono" id="feed-count">0 events</span>
         </h2>
+        <section class="source-grid">
+          <div class="source-grid-head">
+            <span class="source-grid-title">Sources Being Processed</span>
+            <span class="source-grid-summary" id="source-summary">0 mapped</span>
+          </div>
+          <div id="source-items" class="sources"></div>
+        </section>
         <div id="feed" class="feed"></div>
+      </section>
+
+      <section class="card focus-panel">
+        <div class="focus-stack">
+          <div>
+            <h2 class="panel-title">
+              <span>Mission Brief</span>
+              <span class="mono" id="candidate-count">0 active</span>
+            </h2>
+            <div id="mission-brief" class="mission-brief"></div>
+          </div>
+
+          <div>
+            <h2 class="panel-title">
+              <span>Live Candidate</span>
+              <span class="mono" id="focus-stage">Stage: n/a</span>
+            </h2>
+            <div id="focus-candidate" class="focus-card detail-empty">No active candidate yet.</div>
+          </div>
+
+          <div>
+            <h2 class="panel-title">
+              <span>Recommendation Queue</span>
+              <span class="mono" id="queue-count">0 finalists</span>
+            </h2>
+            <div id="live-shortlist" class="queue-list"></div>
+          </div>
+        </div>
       </section>
     </section>
 
@@ -619,6 +1419,57 @@
 
   <script>
     const MAX_FEED_EVENTS = 120;
+    const MAX_REJECT_EVENTS = 10;
+    const FUNNEL_STAGES = [
+      {
+        key: 'sourced',
+        label: 'Multi-Source Sourcing',
+        description: 'Profiles discovered across the target universe and adjacent talent pools.',
+        funnelKey: 'sourced',
+        width: '100%',
+        empty: 'Waiting for the search universe to open.',
+      },
+      {
+        key: 'screened',
+        label: 'Skills & Fit Screening',
+        description: 'Basic fit checked across scope, geography, and level.',
+        funnelKey: 'filtered',
+        width: '78%',
+        empty: 'Signals and thresholds will surface here first.',
+      },
+      {
+        key: 'qualified',
+        label: 'Outreach & Qualification',
+        description: 'Strong enough to deserve active outreach and deeper evaluation.',
+        funnelKey: 'outreach',
+        width: '58%',
+        empty: 'Qualified candidates will build from outreach-ready profiles.',
+      },
+      {
+        key: 'engaged',
+        label: 'Dialogue & Interview',
+        description: 'Responsive candidates with meaningful follow-up and interview signal.',
+        funnelKey: 'engaged',
+        width: '44%',
+        empty: 'The first replies and interview depth checks will appear here.',
+      },
+      {
+        key: 'recommended',
+        label: 'Final Shortlist',
+        description: 'Final shortlist ready for recruiter review and outreach handoff.',
+        funnelKey: 'shortlisted',
+        width: '34%',
+        empty: 'The final shortlist will reveal here.',
+      },
+    ];
+    const FUNNEL_STAGE_ORDER = Object.fromEntries(FUNNEL_STAGES.map((stage, index) => [stage.key, index]));
+    const SOURCE_DEFS = [
+      { id: 'linkedin', label: 'LinkedIn', short: 'LI', note: 'profile, title, tenure, company context', phase: 'sourced' },
+      { id: 'resume', label: 'Resume / CV', short: 'CV', note: 'resume evidence and CV consistency checks', phase: 'screened' },
+      { id: 'github', label: 'GitHub / OSS', short: 'GH', note: 'open source footprint and portfolio depth', phase: 'screened' },
+      { id: 'messages', label: 'Messages', short: 'MSG', note: 'outreach delivery and candidate replies', phase: 'qualified' },
+      { id: 'interview', label: 'Interview', short: 'INT', note: 'interview completion and assessment signal', phase: 'engaged' },
+    ];
 
     const state = {
       projects: [],
@@ -630,15 +1481,18 @@
         timer: null,
       },
       candidatesById: new Map(),
-      candidateOrder: [],
       selectedCandidateId: null,
+      focusCandidateId: null,
       feed: [],
       phase: 'idle',
       revealVisible: false,
-      needsSort: false,
-      dirtyRows: new Set(),
       rafScheduled: false,
       mutationQueue: [],
+      activeFunnelStage: 'sourced',
+      rejectFeed: [],
+      projectTimeline: null,
+      sourceTotals: {},
+      lastSourceIds: [],
     };
 
     function $(id) {
@@ -650,23 +1504,311 @@
       return String(value);
     }
 
-    function scoreClass(score) {
-      const numeric = Number(score || 0);
-      if (numeric >= 80) return 'good';
-      if (numeric >= 60) return 'mid';
-      return 'bad';
+    function escapeHtml(value) {
+      return safeText(value).replace(/[&<>"']/g, (ch) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      }[ch] || ch));
     }
 
     function stageLabel(stage) {
       const map = {
         sourced: 'Sourced',
-        filtered: 'Filtered',
-        in_dialogue: 'Dialogue',
+        filtered: 'Screened',
+        in_dialogue: 'Qualified',
         interviewed: 'Interviewed',
-        shortlisted: 'Shortlisted',
+        shortlisted: 'Recommended',
         eliminated: 'Eliminated',
       };
       return map[stage] || safeText(stage, 'Unknown');
+    }
+
+    function funnelStageLabel(stage) {
+      const map = {
+        sourced: 'Sourced',
+        screened: 'Screened',
+        qualified: 'Qualified',
+        engaged: 'Engaged',
+        recommended: 'Recommended',
+        rejected: 'Rejected',
+      };
+      return map[stage] || safeText(stage, 'Unknown');
+    }
+
+    function stageOrder(stage) {
+      return FUNNEL_STAGE_ORDER[stage] ?? -1;
+    }
+
+    function sourcePhaseOrder(sourceId) {
+      const source = SOURCE_DEFS.find((item) => item.id === sourceId);
+      return stageOrder(source ? source.phase : 'sourced');
+    }
+
+    function inferSourcesFromText(value) {
+      const text = safeText(value).toLowerCase();
+      const out = new Set();
+      if (!text) return out;
+      if (text.includes('linkedin')) out.add('linkedin');
+      if (text.includes('resume') || text.includes('cv')) out.add('resume');
+      if (text.includes('github') || text.includes('open source') || text.includes('oss')) out.add('github');
+      if (text.includes('message') || text.includes('reply') || text.includes('outreach')) out.add('messages');
+      if (text.includes('interview') || text.includes('hireflix')) out.add('interview');
+      return out;
+    }
+
+    function inferSourcesFromSignal(signal) {
+      const out = new Set();
+      const category = safeText(signal?.category, '').toLowerCase();
+      if (category.startsWith('linkedin')) out.add('linkedin');
+      if (category === 'cv_consistency') out.add('resume');
+      if (category === 'github_activity' || category === 'portfolio_quality' || category === 'digital_footprint') out.add('github');
+      if (category === 'communication') out.add('messages');
+      if (category === 'interview') out.add('interview');
+      inferSourcesFromText(signal?.title).forEach((item) => out.add(item));
+      inferSourcesFromText(signal?.detail).forEach((item) => out.add(item));
+      return Array.from(out);
+    }
+
+    function inferSourcesFromEvent(event) {
+      const out = new Set();
+      if (!event) return [];
+      if (event.type === 'sourced') out.add('linkedin');
+      if (event.type === 'message_sent' || event.type === 'message_received' || event.type === 'no_reply') out.add('messages');
+      if (event.type === 'interview_complete') out.add('interview');
+      if (safeText(event.signalCategory, '').toLowerCase().startsWith('linkedin')) out.add('linkedin');
+      if (safeText(event.signalCategory, '').toLowerCase() === 'cv_consistency') out.add('resume');
+      if (safeText(event.signalCategory, '').toLowerCase() === 'github_activity') out.add('github');
+      if (safeText(event.signalCategory, '').toLowerCase() === 'interview') out.add('interview');
+      inferSourcesFromText(event.title).forEach((item) => out.add(item));
+      inferSourcesFromText(event.detail).forEach((item) => out.add(item));
+      return Array.from(out);
+    }
+
+    function summarizeProjectSources(project) {
+      const buckets = Object.fromEntries(SOURCE_DEFS.map((item) => [item.id, new Set()]));
+      const candidates = project?.candidates || [];
+      const events = project?.events || [];
+
+      for (const candidate of candidates) {
+        buckets.linkedin.add(candidate.id);
+        for (const signal of candidate.signals || []) {
+          inferSourcesFromSignal(signal).forEach((sourceId) => {
+            if (buckets[sourceId]) buckets[sourceId].add(candidate.id);
+          });
+        }
+      }
+
+      for (const event of events) {
+        const targetIds = [];
+        if (Array.isArray(event.candidateIds)) {
+          for (const candidateId of event.candidateIds) {
+            if (candidateId && !targetIds.includes(candidateId)) targetIds.push(candidateId);
+          }
+        }
+        if (event.candidateId && !targetIds.includes(event.candidateId)) {
+          targetIds.push(event.candidateId);
+        }
+        inferSourcesFromEvent(event).forEach((sourceId) => {
+          if (!buckets[sourceId]) return;
+          for (const candidateId of targetIds) {
+            buckets[sourceId].add(candidateId);
+          }
+        });
+      }
+
+      return Object.fromEntries(
+        SOURCE_DEFS.map((item) => [item.id, (buckets[item.id] || new Set()).size]),
+      );
+    }
+
+    function sourceState(sourceId) {
+      if (!state.project) return 'pending';
+      if (state.replay.mode === 'idle') {
+        return sourceId === 'linkedin' ? 'active' : 'pending';
+      }
+      if (state.replay.mode === 'complete' || state.revealVisible) {
+        return (state.sourceTotals[sourceId] || 0) > 0 ? 'complete' : 'pending';
+      }
+      if (state.lastSourceIds.includes(sourceId)) {
+        return 'active';
+      }
+      return stageOrder(state.activeFunnelStage) > sourcePhaseOrder(sourceId) && (state.sourceTotals[sourceId] || 0) > 0
+        ? 'complete'
+        : 'pending';
+    }
+
+    function activeSourceLabels() {
+      const ids = SOURCE_DEFS
+        .filter((item) => sourceState(item.id) === 'active')
+        .map((item) => item.label);
+      return ids.length ? ids : ['Replay queue'];
+    }
+
+    function deriveInitialFunnelStage(candidate) {
+      const stage = safeText(candidate?.stage, 'sourced');
+      if (stage === 'shortlisted') return 'recommended';
+      if (stage === 'interviewed') return 'engaged';
+      if (stage === 'in_dialogue') return 'qualified';
+      if (stage === 'filtered') return 'screened';
+      if (stage === 'eliminated') return 'rejected';
+      return 'sourced';
+    }
+
+    function resolveFunnelStageFromPhase(phaseTitle) {
+      const normalized = safeText(phaseTitle).toLowerCase();
+      if (normalized.includes('interview')) return 'recommended';
+      if (normalized.includes('dialog')) return 'qualified';
+      if (normalized.includes('filter')) return 'screened';
+      if (normalized.includes('sourcing')) return 'sourced';
+      return null;
+    }
+
+    function resolveFunnelStageFromEvent(event) {
+      switch (event.type) {
+        case 'sourced':
+          return 'sourced';
+        case 'signal_detected':
+        case 'score_update':
+          return 'screened';
+        case 'message_sent':
+          return 'qualified';
+        case 'message_received':
+        case 'interview_complete':
+          return 'engaged';
+        case 'shortlisted':
+          return 'recommended';
+        case 'eliminated':
+        case 'batch_eliminated':
+        case 'no_reply':
+          return 'rejected';
+        default:
+          return null;
+      }
+    }
+
+    function promoteFunnelStage(candidate, nextStage) {
+      if (!candidate || !nextStage) return;
+      if (nextStage === 'rejected') {
+        candidate.funnelStage = 'rejected';
+        return;
+      }
+      const current = safeText(candidate.funnelStage, 'sourced');
+      if (current === 'rejected') return;
+      if (stageOrder(nextStage) >= stageOrder(current)) {
+        candidate.funnelStage = nextStage;
+      }
+    }
+
+    function buildProjectTimeline(project) {
+      const events = project?.events || [];
+      const total = Math.max(1, events.length);
+      const fallbackFiltering = Math.max(1, Math.floor(total * 0.24));
+      const fallbackDialogue = Math.max(fallbackFiltering + 1, Math.floor(total * 0.55));
+      const fallbackInterview = Math.max(fallbackDialogue + 1, Math.floor(total * 0.82));
+
+      let filtering = fallbackFiltering;
+      let dialogue = fallbackDialogue;
+      let interview = fallbackInterview;
+
+      events.forEach((event, index) => {
+        if (event.type !== 'phase_marker') return;
+        const phase = safeText(event.title).toLowerCase();
+        if (phase.includes('filter')) filtering = index;
+        if (phase.includes('dialog')) dialogue = index;
+        if (phase.includes('interview')) interview = index;
+      });
+
+      dialogue = Math.max(dialogue, filtering + 1);
+      interview = Math.max(interview, dialogue + 1);
+
+      return {
+        total,
+        windows: {
+          sourced: [0, filtering],
+          screened: [filtering, dialogue],
+          qualified: [dialogue, interview],
+          engaged: [dialogue, total],
+          recommended: [interview, total],
+        },
+      };
+    }
+
+    function windowProgress(stageKey) {
+      if (!state.projectTimeline) return 0;
+      if (state.replay.mode === 'complete' || state.revealVisible) return 1;
+      const [start, end] = state.projectTimeline.windows[stageKey] || [0, state.projectTimeline.total];
+      const current = state.replay.eventIndex;
+      if (current <= start) return 0;
+      if (current >= end) return 1;
+      return Math.max(0, Math.min(1, (current - start) / Math.max(1, end - start)));
+    }
+
+    function funnelFinalCount(stageKey) {
+      const meta = FUNNEL_STAGES.find((item) => item.key === stageKey);
+      if (!meta) return 0;
+      return Number(((state.project?.reveal || {}).funnel || {})[meta.funnelKey] || 0);
+    }
+
+    function currentFunnelCount(stageKey) {
+      const finalCount = funnelFinalCount(stageKey);
+      if (!finalCount) return 0;
+      return Math.round(finalCount * windowProgress(stageKey));
+    }
+
+    function currentStageCandidates(stageKey) {
+      const candidates = Array.from(state.candidatesById.values())
+        .filter((candidate) => candidate.visible && safeText(candidate.funnelStage, 'sourced') === stageKey);
+      candidates.sort((a, b) => {
+        const touchDelta = Number(b.lastTouchedIndex ?? -1) - Number(a.lastTouchedIndex ?? -1);
+        if (touchDelta !== 0) return touchDelta;
+        const scoreDelta = Number(b.currentScore || 0) - Number(a.currentScore || 0);
+        if (scoreDelta !== 0) return scoreDelta;
+        return safeText(a.name).localeCompare(safeText(b.name));
+      });
+      return candidates;
+    }
+
+    function aggregateRejectReasons(items) {
+      const counts = new Map();
+      for (const item of items) {
+        const key = safeText(item.reason, 'Rejected');
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      return Array.from(counts.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3);
+    }
+
+    function queueCandidates() {
+      const candidates = Array.from(state.candidatesById.values())
+        .filter((candidate) => candidate.visible && safeText(candidate.funnelStage) !== 'rejected');
+      const stageWeights = {
+        recommended: 50,
+        engaged: 40,
+        qualified: 30,
+        screened: 20,
+        sourced: 10,
+      };
+      candidates.sort((a, b) => {
+        const stageDelta = (stageWeights[b.funnelStage] || 0) - (stageWeights[a.funnelStage] || 0);
+        if (stageDelta !== 0) return stageDelta;
+        const scoreDelta = Number(b.currentScore || 0) - Number(a.currentScore || 0);
+        if (scoreDelta !== 0) return scoreDelta;
+        const confidenceDelta = Number(b.currentConfidence || 0) - Number(a.currentConfidence || 0);
+        if (confidenceDelta !== 0) return confidenceDelta;
+        return safeText(a.name).localeCompare(safeText(b.name));
+      });
+      return candidates.slice(0, 3);
+    }
+
+    function focusCandidate() {
+      return state.candidatesById.get(state.focusCandidateId || '')
+        || state.candidatesById.get(state.selectedCandidateId || '')
+        || queueCandidates()[0]
+        || null;
     }
 
     function isLifeSciencesProject(project) {
@@ -738,10 +1880,13 @@
       state.revealVisible = false;
       state.phase = 'idle';
       state.feed = [];
-      state.needsSort = true;
-      state.dirtyRows.clear();
       state.candidatesById = new Map();
-      state.candidateOrder = [];
+      state.focusCandidateId = null;
+      state.activeFunnelStage = 'sourced';
+      state.rejectFeed = [];
+      state.projectTimeline = buildProjectTimeline(project);
+      state.sourceTotals = summarizeProjectSources(project);
+      state.lastSourceIds = ['linkedin'];
 
       const candidates = project.candidates || [];
       const showFullPoolAtStart = isLifeSciencesProject(project);
@@ -751,99 +1896,20 @@
           visible: showFullPoolAtStart,
           eliminated: false,
           stage: 'sourced',
+          funnelStage: deriveInitialFunnelStage(candidate),
           signalEvents: [...(candidate.signals || [])],
           scoreHistory: [Number(candidate.currentScore || 0)],
+          lastTouchedIndex: -1,
+          lastEventTitle: '',
+          lastEventDetail: '',
+          lastRejectReason: '',
         });
       }
 
       state.selectedCandidateId = candidates.length ? candidates[0].id : null;
-      rebuildCandidateRows();
+      state.focusCandidateId = state.selectedCandidateId;
       render();
       setControlEnabled(true);
-    }
-
-    function rebuildCandidateRows() {
-      const tbody = $('candidate-rows');
-      tbody.innerHTML = '';
-      for (const [candidateId, candidate] of state.candidatesById.entries()) {
-        const tr = document.createElement('tr');
-        tr.dataset.candidateId = candidateId;
-        tr.innerHTML = `
-          <td class="cell-name"></td>
-          <td><span class="score-chip"></span></td>
-          <td>
-            <div class="confidence-track"><span></span></div>
-            <div class="mono confidence-text" style="margin-top:4px"></div>
-          </td>
-          <td><span class="stage-pill"></span></td>
-          <td class="signal-count mono"></td>
-        `;
-        tr.addEventListener('click', () => {
-          state.selectedCandidateId = candidateId;
-          renderSelectedCandidate();
-          updateSelectedRowHighlight();
-        });
-        candidate.rowEl = tr;
-        tbody.appendChild(tr);
-      }
-      state.needsSort = true;
-    }
-
-    function updateSelectedRowHighlight() {
-      for (const candidate of state.candidatesById.values()) {
-        if (!candidate.rowEl) continue;
-        candidate.rowEl.classList.toggle('selected', state.selectedCandidateId === candidate.id);
-      }
-    }
-
-    function updateCandidateRow(candidate) {
-      if (!candidate.rowEl) return;
-      const row = candidate.rowEl;
-      row.classList.toggle('is-visible', !!candidate.visible);
-      row.classList.toggle('is-eliminated', candidate.stage === 'eliminated');
-      row.classList.toggle('is-highlight', !!candidate.highlight);
-
-      const nameCell = row.querySelector('.cell-name');
-      const scoreChip = row.querySelector('.score-chip');
-      const confidenceBar = row.querySelector('.confidence-track > span');
-      const confidenceText = row.querySelector('.confidence-text');
-      const stagePill = row.querySelector('.stage-pill');
-      const signalCount = row.querySelector('.signal-count');
-
-      nameCell.textContent = safeText(candidate.name, candidate.id);
-      scoreChip.textContent = `${Math.round(Number(candidate.currentScore || 0))}`;
-      scoreChip.className = `score-chip ${scoreClass(candidate.currentScore)}`;
-      if (candidate.pulseScore) {
-        scoreChip.classList.add('score-pulse');
-        candidate.pulseScore = false;
-      }
-      confidenceBar.style.width = `${Math.max(0, Math.min(100, Number(candidate.currentConfidence || 0)))}%`;
-      confidenceText.textContent = `${Math.round(Number(candidate.currentConfidence || 0))}%`;
-      stagePill.textContent = stageLabel(candidate.stage);
-      signalCount.textContent = `${(candidate.signalEvents || []).length}`;
-    }
-
-    function sortCandidates() {
-      if (!state.needsSort) return;
-      state.needsSort = false;
-      const candidates = Array.from(state.candidatesById.values());
-      candidates.sort((a, b) => {
-        const scoreDelta = Number(b.currentScore || 0) - Number(a.currentScore || 0);
-        if (scoreDelta !== 0) return scoreDelta;
-        const confidenceDelta = Number(b.currentConfidence || 0) - Number(a.currentConfidence || 0);
-        if (confidenceDelta !== 0) return confidenceDelta;
-        const visibleDelta = Number(b.visible) - Number(a.visible);
-        if (visibleDelta !== 0) return visibleDelta;
-        const eliminatedDelta = Number(a.stage === 'eliminated') - Number(b.stage === 'eliminated');
-        if (eliminatedDelta !== 0) return eliminatedDelta;
-        return safeText(a.name).localeCompare(safeText(b.name));
-      });
-
-      state.candidateOrder = candidates.map((item) => item.id);
-      const tbody = $('candidate-rows');
-      for (const candidate of candidates) {
-        if (candidate.rowEl) tbody.appendChild(candidate.rowEl);
-      }
     }
 
     function pushFeedEvent(event) {
@@ -872,11 +1938,25 @@
       });
     }
 
+    function pushRejectEvent(candidate, event) {
+      state.rejectFeed.unshift({
+        candidateId: candidate.id,
+        candidateName: candidate.name,
+        reason: event.title || 'Rejected',
+        detail: event.detail || '',
+        timestamp: event.timestamp || '',
+      });
+      if (state.rejectFeed.length > MAX_REJECT_EVENTS) {
+        state.rejectFeed.length = MAX_REJECT_EVENTS;
+      }
+    }
+
     function applyEvent(event) {
       if (!state.project) return;
 
       if (event.type === 'phase_marker') {
         state.phase = event.title || 'Phase';
+        state.activeFunnelStage = resolveFunnelStageFromPhase(event.title || '') || state.activeFunnelStage;
       }
 
       if (event.type === 'batch_eliminated') {
@@ -886,9 +1966,13 @@
           candidate.visible = true;
           candidate.stage = 'eliminated';
           candidate.eliminated = true;
-          state.dirtyRows.add(candidateId);
+          candidate.funnelStage = 'rejected';
+          candidate.lastTouchedIndex = state.replay.eventIndex;
+          candidate.lastEventTitle = event.title || '';
+          candidate.lastEventDetail = event.detail || '';
+          candidate.lastRejectReason = event.detail || event.title || '';
+          pushRejectEvent(candidate, event);
         }
-        state.needsSort = true;
       }
 
       const targetIds = [];
@@ -905,6 +1989,13 @@
         const candidate = state.candidatesById.get(candidateId);
         if (!candidate) continue;
 
+        candidate.visible = true;
+        candidate.lastTouchedIndex = state.replay.eventIndex;
+        candidate.lastEventTitle = event.title || '';
+        candidate.lastEventDetail = event.detail || '';
+        state.focusCandidateId = candidateId;
+        state.selectedCandidateId = candidateId;
+
         if (event.type === 'sourced') {
           candidate.visible = true;
         }
@@ -913,6 +2004,8 @@
           candidate.visible = true;
           candidate.stage = 'eliminated';
           candidate.eliminated = true;
+          candidate.lastRejectReason = event.detail || event.title || '';
+          pushRejectEvent(candidate, event);
         }
 
         if (event.type === 'shortlisted') {
@@ -927,6 +2020,21 @@
 
         if ((event.type === 'message_sent' || event.type === 'message_received' || event.type === 'no_reply') && candidate.stage !== 'eliminated' && candidate.stage !== 'shortlisted') {
           candidate.stage = 'in_dialogue';
+        }
+
+        if ((event.type === 'signal_detected' || event.type === 'score_update') && candidate.stage === 'sourced') {
+          candidate.stage = 'filtered';
+        }
+
+        if (event.type === 'no_reply') {
+          candidate.lastRejectReason = event.detail || event.title || '';
+          pushRejectEvent(candidate, event);
+        }
+
+        const funnelStage = resolveFunnelStageFromEvent(event);
+        promoteFunnelStage(candidate, funnelStage);
+        if (funnelStage && funnelStage !== 'rejected') {
+          state.activeFunnelStage = funnelStage;
         }
 
         const prevScore = Number(candidate.currentScore || 0);
@@ -946,17 +2054,11 @@
         }
 
         addSignalFromEvent(candidate, event);
-
-        state.dirtyRows.add(candidateId);
-        state.needsSort = true;
       }
 
       pushFeedEvent(event);
+      state.lastSourceIds = inferSourcesFromEvent(event);
       state.replay.eventIndex += 1;
-
-      if (state.selectedCandidateId && state.dirtyRows.has(state.selectedCandidateId)) {
-        renderSelectedCandidate();
-      }
 
       if (state.replay.eventIndex >= (state.project.events || []).length) {
         state.replay.mode = 'complete';
@@ -1079,8 +2181,335 @@
       feed.scrollTop = 0;
     }
 
+    function renderStatusHero() {
+      if (!state.project) {
+        $('status-headline').textContent = 'Ready to replay sourcing funnel';
+        $('status-subline').textContent = 'Select a project and start the replay to watch candidates move through sourcing, screening, outreach, and shortlist formation.';
+        $('hero-stage-count').textContent = `${FUNNEL_STAGES.length}`;
+        $('hero-live-count').textContent = '0';
+        $('hero-source-count').textContent = '0';
+        return;
+      }
+
+      const activeSources = activeSourceLabels();
+      const visibleCount = Array.from(state.candidatesById.values()).filter((item) => item.visible).length;
+      const sourceCount = SOURCE_DEFS.filter((item) => sourceState(item.id) !== 'pending').length;
+      const headlineMap = {
+        sourced: 'Processing candidates from talent sources',
+        screened: 'Screening skills and fit signals in real time',
+        qualified: 'Evaluating outreach readiness and reply quality',
+        engaged: 'Tracking dialogue and interview signal depth',
+        recommended: 'Final shortlist is emerging in real time',
+      };
+      const sublineMap = {
+        sourced: `Currently pulling evidence from ${activeSources.join(', ')}.`,
+        screened: `Comparing profile evidence against ${safeText(state.project.role)} requirements.`,
+        qualified: `Outreach and qualification steps are updating the queue live.`,
+        engaged: `Live dialogue, interview, and confidence changes are reshaping the shortlist.`,
+        recommended: `Top candidates are ready for recruiter review and final handoff.`,
+      };
+      const stageKey = state.replay.mode === 'idle' ? 'sourced' : safeText(state.activeFunnelStage, 'sourced');
+      $('status-headline').textContent = headlineMap[stageKey] || headlineMap.sourced;
+      $('status-subline').textContent = state.replay.mode === 'complete'
+        ? `Replay complete for ${safeText(state.project.company)}. Final shortlist and rejection reasons are locked in.`
+        : (sublineMap[stageKey] || sublineMap.sourced);
+      $('hero-stage-count').textContent = `${FUNNEL_STAGES.length}`;
+      $('hero-live-count').textContent = `${visibleCount}`;
+      $('hero-source-count').textContent = `${sourceCount}`;
+    }
+
+    function renderSources() {
+      const root = $('source-items');
+      if (!root) return;
+      root.innerHTML = '';
+      const activeCount = SOURCE_DEFS.filter((item) => sourceState(item.id) !== 'pending').length;
+      $('source-summary').textContent = `${activeCount}/${SOURCE_DEFS.length} mapped`;
+
+      for (const source of SOURCE_DEFS) {
+        const item = document.createElement('article');
+        const visualState = sourceState(source.id);
+        const count = Number(state.sourceTotals[source.id] || 0);
+        item.className = `source-item ${visualState}`;
+        item.innerHTML = `
+          <span class="source-icon">${escapeHtml(source.short)}</span>
+          <span class="source-body">
+            <span class="source-name">${escapeHtml(source.label)}</span>
+            <span class="source-note">${escapeHtml(source.note)}</span>
+          </span>
+          <span class="source-count">${count > 0 ? `${count}` : '—'}</span>
+        `;
+        root.appendChild(item);
+      }
+    }
+
+    function initials(name) {
+      return safeText(name)
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((part) => part[0])
+        .join('')
+        .toUpperCase();
+    }
+
+    function renderPreview() {
+      const root = $('preview-candidates');
+      if (!root) return;
+      root.innerHTML = '';
+
+      const visible = Array.from(state.candidatesById.values()).filter((item) => item.visible && item.stage !== 'eliminated');
+      $('preview-count').textContent = `${visible.length} visible`;
+      const previewItems = queueCandidates().length ? queueCandidates() : visible
+        .sort((a, b) => Number(b.currentScore || 0) - Number(a.currentScore || 0))
+        .slice(0, 3);
+
+      if (!previewItems.length) {
+        root.innerHTML = '<div class="detail-empty">Top candidates will emerge here as replayed events advance.</div>';
+        return;
+      }
+
+      previewItems.forEach((candidate) => {
+        const card = document.createElement('article');
+        card.className = 'preview-card';
+        card.innerHTML = `
+          <div class="preview-card-head">
+            <span class="preview-card-name">${escapeHtml(candidate.name)}</span>
+            <span class="chip-tag">${Math.round(Number(candidate.currentScore || 0))}</span>
+          </div>
+          <div class="preview-card-meta">${escapeHtml(initials(candidate.name))} · ${escapeHtml(candidate.location)} · ${escapeHtml(candidate.experience)}</div>
+          <div class="preview-card-copy">${escapeHtml(candidate.lastEventDetail || candidate.experience)}</div>
+        `;
+        card.addEventListener('click', () => {
+          state.selectedCandidateId = candidate.id;
+          state.focusCandidateId = candidate.id;
+          render();
+        });
+        root.appendChild(card);
+      });
+    }
+
+    function renderMissionBrief() {
+      const root = $('mission-brief');
+      if (!root) return;
+      if (!state.project) {
+        root.innerHTML = '<div class="detail-empty">Select an emulator project to load the brief.</div>';
+        return;
+      }
+
+      const companyProfile = state.project.companyProfile || {};
+      const idealTraits = (companyProfile.idealTraits || []).slice(0, 4);
+      const values = (companyProfile.values || []).slice(0, 4);
+
+      root.innerHTML = `
+        <div class="mission-lede">
+          <strong>${escapeHtml(state.project.role)}</strong>
+          <span>${escapeHtml(state.project.company)} · ${escapeHtml(state.project.year)} · ${escapeHtml(safeText(state.phase === 'idle' ? 'Replay ready' : state.phase))}</span>
+        </div>
+        <div class="mission-group">
+          <span class="mission-group-title">Target Signals</span>
+          <div class="mission-tags">
+            ${idealTraits.length
+              ? idealTraits.map((item) => `<span class="mission-tag">${escapeHtml(item)}</span>`).join('')
+              : '<span class="mission-tag">Signals pending</span>'}
+          </div>
+        </div>
+        <div class="mission-group">
+          <span class="mission-group-title">Culture Lens</span>
+          <div class="mission-tags">
+            ${values.length
+              ? values.map((item) => `<span class="mission-tag">${escapeHtml(item)}</span>`).join('')
+              : '<span class="mission-tag">No profile loaded</span>'}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderFunnel() {
+      const root = $('funnel-stages');
+      if (!root) return;
+      root.innerHTML = '';
+
+      FUNNEL_STAGES.forEach((stage, index) => {
+        const card = document.createElement('section');
+        const isActive = stage.key === state.activeFunnelStage;
+        card.className = `funnel-stage-card${isActive ? ' active' : ''}`;
+        card.style.setProperty('--stage-width', stage.width || '100%');
+
+        const stageCandidates = currentStageCandidates(stage.key).slice(0, stage.key === 'recommended' ? 3 : 5);
+        const liveCount = stageCandidates.length;
+        const progress = Math.max(0, Math.min(100, windowProgress(stage.key) * 100));
+
+        card.innerHTML = `
+          <div class="funnel-stage-head">
+            <span class="stage-badge">${String(index + 1).padStart(2, '0')}</span>
+            <div>
+              <h3 class="stage-title">${escapeHtml(stage.label)}</h3>
+              <p class="stage-copy">${escapeHtml(stage.description)}</p>
+            </div>
+            <div class="stage-count">
+              <strong>${currentFunnelCount(stage.key).toLocaleString()}</strong>
+              <span>${liveCount} live sample${liveCount === 1 ? '' : 's'}</span>
+            </div>
+          </div>
+          <div class="stage-meter"><span style="width:${progress}%"></span></div>
+        `;
+
+        const lane = document.createElement('div');
+        lane.className = 'stage-lane';
+
+        if (!stageCandidates.length) {
+          const empty = document.createElement('div');
+          empty.className = 'stage-empty';
+          empty.textContent = stage.empty;
+          lane.appendChild(empty);
+        } else {
+          stageCandidates.forEach((candidate) => {
+            const chip = document.createElement('article');
+            const isFresh = candidate.lastTouchedIndex >= 0 && candidate.lastTouchedIndex >= (state.replay.eventIndex - 1);
+            chip.className = `funnel-chip${isFresh ? ' fresh' : ''}${stage.key === 'recommended' ? ' recommended' : ''}`;
+            chip.tabIndex = 0;
+            chip.innerHTML = `
+              <div class="funnel-chip-head">
+                <div>
+                  <div class="chip-name">${escapeHtml(candidate.name)}</div>
+                  <div class="chip-meta">${escapeHtml(candidate.location)} · ${escapeHtml(candidate.experience)}</div>
+                </div>
+                <span class="chip-tag">${Math.round(Number(candidate.currentScore || 0))}</span>
+              </div>
+              <div class="chip-signal${candidate.lastRejectReason ? ' negative' : ''}">
+                ${escapeHtml(candidate.lastRejectReason || candidate.lastEventDetail || candidate.experience)}
+              </div>
+            `;
+            chip.addEventListener('click', () => {
+              state.selectedCandidateId = candidate.id;
+              state.focusCandidateId = candidate.id;
+              render();
+            });
+            chip.addEventListener('keydown', (event) => {
+              if (event.key !== 'Enter' && event.key !== ' ') return;
+              event.preventDefault();
+              state.selectedCandidateId = candidate.id;
+              state.focusCandidateId = candidate.id;
+              render();
+            });
+            lane.appendChild(chip);
+          });
+        }
+
+        card.appendChild(lane);
+        root.appendChild(card);
+      });
+
+      const rejectItemsRoot = $('reject-items');
+      const rejectSummaryRoot = $('reject-summary');
+      rejectItemsRoot.innerHTML = '';
+
+      const rejectItems = state.rejectFeed.slice(0, 5);
+      if (!rejectItems.length) {
+        rejectItemsRoot.innerHTML = '<div class="detail-empty">Rejections and drop-offs will accumulate here.</div>';
+        rejectSummaryRoot.innerHTML = '<div class="detail-empty">No removals yet.</div>';
+      } else {
+        rejectItems.forEach((item) => {
+          const row = document.createElement('article');
+          row.className = 'reject-item';
+          row.innerHTML = `
+            <strong>${escapeHtml(item.candidateName)}</strong>
+            <span>${escapeHtml(item.reason)}</span>
+            <span>${escapeHtml(item.detail)}</span>
+          `;
+          rejectItemsRoot.appendChild(row);
+        });
+
+        const grouped = aggregateRejectReasons(rejectItems);
+        rejectSummaryRoot.innerHTML = grouped
+          .map(([reason, count]) => `
+            <div class="reject-summary-item">
+              <span>${escapeHtml(reason)}</span>
+              <strong>${count}</strong>
+            </div>
+          `)
+          .join('');
+      }
+    }
+
+    function renderFocusPanel() {
+      const candidate = focusCandidate();
+      const queue = queueCandidates();
+      $('queue-count').textContent = `${queue.length} finalist${queue.length === 1 ? '' : 's'}`;
+      $('focus-stage').textContent = `Stage: ${candidate ? funnelStageLabel(candidate.funnelStage) : 'n/a'}`;
+
+      const focusRoot = $('focus-candidate');
+      if (!candidate) {
+        focusRoot.innerHTML = 'No active candidate yet.';
+        return;
+      }
+
+      const recentSignals = (candidate.signalEvents || []).slice(-3);
+      const signalMarkup = recentSignals.length
+        ? recentSignals.map((signal) => `
+            <div class="focus-signal${safeText(signal.sentiment) === 'negative' ? ' negative' : ''}">
+              <strong>${escapeHtml(signal.title)}</strong><br>${escapeHtml(signal.detail)}
+            </div>
+          `).join('')
+        : `<div class="focus-signal${candidate.lastRejectReason ? ' negative' : ''}">${escapeHtml(candidate.lastRejectReason || candidate.lastEventDetail || 'Waiting for a scored signal.')}</div>`;
+
+      focusRoot.innerHTML = `
+        <div class="focus-head">
+          <div>
+            <strong>${escapeHtml(candidate.name)}</strong>
+            <span>${escapeHtml(candidate.location)} · ${escapeHtml(candidate.experience)}</span>
+          </div>
+          <span class="chip-tag">${escapeHtml(funnelStageLabel(candidate.funnelStage))}</span>
+        </div>
+        <div class="focus-metrics">
+          <div class="focus-metric">
+            <strong>${Math.round(Number(candidate.currentScore || 0))}</strong>
+            <span>Score</span>
+          </div>
+          <div class="focus-metric">
+            <strong>${Math.round(Number(candidate.currentConfidence || 0))}%</strong>
+            <span>Confidence</span>
+          </div>
+          <div class="focus-metric">
+            <strong>${(candidate.signalEvents || []).length}</strong>
+            <span>Signals</span>
+          </div>
+        </div>
+        <div class="focus-signals">${signalMarkup}</div>
+      `;
+
+      const queueRoot = $('live-shortlist');
+      queueRoot.innerHTML = '';
+      if (!queue.length) {
+        queueRoot.innerHTML = '<div class="detail-empty">The top queue will populate as candidates advance.</div>';
+        return;
+      }
+
+      queue.forEach((item, index) => {
+        const row = document.createElement('article');
+        row.className = `queue-item${state.selectedCandidateId === item.id ? ' selected' : ''}`;
+        row.innerHTML = `
+          <div class="queue-item-head">
+            <span class="queue-item-name">#${index + 1} ${escapeHtml(item.name)}</span>
+            <span class="chip-tag">${Math.round(Number(item.currentScore || 0))}</span>
+          </div>
+          <div class="queue-item-copy">${escapeHtml(item.lastEventDetail || item.experience)}</div>
+          <div class="queue-item-copy">${Math.round(Number(item.currentConfidence || 0))}% confidence · ${escapeHtml(funnelStageLabel(item.funnelStage))}</div>
+        `;
+        row.addEventListener('click', () => {
+          state.selectedCandidateId = item.id;
+          state.focusCandidateId = item.id;
+          render();
+        });
+        queueRoot.appendChild(row);
+      });
+    }
+
     function renderSelectedCandidate() {
-      const candidate = state.candidatesById.get(state.selectedCandidateId || '');
+      const candidate = state.candidatesById.get(state.selectedCandidateId || '')
+        || state.candidatesById.get(state.focusCandidateId || '')
+        || queueCandidates()[0]
+        || null;
       $('selected-candidate-name').textContent = candidate ? `${candidate.name}` : 'None';
       $('selected-stage').textContent = `Stage: ${candidate ? stageLabel(candidate.stage) : 'n/a'}`;
 
@@ -1145,7 +2574,7 @@
 
       const reveal = state.project.reveal || {};
       const funnel = reveal.funnel || {};
-      $('funnel-text').textContent = `Funnel: ${funnel.sourced || 0} sourced -> ${funnel.filtered || 0} filtered -> ${funnel.outreach || 0} outreach -> ${funnel.engaged || 0} engaged -> ${funnel.shortlisted || 0} shortlisted`;
+      $('funnel-text').textContent = `Funnel: ${funnel.sourced || 0} sourced -> ${funnel.filtered || 0} screened -> ${funnel.outreach || 0} qualified -> ${funnel.engaged || 0} engaged -> ${funnel.shortlisted || 0} recommended`;
 
       const candidates = Array.from(state.candidatesById.values());
       let shortlist = candidates.filter((c) => c.stage === 'shortlisted');
@@ -1198,34 +2627,21 @@
       `;
     }
 
-    function renderRows() {
-      sortCandidates();
-      for (const candidateId of state.dirtyRows) {
-        const candidate = state.candidatesById.get(candidateId);
-        if (!candidate) continue;
-        updateCandidateRow(candidate);
-      }
-      if (state.dirtyRows.size === 0) {
-        for (const candidate of state.candidatesById.values()) {
-          if (!candidate.rowEl) continue;
-          if (candidate.rowEl.classList.contains('is-visible')) continue;
-          updateCandidateRow(candidate);
-        }
-      }
-      state.dirtyRows.clear();
-      updateSelectedRowHighlight();
-    }
-
     function renderProjectMeta() {
       if (!state.project) {
         $('project-summary').textContent = 'No project selected';
         $('candidate-count').textContent = '0 active';
+        $('funnel-summary').textContent = '0 live candidates';
+        $('queue-count').textContent = '0 finalists';
         return;
       }
       const events = state.project.events || [];
       const visibleCount = Array.from(state.candidatesById.values()).filter((item) => item.visible).length;
+      const shortlistedCount = queueCandidates().length;
       $('project-summary').textContent = `${state.project.company} · ${state.project.role} · ${state.project.year}`;
-      $('candidate-count').textContent = `${visibleCount} active of ${state.project.candidates.length}`;
+      $('candidate-count').textContent = `${visibleCount} live sample of ${state.project.candidates.length}`;
+      $('funnel-summary').textContent = `${currentFunnelCount('screened').toLocaleString()} screened · ${currentFunnelCount('qualified').toLocaleString()} qualified · ${currentFunnelCount('recommended').toLocaleString()} recommended`;
+      $('queue-count').textContent = `${shortlistedCount} finalist${shortlistedCount === 1 ? '' : 's'}`;
       $('progress-label').textContent = `Event ${state.replay.eventIndex} / ${events.length}`;
       const ratio = events.length ? (state.replay.eventIndex / events.length) * 100 : 0;
       $('progress-fill').style.width = `${Math.max(0, Math.min(100, ratio))}%`;
@@ -1241,8 +2657,13 @@
 
     function render() {
       renderProjectMeta();
-      renderRows();
+      renderStatusHero();
+      renderSources();
       renderFeed();
+      renderMissionBrief();
+      renderFunnel();
+      renderPreview();
+      renderFocusPanel();
       renderPhaseAndControls();
       renderSelectedCandidate();
       revealShortlist();

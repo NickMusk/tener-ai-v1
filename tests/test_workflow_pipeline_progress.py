@@ -83,6 +83,72 @@ class _PriorityAwareProvider:
         return {"provider": "stub", "sent": False, "reason": "stub_no_delivery"}
 
 
+class _TopUpProvider:
+    def __init__(self) -> None:
+        self.account_id: str | None = None
+        self.profiles = [
+            {
+                "linkedin_id": "existing-a",
+                "full_name": "Existing A",
+                "headline": "Manual QA Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["manual testing", "api testing", "regression testing"],
+                "years_experience": 4,
+                "raw": {},
+            },
+            {
+                "linkedin_id": "existing-b",
+                "full_name": "Existing B",
+                "headline": "Manual QA Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["manual testing", "api testing", "regression testing"],
+                "years_experience": 4,
+                "raw": {},
+            },
+            {
+                "linkedin_id": "topup-c",
+                "full_name": "Top Up C",
+                "headline": "Manual QA Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["manual testing", "api testing", "regression testing"],
+                "years_experience": 4,
+                "raw": {},
+            },
+            {
+                "linkedin_id": "topup-d",
+                "full_name": "Top Up D",
+                "headline": "Manual QA Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["manual testing", "api testing", "regression testing"],
+                "years_experience": 4,
+                "raw": {},
+            },
+            {
+                "linkedin_id": "topup-e",
+                "full_name": "Top Up E",
+                "headline": "Manual QA Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["manual testing", "api testing", "regression testing"],
+                "years_experience": 4,
+                "raw": {},
+            },
+        ]
+
+    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        return [dict(item) for item in self.profiles[:limit]]
+
+    def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        return dict(profile)
+
+    def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+        return {"provider": "stub", "sent": False, "reason": "stub_no_delivery"}
+
+
 class WorkflowPipelineProgressTests(unittest.TestCase):
     def _build_workflow(self, work_dir: Path, provider: Any) -> Tuple[Database, WorkflowService]:
         root = Path(__file__).resolve().parents[1]
@@ -179,6 +245,55 @@ class WorkflowPipelineProgressTests(unittest.TestCase):
             self.assertEqual(int(out.get("total") or 0), 1)
             self.assertTrue(provider.seen_accounts)
             self.assertEqual(provider.seen_accounts[0], "acc-recruiter")
+
+    def test_source_top_up_adds_only_new_candidates_without_touching_outreach(self) -> None:
+        with TemporaryDirectory() as td:
+            db, workflow = self._build_workflow(Path(td), _TopUpProvider())
+            job_id = self._insert_job(db)
+            db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-live",
+                status="connected",
+                connected_at=utc_now_iso(),
+            )
+
+            for linkedin_id in ("existing-a", "existing-b"):
+                candidate_id = db.upsert_candidate(
+                    {
+                        "linkedin_id": linkedin_id,
+                        "full_name": linkedin_id.title(),
+                        "headline": "Manual QA Engineer",
+                        "location": "Remote",
+                        "languages": ["en"],
+                        "skills": ["manual testing", "api testing", "regression testing"],
+                        "years_experience": 4,
+                        "raw": {},
+                    },
+                    source="linkedin",
+                )
+                db.create_candidate_match(
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    score=0.8,
+                    status="verified",
+                    verification_notes={},
+                )
+
+            out = workflow.top_up_job_candidates(job_id=job_id, limit=3)
+            self.assertEqual(int(out.get("searched") or 0), 3)
+            self.assertEqual(int(out.get("added") or 0), 3)
+
+            candidate_rows = db.list_candidates_for_job(job_id)
+            linkedin_ids = {str(item.get("linkedin_id") or "") for item in candidate_rows}
+            self.assertEqual(linkedin_ids, {"existing-a", "existing-b", "topup-c", "topup-d", "topup-e"})
+
+            by_step = {row["step"]: row for row in db.list_job_step_progress(job_id=job_id)}
+            self.assertEqual(str((by_step.get("source") or {}).get("status") or ""), "success")
+            self.assertEqual(str((by_step.get("enrich") or {}).get("status") or ""), "success")
+            self.assertEqual(str((by_step.get("verify") or {}).get("status") or ""), "success")
+            self.assertEqual(str((by_step.get("add") or {}).get("status") or ""), "success")
+            self.assertEqual(str((by_step.get("workflow") or {}).get("status") or ""), "success")
+            self.assertEqual((by_step.get("outreach") or {}).get("status"), None)
 
 
 if __name__ == "__main__":
