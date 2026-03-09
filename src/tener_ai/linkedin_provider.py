@@ -205,7 +205,12 @@ class UnipileLinkedInProvider(LinkedInProvider):
 
         attendee_id = self._extract_attendee_id(candidate_profile)
         if not attendee_id:
-            return {"provider": "unipile", "sent": False, "reason": "missing_attendee_provider_id"}
+            return {
+                "provider": "unipile",
+                "sent": False,
+                "reason": "missing_attendee_provider_id",
+                "error": "candidate profile missing provider-specific attendee id",
+            }
 
         endpoint = self._build_url(self.chat_create_path)
         fields = {
@@ -249,12 +254,18 @@ class UnipileLinkedInProvider(LinkedInProvider):
             if detail.get(key):
                 merged[key] = detail.get(key)
 
-        merged_id = detail.get("provider_id") or profile.get("linkedin_id")
-        if merged_id:
-            merged["provider_id"] = merged_id
-            merged["linkedin_id"] = merged_id
-            merged["unipile_profile_id"] = merged_id
-            merged["attendee_provider_id"] = merged_id
+        merged_provider_id = (
+            detail.get("attendee_provider_id")
+            or detail.get("provider_id")
+            or detail.get("id")
+            or profile.get("attendee_provider_id")
+            or profile.get("unipile_profile_id")
+            or profile.get("provider_id")
+        )
+        if merged_provider_id:
+            merged["provider_id"] = merged_provider_id
+            merged["unipile_profile_id"] = merged_provider_id
+            merged["attendee_provider_id"] = detail.get("attendee_provider_id") or merged_provider_id
 
         merged_raw: Dict[str, Any] = {"search": profile.get("raw"), "detail": detail}
         merged["raw"] = merged_raw
@@ -274,7 +285,12 @@ class UnipileLinkedInProvider(LinkedInProvider):
 
         attendee_id = self._extract_attendee_id(candidate_profile)
         if not attendee_id:
-            return {"provider": "unipile", "sent": False, "reason": "missing_attendee_provider_id"}
+            return {
+                "provider": "unipile",
+                "sent": False,
+                "reason": "invalid_candidate_identity",
+                "error": "candidate profile missing provider-specific attendee id",
+            }
 
         last_error = "unknown_connection_request_error"
         non_404_error: Optional[str] = None
@@ -306,11 +322,12 @@ class UnipileLinkedInProvider(LinkedInProvider):
                     continue
 
         effective_error = non_404_error or last_error
+        failure_reason = self._classify_connect_request_failure(error_text=effective_error)
         return {
             "provider": "unipile",
             "sent": False,
             "attendee_provider_id": attendee_id,
-            "reason": "connection_request_failed",
+            "reason": failure_reason,
             "error": effective_error,
             "attempts": attempts[:10],
         }
@@ -397,7 +414,6 @@ class UnipileLinkedInProvider(LinkedInProvider):
             candidate_profile.get("attendee_provider_id"),
             candidate_profile.get("unipile_profile_id"),
             candidate_profile.get("provider_id"),
-            candidate_profile.get("linkedin_id"),
         ]
         for value in candidates:
             if isinstance(value, str) and value.strip():
@@ -691,7 +707,6 @@ class UnipileLinkedInProvider(LinkedInProvider):
     def _candidate_connect_paths(self) -> List[str]:
         candidates = [
             "/api/v1/users/invite",
-            "/api/v1/invitations",
             "/api/v1/linkedin/invite",
             self.connect_create_path,
         ]
@@ -714,7 +729,6 @@ class UnipileLinkedInProvider(LinkedInProvider):
         payloads: List[Dict[str, Any]] = [
             {"account_id": self.account_id, "provider_id": attendee_id},
             {"account_id": self.account_id, "attendee_id": attendee_id},
-            {"account_id": self.account_id, "attendees_ids": attendee_id},
         ]
         if text:
             payloads.extend(
@@ -723,7 +737,6 @@ class UnipileLinkedInProvider(LinkedInProvider):
                     {"account_id": self.account_id, "provider_id": attendee_id, "text": text},
                     {"account_id": self.account_id, "attendee_id": attendee_id, "message": text},
                     {"account_id": self.account_id, "attendee_id": attendee_id, "text": text},
-                    {"account_id": self.account_id, "attendees_ids": attendee_id, "text": text},
                 ]
             )
         if self.api_type:
@@ -778,7 +791,13 @@ class UnipileLinkedInProvider(LinkedInProvider):
         full_name = item.get("full_name") or item.get("name") or f"{first_name} {last_name}".strip() or "Unknown"
         headline = item.get("headline") or item.get("title") or ""
 
-        profile_id = item.get("attendee_provider_id") or item.get("provider_id") or item.get("id") or item.get("linkedin_id")
+        provider_id = item.get("attendee_provider_id") or item.get("provider_id") or item.get("id")
+        public_identifier = (
+            item.get("linkedin_id")
+            or item.get("public_identifier")
+            or item.get("publicIdentifier")
+            or ((item.get("raw") or {}).get("public_identifier") if isinstance(item.get("raw"), dict) else None)
+        )
         location = item.get("location") or item.get("geo") or ""
         languages = item.get("languages")
         if not isinstance(languages, list):
@@ -799,9 +818,10 @@ class UnipileLinkedInProvider(LinkedInProvider):
             years_experience = 0
 
         normalized = {
-            "linkedin_id": profile_id,
-            "unipile_profile_id": profile_id,
-            "attendee_provider_id": item.get("attendee_provider_id") or profile_id,
+            "linkedin_id": public_identifier or provider_id,
+            "provider_id": provider_id,
+            "unipile_profile_id": provider_id,
+            "attendee_provider_id": item.get("attendee_provider_id") or provider_id,
             "full_name": full_name,
             "headline": headline,
             "location": location,
@@ -811,6 +831,20 @@ class UnipileLinkedInProvider(LinkedInProvider):
             "raw": item,
         }
         return normalized
+
+    @staticmethod
+    def _classify_connect_request_failure(*, error_text: str) -> str:
+        text = str(error_text or "").lower()
+        if "cannot_resend_yet" in text or "cannot resend yet" in text:
+            return "cannot_resend_yet"
+        invalid_identity_needles = (
+            "user id does not match provider's expected format",
+            "invalid_parameters",
+            "missing provider-specific attendee id",
+        )
+        if any(needle in text for needle in invalid_identity_needles):
+            return "invalid_candidate_identity"
+        return "connection_request_failed"
 
     @staticmethod
     def _extract_skills_from_text(text: str) -> List[str]:

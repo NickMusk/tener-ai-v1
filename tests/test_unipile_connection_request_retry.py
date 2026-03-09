@@ -33,13 +33,14 @@ class UnipileConnectionRequestRetryTests(unittest.TestCase):
         self.assertGreaterEqual(len(paths), 2)
         self.assertEqual(paths[0], "/api/v1/users/invite")
         self.assertIn("/api/v1/linkedin/invite", paths)
+        self.assertNotIn("/api/v1/invitations", paths)
 
     def test_connection_request_succeeds_on_users_invite_when_legacy_path_is_configured(self) -> None:
         with patch.dict(os.environ, {"UNIPILE_CONNECT_CREATE_PATH": "/api/v1/linkedin/invite"}, clear=False):
             provider = _StubInviteProvider(success_path="/api/v1/users/invite")
 
         out = provider.send_connection_request(
-            candidate_profile={"linkedin_id": "ACoAATest"},
+            candidate_profile={"attendee_provider_id": "eUS3xLNZRCSpqfO_tzKaGw"},
             message="Connect?",
         )
 
@@ -55,7 +56,10 @@ class UnipileConnectionRequestRetryTests(unittest.TestCase):
                 ),
             )
 
-        out = provider.send_connection_request(candidate_profile={"linkedin_id": "ACoAATest"}, message="Connect?")
+        out = provider.send_connection_request(
+            candidate_profile={"attendee_provider_id": "eUS3xLNZRCSpqfO_tzKaGw"},
+            message="Connect?",
+        )
 
         self.assertFalse(out["sent"])
         self.assertEqual(out["reason"], "connection_request_failed")
@@ -63,6 +67,32 @@ class UnipileConnectionRequestRetryTests(unittest.TestCase):
         attempts = out.get("attempts") or []
         self.assertTrue(attempts)
         self.assertIn("path", attempts[0])
+
+    def test_connection_request_classifies_invalid_candidate_identity(self) -> None:
+        with patch.dict(os.environ, {"UNIPILE_CONNECT_CREATE_PATH": "/api/v1/linkedin/invite"}, clear=False):
+            provider = _StubInviteProvider(
+                success_path=None,
+                users_invite_error=(
+                    "Unipile HTTP error 400: {\"status\":400,\"type\":\"errors/invalid_parameters\","
+                    "\"title\":\"User ID does not match provider's expected format\"}"
+                ),
+            )
+
+        out = provider.send_connection_request(
+            candidate_profile={"attendee_provider_id": "olena-bachek-b8523121a"},
+            message="Connect?",
+        )
+
+        self.assertFalse(out["sent"])
+        self.assertEqual(out["reason"], "invalid_candidate_identity")
+
+    def test_connection_request_requires_provider_specific_identity(self) -> None:
+        provider = UnipileLinkedInProvider(api_key="k", base_url="https://api.unipile.com", account_id="acc")
+
+        out = provider.send_connection_request(candidate_profile={"linkedin_id": "public-identifier"}, message="Connect?")
+
+        self.assertFalse(out["sent"])
+        self.assertEqual(out["reason"], "invalid_candidate_identity")
 
 
 if __name__ == "__main__":

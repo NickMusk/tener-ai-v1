@@ -4720,6 +4720,12 @@ class WorkflowService:
                         "connect_request": connect_request,
                         "linkedin_account_id": account_id,
                     }
+                terminal_connect_error = self._connect_request_terminal_error(connect_request)
+                if terminal_connect_error:
+                    self._suppress_pre_resume_recovery(
+                        conversation_id=conversation_id,
+                        reason=terminal_connect_error,
+                    )
                 delivery_status = "failed"
                 self.db.log_operation(
                     operation="agent.outreach.connect_request",
@@ -5856,6 +5862,57 @@ class WorkflowService:
             return "cannot_resend_yet"
         return None
 
+    @staticmethod
+    def _connect_request_terminal_error(connect_request: Dict[str, Any]) -> str | None:
+        if not isinstance(connect_request, dict):
+            return None
+        if connect_request.get("sent"):
+            return None
+        reason = str(connect_request.get("reason") or "").lower()
+        error = str(connect_request.get("error") or "").lower()
+        text = f"{reason} {error}"
+        if "invalid_candidate_identity" in text or "missing_attendee_provider_id" in text:
+            return "invalid_candidate_identity"
+        if "user id does not match provider's expected format" in text:
+            return "invalid_candidate_identity"
+        return None
+
+    def _suppress_pre_resume_recovery(self, *, conversation_id: int, reason: str) -> None:
+        session = self.db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
+        if not session:
+            return
+        session_id = str(session.get("session_id") or "").strip()
+        if not session_id:
+            return
+        try:
+            state = json.loads(str(session.get("state_json") or "{}"))
+            if not isinstance(state, dict):
+                state = {}
+        except json.JSONDecodeError:
+            state = {}
+        state["status"] = "stalled"
+        state["next_followup_at"] = None
+        state["updated_at"] = utc_now_iso()
+        state["last_error"] = reason
+        self.db.upsert_pre_resume_session(
+            session_id=session_id,
+            conversation_id=conversation_id,
+            job_id=int(session.get("job_id") or 0),
+            candidate_id=int(session.get("candidate_id") or 0),
+            state=state,
+            instruction=str(session.get("instruction") or ""),
+        )
+        self.db.insert_pre_resume_event(
+            session_id=session_id,
+            conversation_id=conversation_id,
+            event_type="system_stalled",
+            intent=None,
+            inbound_text=None,
+            outbound_text=None,
+            state_status="stalled",
+            details={"reason": reason},
+        )
+
     def _deliver_pending_outreach_message(self, conversation_id: int, candidate: Dict[str, Any]) -> Dict[str, Any]:
         messages = self.db.list_messages(conversation_id=conversation_id)
         pending = None
@@ -6073,8 +6130,6 @@ class WorkflowService:
 
         fallback = {
             "linkedin_id": identifier,
-            "unipile_profile_id": identifier,
-            "attendee_provider_id": identifier,
             "full_name": f"Forced Test Candidate ({identifier})",
             "headline": "Test candidate",
             "location": str(job.get("location") or "Remote"),
@@ -6129,10 +6184,6 @@ class WorkflowService:
 
         if not str(out.get("linkedin_id") or "").strip():
             out["linkedin_id"] = identifier
-        if not str(out.get("attendee_provider_id") or "").strip():
-            out["attendee_provider_id"] = str(out.get("linkedin_id") or identifier)
-        if not str(out.get("unipile_profile_id") or "").strip():
-            out["unipile_profile_id"] = str(out.get("linkedin_id") or identifier)
         if not str(out.get("full_name") or "").strip():
             out["full_name"] = f"Forced Test Candidate ({identifier})"
         if not isinstance(out.get("languages"), list) or not out.get("languages"):

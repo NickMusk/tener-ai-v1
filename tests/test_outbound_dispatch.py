@@ -96,6 +96,24 @@ class _CannotResendManagedStubProvider:
         }
 
 
+class _InvalidIdentityManagedStubProvider:
+    def __init__(self, *, account_ref: str) -> None:
+        self.account_ref = account_ref
+        self.connect_messages: List[str] = []
+
+    def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+        return {"sent": False, "provider": "unipile", "reason": "connect_first"}
+
+    def send_connection_request(self, candidate_profile: Dict[str, Any], message: str | None = None) -> Dict[str, Any]:
+        self.connect_messages.append(message or "")
+        return {
+            "sent": False,
+            "provider": "unipile",
+            "reason": "invalid_candidate_identity",
+            "error": 'Unipile HTTP error 400: {"status":400,"type":"errors/invalid_parameters","title":"User ID does not match provider\'s expected format"}',
+        }
+
+
 class OutboundDispatchTests(unittest.TestCase):
     def _create_workflow(
         self,
@@ -313,6 +331,51 @@ class OutboundDispatchTests(unittest.TestCase):
             self.assertIn("cannot_resend_yet", str((action or {}).get("last_error") or ""))
             not_before = datetime.fromisoformat(str((action or {}).get("not_before") or "").replace("Z", "+00:00"))
             self.assertGreater(not_before, datetime.now(timezone.utc))
+
+    def test_invalid_candidate_identity_stalls_recovery_for_conversation(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_dispatch_invalid_identity.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            account_id = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-invalid",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            provider = _InvalidIdentityManagedStubProvider(account_ref="acc-invalid")
+            workflow._build_managed_provider = lambda account_id: provider  # type: ignore[method-assign]
+
+            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="invalid")
+            queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            action_id = int(queued["items"][0]["action_id"])
+            self.assertEqual(int(queued["items"][0].get("linkedin_account_id") or 0), account_id)
+            conversation_id = int(queued["conversation_ids"][0])
+            db.upsert_pre_resume_session(
+                session_id=f"pre-invalid-{conversation_id}",
+                conversation_id=conversation_id,
+                job_id=job_id,
+                candidate_id=candidate_id,
+                state={"status": "awaiting_reply", "language": "en"},
+                instruction="",
+            )
+
+            dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
+            self.assertEqual(dispatched["processed"], 1)
+            self.assertEqual(dispatched["failed"], 1)
+            self.assertEqual(dispatched["deferred"], 0)
+
+            action = db.get_outbound_action(action_id)
+            self.assertEqual(str((action or {}).get("status") or ""), "failed")
+
+            session = db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
+            self.assertIsNotNone(session)
+            self.assertEqual(str((session or {}).get("status") or ""), "stalled")
+            self.assertIn("invalid_candidate_identity", str((session or {}).get("last_error") or ""))
+
+            recovery_rows = db.list_unassigned_outreach_conversations(limit=10, job_id=job_id)
+            self.assertEqual(recovery_rows, [])
 
     def test_recovery_backfill_assigns_owner_from_lower_workload_account(self) -> None:
         with TemporaryDirectory() as td:
