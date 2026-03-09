@@ -69,6 +69,48 @@ class MatchingEngineTests(unittest.TestCase):
         result = self.engine.verify(job=job, profile=profile)
         self.assertEqual(result.notes["components"]["location_match"], 1.0)
 
+    def test_explicit_job_requirements_override_jd_parsing(self) -> None:
+        job = {
+            "title": "Manual QA Engineer",
+            "jd_text": "About Tener.ai platform with Go, Docker, LLM and recruiting automation copy.",
+            "location": "Remote",
+            "preferred_languages": ["en"],
+            "seniority": "junior",
+            "must_have_skills": ["manual testing", "api testing", "regression"],
+            "nice_to_have_skills": ["sql", "postman"],
+        }
+
+        requirements = self.engine.build_job_requirements(job)
+        self.assertEqual(requirements["must_have_skills"], ["manual testing", "api testing", "regression"])
+        self.assertEqual(requirements["nice_to_have_skills"], ["sql", "postman"])
+
+    def test_nice_to_have_missing_does_not_force_reject(self) -> None:
+        job = {
+            "title": "Manual QA Engineer",
+            "jd_text": "Manual QA role",
+            "location": "Remote",
+            "preferred_languages": ["en"],
+            "seniority": "junior",
+            "must_have_skills": ["manual testing", "api testing"],
+            "nice_to_have_skills": ["sql"],
+        }
+        profile = {
+            "linkedin_id": "ln_test_qa",
+            "full_name": "QA Candidate",
+            "headline": "Manual QA Engineer",
+            "location": "Remote",
+            "languages": ["en"],
+            "skills": ["manual testing", "api testing"],
+            "years_experience": 2,
+        }
+
+        result = self.engine.verify(job=job, profile=profile)
+        self.assertEqual(result.status, "verified")
+        self.assertEqual(result.notes["required_skills"], ["manual testing", "api testing"])
+        self.assertEqual(result.notes["nice_to_have_skills"], ["sql"])
+        self.assertEqual(result.notes["matched_nice_to_have_skills"], [])
+        self.assertGreaterEqual(result.notes["components"]["must_have_match"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

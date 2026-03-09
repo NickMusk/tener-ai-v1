@@ -48,6 +48,8 @@ class Database:
             jd_text TEXT NOT NULL,
             location TEXT,
             preferred_languages TEXT,
+            must_have_skills TEXT,
+            nice_to_have_skills TEXT,
             seniority TEXT,
             linkedin_routing_mode TEXT NOT NULL DEFAULT 'auto',
             archived_at TEXT,
@@ -387,14 +389,20 @@ class Database:
         seniority: Optional[str],
         company: Optional[str] = None,
         company_website: Optional[str] = None,
+        must_have_skills: Optional[List[str]] = None,
+        nice_to_have_skills: Optional[List[str]] = None,
         linkedin_routing_mode: str = "auto",
     ) -> int:
         routing_mode = self._normalize_linkedin_routing_mode(linkedin_routing_mode)
         with self.transaction() as conn:
             cur = conn.execute(
                 """
-                INSERT INTO jobs (title, company, company_website, jd_text, location, preferred_languages, seniority, linkedin_routing_mode, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO jobs (
+                    title, company, company_website, jd_text, location,
+                    preferred_languages, must_have_skills, nice_to_have_skills,
+                    seniority, linkedin_routing_mode, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     title,
@@ -403,6 +411,8 @@ class Database:
                     jd_text,
                     location,
                     json.dumps(preferred_languages),
+                    json.dumps(self._normalize_skill_list(must_have_skills)),
+                    json.dumps(self._normalize_skill_list(nice_to_have_skills)),
                     seniority,
                     routing_mode,
                     utc_now_iso(),
@@ -429,6 +439,28 @@ class Database:
                 WHERE id = ?
                 """,
                 (jd_text, job_id),
+            )
+            return cur.rowcount > 0
+
+    def update_job_requirements(
+        self,
+        *,
+        job_id: int,
+        must_have_skills: Optional[List[str]],
+        nice_to_have_skills: Optional[List[str]],
+    ) -> bool:
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                UPDATE jobs
+                SET must_have_skills = ?, nice_to_have_skills = ?
+                WHERE id = ?
+                """,
+                (
+                    json.dumps(self._normalize_skill_list(must_have_skills)),
+                    json.dumps(self._normalize_skill_list(nice_to_have_skills)),
+                    int(job_id),
+                ),
             )
             return cur.rowcount > 0
 
@@ -3334,6 +3366,12 @@ class Database:
         if "company_website" not in job_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN company_website TEXT")
+        if "must_have_skills" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN must_have_skills TEXT")
+        if "nice_to_have_skills" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN nice_to_have_skills TEXT")
         if "linkedin_routing_mode" not in job_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN linkedin_routing_mode TEXT")
@@ -3570,6 +3608,8 @@ class Database:
         item = dict(row)
         for field in (
             "preferred_languages",
+            "must_have_skills",
+            "nice_to_have_skills",
             "languages",
             "skills",
             "verification_notes",
@@ -3599,6 +3639,18 @@ class Database:
                 except json.JSONDecodeError:
                     pass
         return item
+
+    @staticmethod
+    def _normalize_skill_list(values: Optional[List[Any]]) -> List[str]:
+        out: List[str] = []
+        seen: set[str] = set()
+        for raw in values or []:
+            value = str(raw or "").strip().lower()
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            out.append(value)
+        return out
 
     @staticmethod
     def _candidate_interview_score(item: Dict[str, Any]) -> float | None:

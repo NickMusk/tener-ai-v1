@@ -558,6 +558,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "emulator_dashboard": "GET /dashboard/emulator",
                         "job_linkedin_routing": "GET /api/jobs/{job_id}/linkedin-routing",
                         "update_job_jd": "POST /api/jobs/{job_id}/jd",
+                        "update_job_requirements": "POST /api/jobs/{job_id}/requirements",
                         "update_job_linkedin_routing": "POST /api/jobs/{job_id}/linkedin-routing",
                         "run_workflow": "POST /api/workflows/execute",
                         "source_step": "POST /api/steps/source",
@@ -1830,6 +1831,54 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, {"job_id": job_id, "jd_text": jd_text})
             return
 
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/requirements"):
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/requirements$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            must_have_raw = body.get("must_have_skills") or []
+            if not isinstance(must_have_raw, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "must_have_skills must be an array"})
+                return
+            nice_to_have_raw = body.get("nice_to_have_skills") or []
+            if not isinstance(nice_to_have_raw, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "nice_to_have_skills must be an array"})
+                return
+
+            must_have_skills = self._normalize_text_list(must_have_raw)
+            nice_to_have_skills = self._normalize_text_list(nice_to_have_raw)
+            updated = SERVICES["db"].update_job_requirements(
+                job_id=job_id,
+                must_have_skills=must_have_skills,
+                nice_to_have_skills=nice_to_have_skills,
+            )
+            if not updated:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            SERVICES["db"].log_operation(
+                operation="job.requirements.updated",
+                status="ok",
+                entity_type="job",
+                entity_id=str(job_id),
+                details={
+                    "must_have_skills": must_have_skills,
+                    "nice_to_have_skills": nice_to_have_skills,
+                },
+            )
+            self._json_response(
+                HTTPStatus.OK,
+                {
+                    "job_id": job_id,
+                    "must_have_skills": must_have_skills,
+                    "nice_to_have_skills": nice_to_have_skills,
+                },
+            )
+            return
+
         if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/linkedin-routing"):
             job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/linkedin-routing$")
             if job_id is None:
@@ -2170,12 +2219,22 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(preferred_languages, list):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "preferred_languages must be an array"})
                 return
+            must_have_raw = body.get("must_have_skills") or []
+            if not isinstance(must_have_raw, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "must_have_skills must be an array"})
+                return
+            nice_to_have_raw = body.get("nice_to_have_skills") or []
+            if not isinstance(nice_to_have_raw, list):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "nice_to_have_skills must be an array"})
+                return
 
             job_id = SERVICES["db"].insert_job(
                 title=title,
                 jd_text=jd_text,
                 location=body.get("location"),
                 preferred_languages=[str(x).lower() for x in preferred_languages if str(x).strip()],
+                must_have_skills=self._normalize_text_list(must_have_raw),
+                nice_to_have_skills=self._normalize_text_list(nice_to_have_raw),
                 seniority=(str(body.get("seniority")).lower() if body.get("seniority") else None),
                 company=company,
                 company_website=company_website,
@@ -2955,6 +3014,18 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         if ip is not None and (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast):
             return None
         return normalized
+
+    @staticmethod
+    def _normalize_text_list(values: Any) -> list[str]:
+        out: list[str] = []
+        seen: set[str] = set()
+        for raw in values or []:
+            value = str(raw or "").strip().lower()
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            out.append(value)
+        return out
 
     def _start_company_culture_profile_pipeline(self, *, job_id: int) -> Dict[str, Any]:
         job = SERVICES["db"].get_job(int(job_id))

@@ -25,6 +25,7 @@ class MatchingEngine:
         rules = self.rules
         weights = rules.get("weights", {})
         candidate_skills = self._candidate_skills(profile)
+        requirements = self.build_job_requirements(job)
         core_profile = self.build_core_profile(job)
 
         missing_fields = [
@@ -48,19 +49,30 @@ class MatchingEngine:
                 },
             )
 
-        jd_text = (job.get("jd_text") or "").lower()
-        required_skills = self._extract_required_skills(jd_text)
+        required_skills = requirements.get("must_have_skills") or []
+        nice_to_have_skills = requirements.get("nice_to_have_skills") or []
 
         if not required_skills:
             # If no skills are detected in JD, the role is broad; do not penalize heavily.
-            skills_match = 0.6
+            must_have_match = 0.6
             matched_skills = []
         else:
-            matched_skills = sorted(required_skills.intersection(candidate_skills))
+            matched_skills = [skill for skill in required_skills if skill in candidate_skills]
             effective_required_count = min(len(required_skills), 6)
-            skills_match = min(1.0, len(matched_skills) / effective_required_count)
+            must_have_match = min(1.0, len(matched_skills) / effective_required_count)
 
-        target_seniority = (job.get("seniority") or self._infer_seniority(jd_text) or "middle").lower()
+        matched_nice_to_have = [skill for skill in nice_to_have_skills if skill in candidate_skills]
+        nice_to_have_match = (
+            min(1.0, len(matched_nice_to_have) / max(1, len(nice_to_have_skills)))
+            if nice_to_have_skills
+            else 0.0
+        )
+        if required_skills:
+            skills_match = min(1.0, (must_have_match * 0.9) + (nice_to_have_match * 0.1))
+        else:
+            skills_match = must_have_match
+
+        target_seniority = str(requirements.get("target_seniority") or "middle").lower()
         years = int(profile.get("years_experience") or 0)
         seniority_match = self._seniority_match(target_seniority, years)
 
@@ -77,13 +89,17 @@ class MatchingEngine:
         status = "verified" if score >= float(rules.get("min_score", 0.65)) else "rejected"
         notes = {
             "core_profile": core_profile,
-            "required_skills": sorted(required_skills),
+            "required_skills": list(required_skills),
+            "nice_to_have_skills": list(nice_to_have_skills),
             "matched_skills": matched_skills,
+            "matched_nice_to_have_skills": matched_nice_to_have,
             "effective_required_skills_count": min(len(required_skills), 6) if required_skills else 0,
             "target_seniority": target_seniority,
             "candidate_years_experience": years,
             "components": {
                 "skills_match": round(skills_match, 3),
+                "must_have_match": round(must_have_match, 3),
+                "nice_to_have_match": round(nice_to_have_match, 3),
                 "seniority_match": round(seniority_match, 3),
                 "location_match": round(location_match, 3),
                 "language_match": round(language_match, 3),
@@ -95,8 +111,10 @@ class MatchingEngine:
             status=status,
             score=round(score, 3),
             min_score=float(rules.get("min_score", 0.65)),
-            required_skills=sorted(required_skills),
+            required_skills=list(required_skills),
             matched_skills=matched_skills,
+            nice_to_have_skills=list(nice_to_have_skills),
+            matched_nice_to_have=matched_nice_to_have,
             target_seniority=target_seniority,
             years=years,
             location_match=round(location_match, 3),
@@ -104,21 +122,55 @@ class MatchingEngine:
         )
         return MatchResult(score=round(score, 3), status=status, notes=notes)
 
-    def build_core_profile(self, job: Dict[str, Any], max_skills: int = 6) -> Dict[str, Any]:
+    def build_job_requirements(
+        self,
+        job: Dict[str, Any],
+        *,
+        max_must_have: int = 6,
+        max_nice_to_have: int = 6,
+    ) -> Dict[str, Any]:
         jd_text = (job.get("jd_text") or "").lower()
         title = str(job.get("title") or "").strip()
         target_seniority = (job.get("seniority") or self._infer_seniority(jd_text) or "middle").lower()
-        required_skills = sorted(self._extract_required_skills(jd_text))
-        if required_skills:
-            core_skills = required_skills[:max_skills]
+
+        explicit_must_have = self._normalize_skill_list(job.get("must_have_skills"))
+        explicit_nice_to_have = self._normalize_skill_list(job.get("nice_to_have_skills"))
+
+        if explicit_must_have:
+            must_have_skills = explicit_must_have[:max_must_have]
         else:
-            core_skills = self._extract_jd_keywords(jd_text, max_items=max_skills)
+            extracted_required = sorted(self._extract_required_skills(jd_text))
+            must_have_skills = (
+                extracted_required[:max_must_have]
+                if extracted_required
+                else self._extract_jd_keywords(jd_text, max_items=max_must_have)
+            )
+
+        if explicit_nice_to_have:
+            nice_to_have_skills = explicit_nice_to_have[:max_nice_to_have]
+        else:
+            fallback_keywords = self._extract_jd_keywords(jd_text, max_items=max_must_have + max_nice_to_have)
+            must_set = {item.lower() for item in must_have_skills}
+            nice_to_have_skills = [item for item in fallback_keywords if item.lower() not in must_set][:max_nice_to_have]
+
         return {
             "title": title,
             "target_seniority": target_seniority,
-            "core_skills": core_skills,
+            "must_have_skills": must_have_skills,
+            "nice_to_have_skills": nice_to_have_skills,
             "location": job.get("location"),
             "preferred_languages": job.get("preferred_languages") or [],
+        }
+
+    def build_core_profile(self, job: Dict[str, Any], max_skills: int = 6) -> Dict[str, Any]:
+        requirements = self.build_job_requirements(job, max_must_have=max_skills, max_nice_to_have=max_skills)
+        return {
+            "title": requirements.get("title"),
+            "target_seniority": requirements.get("target_seniority"),
+            "core_skills": requirements.get("must_have_skills") or [],
+            "nice_to_have_skills": requirements.get("nice_to_have_skills") or [],
+            "location": requirements.get("location"),
+            "preferred_languages": requirements.get("preferred_languages") or [],
         }
 
     def _build_human_explanation(
@@ -128,6 +180,8 @@ class MatchingEngine:
         min_score: float,
         required_skills: List[str],
         matched_skills: List[str],
+        nice_to_have_skills: List[str],
+        matched_nice_to_have: List[str],
         target_seniority: str,
         years: int,
         location_match: float,
@@ -140,6 +194,13 @@ class MatchingEngine:
             if skills_total
             else "skills: none explicitly detected in JD (component softened)"
         )
+        nice_total = len(nice_to_have_skills)
+        nice_matched = len(matched_nice_to_have)
+        nice_part = (
+            f"nice-to-have: {nice_matched}/{nice_total}"
+            if nice_total
+            else "nice-to-have: not configured"
+        )
         seniority_part = f"seniority: target {target_seniority}, candidate has {years} years of experience"
         location_part = f"location score: {location_match}"
         language_part = f"language score: {language_match}"
@@ -147,7 +208,7 @@ class MatchingEngine:
         if status == "verified":
             return (
                 f"Candidate verified: final score {score} is above threshold {min_score}. "
-                f"Factors: {skills_part}; {seniority_part}; {location_part}; {language_part}."
+                f"Factors: {skills_part}; {nice_part}; {seniority_part}; {location_part}; {language_part}."
             )
 
         gaps: List[str] = []
@@ -169,7 +230,7 @@ class MatchingEngine:
         return (
             f"Candidate rejected: final score {score} is below threshold {min_score}. "
             f"Reasons: {gaps_text}. "
-            f"Factors: {skills_part}; {seniority_part}; {location_part}; {language_part}."
+            f"Factors: {skills_part}; {nice_part}; {seniority_part}; {location_part}; {language_part}."
         )
 
     def summarize_scope(self, job: Dict[str, Any], max_items: int = 5) -> str:
@@ -184,6 +245,18 @@ class MatchingEngine:
         dictionary = [s.lower() for s in self.rules.get("skill_dictionary", [])]
         found = {skill for skill in dictionary if skill in jd_text}
         return found
+
+    @staticmethod
+    def _normalize_skill_list(values: Any) -> List[str]:
+        out: List[str] = []
+        seen: Set[str] = set()
+        for raw in values or []:
+            value = str(raw or "").strip().lower()
+            if not value or value in seen:
+                continue
+            seen.add(value)
+            out.append(value)
+        return out
 
     def _infer_seniority(self, jd_text: str) -> str | None:
         tokens = {

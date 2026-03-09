@@ -120,6 +120,23 @@ class JobArchivingTests(unittest.TestCase):
         visible_titles = [str(item.get("title") or "") for item in (payload_jobs.get("items") or [])]
         self.assertEqual(visible_titles, ["Frontend Engineer", "Manual QA Engineer"])
 
+    def test_jobs_api_updates_explicit_requirements(self) -> None:
+        status_update, payload_update = self._request(
+            "POST",
+            f"/api/jobs/{self.manual_job_id}/requirements",
+            {
+                "must_have_skills": ["manual testing", "api testing", "regression"],
+                "nice_to_have_skills": ["sql", "postman"],
+            },
+        )
+        self.assertEqual(status_update, 200)
+        self.assertEqual(payload_update.get("must_have_skills"), ["manual testing", "api testing", "regression"])
+        self.assertEqual(payload_update.get("nice_to_have_skills"), ["sql", "postman"])
+
+        job = self.db.get_job(self.manual_job_id) or {}
+        self.assertEqual(job.get("must_have_skills"), ["manual testing", "api testing", "regression"])
+        self.assertEqual(job.get("nice_to_have_skills"), ["sql", "postman"])
+
     def test_archive_job_stops_pending_outreach_and_pre_resume_followups(self) -> None:
         candidate_id = self.db.upsert_candidate(
             {
