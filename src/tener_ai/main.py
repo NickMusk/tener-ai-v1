@@ -249,6 +249,7 @@ def build_services() -> Dict[str, Any]:
     sourcing_agent = SourcingAgent(
         linkedin_provider=linkedin_provider,
         instruction=instructions.get("sourcing"),
+        matching_engine=matching_engine,
     )
     verification_agent = VerificationAgent(
         matching_engine=matching_engine,

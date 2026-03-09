@@ -150,6 +150,80 @@ class UnipileProviderParsingTests(unittest.TestCase):
         self.assertEqual(self.provider._extract_years_from_text("Senior Backend Engineer | 7.6+ YOE"), 7)
         self.assertEqual(self.provider._extract_years_from_text("Platform engineer with 10 years experience"), 10)
 
+    def test_structured_search_uses_keywords_and_resolved_filters(self) -> None:
+        class FakeProvider(UnipileLinkedInProvider):
+            def __init__(self) -> None:
+                super().__init__(api_key="k", base_url="https://api.example.com", account_id="acc")
+                self.calls = []
+
+            def _request_json(self, method, url, payload=None):  # type: ignore[override]
+                self.calls.append((method, url, payload))
+                if "/api/v1/linkedin/search/parameters" in url and "type=LOCATION" in url:
+                    return {"items": [{"id": "loc_remote", "label": "Remote"}]}
+                if "/api/v1/linkedin/search/parameters" in url and "type=SKILL" in url and "python" in url.lower():
+                    return {"items": [{"id": "skill_python", "label": "Python"}]}
+                if "/api/v1/linkedin/search/parameters" in url and "type=SKILL" in url and "aws" in url.lower():
+                    return {"items": [{"id": "skill_aws", "label": "AWS"}]}
+                if "/api/v1/linkedin/search" in url:
+                    return {
+                        "items": [
+                            {
+                                "provider_id": "cand_1",
+                                "full_name": "Alex Morgan",
+                                "headline": "Senior Backend Engineer",
+                                "location": "Remote",
+                                "languages": ["en"],
+                                "skills": ["python", "aws"],
+                                "years_experience": 7,
+                            }
+                        ]
+                    }
+                return {}
+
+        provider = FakeProvider()
+        out = provider.search_profiles_structured(
+            spec={
+                "title_query": "Senior Backend Engineer",
+                "filters": {
+                    "location": "Remote",
+                    "skills": ["python", "aws"],
+                    "profile_language": ["en"],
+                },
+            },
+            limit=20,
+        )
+        self.assertEqual(len(out), 1)
+        search_call = next(call for call in provider.calls if "/api/v1/linkedin/search?" in call[1])
+        payload = search_call[2] or {}
+        self.assertEqual(payload.get("keywords"), "Senior Backend Engineer")
+        self.assertEqual(payload.get("profile_language"), ["en"])
+        self.assertEqual(payload.get("location"), ["loc_remote"])
+        self.assertEqual(
+            payload.get("skills"),
+            [{"id": "skill_python", "priority": "MUST_HAVE"}, {"id": "skill_aws", "priority": "MUST_HAVE"}],
+        )
+
+    def test_structured_search_parameter_resolution_is_cached(self) -> None:
+        class FakeProvider(UnipileLinkedInProvider):
+            def __init__(self) -> None:
+                super().__init__(api_key="k", base_url="https://api.example.com", account_id="acc")
+                self.calls = []
+
+            def _request_json(self, method, url, payload=None):  # type: ignore[override]
+                self.calls.append((method, url, payload))
+                if "/api/v1/linkedin/search/parameters" in url:
+                    return {"items": [{"id": "loc_remote", "label": "Remote"}]}
+                if "/api/v1/linkedin/search" in url:
+                    return {"items": []}
+                return {}
+
+        provider = FakeProvider()
+        spec = {"title_query": "Manual QA Engineer", "filters": {"location": "Remote"}}
+        provider.search_profiles_structured(spec=spec, limit=10)
+        provider.search_profiles_structured(spec=spec, limit=10)
+        parameter_calls = [call for call in provider.calls if "/api/v1/linkedin/search/parameters" in call[1]]
+        self.assertEqual(len(parameter_calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

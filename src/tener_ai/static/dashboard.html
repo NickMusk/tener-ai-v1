@@ -475,6 +475,13 @@
       font-size: 12px;
       line-height: 1.6;
     }
+    .source-filters-section-title {
+      color: var(--text-secondary);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-family: 'Space Mono', monospace;
+    }
     .source-filter-chips {
       display: flex;
       flex-wrap: wrap;
@@ -499,6 +506,42 @@
     }
     .source-filters-queries li + li {
       margin-top: 5px;
+    }
+    .collapsible-card {
+      padding: 0;
+      overflow: hidden;
+    }
+    .collapsible-card summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 14px 16px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+    .collapsible-card summary::-webkit-details-marker {
+      display: none;
+    }
+    .collapsible-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    .collapsible-meta {
+      color: var(--text-secondary);
+      font-size: 12px;
+      text-align: right;
+      max-width: 65%;
+      line-height: 1.4;
+    }
+    .collapsible-body {
+      border-top: 1px solid var(--border-color);
+      padding: 14px 16px 16px;
+      display: grid;
+      gap: 12px;
     }
     .json-nav { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; }
     .json-tab { font-size: 11px; padding: 7px 9px; }
@@ -938,30 +981,60 @@
       </article>
     </section>
 
-    <section class="card">
-      <div class="panel-title"><span>Verification Explanations</span><span class="mono">rules-based</span></div>
-      <div id="verify-explanations-box" class="verify-list">
-        <div class="muted">Run Vetting to see human-readable decision reasons.</div>
-      </div>
+    <section class="card collapsible-card">
+      <details id="verify-explanations-panel">
+        <summary>
+          <div class="collapsible-title">
+            <span>Verification Explanations</span>
+            <span class="mono">rules-based</span>
+          </div>
+          <div class="collapsible-meta">Show human-readable vetting decisions.</div>
+        </summary>
+        <div class="collapsible-body">
+          <div id="verify-explanations-box" class="verify-list">
+            <div class="muted">Run Vetting to see human-readable decision reasons.</div>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section class="panels">
-      <div class="card">
-        <div class="panel-title"><span>Live Operation Logs</span><button id="logs-refresh-btn">Reload</button></div>
-        <div id="logs-box" class="log-box"></div>
+      <div class="card collapsible-card">
+        <details id="live-logs-panel">
+          <summary>
+            <div class="collapsible-title">
+              <span>Live Operation Logs</span>
+            </div>
+            <div class="collapsible-meta">Inspect recent pipeline events and API activity.</div>
+          </summary>
+          <div class="collapsible-body">
+            <div class="panel-title"><span>Live Operation Logs</span><button id="logs-refresh-btn">Reload</button></div>
+            <div id="logs-box" class="log-box"></div>
+          </div>
+        </details>
       </div>
 
-      <div class="card">
-        <div class="panel-title"><span>Step JSON Outputs</span><span class="mono" id="snapshot-label">none</span></div>
-        <div class="json-nav">
-          <button class="json-tab" data-step="source" data-label="source">source</button>
-          <button class="json-tab" data-step="enrich" data-label="enrich">enrich</button>
-          <button class="json-tab" data-step="verify" data-label="verify">verify</button>
-          <button class="json-tab" data-step="add" data-label="add">add</button>
-          <button class="json-tab" data-step="outreach" data-label="outreach">outreach</button>
-          <button class="json-tab" data-step="workflow" data-label="workflow">workflow</button>
-        </div>
-        <div id="snapshot-box" class="log-box"></div>
+      <div class="card collapsible-card">
+        <details id="step-json-panel">
+          <summary>
+            <div class="collapsible-title">
+              <span>Step JSON Outputs</span>
+              <span class="mono" id="snapshot-label">none</span>
+            </div>
+            <div class="collapsible-meta">Inspect raw payloads returned by each pipeline step.</div>
+          </summary>
+          <div class="collapsible-body">
+            <div class="json-nav">
+              <button class="json-tab" data-step="source" data-label="source">source</button>
+              <button class="json-tab" data-step="enrich" data-label="enrich">enrich</button>
+              <button class="json-tab" data-step="verify" data-label="verify">verify</button>
+              <button class="json-tab" data-step="add" data-label="add">add</button>
+              <button class="json-tab" data-step="outreach" data-label="outreach">outreach</button>
+              <button class="json-tab" data-step="workflow" data-label="workflow">workflow</button>
+            </div>
+            <div id="snapshot-box" class="log-box"></div>
+          </div>
+        </details>
       </div>
     </section>
 
@@ -976,7 +1049,11 @@
         </summary>
         <div id="source-filters-box" class="source-filters-box">
           <div id="source-filters-summary" class="source-filters-summary">Select a job to inspect sourcing filters.</div>
+          <div class="source-filters-section-title">Applied Filters</div>
           <div id="source-filter-chips" class="source-filter-chips"></div>
+          <div class="source-filters-section-title">Primary Query</div>
+          <div id="source-primary-query" class="source-filters-summary">-</div>
+          <div class="source-filters-section-title">Fallback Queries</div>
           <ol id="source-filters-queries" class="source-filters-queries">
             <li class="muted">No generated queries yet.</li>
           </ol>
@@ -984,39 +1061,49 @@
       </details>
     </section>
 
-    <section class="card">
-      <div class="panel-title">
-        <span>Candidates for Selected Job</span>
-        <div class="panel-actions">
-          <select id="cands-overall-filter" class="overall-status-filter">
-            <option value="all">Overall: all</option>
-            <option value="shortlist">Overall: shortlist</option>
-            <option value="pipeline">Overall: pipeline</option>
-            <option value="review">Overall: review</option>
-            <option value="blocked">Overall: blocked</option>
-          </select>
-          <button id="demo-candidate-profile-btn">Demo profile</button>
-          <button id="cands-refresh-btn">Reload</button>
+    <section class="card collapsible-card">
+      <details id="candidates-panel" open>
+        <summary>
+          <div class="collapsible-title">
+            <span>Candidates</span>
+          </div>
+          <div class="collapsible-meta">Review current candidates for the selected job.</div>
+        </summary>
+        <div class="collapsible-body">
+          <div class="panel-title">
+            <span>Candidates</span>
+            <div class="panel-actions">
+              <select id="cands-overall-filter" class="overall-status-filter">
+                <option value="all">Overall: all</option>
+                <option value="shortlist">Overall: shortlist</option>
+                <option value="pipeline">Overall: pipeline</option>
+                <option value="review">Overall: review</option>
+                <option value="blocked">Overall: blocked</option>
+              </select>
+              <button id="demo-candidate-profile-btn">Demo profile</button>
+              <button id="cands-refresh-btn">Reload</button>
+            </div>
+          </div>
+          <div style="overflow:auto;">
+            <table id="candidates-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Current Status</th>
+                  <th>Vetting</th>
+                  <th>Communication</th>
+                  <th>Interview</th>
+                  <th>Overall</th>
+                  <th>Location</th>
+                  <th>Skills</th>
+                </tr>
+              </thead>
+              <tbody id="candidates-tbody"></tbody>
+            </table>
+          </div>
         </div>
-      </div>
-      <div style="overflow:auto;">
-        <table id="candidates-table">
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Current Status</th>
-              <th>Vetting</th>
-              <th>Communication</th>
-              <th>Interview</th>
-              <th>Overall</th>
-              <th>Location</th>
-              <th>Skills</th>
-            </tr>
-          </thead>
-          <tbody id="candidates-tbody"></tbody>
-        </table>
-      </div>
+      </details>
     </section>
     </section>
 
@@ -1873,8 +1960,9 @@
       const toggleSummaryEl = $("source-filters-toggle-summary");
       const summaryEl = $("source-filters-summary");
       const chipsEl = $("source-filter-chips");
+      const primaryQueryEl = $("source-primary-query");
       const queriesEl = $("source-filters-queries");
-      if (!summaryEl || !chipsEl || !queriesEl || !toggleSummaryEl) return;
+      if (!summaryEl || !chipsEl || !queriesEl || !toggleSummaryEl || !primaryQueryEl) return;
       const selected = selectedJobId();
       const preview = state.sourceFiltersPreview || {};
       const filters = preview.filters || {};
@@ -1882,6 +1970,7 @@
         toggleSummaryEl.textContent = "Select a job to inspect sourcing filters.";
         summaryEl.textContent = "Select a job to inspect sourcing filters.";
         chipsEl.innerHTML = "";
+        primaryQueryEl.textContent = "-";
         queriesEl.innerHTML = '<li class="muted">No generated queries yet.</li>';
         return;
       }
@@ -1889,38 +1978,54 @@
         toggleSummaryEl.textContent = "Source filters unavailable";
         summaryEl.textContent = String(preview.error || "Failed to load source filters");
         chipsEl.innerHTML = "";
+        primaryQueryEl.textContent = "-";
         queriesEl.innerHTML = '<li class="muted">Source filters unavailable.</li>';
         return;
       }
       const languages = Array.isArray(filters.preferred_languages) ? filters.preferred_languages : [];
-      const keywords = Array.isArray(filters.extracted_keywords) ? filters.extracted_keywords : [];
-      const queries = Array.isArray(filters.queries) ? filters.queries : [];
+      const appliedFilters = (filters.filters && typeof filters.filters === "object") ? filters.filters : {};
+      const queries = Array.isArray(filters.fallback_queries) ? filters.fallback_queries : (Array.isArray(filters.queries) ? filters.queries : []);
+      const primaryQuery = String(filters.primary_query || filters.title || "").trim();
       const jobTitle = String(preview.job_title || filters.title || "").trim() || "Current job";
       const company = String(preview.job_company || "").trim();
       const location = String(filters.location || "").trim();
       const seniority = String(filters.seniority || "").trim();
+      const appliedSkills = Array.isArray(appliedFilters.skills) ? appliedFilters.skills : [];
+      const appliedLanguages = Array.isArray(appliedFilters.profile_language) ? appliedFilters.profile_language : [];
       const compactParts = [
-        `${queries.length} quer${queries.length === 1 ? "y" : "ies"}`,
+        primaryQuery ? `primary: ${primaryQuery}` : "",
+        `${Object.values(appliedFilters).filter((value) => Array.isArray(value) ? value.length : !!value).length} filter${Object.values(appliedFilters).filter((value) => Array.isArray(value) ? value.length : !!value).length === 1 ? "" : "s"}`,
+        `${queries.length} fallback${queries.length === 1 ? "" : "s"}`,
         location || "",
         seniority || "",
-        languages.length ? languages.join(", ") : "",
+        appliedLanguages.length ? appliedLanguages.join(", ") : "",
       ].filter(Boolean);
       toggleSummaryEl.textContent = compactParts.join(" • ");
       const summaryParts = [
         company ? `${jobTitle} • ${company}` : jobTitle,
+        primaryQuery ? `search: ${primaryQuery}` : "",
         location ? `location: ${location}` : "",
         seniority ? `seniority: ${seniority}` : "",
         languages.length ? `languages: ${languages.join(", ")}` : "",
-        `${queries.length} generated quer${queries.length === 1 ? "y" : "ies"}`,
+        appliedSkills.length ? `skills: ${appliedSkills.join(", ")}` : "",
+        `${queries.length} fallback quer${queries.length === 1 ? "y" : "ies"}`,
       ].filter(Boolean);
       summaryEl.textContent = summaryParts.join(" • ");
+      primaryQueryEl.textContent = primaryQuery || "-";
       const chips = [];
-      keywords.forEach((item) => chips.push(`<span class="source-filter-chip">${escapeHtml(String(item))}</span>`));
-      languages.forEach((item) => chips.push(`<span class="source-filter-chip">lang:${escapeHtml(String(item))}</span>`));
-      chipsEl.innerHTML = chips.join("") || '<span class="muted">No extracted keywords</span>';
+      if (appliedFilters.location) {
+        chips.push(`<span class="source-filter-chip">location: ${escapeHtml(String(appliedFilters.location))}</span>`);
+      }
+      appliedSkills.forEach((item) => {
+        chips.push(`<span class="source-filter-chip">skill: ${escapeHtml(String(item))}</span>`);
+      });
+      appliedLanguages.forEach((item) => {
+        chips.push(`<span class="source-filter-chip">lang: ${escapeHtml(String(item))}</span>`);
+      });
+      chipsEl.innerHTML = chips.join("") || '<span class="muted">No applied filters</span>';
       queriesEl.innerHTML = queries.length
         ? queries.map((query) => `<li>${escapeHtml(String(query || ""))}</li>`).join("")
-        : '<li class="muted">No generated queries.</li>';
+        : '<li class="muted">No fallback queries.</li>';
     }
 
     async function refreshSourceFilters(jobId = selectedJobId()) {

@@ -3,25 +3,43 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .language import detect_language_from_text, pick_candidate_language
 from .matching import MatchingEngine
 
 
 class SourcingAgent:
-    def __init__(self, linkedin_provider: Any, instruction: str = "") -> None:
+    def __init__(self, linkedin_provider: Any, instruction: str = "", matching_engine: Any | None = None) -> None:
         self.linkedin_provider = linkedin_provider
         self.instruction = instruction
+        self.matching_engine = matching_engine
 
     def find_candidates(self, job: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
         limit = max(1, min(int(limit or 1), 200))
-        queries = self._build_queries(job)
+        spec = self.build_search_spec(job)
+        queries = list(spec.get("fallback_queries") or [])
         per_query_limit = max(10, min(limit, 50))
 
         seen: set[str] = set()
         collected: List[Dict[str, Any]] = []
         search_errors: List[str] = []
+
+        structured_search = getattr(self.linkedin_provider, "search_profiles_structured", None)
+        if callable(structured_search):
+            try:
+                profiles = structured_search(spec=spec, limit=per_query_limit)
+            except Exception as exc:
+                search_errors.append(f"structured_search error={exc}")
+            else:
+                for profile in profiles or []:
+                    key = self._candidate_key(profile)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+                    collected.append(profile)
+                    if len(collected) >= limit:
+                        return collected[:limit]
 
         # Pass 1: broad query set with a larger per-query window.
         for query in queries:
@@ -66,6 +84,21 @@ class SourcingAgent:
         return collected[:limit]
 
     def build_search_preview(self, job: Dict[str, Any]) -> Dict[str, Any]:
+        spec = self.build_search_spec(job)
+        return {
+            "title": spec.get("title_query"),
+            "location": spec.get("location"),
+            "seniority": spec.get("seniority"),
+            "preferred_languages": spec.get("preferred_languages") or [],
+            "jd_excerpt": spec.get("jd_excerpt"),
+            "extracted_keywords": spec.get("keywords") or [],
+            "primary_query": spec.get("title_query"),
+            "filters": spec.get("filters") or {},
+            "fallback_queries": spec.get("fallback_queries") or [],
+            "queries": spec.get("fallback_queries") or [],
+        }
+
+    def build_search_spec(self, job: Dict[str, Any]) -> Dict[str, Any]:
         title = str(job.get("title") or "").strip()
         jd_text = str(job.get("jd_text") or "").strip()
         location = str(job.get("location") or "").strip() or None
@@ -75,16 +108,25 @@ class SourcingAgent:
             for item in (job.get("preferred_languages") or [])
             if str(item).strip()
         ]
-        extracted_keywords = self._extract_keywords(jd_text, max_items=14)
-        queries = self._build_queries(job)
+        keywords = self._core_skills(job)
+        filters: Dict[str, Any] = {
+            "location": location,
+            "skills": keywords[:3],
+            "profile_language": preferred_languages[:2],
+        }
         return {
-            "title": title or None,
+            "title_query": title or None,
             "location": location,
             "seniority": seniority,
             "preferred_languages": preferred_languages,
+            "keywords": keywords,
             "jd_excerpt": jd_text[:280] or None,
-            "extracted_keywords": extracted_keywords,
-            "queries": queries,
+            "filters": filters,
+            "fallback_queries": self._build_fallback_queries(
+                title=title,
+                location=location,
+                keywords=keywords,
+            ),
         }
 
     def send_outreach(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
@@ -143,39 +185,42 @@ class SourcingAgent:
         return f"fallback:{name}|{headline}"
 
     def _build_queries(self, job: Dict[str, Any]) -> List[str]:
-        title = str(job.get("title") or "").strip()
-        jd_text = str(job.get("jd_text") or "").strip()
-        location = str(job.get("location") or "").strip()
-        keywords = self._extract_keywords(jd_text, max_items=14)
+        spec = self.build_search_spec(job)
+        return list(spec.get("fallback_queries") or [])
 
+    def _core_skills(self, job: Dict[str, Any], max_items: int = 4) -> List[str]:
+        if self.matching_engine is not None:
+            try:
+                core = self.matching_engine.build_core_profile(job)
+            except Exception:
+                core = {}
+            skills = core.get("core_skills") if isinstance(core, dict) else []
+            if isinstance(skills, list):
+                cleaned = [str(item).strip().lower() for item in skills if str(item).strip()]
+                if cleaned:
+                    return cleaned[:max_items]
+        return self._extract_keywords(str(job.get("jd_text") or ""), max_items=max_items)
+
+    @staticmethod
+    def _build_fallback_queries(*, title: str, location: Optional[str], keywords: List[str]) -> List[str]:
         candidates = [
-            title,
-            f"{title} {location}".strip(),
-            f"{title} {' '.join(keywords[:4])}".strip(),
-            " ".join(keywords[:5]).strip(),
-            " ".join(keywords[5:10]).strip(),
-            f"{title} {' '.join(keywords[4:8])}".strip(),
-            f"{title} {location} {' '.join(keywords[:6])}".strip(),
-            f"{title} {jd_text[:220]}".strip(),
+            title.strip(),
+            f"{title} {location or ''}".strip(),
+            f"{title} {' '.join(keywords[:2])}".strip(),
+            f"{title} {location or ''} {' '.join(keywords[:2])}".strip(),
         ]
-        for idx in range(0, min(len(keywords), 10), 2):
-            chunk = " ".join(keywords[idx : idx + 4]).strip()
-            if chunk:
-                candidates.append(f"{title} {chunk}".strip())
-                if location:
-                    candidates.append(f"{title} {location} {chunk}".strip())
-        queries: List[str] = []
+        out: List[str] = []
         seen: set[str] = set()
         for item in candidates:
-            query = " ".join(item.split())
+            query = " ".join(str(item or "").split()).strip()
             if not query:
                 continue
             lowered = query.lower()
             if lowered in seen:
                 continue
             seen.add(lowered)
-            queries.append(query)
-        return queries or [title or jd_text]
+            out.append(query)
+        return out[:4]
 
     @staticmethod
     def _extract_keywords(text: str, max_items: int = 8) -> List[str]:

@@ -89,6 +89,17 @@ class _AlwaysFailProvider:
         return {"sent": False}
 
 
+class _MatchingEngineStub:
+    def build_core_profile(self, job: Dict[str, Any], max_skills: int = 6) -> Dict[str, Any]:
+        return {
+            "title": str(job.get("title") or ""),
+            "target_seniority": str(job.get("seniority") or "middle"),
+            "core_skills": ["manual testing", "api testing", "regression"],
+            "location": job.get("location"),
+            "preferred_languages": job.get("preferred_languages") or [],
+        }
+
+
 class SourcingAgentLimitTests(unittest.TestCase):
     def test_find_candidates_can_reach_high_limit_with_duplicate_heavy_provider(self) -> None:
         agent = SourcingAgent(_DuplicateHeavyProvider())
@@ -127,6 +138,31 @@ class SourcingAgentLimitTests(unittest.TestCase):
 
         with self.assertRaises(RuntimeError):
             agent.find_candidates(job=job, limit=3)
+
+    def test_build_search_preview_uses_title_plus_structured_filters(self) -> None:
+        agent = SourcingAgent(_DuplicateHeavyProvider(), matching_engine=_MatchingEngineStub())
+        job = {
+            "title": "Manual QA Engineer",
+            "company": "Tener.ai",
+            "location": "Remote",
+            "seniority": "junior",
+            "preferred_languages": ["en", "ru"],
+            "jd_text": (
+                "About Tener.ai: our AI recruiting platform transforms delivery cycles. "
+                "Need manual testing, api testing, regression and bug triage."
+            ),
+        }
+
+        preview = agent.build_search_preview(job)
+        self.assertEqual(preview.get("primary_query"), "Manual QA Engineer")
+        self.assertEqual((preview.get("filters") or {}).get("location"), "Remote")
+        self.assertEqual((preview.get("filters") or {}).get("profile_language"), ["en", "ru"])
+        self.assertEqual((preview.get("filters") or {}).get("skills"), ["manual testing", "api testing", "regression"])
+        fallback_queries = preview.get("fallback_queries") or []
+        self.assertGreaterEqual(len(fallback_queries), 1)
+        self.assertLessEqual(len(fallback_queries), 4)
+        self.assertEqual(fallback_queries[0], "Manual QA Engineer")
+        self.assertFalse(any("about tener.ai" in str(item).lower() for item in fallback_queries))
 
 
 if __name__ == "__main__":

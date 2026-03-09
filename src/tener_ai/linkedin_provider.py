@@ -55,6 +55,16 @@ class MockLinkedInProvider(LinkedInProvider):
             ranked = self._profiles
         return ranked[: max(1, min(limit, 200))]
 
+    def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
+        filters = spec.get("filters") if isinstance(spec.get("filters"), dict) else {}
+        query_parts = [
+            str(spec.get("title_query") or "").strip(),
+            str(filters.get("location") or "").strip(),
+            " ".join(str(item).strip() for item in (filters.get("skills") or []) if str(item).strip()),
+        ]
+        query = " ".join(part for part in query_parts if part).strip()
+        return self.search_profiles(query=query, limit=limit)
+
     def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
         return {
             "provider": "mock",
@@ -131,6 +141,8 @@ class UnipileLinkedInProvider(LinkedInProvider):
         self.api_type = (os.environ.get("UNIPILE_LINKEDIN_API_TYPE") or "").strip()
         self.force_inmail = (os.environ.get("UNIPILE_LINKEDIN_INMAIL") or "").strip().lower() in {"1", "true", "yes"}
         self.dry_run = (os.environ.get("UNIPILE_DRY_RUN") or "").strip().lower() in {"1", "true", "yes"}
+        self.search_parameters_path = os.environ.get("UNIPILE_LINKEDIN_SEARCH_PARAMETERS_PATH", "/api/v1/linkedin/search/parameters")
+        self._search_parameter_cache: Dict[str, Optional[str]] = {}
 
     def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         if not self.account_id:
@@ -165,6 +177,18 @@ class UnipileLinkedInProvider(LinkedInProvider):
                     continue
 
         raise RuntimeError(f"Unipile search failed: {last_error}")
+
+    def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
+        if not self.account_id:
+            raise RuntimeError("UNIPILE_ACCOUNT_ID is required for Unipile search")
+        safe_limit = max(1, min(int(limit or 1), 100))
+        endpoint = self._with_account_id(self._build_url("/api/v1/linkedin/search"), self.account_id)
+        payload = self._build_structured_search_payload(spec=spec, limit=safe_limit)
+        response = self._request_json("POST", endpoint, payload)
+        items = self._extract_results(response)
+        if self._looks_like_search_placeholder(items):
+            return []
+        return [self._normalize_profile(item) for item in items]
 
     def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
         if self.dry_run:
@@ -560,6 +584,109 @@ class UnipileLinkedInProvider(LinkedInProvider):
             seen.add(p)
             out.append(p)
         return out
+
+    def _build_structured_search_payload(self, spec: Dict[str, Any], limit: int) -> Dict[str, Any]:
+        filters = spec.get("filters") if isinstance(spec.get("filters"), dict) else {}
+        title_query = str(spec.get("title_query") or "").strip()
+        api_value = self.api_type or "classic"
+        payload: Dict[str, Any] = {
+            "api": api_value,
+            "category": "people",
+            "limit": int(limit),
+        }
+        if title_query:
+            payload["keywords"] = title_query
+            if api_value == "recruiter":
+                payload["role"] = [
+                    {
+                        "keywords": title_query,
+                        "priority": "MUST_HAVE",
+                        "scope": "CURRENT_OR_PAST",
+                    }
+                ]
+
+        profile_languages = [
+            str(item).strip().lower()
+            for item in (filters.get("profile_language") or [])
+            if str(item).strip()
+        ]
+        if profile_languages:
+            payload["profile_language"] = profile_languages[:2]
+
+        location_text = str(filters.get("location") or "").strip()
+        location_id = self._resolve_search_parameter_id(kind="location", text=location_text)
+        if location_id:
+            payload["location"] = [location_id]
+
+        skill_ids: List[str] = []
+        for skill in (filters.get("skills") or [])[:3]:
+            skill_id = self._resolve_search_parameter_id(kind="skill", text=str(skill or "").strip())
+            if skill_id:
+                skill_ids.append(skill_id)
+        if skill_ids:
+            payload["skills"] = [{"id": item, "priority": "MUST_HAVE"} for item in skill_ids]
+
+        return payload
+
+    def _resolve_search_parameter_id(self, *, kind: str, text: str) -> Optional[str]:
+        normalized_text = str(text or "").strip()
+        if not normalized_text:
+            return None
+        cache_key = f"{kind.lower()}::{normalized_text.lower()}"
+        if cache_key in self._search_parameter_cache:
+            return self._search_parameter_cache[cache_key]
+
+        endpoint = self._with_account_id(self._build_url(self.search_parameters_path), self.account_id or "")
+        best_value: Optional[str] = None
+        for type_name in self._search_parameter_type_candidates(kind):
+            url = f"{endpoint}{'&' if '?' in endpoint else '?'}{parse.urlencode({'type': type_name, 'keywords': normalized_text, 'limit': 5})}"
+            try:
+                response = self._request_json("GET", url)
+            except RuntimeError:
+                continue
+            items = self._extract_search_parameter_items(response)
+            if not items:
+                continue
+            best_value = self._extract_search_parameter_id(items[0])
+            if best_value:
+                break
+        self._search_parameter_cache[cache_key] = best_value
+        return best_value
+
+    @staticmethod
+    def _search_parameter_type_candidates(kind: str) -> List[str]:
+        normalized = str(kind or "").strip().lower()
+        if normalized == "location":
+            return ["LOCATION", "locations", "location"]
+        if normalized == "skill":
+            return ["SKILL", "skills", "skill"]
+        return [normalized.upper(), normalized]
+
+    @staticmethod
+    def _extract_search_parameter_items(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, dict)]
+        for key in ("items", "results", "data", "parameters"):
+            bucket = payload.get(key)
+            if isinstance(bucket, list):
+                return [item for item in bucket if isinstance(item, dict)]
+            if isinstance(bucket, dict):
+                for nested_key in ("items", "results", "parameters"):
+                    nested = bucket.get(nested_key)
+                    if isinstance(nested, list):
+                        return [item for item in nested if isinstance(item, dict)]
+        return []
+
+    @staticmethod
+    def _extract_search_parameter_id(item: Dict[str, Any]) -> Optional[str]:
+        for key in ("id", "provider_id", "urn", "code", "value"):
+            value = item.get(key)
+            if value is None:
+                continue
+            normalized = str(value).strip()
+            if normalized:
+                return normalized
+        return None
 
     def _candidate_connect_paths(self) -> List[str]:
         candidates = [

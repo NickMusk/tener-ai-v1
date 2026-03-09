@@ -22,9 +22,20 @@ class _SourceProvider:
         return []
 
 
+class _MatchingEngineStub:
+    def build_core_profile(self, job: Dict[str, Any], max_skills: int = 6) -> Dict[str, Any]:
+        return {
+            "title": str(job.get("title") or ""),
+            "target_seniority": str(job.get("seniority") or "middle"),
+            "core_skills": ["python", "django", "aws"],
+            "location": job.get("location"),
+            "preferred_languages": job.get("preferred_languages") or [],
+        }
+
+
 class _WorkflowStub:
     def __init__(self) -> None:
-        self.sourcing_agent = SourcingAgent(_SourceProvider())
+        self.sourcing_agent = SourcingAgent(_SourceProvider(), matching_engine=_MatchingEngineStub())
 
 
 class JobSourceFiltersApiTests(unittest.TestCase):
@@ -68,7 +79,7 @@ class JobSourceFiltersApiTests(unittest.TestCase):
         body = json.loads(raw) if raw else {}
         return status, body
 
-    def test_job_source_filters_preview_returns_effective_queries(self) -> None:
+    def test_job_source_filters_preview_returns_structured_search_preview(self) -> None:
         job_id = self.db.insert_job(
             title="Senior Backend Engineer",
             company="Tener",
@@ -86,15 +97,21 @@ class JobSourceFiltersApiTests(unittest.TestCase):
 
         filters = payload.get("filters") or {}
         self.assertEqual(str(filters.get("title") or ""), "Senior Backend Engineer")
+        self.assertEqual(str(filters.get("primary_query") or ""), "Senior Backend Engineer")
         self.assertEqual(str(filters.get("location") or ""), "Germany")
         self.assertEqual(str(filters.get("seniority") or ""), "senior")
         self.assertEqual(filters.get("preferred_languages") or [], ["en", "de"])
-        self.assertIn("python", filters.get("extracted_keywords") or [])
-        self.assertIn("django", filters.get("extracted_keywords") or [])
-        queries = filters.get("queries") or []
-        self.assertTrue(queries)
-        self.assertTrue(any("Senior Backend Engineer" in str(item) for item in queries))
-        self.assertTrue(any("Germany" in str(item) for item in queries))
+        self.assertEqual(filters.get("filters") or {}, {
+            "location": "Germany",
+            "skills": ["python", "django", "aws"],
+            "profile_language": ["en", "de"],
+        })
+        self.assertEqual(filters.get("fallback_queries") or [], [
+            "Senior Backend Engineer",
+            "Senior Backend Engineer Germany",
+            "Senior Backend Engineer python django",
+            "Senior Backend Engineer Germany python django",
+        ])
 
     def test_job_source_filters_preview_returns_not_found_for_unknown_job(self) -> None:
         status, payload = self._request("GET", "/api/jobs/999/source-filters")
