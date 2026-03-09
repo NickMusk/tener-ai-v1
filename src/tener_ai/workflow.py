@@ -394,6 +394,8 @@ class WorkflowService:
         result = {
             "job_id": job_id,
             "mode": "source_top_up",
+            "requested_limit": int(limit or 0),
+            "existing_candidates": len(exclude_profile_keys),
             "searched": int(source_result.get("total") or 0),
             "verified": int(verify_result.get("verified") or 0),
             "needs_resume": int(verify_result.get("needs_resume") or 0),

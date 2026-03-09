@@ -420,9 +420,87 @@
       color: var(--text-secondary);
     }
 
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
     .status.running { color: var(--warn); border-color: var(--warn); }
+    .status.running::before {
+      content: "";
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: -2px;
+      animation: spin .8s linear infinite;
+    }
     .status.success { color: var(--ok); border-color: var(--ok); }
     .status.error { color: var(--err); border-color: var(--err); }
+
+    .pipeline-loader {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 16px;
+    }
+
+    .pipeline-loader.active { display: flex; }
+    .pipeline-loader.success { border-color: rgba(16, 185, 129, 0.5); }
+    .pipeline-loader.error { border-color: rgba(239, 68, 68, 0.5); }
+
+    .pipeline-loader-main {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }
+
+    .pipeline-loader-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(0, 212, 255, 0.2);
+      border-top-color: var(--accent-blue);
+      border-radius: 50%;
+      animation: spin .9s linear infinite;
+      flex: 0 0 auto;
+    }
+
+    .pipeline-loader.success .pipeline-loader-spinner {
+      border-color: rgba(16, 185, 129, 0.2);
+      border-top-color: var(--ok);
+    }
+
+    .pipeline-loader.error .pipeline-loader-spinner {
+      border-color: rgba(239, 68, 68, 0.2);
+      border-top-color: var(--err);
+    }
+
+    .pipeline-loader-copy {
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+    }
+
+    .pipeline-loader-title {
+      font-weight: 700;
+    }
+
+    .pipeline-loader-detail {
+      color: var(--text-secondary);
+      font-size: 13px;
+    }
+
+    .pipeline-loader-meta {
+      color: var(--text-secondary);
+      font-family: 'Space Mono', monospace;
+      font-size: 11px;
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
 
     .step-metrics {
       color: var(--text-secondary);
@@ -882,6 +960,17 @@
         <div class="label">Outreached</div>
         <div class="value" id="metric-outreached">0</div>
       </div>
+    </section>
+
+    <section id="pipeline-run-banner" class="card pipeline-loader" hidden>
+      <div class="pipeline-loader-main">
+        <div class="pipeline-loader-spinner" aria-hidden="true"></div>
+        <div class="pipeline-loader-copy">
+          <div id="pipeline-run-title" class="pipeline-loader-title">Pipeline is running</div>
+          <div id="pipeline-run-detail" class="pipeline-loader-detail">Waiting for step progress…</div>
+        </div>
+      </div>
+      <div id="pipeline-run-meta" class="pipeline-loader-meta">00s</div>
     </section>
 
     <section class="controls">
@@ -1504,6 +1593,16 @@
     const CANDS_OVERALL_FILTER_STORAGE_KEY = "tener.candidatesOverallFilter";
     const LINKEDIN_ADMIN_TOKEN_STORAGE_KEY = "tener.linkedinAdminToken";
     const PIPELINE_STEPS = ["source", "enrich", "verify", "add", "outreach"];
+    const PIPELINE_RUN_CONTROL_IDS = [
+      "run-full-btn",
+      "run-source-btn",
+      "run-source-topup-btn",
+      "run-enrich-btn",
+      "run-verify-btn",
+      "run-add-btn",
+      "run-outreach-btn",
+      "poll-connections-btn",
+    ];
 
     const state = {
       jobId: null,
@@ -1533,7 +1632,17 @@
       linkedinAdminToken: "",
       agentConversationId: null,
       selectedSnapshotStep: "source",
-      stepSnapshots: defaultStepSnapshots()
+      stepSnapshots: defaultStepSnapshots(),
+      pipelineTracker: {
+        active: false,
+        jobId: null,
+        mode: null,
+        startedAt: 0,
+        pollTimerId: null,
+        tickTimerId: null,
+        hideTimerId: null,
+        pollBusy: false,
+      }
     };
 
     const $ = (id) => document.getElementById(id);
@@ -1589,6 +1698,115 @@
 
       const nav = $("nav-" + step);
       if (nav) nav.textContent = status;
+    }
+
+    function setPipelineControlsDisabled(disabled) {
+      PIPELINE_RUN_CONTROL_IDS.forEach((id) => {
+        const el = $(id);
+        if (el) el.disabled = Boolean(disabled);
+      });
+    }
+
+    function formatElapsedMs(ms) {
+      const totalSeconds = Math.max(0, Math.floor((Number(ms) || 0) / 1000));
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+      if (minutes <= 0) return `${seconds}s`;
+      return `${minutes}m ${String(seconds).padStart(2, "0")}s`;
+    }
+
+    function setPipelineBanner({ active, title = "", detail = "", tone = "" }) {
+      const banner = $("pipeline-run-banner");
+      if (!banner) return;
+      banner.classList.remove("active", "success", "error");
+      if (!active) {
+        banner.hidden = true;
+        return;
+      }
+      banner.hidden = false;
+      banner.classList.add("active");
+      if (tone === "success" || tone === "error") banner.classList.add(tone);
+      $("pipeline-run-title").textContent = title || "Pipeline is running";
+      $("pipeline-run-detail").textContent = detail || "Waiting for step progress…";
+    }
+
+    function currentRunningPipelineSteps() {
+      return PIPELINE_STEPS.filter((step) => {
+        const el = $("status-" + step);
+        return el && String(el.textContent || "").trim().toLowerCase() === "running";
+      });
+    }
+
+    function updatePipelineTrackerBanner() {
+      const tracker = state.pipelineTracker || {};
+      if (!tracker.active) return;
+      const elapsed = formatElapsedMs(Date.now() - Number(tracker.startedAt || Date.now()));
+      const runningSteps = currentRunningPipelineSteps();
+      const modeLabel = tracker.mode === "source_top_up" ? "Source top-up is running" : "Full pipeline is running";
+      const stepLabel = runningSteps.length ? `Steps: ${runningSteps.join(", ")}` : "Syncing step progress…";
+      $("pipeline-run-meta").textContent = elapsed;
+      setPipelineBanner({
+        active: true,
+        title: modeLabel,
+        detail: stepLabel,
+      });
+    }
+
+    function stopPipelineTracking({ title = "", detail = "", tone = "" } = {}) {
+      const tracker = state.pipelineTracker || {};
+      if (tracker.pollTimerId) clearInterval(tracker.pollTimerId);
+      if (tracker.tickTimerId) clearInterval(tracker.tickTimerId);
+      if (tracker.hideTimerId) clearTimeout(tracker.hideTimerId);
+      state.pipelineTracker = {
+        active: false,
+        jobId: null,
+        mode: null,
+        startedAt: 0,
+        pollTimerId: null,
+        tickTimerId: null,
+        hideTimerId: null,
+        pollBusy: false,
+      };
+      setPipelineControlsDisabled(false);
+      if (!title && !detail) {
+        setPipelineBanner({ active: false });
+        return;
+      }
+      $("pipeline-run-meta").textContent = "";
+      setPipelineBanner({ active: true, title, detail, tone });
+      state.pipelineTracker.hideTimerId = setTimeout(() => {
+        if (!state.pipelineTracker.active) setPipelineBanner({ active: false });
+      }, 5000);
+    }
+
+    function startPipelineTracking({ jobId, mode }) {
+      stopPipelineTracking();
+      state.pipelineTracker = {
+        active: true,
+        jobId: Number(jobId || 0) || null,
+        mode: mode || "workflow",
+        startedAt: Date.now(),
+        pollTimerId: null,
+        tickTimerId: null,
+        hideTimerId: null,
+        pollBusy: false,
+      };
+      setPipelineControlsDisabled(true);
+      updatePipelineTrackerBanner();
+      state.pipelineTracker.tickTimerId = setInterval(updatePipelineTrackerBanner, 1000);
+      state.pipelineTracker.pollTimerId = setInterval(async () => {
+        const tracker = state.pipelineTracker || {};
+        if (!tracker.active || tracker.pollBusy || !tracker.jobId) return;
+        tracker.pollBusy = true;
+        try {
+          await loadJobProgress(tracker.jobId);
+          await refreshLogs();
+        } catch {
+        } finally {
+          tracker.pollBusy = false;
+          updatePipelineTrackerBanner();
+        }
+      }, 2500);
     }
 
     function setMetrics({searched = 0, verified = 0, outreached = 0}) {
@@ -3634,8 +3852,12 @@
     async function runFull() {
       const jobId = selectedJobId();
       if (!jobId) return alert('Select a job');
+      startPipelineTracking({ jobId, mode: 'full_pipeline' });
       ['source', 'enrich', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'running'));
 
+      let finalTone = 'success';
+      let finalTitle = 'Full pipeline finished';
+      let finalDetail = 'Step progress synchronized.';
       try {
         const limit = Number($("source-limit").value || '10');
         const out = await api('/api/workflows/execute', {
@@ -3657,20 +3879,29 @@
         }
         setMetrics({ searched: out.searched || 0, verified: out.verified || 0, outreached: out.outreached || 0 });
         snapshot('workflow.execute', out);
+        finalDetail = `Searched ${out.searched || 0}, verified ${out.verified || 0}, outreached ${out.outreached || 0}.`;
       } catch (e) {
         ['source', 'enrich', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'error'));
         snapshot('workflow.error', { error: e.message });
+        finalTone = 'error';
+        finalTitle = 'Full pipeline failed';
+        finalDetail = e.message || 'Workflow execution failed.';
       }
       await loadJobProgress(jobId);
       await refreshCandidates();
       await refreshLogs();
       await refreshOutreachOps();
+      stopPipelineTracking({ title: finalTitle, detail: finalDetail, tone: finalTone });
     }
 
     async function runSourceTopUp() {
       const jobId = selectedJobId();
       if (!jobId) return alert('Select a job');
+      startPipelineTracking({ jobId, mode: 'source_top_up' });
       ['source', 'enrich', 'verify', 'add'].forEach(s => setStepStatus(s, 'running'));
+      let finalTone = 'success';
+      let finalTitle = 'Source top-up finished';
+      let finalDetail = 'Step progress synchronized.';
       try {
         const limit = Number($("source-limit").value || '10');
         const out = await api(`/api/jobs/${jobId}/source-top-up`, {
@@ -3678,14 +3909,19 @@
           body: JSON.stringify({ limit, test_mode: isTestModeEnabled() })
         });
         snapshot('workflow.source_top_up', out);
+        finalDetail = `Requested ${limit}, sourced ${out.searched || 0}, added ${out.added || 0} new candidates, skipped ${out.existing_candidates || 0} existing.`;
       } catch (e) {
         ['source', 'enrich', 'verify', 'add'].forEach(s => setStepStatus(s, 'error'));
         snapshot('workflow.source_top_up.error', { error: e.message });
+        finalTone = 'error';
+        finalTitle = 'Source top-up failed';
+        finalDetail = e.message || 'Top-up request failed.';
       }
       await loadJobProgress(jobId);
       await refreshCandidates();
       await refreshLogs();
       await refreshOutreachOps();
+      stopPipelineTracking({ title: finalTitle, detail: finalDetail, tone: finalTone });
     }
 
     async function refreshLogs() {
