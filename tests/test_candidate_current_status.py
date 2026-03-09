@@ -166,6 +166,61 @@ class CandidateCurrentStatusTests(unittest.TestCase):
             self.assertEqual(rows[0]["candidate_lifecycle_label"], "Interview passed")
             self.assertEqual(rows[0]["candidate_lifecycle_detail"], "Score 84.0")
 
+    def test_candidate_ats_stage_marks_interview_failed_when_scored_below_threshold(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "candidate_interview_failed.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(_DeliveredProvider()),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python and AWS",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile = {
+                "linkedin_id": "ln-status-interview-fail",
+                "unipile_profile_id": "ln-status-interview-fail",
+                "attendee_provider_id": "ln-status-interview-fail",
+                "full_name": "Interview Failed Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": [],
+                "years_experience": 5,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.61, "status": "needs_resume", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+            db.update_candidate_match_status(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                status="interview_scored",
+                extra_notes={"interview_status": "scored", "interview_total_score": 44.8},
+            )
+
+            rows = db.list_candidates_for_job(job_id)
+            self.assertEqual(rows[0]["current_status_key"], "interview_scored")
+            stage = db.derive_candidate_ats_stage(rows[0])
+            self.assertEqual(stage["ats_stage_key"], "interview_failed")
+            self.assertEqual(stage["ats_stage_label"], "Interview Failed")
+            self.assertEqual(stage["ats_stage_detail"], "Score 44.8")
+
 
 if __name__ == "__main__":
     unittest.main()

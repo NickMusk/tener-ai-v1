@@ -40,6 +40,7 @@ from .db_read_pg import PostgresReadDatabase
 from .emulator import EmulatorProjectStore
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
 from .interview_client import InterviewAPIClient
+from .landing import LandingService, LandingValidationError
 from .linkedin_accounts import LinkedInAccountService
 from .linkedin_limits import resolve_account_limit_snapshot, validate_account_limits_payload
 from .llm_responder import CandidateLLMResponder
@@ -438,6 +439,7 @@ def build_services() -> Dict[str, Any]:
     signals_ingestion = SignalIngestionService(db=db, rules_engine=signal_rules)
     signals_live = JobSignalsLiveViewService(db=db, rules_engine=signal_rules)
     monitoring = MonitoringService(db=db)
+    landing = LandingService(db=db)
 
     services = {
         "db": db,
@@ -466,6 +468,7 @@ def build_services() -> Dict[str, Any]:
         "signals_ingestion": signals_ingestion,
         "signals_live": signals_live,
         "monitoring": monitoring,
+        "landing": landing,
         "emulator_store": emulator_store,
         "company_culture": company_culture_service,
         "workflow": workflow,
@@ -510,6 +513,27 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
             return
 
+        if parsed.path in {"/landing", "/landing/"}:
+            landing_page = project_root() / "src" / "tener_ai" / "static" / "landing.html"
+            if not landing_page.exists():
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "landing file not found"})
+                return
+            self._html_response(HTTPStatus.OK, landing_page.read_text(encoding="utf-8"))
+            return
+
+        if parsed.path in {"/favicon.ico", "/favicon.png"}:
+            favicon = project_root() / "src" / "tener_ai" / "static" / "favicon.png"
+            if not favicon.exists():
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "favicon file not found"})
+                return
+            self._binary_response(
+                status=HTTPStatus.OK,
+                content_type="image/png",
+                payload=favicon.read_bytes(),
+                extra_headers={"Cache-Control": "public, max-age=3600"},
+            )
+            return
+
         if parsed.path in {"/", "/dashboard"}:
             dashboard = project_root() / "src" / "tener_ai" / "static" / "dashboard.html"
             if not dashboard.exists():
@@ -535,6 +559,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     "status": "ok",
                     "endpoints": {
                         "health": "GET /health",
+                        "landing": "GET /landing",
                         "create_job": "POST /api/jobs",
                         "list_jobs": "GET /api/jobs",
                         "get_job": "GET /api/jobs/{job_id}",
@@ -610,6 +635,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "db_cutover_rollback": "POST /api/db/cutover/rollback",
                         "db_dual_write_strict": "POST /api/db/dual-write/strict",
                         "reload_rules": "POST /api/rules/reload",
+                        "landing_newsletter": "POST /api/landing/newsletter",
+                        "landing_contact": "POST /api/landing/contact",
                     },
                 },
             )
@@ -1286,6 +1313,41 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         payload = self._read_json_body()
         if isinstance(payload, dict) and payload.get("_error"):
             self._json_response(HTTPStatus.BAD_REQUEST, payload)
+            return
+
+        if parsed.path == "/api/landing/newsletter":
+            if not isinstance(payload, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            try:
+                result = SERVICES["landing"].submit_newsletter(
+                    payload,
+                    source_path="/landing",
+                    ip_address=self._request_ip_address(),
+                    user_agent=str(self.headers.get("User-Agent") or ""),
+                )
+            except LandingValidationError as exc:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "validation_failed", "field_errors": exc.field_errors})
+                return
+            status = HTTPStatus.CREATED if bool(result.get("created")) else HTTPStatus.OK
+            self._json_response(status, result)
+            return
+
+        if parsed.path == "/api/landing/contact":
+            if not isinstance(payload, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            try:
+                result = SERVICES["landing"].submit_contact_request(
+                    payload,
+                    source_path="/landing",
+                    ip_address=self._request_ip_address(),
+                    user_agent=str(self.headers.get("User-Agent") or ""),
+                )
+            except LandingValidationError as exc:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "validation_failed", "field_errors": exc.field_errors})
+                return
+            self._json_response(HTTPStatus.CREATED, result)
             return
 
         if parsed.path == "/api/emulator/reload":
@@ -3426,6 +3488,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             return False
         return default
 
+    def _request_ip_address(self) -> str:
+        forwarded = str(self.headers.get("X-Forwarded-For") or "").strip()
+        if forwarded:
+            return forwarded.split(",", 1)[0].strip()
+        if isinstance(self.client_address, tuple) and self.client_address:
+            return str(self.client_address[0] or "").strip()
+        return ""
+
     @staticmethod
     def _parse_iso_datetime(value: Any) -> Optional[datetime]:
         text = str(value or "").strip()
@@ -3484,6 +3554,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             ("cv_received", "CV Received"),
             ("interview_pending", "Interview Pending"),
             ("interview_passed", "Interview Passed"),
+            ("interview_failed", "Interview Failed"),
             ("closed", "Closed"),
         ]
         columns: List[Dict[str, Any]] = []
@@ -3495,6 +3566,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             "cv_received": 0,
             "interview_pending": 0,
             "interview_passed": 0,
+            "interview_failed": 0,
             "closed": 0,
         }
         items_by_stage: Dict[str, List[Dict[str, Any]]] = {key: [] for key, _ in column_defs}
@@ -4222,13 +4294,26 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _is_public_path(*, method: str, path: str) -> bool:
         normalized = str(path or "").strip()
-        if normalized in {"/", "/dashboard", "/dashboard/emulator", "/dashboard/signals-live", "/health", "/api"}:
+        if normalized in {
+            "/",
+            "/dashboard",
+            "/dashboard/emulator",
+            "/dashboard/signals-live",
+            "/health",
+            "/api",
+            "/landing",
+            "/landing/",
+            "/favicon.ico",
+            "/favicon.png",
+        }:
             return True
         if normalized == "/zalando" or normalized.startswith("/zalando/"):
             return True
         if normalized.startswith("/candidate/"):
             return True
         if method.upper() == "POST" and normalized == "/api/webhooks/unipile":
+            return True
+        if method.upper() == "POST" and normalized in {"/api/landing/newsletter", "/api/landing/contact"}:
             return True
         if normalized == "/api/linkedin/accounts/connect/callback":
             return True

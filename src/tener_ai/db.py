@@ -133,6 +133,38 @@ class Database:
             created_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS newsletter_subscriptions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT NOT NULL UNIQUE,
+            full_name TEXT,
+            company_name TEXT,
+            notes TEXT,
+            source_path TEXT,
+            status TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_newsletter_subscriptions_created
+            ON newsletter_subscriptions(created_at DESC, id DESC);
+
+        CREATE TABLE IF NOT EXISTS contact_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            full_name TEXT NOT NULL,
+            work_email TEXT NOT NULL,
+            company_name TEXT NOT NULL,
+            job_title TEXT,
+            hiring_need TEXT NOT NULL,
+            source_path TEXT,
+            status TEXT NOT NULL,
+            ip_address TEXT,
+            user_agent TEXT,
+            created_at TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_contact_requests_created
+            ON contact_requests(created_at DESC, id DESC);
+
         CREATE TABLE IF NOT EXISTS pre_resume_sessions (
             session_id TEXT PRIMARY KEY,
             conversation_id INTEGER UNIQUE NOT NULL,
@@ -1666,6 +1698,161 @@ class Database:
         rows = self._conn.execute(
             "SELECT * FROM operation_logs ORDER BY id DESC LIMIT ?",
             (max(1, min(limit, 1000)),),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def create_newsletter_subscription(
+        self,
+        *,
+        email: str,
+        full_name: Optional[str] = None,
+        company_name: Optional[str] = None,
+        notes: Optional[str] = None,
+        source_path: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        normalized_email = str(email or "").strip().lower()
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            existing = conn.execute(
+                "SELECT * FROM newsletter_subscriptions WHERE email = ? LIMIT 1",
+                (normalized_email,),
+            ).fetchone()
+            if existing is not None:
+                row_id = int(existing["id"])
+                conn.execute(
+                    """
+                    UPDATE newsletter_subscriptions
+                    SET
+                        full_name = ?,
+                        company_name = ?,
+                        notes = ?,
+                        source_path = ?,
+                        status = 'active',
+                        ip_address = ?,
+                        user_agent = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        self._prefer_nonempty_text(full_name, existing["full_name"]),
+                        self._prefer_nonempty_text(company_name, existing["company_name"]),
+                        self._prefer_nonempty_text(notes, existing["notes"]),
+                        self._prefer_nonempty_text(source_path, existing["source_path"]),
+                        self._prefer_nonempty_text(ip_address, existing["ip_address"]),
+                        self._prefer_nonempty_text(user_agent, existing["user_agent"]),
+                        now,
+                        row_id,
+                    ),
+                )
+                row = conn.execute(
+                    "SELECT * FROM newsletter_subscriptions WHERE id = ? LIMIT 1",
+                    (row_id,),
+                ).fetchone()
+                return {
+                    "created": False,
+                    "subscription": self._row_to_dict(row) if row is not None else None,
+                }
+
+            cur = conn.execute(
+                """
+                INSERT INTO newsletter_subscriptions (
+                    email, full_name, company_name, notes, source_path, status,
+                    ip_address, user_agent, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+                """,
+                (
+                    normalized_email,
+                    str(full_name or "").strip() or None,
+                    str(company_name or "").strip() or None,
+                    str(notes or "").strip() or None,
+                    str(source_path or "").strip() or None,
+                    str(ip_address or "").strip() or None,
+                    str(user_agent or "").strip() or None,
+                    now,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM newsletter_subscriptions WHERE id = ? LIMIT 1",
+                (int(cur.lastrowid),),
+            ).fetchone()
+            return {
+                "created": True,
+                "subscription": self._row_to_dict(row) if row is not None else None,
+            }
+
+    def get_newsletter_subscription(self, email: str) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            "SELECT * FROM newsletter_subscriptions WHERE email = ? LIMIT 1",
+            (str(email or "").strip().lower(),),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._row_to_dict(row)
+
+    def list_newsletter_subscriptions(self, limit: int = 100) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM newsletter_subscriptions ORDER BY id DESC LIMIT ?",
+            (max(1, min(int(limit or 100), 1000)),),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def create_contact_request(
+        self,
+        *,
+        full_name: str,
+        work_email: str,
+        company_name: str,
+        job_title: Optional[str],
+        hiring_need: str,
+        source_path: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO contact_requests (
+                    full_name, work_email, company_name, job_title, hiring_need,
+                    source_path, status, ip_address, user_agent, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, 'new', ?, ?, ?)
+                """,
+                (
+                    str(full_name or "").strip(),
+                    str(work_email or "").strip().lower(),
+                    str(company_name or "").strip(),
+                    str(job_title or "").strip() or None,
+                    str(hiring_need or "").strip(),
+                    str(source_path or "").strip() or None,
+                    str(ip_address or "").strip() or None,
+                    str(user_agent or "").strip() or None,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM contact_requests WHERE id = ? LIMIT 1",
+                (int(cur.lastrowid),),
+            ).fetchone()
+            return self._row_to_dict(row) if row is not None else {}
+
+    def get_contact_request(self, request_id: int) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            "SELECT * FROM contact_requests WHERE id = ? LIMIT 1",
+            (int(request_id),),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._row_to_dict(row)
+
+    def list_contact_requests(self, limit: int = 100) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM contact_requests ORDER BY id DESC LIMIT ?",
+            (max(1, min(int(limit or 100), 1000)),),
         ).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
@@ -3500,6 +3687,46 @@ class Database:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_outreach_account_events_job_created ON outreach_account_events(job_id, created_at DESC, id DESC)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS newsletter_subscriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    email TEXT NOT NULL UNIQUE,
+                    full_name TEXT,
+                    company_name TEXT,
+                    notes TEXT,
+                    source_path TEXT,
+                    status TEXT NOT NULL,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_newsletter_subscriptions_created ON newsletter_subscriptions(created_at DESC, id DESC)"
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS contact_requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    full_name TEXT NOT NULL,
+                    work_email TEXT NOT NULL,
+                    company_name TEXT NOT NULL,
+                    job_title TEXT,
+                    hiring_need TEXT NOT NULL,
+                    source_path TEXT,
+                    status TEXT NOT NULL,
+                    ip_address TEXT,
+                    user_agent TEXT,
+                    created_at TEXT NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_contact_requests_created ON contact_requests(created_at DESC, id DESC)"
+            )
 
         columns = self._table_columns("conversations")
         if "external_chat_id" not in columns:
@@ -3520,6 +3747,16 @@ class Database:
         if normalized in {"auto", "manual"}:
             return normalized
         return "auto"
+
+    @staticmethod
+    def _prefer_nonempty_text(preferred: Any, fallback: Any) -> Optional[str]:
+        preferred_text = str(preferred or "").strip()
+        if preferred_text:
+            return preferred_text
+        fallback_text = str(fallback or "").strip()
+        if fallback_text:
+            return fallback_text
+        return None
 
     @classmethod
     def extract_linkedin_public_url(cls, profile: Dict[str, Any]) -> Optional[str]:
@@ -3833,9 +4070,10 @@ class Database:
         planned_action_label = str(item.get("planned_action_label") or "").strip()
         pending_action_status = str(item.get("pending_action_status") or item.get("pending_action_status_label") or "").strip().lower()
         pending_action_at = str(item.get("pending_action_not_before") or "").strip() or None
+        interview_score = Database._candidate_interview_score(item)
 
-        closed_statuses = {"not_interested", "unreachable", "rejected", "stalled", "interview_failed"}
-        interview_pending_statuses = {"interview_invited", "interview_in_progress", "interview_completed", "interview_scored"}
+        closed_statuses = {"not_interested", "unreachable", "rejected", "stalled"}
+        interview_pending_statuses = {"interview_invited", "interview_in_progress", "interview_completed"}
 
         stage_key = "queued"
         stage_label = "Queued"
@@ -3858,6 +4096,16 @@ class Database:
             next_action_kind = None
             next_action_at = None
             stage_rank = 60
+        elif current_status_key in {"interview_scored", "interview_failed"}:
+            stage_key = "interview_failed"
+            stage_label = "Interview Failed"
+            if interview_score is not None:
+                stage_detail = f"Score {interview_score:.1f}"
+            else:
+                stage_detail = lifecycle_detail or current_status_label or "Candidate did not pass interview"
+            next_action_kind = None
+            next_action_at = None
+            stage_rank = 65
         elif current_status_key in interview_pending_statuses:
             stage_key = "interview_pending"
             stage_label = "Interview Pending"

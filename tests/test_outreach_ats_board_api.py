@@ -157,6 +157,14 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
             verification_notes={"interview_status": "scored", "interview_total_score": 84.0},
         )
 
+        failed_candidate = self._create_candidate("failed", "Failed Candidate")
+        self._attach_match(
+            job_id=job_id,
+            candidate_id=failed_candidate,
+            status="interview_scored",
+            verification_notes={"interview_status": "scored", "interview_total_score": 44.8},
+        )
+
         closed_candidate = self._create_candidate("closed", "Closed Candidate")
         self._attach_match(job_id=job_id, candidate_id=closed_candidate, status="rejected")
 
@@ -164,13 +172,14 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
 
         summary = payload.get("summary") or {}
-        self.assertEqual(int(summary.get("total_candidates") or 0), 7)
+        self.assertEqual(int(summary.get("total_candidates") or 0), 8)
         self.assertEqual(int(summary.get("queued") or 0), 1)
         self.assertEqual(int(summary.get("connect_sent") or 0), 1)
         self.assertEqual(int(summary.get("dialogue") or 0), 1)
         self.assertEqual(int(summary.get("cv_received") or 0), 1)
         self.assertEqual(int(summary.get("interview_pending") or 0), 1)
         self.assertEqual(int(summary.get("interview_passed") or 0), 1)
+        self.assertEqual(int(summary.get("interview_failed") or 0), 1)
         self.assertEqual(int(summary.get("closed") or 0), 1)
 
         columns = {str(item.get("key") or ""): item for item in (payload.get("columns") or [])}
@@ -197,6 +206,10 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.assertEqual(
             [str(item.get("candidate_name") or "") for item in (columns.get("interview_passed") or {}).get("items", [])],
             ["Passed Candidate"],
+        )
+        self.assertEqual(
+            [str(item.get("candidate_name") or "") for item in (columns.get("interview_failed") or {}).get("items", [])],
+            ["Failed Candidate"],
         )
         self.assertEqual(
             [str(item.get("candidate_name") or "") for item in (columns.get("closed") or {}).get("items", [])],
@@ -257,13 +270,16 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         status, payload = self._request("GET", "/api/outreach/ats-board")
         self.assertEqual(status, 200)
         summary = payload.get("summary") or {}
-        self.assertEqual(int(summary.get("closed") or 0), 3)
+        self.assertEqual(int(summary.get("closed") or 0), 2)
+        self.assertEqual(int(summary.get("interview_failed") or 0), 1)
         columns = {str(item.get("key") or ""): item for item in (payload.get("columns") or [])}
         closed_names = {str(item.get("candidate_name") or "") for item in (columns.get("closed") or {}).get("items", [])}
         self.assertEqual(
             closed_names,
-            {"Not Interested Candidate", "Unreachable Candidate", "Interview Failed Candidate"},
+            {"Not Interested Candidate", "Unreachable Candidate"},
         )
+        failed_names = {str(item.get("candidate_name") or "") for item in (columns.get("interview_failed") or {}).get("items", [])}
+        self.assertEqual(failed_names, {"Interview Failed Candidate"})
 
 
 if __name__ == "__main__":
