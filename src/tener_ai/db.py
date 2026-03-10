@@ -3661,6 +3661,8 @@ class Database:
                 "latest_stage": None,
                 "latest_score": None,
                 "latest_status": "not_started",
+                "latest_reason": None,
+                "latest_details": {},
                 "stages": [],
             },
             "communication": {
@@ -3669,6 +3671,8 @@ class Database:
                 "latest_stage": None,
                 "latest_score": None,
                 "latest_status": "not_started",
+                "latest_reason": None,
+                "latest_details": {},
                 "stages": [],
             },
             "interview_evaluation": {
@@ -3677,6 +3681,8 @@ class Database:
                 "latest_stage": None,
                 "latest_score": None,
                 "latest_status": "not_started",
+                "latest_reason": None,
+                "latest_details": {},
                 "stages": [],
             },
         }
@@ -3693,6 +3699,8 @@ class Database:
                     "latest_stage": None,
                     "latest_score": None,
                     "latest_status": "not_started",
+                    "latest_reason": None,
+                    "latest_details": {},
                     "stages": [],
                 },
             )
@@ -3704,6 +3712,7 @@ class Database:
                 "score": item.get("score"),
                 "status": item.get("status"),
                 "reason": item.get("reason"),
+                "details": item.get("details") if isinstance(item.get("details"), dict) else {},
                 "updated_at": item.get("updated_at"),
             }
             bucket["stages"].append(stage)
@@ -3711,6 +3720,8 @@ class Database:
                 bucket["latest_stage"] = item.get("stage_key")
                 bucket["latest_score"] = item.get("score")
                 bucket["latest_status"] = item.get("status") or "unknown"
+                bucket["latest_reason"] = item.get("reason")
+                bucket["latest_details"] = dict(stage.get("details") or {})
 
         interview = scorecard.get("interview_evaluation")
         if interview:
@@ -3739,6 +3750,7 @@ class Database:
                             "score": interview_score,
                             "status": normalized_notes_status or "scored",
                             "reason": "Loaded from candidate verification notes.",
+                            "details": {},
                             "updated_at": candidate_row.get("last_message_created_at") or candidate_row.get("created_at"),
                         }
                     ]
@@ -3746,6 +3758,7 @@ class Database:
                     interview["latest_score"] = interview_score
                     if normalized_notes_status:
                         interview["latest_status"] = normalized_notes_status
+                    interview["latest_details"] = {}
                     stages = interview.get("stages") if isinstance(interview.get("stages"), list) else []
                     if stages:
                         first = stages[0]

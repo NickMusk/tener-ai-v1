@@ -253,6 +253,83 @@ class AgentAssessmentsTests(unittest.TestCase):
             self.assertIsInstance(rich_score, (int, float))
             self.assertGreater(float(rich_score), float(short_score))
 
+    def test_needs_resume_candidates_keep_distinct_raw_sourcing_scores(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "agent_assessments_needs_resume.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(_Provider()),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=PreResumeCommunicationService(
+                    templates_path=str(root / "config" / "outreach_templates.json")
+                ),
+                agent_evaluation_playbook=AgentEvaluationPlaybook(
+                    str(root / "config" / "agent_evaluation_instructions.json")
+                ),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+                stage_instructions={"pre_resume": "request cv and track status"},
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS, Docker, distributed systems, microservices.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profiles = [
+                {
+                    "linkedin_id": "ln-agent-needs-resume-1",
+                    "unipile_profile_id": "ln-agent-needs-resume-1",
+                    "attendee_provider_id": "ln-agent-needs-resume-1",
+                    "full_name": "Low Evidence One",
+                    "headline": "Software Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python"],
+                    "years_experience": 1,
+                    "raw": {},
+                },
+                {
+                    "linkedin_id": "ln-agent-needs-resume-2",
+                    "unipile_profile_id": "ln-agent-needs-resume-2",
+                    "attendee_provider_id": "ln-agent-needs-resume-2",
+                    "full_name": "Low Evidence Two",
+                    "headline": "Software Engineer",
+                    "location": "Berlin",
+                    "languages": ["de"],
+                    "skills": ["python"],
+                    "years_experience": 0,
+                    "raw": {},
+                },
+            ]
+
+            verify = workflow.verify_profiles(job_id=job_id, profiles=profiles)
+            self.assertEqual(int(verify.get("needs_resume") or 0), 2)
+
+            added = workflow.add_verified_candidates(job_id=job_id, verified_items=verify["items"])
+            self.assertEqual(int(added.get("total") or 0), 2)
+
+            rows = db.list_candidates_for_job(job_id)
+            by_linkedin = {str(row.get("linkedin_id") or ""): row for row in rows}
+            score_one = float((((by_linkedin["ln-agent-needs-resume-1"].get("agent_scorecard") or {}).get("sourcing_vetting") or {}).get("latest_score")) or 0.0)
+            score_two = float((((by_linkedin["ln-agent-needs-resume-2"].get("agent_scorecard") or {}).get("sourcing_vetting") or {}).get("latest_score")) or 0.0)
+            details_one = (((by_linkedin["ln-agent-needs-resume-1"].get("agent_scorecard") or {}).get("sourcing_vetting") or {}).get("latest_details") or {})
+            details_two = (((by_linkedin["ln-agent-needs-resume-2"].get("agent_scorecard") or {}).get("sourcing_vetting") or {}).get("latest_details") or {})
+
+            self.assertNotEqual(score_one, 50.0)
+            self.assertNotEqual(score_two, 50.0)
+            self.assertNotEqual(score_one, score_two)
+            self.assertEqual(score_one, float(details_one.get("match_score") or 0.0))
+            self.assertEqual(score_two, float(details_two.get("match_score") or 0.0))
+
     def test_interview_score_loaded_from_notes_when_assessment_score_missing(self) -> None:
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "agent_assessments_interview_fallback.sqlite3"))

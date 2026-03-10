@@ -67,6 +67,15 @@ class WorkflowContactAllTests(unittest.TestCase):
             saved = db.list_candidates_for_job(job_id)
             self.assertEqual(len(saved), 1)
             self.assertEqual(saved[0]["status"], "needs_resume")
+            scorecard = saved[0].get("agent_scorecard") or {}
+            sourcing = scorecard.get("sourcing_vetting") or {}
+            self.assertEqual(str(sourcing.get("latest_status") or ""), "conditional")
+            self.assertAlmostEqual(float(sourcing.get("latest_score") or 0.0), float(verify["items"][0]["score"]) * 100.0, places=2)
+            self.assertLess(float(sourcing.get("latest_score") or 0.0), 50.0)
+            self.assertEqual(
+                float(((sourcing.get("latest_details") or {}).get("match_score")) or 0.0),
+                round(float(verify["items"][0]["score"]) * 100.0, 2),
+            )
 
             outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[added["added"][0]["candidate_id"]])
             self.assertEqual(outreach["total"], 1)

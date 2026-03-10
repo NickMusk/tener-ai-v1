@@ -3817,11 +3817,12 @@ class WorkflowService:
         normalized_status = str(screening_status or "").strip().lower()
         raw_score = self._normalize_percentage(match_score * 100.0)
         status_map = {
-            "verified": ("qualified", max(raw_score, 75.0)),
-            "needs_resume": ("conditional", max(min(raw_score, 74.0), 50.0)),
-            "rejected": ("not_matched", min(raw_score, 45.0)),
+            "verified": "qualified",
+            "needs_resume": "conditional",
+            "rejected": "not_matched",
         }
-        assessment_status, score = status_map.get(normalized_status, ("review", raw_score))
+        assessment_status = status_map.get(normalized_status, "review")
+        score = raw_score
         explanation = ""
         if isinstance(notes, dict):
             explanation = str(notes.get("human_explanation") or "").strip()
@@ -3839,6 +3840,7 @@ class WorkflowService:
             details={
                 "screening_status": normalized_status,
                 "match_score": round(raw_score, 2),
+                "score_mode": "raw_match_score",
             },
         )
 
