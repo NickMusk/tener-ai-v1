@@ -1618,6 +1618,14 @@
       jobLinkedinRouting: null,
       linkedinAdminToken: "",
       agentConversationId: null,
+      candidateMetrics: {
+        total: 0,
+        verified: 0,
+        outreached: 0,
+        needsResume: 0,
+        rejected: 0,
+        added: 0,
+      },
       selectedSnapshotStep: "source",
       stepSnapshots: defaultStepSnapshots(),
       pipelineTracker: {
@@ -1800,6 +1808,17 @@
       $("metric-outreached").textContent = outreached;
     }
 
+    function getCandidateMetrics() {
+      return state.candidateMetrics || {
+        total: 0,
+        verified: 0,
+        outreached: 0,
+        needsResume: 0,
+        rejected: 0,
+        added: 0,
+      };
+    }
+
     function _metricValue(id) {
       const raw = Number(($(id) || {}).textContent || 0);
       return Number.isFinite(raw) && raw > 0 ? raw : 0;
@@ -1807,7 +1826,19 @@
 
     function applyCandidateMetricsFallback(items) {
       const rows = Array.isArray(items) ? items : [];
-      if (!rows.length) return;
+      if (!rows.length) {
+        state.candidateMetrics = {
+          total: 0,
+          verified: 0,
+          outreached: 0,
+          needsResume: 0,
+          rejected: 0,
+          added: 0,
+        };
+        setMetrics({ searched: 0, verified: 0, outreached: 0 });
+        $("step-source-meta").textContent = "Candidates in job: 0";
+        return;
+      }
 
       const searchedFromCandidates = rows.length;
       const verifiedFromCandidates = rows.filter((row) => String(row.status || "").toLowerCase() === "verified").length;
@@ -1820,16 +1851,23 @@
         return key === "outreached" || conversationStatus === "active" || conversationStatus === "waiting_connection";
       }).length;
 
-      const merged = {
-        searched: Math.max(_metricValue("metric-searched"), searchedFromCandidates),
-        verified: Math.max(_metricValue("metric-verified"), verifiedFromCandidates),
-        outreached: Math.max(_metricValue("metric-outreached"), outreachedFromCandidates),
+      state.candidateMetrics = {
+        total: searchedFromCandidates,
+        verified: verifiedFromCandidates,
+        outreached: outreachedFromCandidates,
+        needsResume: needsResumeFromCandidates,
+        rejected: rejectedFromCandidates,
+        added: addedFromCandidates,
       };
-      setMetrics(merged);
+      setMetrics({
+        searched: searchedFromCandidates,
+        verified: verifiedFromCandidates,
+        outreached: outreachedFromCandidates,
+      });
 
       $("step-source-meta").textContent = `Candidates in job: ${searchedFromCandidates}`;
       if (String($("step-enrich-meta").textContent || "").includes("Profiles: 0")) {
-        $("step-enrich-meta").textContent = `Profiles: ${merged.searched}, Failed: 0`;
+        $("step-enrich-meta").textContent = `Profiles: ${searchedFromCandidates}, Failed: 0`;
       }
       if (String($("step-verify-meta").textContent || "").includes("Verified: 0")) {
         $("step-verify-meta").textContent =
@@ -1838,8 +1876,8 @@
       if (String($("step-add-meta").textContent || "").includes("Added: 0")) {
         $("step-add-meta").textContent = `Added: ${addedFromCandidates}`;
       }
-      if (String($("step-outreach-meta").textContent || "").includes("Total: 0") && merged.outreached > 0) {
-        $("step-outreach-meta").textContent = `Total: ${merged.outreached}, Sent: 0, Pending: 0, Failed: 0`;
+      if (String($("step-outreach-meta").textContent || "").includes("Total: 0") && outreachedFromCandidates > 0) {
+        $("step-outreach-meta").textContent = `Total: ${outreachedFromCandidates}, Sent: 0, Pending: 0, Failed: 0`;
       }
     }
 
@@ -2326,6 +2364,14 @@
       if (!jobId) {
         resetPipelineMemory();
         resetPipelineVisuals();
+        state.candidateMetrics = {
+          total: 0,
+          verified: 0,
+          outreached: 0,
+          needsResume: 0,
+          rejected: 0,
+          added: 0,
+        };
         renderVerificationExplanations([]);
         renderSnapshotTabs();
         renderSelectedSnapshot();
@@ -2347,8 +2393,20 @@
       }
 
       resetPipelineMemory();
-      resetPipelineVisuals();
       renderVerificationExplanations([]);
+      PIPELINE_STEPS.forEach((step) => setStepStatus(step, "idle"));
+      setStepStatus("faq", "ongoing");
+      $("step-enrich-meta").textContent = "Profiles: 0, Failed: 0";
+      $("step-verify-meta").textContent = "Verified: 0, Needs resume: 0, Rejected: 0";
+      $("step-add-meta").textContent = "Added: 0";
+      $("step-outreach-meta").textContent = "Total: 0, Sent: 0, Pending: 0, Failed: 0";
+      const currentMetrics = getCandidateMetrics();
+      $("step-source-meta").textContent = `Candidates in job: ${currentMetrics.total || 0}`;
+      setMetrics({
+        searched: currentMetrics.total || 0,
+        verified: currentMetrics.verified || 0,
+        outreached: currentMetrics.outreached || 0,
+      });
 
       const items = Array.isArray(data.items) ? data.items : [];
       const byStep = {};
@@ -3824,6 +3882,11 @@
       await refreshCandidates();
       await refreshLogs();
       await refreshOutreachOps();
+      if (finalTone === 'success') {
+        const metrics = getCandidateMetrics();
+        const addedThisRun = Number(($("step-add-meta").textContent || '').match(/\d+/)?.[0] || 0);
+        finalDetail = `Added ${addedThisRun} this run • total candidates in job: ${metrics.total || 0} • verified in job: ${metrics.verified || 0} • outreached in job: ${metrics.outreached || 0}.`;
+      }
       stopPipelineTracking({ title: finalTitle, detail: finalDetail, tone: finalTone });
     }
 
@@ -3842,7 +3905,7 @@
           body: JSON.stringify({ limit, test_mode: isTestModeEnabled() })
         });
         snapshot('workflow.source_top_up', out);
-        finalDetail = `Requested ${limit}, sourced ${out.searched || 0}, added ${out.added || 0} new candidates, skipped ${out.existing_candidates || 0} existing.`;
+        finalDetail = `Requested ${limit}, added ${out.added || 0} new candidates, skipped ${out.existing_candidates || 0} existing.`;
       } catch (e) {
         ['source', 'enrich', 'verify', 'add'].forEach(s => setStepStatus(s, 'error'));
         snapshot('workflow.source_top_up.error', { error: e.message });
@@ -3854,6 +3917,10 @@
       await refreshCandidates();
       await refreshLogs();
       await refreshOutreachOps();
+      if (finalTone === 'success') {
+        const metrics = getCandidateMetrics();
+        finalDetail = `${finalDetail} Total candidates in job: ${metrics.total || 0}.`;
+      }
       stopPipelineTracking({ title: finalTitle, detail: finalDetail, tone: finalTone });
     }
 
