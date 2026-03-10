@@ -230,10 +230,14 @@ class SourcingAgentLimitTests(unittest.TestCase):
         }
 
         preview = agent.build_search_preview(job)
-        self.assertEqual(preview.get("primary_query"), "Manual QA Engineer")
+        self.assertEqual(preview.get("primary_query"), "\"Manual QA Engineer\"")
+        self.assertEqual(preview.get("job_title_query"), "\"Manual QA Engineer\"")
+        self.assertEqual(preview.get("keyword_query"), "\"manual testing\" AND \"api testing\" AND \"regression\" AND (\"sql\" OR \"postman\")")
         self.assertEqual((preview.get("filters") or {}).get("location"), "Remote")
         self.assertEqual((preview.get("filters") or {}).get("profile_language"), ["en", "ru"])
-        self.assertEqual((preview.get("filters") or {}).get("skills"), ["manual testing", "api testing", "regression"])
+        self.assertEqual((preview.get("filters") or {}).get("keywords"), "\"manual testing\" AND \"api testing\" AND \"regression\" AND (\"sql\" OR \"postman\")")
+        self.assertEqual((preview.get("filters") or {}).get("must_terms"), ["manual testing", "api testing", "regression"])
+        self.assertEqual((preview.get("filters") or {}).get("optional_terms"), ["sql", "postman"])
         self.assertEqual(preview.get("must_have_skills") or [], ["manual testing", "api testing", "regression"])
         self.assertEqual(preview.get("nice_to_have_skills") or [], ["sql", "postman"])
         fallback_queries = preview.get("fallback_queries") or []

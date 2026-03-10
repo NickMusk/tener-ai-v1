@@ -25,6 +25,12 @@ class MatchingEngineTests(unittest.TestCase):
             "languages": ["en"],
             "skills": ["python", "django", "aws", "docker", "postgresql"],
             "years_experience": 8,
+            "raw": {
+                "summary": "Backend engineer working with Python and Django.",
+                "positions": [
+                    {"description": "Built AWS services with Docker and PostgreSQL."},
+                ],
+            },
         }
 
         result = self.engine.verify(job=job, profile=profile)
@@ -102,6 +108,12 @@ class MatchingEngineTests(unittest.TestCase):
             "languages": ["en"],
             "skills": ["manual testing", "api testing"],
             "years_experience": 2,
+            "raw": {
+                "summary": "Manual QA focused on regression and API validation.",
+                "positions": [
+                    {"description": "Performed manual testing and API testing for web releases."},
+                ],
+            },
         }
 
         result = self.engine.verify(job=job, profile=profile)
@@ -109,7 +121,64 @@ class MatchingEngineTests(unittest.TestCase):
         self.assertEqual(result.notes["required_skills"], ["manual testing", "api testing"])
         self.assertEqual(result.notes["nice_to_have_skills"], ["sql"])
         self.assertEqual(result.notes["matched_nice_to_have_skills"], [])
-        self.assertGreaterEqual(result.notes["components"]["must_have_match"], 1.0)
+        self.assertGreaterEqual(result.notes["components"]["must_have_match"], 0.5)
+
+    def test_text_evidence_is_preferred_over_skills_only_signal(self) -> None:
+        job = {
+            "title": "Senior Backend Engineer",
+            "jd_text": "Need Python, Django, AWS",
+            "location": "Remote",
+            "preferred_languages": ["en"],
+            "seniority": "senior",
+            "must_have_skills": ["python", "django", "aws"],
+        }
+        profile = {
+            "linkedin_id": "ln_text_evidence",
+            "full_name": "Text Evidence",
+            "headline": "Senior Backend Engineer",
+            "location": "Remote",
+            "languages": ["en"],
+            "skills": ["python", "django", "aws"],
+            "years_experience": 8,
+            "raw": {
+                "summary": "Core stack: Python and Django.",
+                "positions": [
+                    {"title": "Backend Engineer", "description": "Built AWS-hosted services and APIs."},
+                ],
+            },
+        }
+
+        result = self.engine.verify(job=job, profile=profile)
+        self.assertEqual(result.status, "verified")
+        self.assertEqual(result.notes["matched_skills"], ["python", "django", "aws"])
+        self.assertEqual(result.notes["weak_skill_matches"], [])
+        self.assertEqual(result.notes["skill_evidence"].get("python"), "summary")
+        self.assertEqual(result.notes["skill_evidence"].get("aws"), "experience")
+
+    def test_skills_only_match_is_treated_as_weak_signal(self) -> None:
+        job = {
+            "title": "Senior Backend Engineer",
+            "jd_text": "Need Python, Django, AWS",
+            "location": "Remote",
+            "preferred_languages": ["en"],
+            "seniority": "senior",
+            "must_have_skills": ["python", "django", "aws"],
+        }
+        profile = {
+            "linkedin_id": "ln_skills_only",
+            "full_name": "Skills Only",
+            "headline": "Senior Backend Engineer",
+            "location": "Remote",
+            "languages": ["en"],
+            "skills": ["python", "django", "aws"],
+            "years_experience": 8,
+        }
+
+        result = self.engine.verify(job=job, profile=profile)
+        self.assertEqual(result.notes["matched_skills"], [])
+        self.assertEqual(result.notes["weak_skill_matches"], ["python", "django", "aws"])
+        self.assertLess(result.notes["components"]["must_have_match"], 1.0)
+        self.assertIn("skills-only signals", str(result.notes.get("human_explanation") or ""))
 
     def test_build_job_requirements_ignores_company_copy_and_nice_to_have_noise(self) -> None:
         job = {

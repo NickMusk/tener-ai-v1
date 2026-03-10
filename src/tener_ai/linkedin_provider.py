@@ -40,13 +40,7 @@ class MockLinkedInProvider(LinkedInProvider):
         q = (query or "").lower()
         scored = []
         for profile in self._profiles:
-            text = " ".join(
-                [
-                    profile.get("headline", ""),
-                    " ".join(profile.get("skills", [])),
-                    profile.get("location", ""),
-                ]
-            ).lower()
+            text = self._searchable_profile_text(profile)
             score = self._score(q, text)
             scored.append((score, profile))
 
@@ -62,7 +56,7 @@ class MockLinkedInProvider(LinkedInProvider):
         query_parts = [
             str(spec.get("title_query") or "").strip(),
             str(filters.get("location") or "").strip(),
-            " ".join(str(item).strip() for item in (filters.get("skills") or []) if str(item).strip()),
+            str(spec.get("keyword_query") or filters.get("keywords") or "").strip(),
         ]
         query = " ".join(part for part in query_parts if part).strip()
         return self.search_profiles(query=query, limit=limit, offset=offset)
@@ -117,11 +111,48 @@ class MockLinkedInProvider(LinkedInProvider):
     def _score(query: str, text: str) -> float:
         if not query.strip():
             return 1.0
-        tokens = [token for token in query.split() if len(token) > 2]
+        tokens = [
+            token
+            for token in re.findall(r"[a-zA-Z][a-zA-Z0-9+.#/-]{1,}", query.lower())
+            if len(token) > 2 and token not in {"and", "or", "not"}
+        ]
         if not tokens:
             return 1.0
         matched = sum(1 for token in tokens if token in text)
         return matched / len(tokens)
+
+    @classmethod
+    def _searchable_profile_text(cls, profile: Dict[str, Any]) -> str:
+        buckets = [
+            str(profile.get("headline") or ""),
+            str(profile.get("summary") or ""),
+            str(profile.get("location") or ""),
+            " ".join(str(item).strip() for item in (profile.get("skills") or []) if str(item).strip()),
+        ]
+        experience = profile.get("experience")
+        if isinstance(experience, list):
+            buckets.extend(str(item).strip() for item in experience if str(item).strip())
+        raw = profile.get("raw")
+        if isinstance(raw, dict):
+            buckets.extend(cls._collect_raw_strings(raw))
+        return " ".join(item for item in buckets if item).lower()
+
+    @classmethod
+    def _collect_raw_strings(cls, payload: Any) -> List[str]:
+        if isinstance(payload, str):
+            text = payload.strip()
+            return [text] if text else []
+        if isinstance(payload, list):
+            out: List[str] = []
+            for item in payload:
+                out.extend(cls._collect_raw_strings(item))
+            return out
+        if isinstance(payload, dict):
+            out: List[str] = []
+            for value in payload.values():
+                out.extend(cls._collect_raw_strings(value))
+            return out
+        return []
 
 
 class UnipileLinkedInProvider(LinkedInProvider):
@@ -608,6 +639,7 @@ class UnipileLinkedInProvider(LinkedInProvider):
     def _build_structured_search_payload(self, spec: Dict[str, Any], limit: int, offset: int = 0) -> Dict[str, Any]:
         filters = spec.get("filters") if isinstance(spec.get("filters"), dict) else {}
         title_query = str(spec.get("title_query") or "").strip()
+        keyword_query = str(spec.get("keyword_query") or filters.get("keywords") or "").strip()
         api_value = self.api_type or "classic"
         payload: Dict[str, Any] = {
             "api": api_value,
@@ -617,15 +649,19 @@ class UnipileLinkedInProvider(LinkedInProvider):
         if offset > 0:
             payload["offset"] = int(offset)
         if title_query:
-            payload["keywords"] = title_query
+            payload["job_title"] = title_query
             if api_value == "recruiter":
                 payload["role"] = [
                     {
-                        "keywords": title_query,
+                        "keywords": title_query.strip('"'),
                         "priority": "MUST_HAVE",
                         "scope": "CURRENT_OR_PAST",
                     }
                 ]
+        if keyword_query:
+            payload["keywords"] = keyword_query
+        elif title_query:
+            payload["keywords"] = title_query
 
         profile_languages = [
             str(item).strip().lower()
@@ -639,14 +675,6 @@ class UnipileLinkedInProvider(LinkedInProvider):
         location_id = self._resolve_search_parameter_id(kind="location", text=location_text)
         if location_id:
             payload["location"] = [location_id]
-
-        skill_ids: List[str] = []
-        for skill in (filters.get("skills") or [])[:3]:
-            skill_id = self._resolve_search_parameter_id(kind="skill", text=str(skill or "").strip())
-            if skill_id:
-                skill_ids.append(skill_id)
-        if skill_ids:
-            payload["skills"] = [{"id": item, "priority": "MUST_HAVE"} for item in skill_ids]
 
         return payload
 

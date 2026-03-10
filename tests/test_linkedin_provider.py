@@ -160,10 +160,6 @@ class UnipileProviderParsingTests(unittest.TestCase):
                 self.calls.append((method, url, payload))
                 if "/api/v1/linkedin/search/parameters" in url and "type=LOCATION" in url:
                     return {"items": [{"id": "loc_remote", "label": "Remote"}]}
-                if "/api/v1/linkedin/search/parameters" in url and "type=SKILL" in url and "python" in url.lower():
-                    return {"items": [{"id": "skill_python", "label": "Python"}]}
-                if "/api/v1/linkedin/search/parameters" in url and "type=SKILL" in url and "aws" in url.lower():
-                    return {"items": [{"id": "skill_aws", "label": "AWS"}]}
                 if "/api/v1/linkedin/search" in url:
                     return {
                         "items": [
@@ -183,10 +179,13 @@ class UnipileProviderParsingTests(unittest.TestCase):
         provider = FakeProvider()
         out = provider.search_profiles_structured(
             spec={
-                "title_query": "Senior Backend Engineer",
+                "title_query": "\"Python\"",
+                "keyword_query": "\"Django\" AND (\"AWS\" OR \"GCP\")",
                 "filters": {
                     "location": "Remote",
-                    "skills": ["python", "aws"],
+                    "keywords": "\"Django\" AND (\"AWS\" OR \"GCP\")",
+                    "must_terms": ["django"],
+                    "optional_terms": ["aws", "gcp"],
                     "profile_language": ["en"],
                 },
             },
@@ -195,13 +194,11 @@ class UnipileProviderParsingTests(unittest.TestCase):
         self.assertEqual(len(out), 1)
         search_call = next(call for call in provider.calls if "/api/v1/linkedin/search?" in call[1])
         payload = search_call[2] or {}
-        self.assertEqual(payload.get("keywords"), "Senior Backend Engineer")
+        self.assertEqual(payload.get("job_title"), "\"Python\"")
+        self.assertEqual(payload.get("keywords"), "\"Django\" AND (\"AWS\" OR \"GCP\")")
         self.assertEqual(payload.get("profile_language"), ["en"])
         self.assertEqual(payload.get("location"), ["loc_remote"])
-        self.assertEqual(
-            payload.get("skills"),
-            [{"id": "skill_python", "priority": "MUST_HAVE"}, {"id": "skill_aws", "priority": "MUST_HAVE"}],
-        )
+        self.assertNotIn("skills", payload)
 
     def test_structured_search_parameter_resolution_is_cached(self) -> None:
         class FakeProvider(UnipileLinkedInProvider):

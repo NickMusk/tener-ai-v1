@@ -3,11 +3,69 @@ from __future__ import annotations
 import inspect
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .language import detect_language_from_text, pick_candidate_language
 from .matching import MatchingEngine
+
+
+TITLE_LANGUAGE_TERMS = {
+    "python": "Python",
+    "java": "Java",
+    "javascript": "JavaScript",
+    "typescript": "TypeScript",
+    "php": "PHP",
+    "go": "Go",
+    "golang": "Go",
+    "ruby": "Ruby",
+    "scala": "Scala",
+    "kotlin": "Kotlin",
+    "swift": "Swift",
+    "rust": "Rust",
+    "c#": "C#",
+    "c++": "C++",
+}
+
+TITLE_ROLE_PHRASES = (
+    "manual qa engineer",
+    "devops engineer",
+    "site reliability engineer",
+    "platform engineer",
+    "backend engineer",
+    "frontend engineer",
+    "fullstack engineer",
+    "software engineer",
+    "software developer",
+    "qa engineer",
+    "data engineer",
+    "ml engineer",
+    "machine learning engineer",
+    "java architect",
+    "solution architect",
+)
+
+TITLE_SENIORITY_TOKENS = {
+    "senior",
+    "sr",
+    "jr",
+    "junior",
+    "mid",
+    "middle",
+    "lead",
+    "principal",
+    "staff",
+    "head",
+}
+
+
+@dataclass(frozen=True)
+class SearchIntent:
+    title_term: Optional[str]
+    keyword_query: Optional[str]
+    must_terms: List[str]
+    optional_terms: List[str]
 
 
 class SourcingAgent:
@@ -80,11 +138,15 @@ class SourcingAgent:
         spec = self.build_search_spec(job)
         return {
             "title": spec.get("title_query"),
+            "job_title_query": spec.get("title_query"),
+            "keyword_query": spec.get("keyword_query"),
             "location": spec.get("location"),
             "seniority": spec.get("seniority"),
             "preferred_languages": spec.get("preferred_languages") or [],
             "jd_excerpt": spec.get("jd_excerpt"),
             "extracted_keywords": spec.get("keywords") or [],
+            "keyword_terms": spec.get("must_terms") or [],
+            "optional_keyword_terms": spec.get("optional_terms") or [],
             "must_have_skills": spec.get("must_have_skills") or [],
             "nice_to_have_skills": spec.get("nice_to_have_skills") or [],
             "questionable_skills": spec.get("questionable_skills") or [],
@@ -116,17 +178,28 @@ class SourcingAgent:
             for item in (requirements.get("questionable_skills") or [])
             if str(item).strip()
         ]
+        intent = self._build_search_intent(
+            title=title,
+            must_terms=keywords,
+            optional_terms=nice_to_have_skills,
+        )
         filters: Dict[str, Any] = {
             "location": location,
-            "skills": keywords[:3],
+            "keywords": intent.keyword_query,
+            "must_terms": list(intent.must_terms),
+            "optional_terms": list(intent.optional_terms),
             "profile_language": preferred_languages[:2],
         }
         return {
-            "title_query": title or None,
+            "title_query": self._quote_exact(intent.title_term) if intent.title_term else None,
+            "title_term": intent.title_term,
+            "keyword_query": intent.keyword_query,
             "location": location,
             "seniority": seniority,
             "preferred_languages": preferred_languages,
             "keywords": keywords,
+            "must_terms": list(intent.must_terms),
+            "optional_terms": list(intent.optional_terms),
             "must_have_skills": keywords,
             "nice_to_have_skills": nice_to_have_skills,
             "questionable_skills": questionable_skills,
@@ -310,32 +383,116 @@ class SourcingAgent:
     def _build_structured_search_stages(self, spec: Dict[str, Any]) -> List[Dict[str, Any]]:
         filters = spec.get("filters") if isinstance(spec.get("filters"), dict) else {}
         location = str(filters.get("location") or "").strip()
-        skills = [str(item).strip() for item in (filters.get("skills") or []) if str(item).strip()]
+        must_terms = [str(item).strip() for item in (filters.get("must_terms") or []) if str(item).strip()]
+        optional_terms = [str(item).strip() for item in (filters.get("optional_terms") or []) if str(item).strip()]
         profile_language = [str(item).strip() for item in (filters.get("profile_language") or []) if str(item).strip()]
+        full_keyword_query = str(spec.get("keyword_query") or filters.get("keywords") or "").strip()
 
-        def stage(stage_key: str, *, include_location: bool, include_languages: bool, stage_skills: List[str]) -> Dict[str, Any]:
+        def stage(
+            stage_key: str,
+            *,
+            include_location: bool,
+            include_languages: bool,
+            stage_keyword_query: Optional[str],
+            stage_must_terms: List[str],
+            stage_optional_terms: List[str],
+        ) -> Dict[str, Any]:
             next_filters: Dict[str, Any] = {}
             if include_location and location:
                 next_filters["location"] = location
             if include_languages and profile_language:
                 next_filters["profile_language"] = profile_language[:2]
-            if stage_skills:
-                next_filters["skills"] = stage_skills[:3]
+            if stage_keyword_query:
+                next_filters["keywords"] = stage_keyword_query
+            if stage_must_terms:
+                next_filters["must_terms"] = stage_must_terms[:6]
+            if stage_optional_terms:
+                next_filters["optional_terms"] = stage_optional_terms[:6]
             return {
                 **spec,
+                "keyword_query": stage_keyword_query,
+                "must_terms": stage_must_terms[:6],
+                "optional_terms": stage_optional_terms[:6],
                 "filters": next_filters,
                 "stage_key": stage_key,
             }
 
+        must_only_query = self._compose_keyword_query(must_terms=must_terms, optional_terms=[])
+        primary_must_query = self._compose_keyword_query(must_terms=must_terms[:1], optional_terms=[])
+        optional_only_query = self._compose_keyword_query(must_terms=[], optional_terms=optional_terms[:3])
         stages = [
-            stage("strict", include_location=True, include_languages=True, stage_skills=skills[:3]),
-            stage("focused", include_location=True, include_languages=True, stage_skills=skills[:1]),
-            stage("location_skills", include_location=True, include_languages=False, stage_skills=skills[:3]),
-            stage("location_lang", include_location=True, include_languages=True, stage_skills=[]),
-            stage("location_only", include_location=True, include_languages=False, stage_skills=[]),
-            stage("skills_only", include_location=False, include_languages=False, stage_skills=skills[:3]),
-            stage("skills_primary", include_location=False, include_languages=False, stage_skills=skills[:1]),
-            stage("title_only", include_location=False, include_languages=False, stage_skills=[]),
+            stage(
+                "strict",
+                include_location=True,
+                include_languages=True,
+                stage_keyword_query=full_keyword_query,
+                stage_must_terms=must_terms,
+                stage_optional_terms=optional_terms,
+            ),
+            stage(
+                "must_only",
+                include_location=True,
+                include_languages=True,
+                stage_keyword_query=must_only_query,
+                stage_must_terms=must_terms,
+                stage_optional_terms=[],
+            ),
+            stage(
+                "must_primary",
+                include_location=True,
+                include_languages=True,
+                stage_keyword_query=primary_must_query,
+                stage_must_terms=must_terms[:1],
+                stage_optional_terms=[],
+            ),
+            stage(
+                "location_keywords",
+                include_location=True,
+                include_languages=False,
+                stage_keyword_query=full_keyword_query,
+                stage_must_terms=must_terms,
+                stage_optional_terms=optional_terms,
+            ),
+            stage(
+                "location_lang",
+                include_location=True,
+                include_languages=True,
+                stage_keyword_query=None,
+                stage_must_terms=[],
+                stage_optional_terms=[],
+            ),
+            stage(
+                "location_only",
+                include_location=True,
+                include_languages=False,
+                stage_keyword_query=None,
+                stage_must_terms=[],
+                stage_optional_terms=[],
+            ),
+            stage(
+                "keywords_only",
+                include_location=False,
+                include_languages=False,
+                stage_keyword_query=must_only_query,
+                stage_must_terms=must_terms,
+                stage_optional_terms=[],
+            ),
+            stage(
+                "optional_only",
+                include_location=False,
+                include_languages=False,
+                stage_keyword_query=optional_only_query,
+                stage_must_terms=[],
+                stage_optional_terms=optional_terms[:3],
+            ),
+            stage(
+                "title_only",
+                include_location=False,
+                include_languages=False,
+                stage_keyword_query=None,
+                stage_must_terms=[],
+                stage_optional_terms=[],
+            ),
         ]
         out: List[Dict[str, Any]] = []
         seen_keys: set[str] = set()
@@ -450,6 +607,108 @@ class SourcingAgent:
             seen.add(lowered)
             out.append(query)
         return out[:8]
+
+    @classmethod
+    def _build_search_intent(cls, *, title: str, must_terms: List[str], optional_terms: List[str]) -> SearchIntent:
+        title_term = cls._normalize_title_term(title=title, must_terms=must_terms)
+        filtered_must_terms = [
+            term
+            for term in must_terms
+            if cls._normalize_comparison_key(term) != cls._normalize_comparison_key(title_term)
+        ]
+        keyword_query = cls._compose_keyword_query(
+            must_terms=filtered_must_terms,
+            optional_terms=optional_terms[:3],
+        )
+        return SearchIntent(
+            title_term=title_term,
+            keyword_query=keyword_query,
+            must_terms=filtered_must_terms,
+            optional_terms=optional_terms[:3],
+        )
+
+    @classmethod
+    def _normalize_title_term(cls, *, title: str, must_terms: List[str]) -> Optional[str]:
+        normalized_title = " ".join(re.sub(r"[()/_-]+", " ", str(title or "")).split()).strip()
+        if not normalized_title:
+            return None
+        lowered = normalized_title.lower()
+        for phrase in TITLE_ROLE_PHRASES:
+            if phrase in lowered:
+                return cls._canonical_title_case(phrase)
+
+        title_tokens = [token for token in re.split(r"\s+", lowered) if token]
+        title_tokens = [token for token in title_tokens if token not in TITLE_SENIORITY_TOKENS]
+        for raw in re.split(r"\s+", normalized_title):
+            key = raw.strip().lower()
+            if key in TITLE_LANGUAGE_TERMS:
+                return TITLE_LANGUAGE_TERMS[key]
+
+        for term in must_terms:
+            key = cls._normalize_comparison_key(term)
+            if key in TITLE_LANGUAGE_TERMS and key in lowered:
+                return TITLE_LANGUAGE_TERMS[key]
+
+        cleaned = " ".join(token for token in title_tokens if token)
+        if not cleaned:
+            return None
+        return cls._canonical_title_case(cleaned)
+
+    @staticmethod
+    def _canonical_title_case(value: str) -> str:
+        words = []
+        for word in str(value or "").split():
+            canonical = TITLE_LANGUAGE_TERMS.get(word.lower())
+            if canonical:
+                words.append(canonical)
+            elif word.lower() == "devops":
+                words.append("DevOps")
+            elif word.lower() == "qa":
+                words.append("QA")
+            else:
+                words.append(word.capitalize())
+        return " ".join(words).strip()
+
+    @staticmethod
+    def _compose_keyword_query(*, must_terms: List[str], optional_terms: List[str]) -> Optional[str]:
+        normalized_must = []
+        seen: set[str] = set()
+        for term in must_terms:
+            cleaned = str(term or "").strip()
+            key = SourcingAgent._normalize_comparison_key(cleaned)
+            if not cleaned or key in seen:
+                continue
+            seen.add(key)
+            normalized_must.append(cleaned)
+
+        normalized_optional = []
+        for term in optional_terms:
+            cleaned = str(term or "").strip()
+            key = SourcingAgent._normalize_comparison_key(cleaned)
+            if not cleaned or key in seen:
+                continue
+            seen.add(key)
+            normalized_optional.append(cleaned)
+
+        clauses = [SourcingAgent._quote_exact(term) for term in normalized_must]
+        if normalized_optional:
+            if len(normalized_optional) == 1:
+                clauses.append(SourcingAgent._quote_exact(normalized_optional[0]))
+            else:
+                joined = " OR ".join(SourcingAgent._quote_exact(term) for term in normalized_optional)
+                clauses.append(f"({joined})")
+        if not clauses:
+            return None
+        return " AND ".join(clauses)
+
+    @staticmethod
+    def _quote_exact(value: str) -> str:
+        cleaned = str(value or "").strip().strip('"')
+        return f"\"{cleaned}\"" if cleaned else ""
+
+    @staticmethod
+    def _normalize_comparison_key(value: Optional[str]) -> str:
+        return re.sub(r"\s+", " ", str(value or "").strip().lower())
 
     @staticmethod
     def _extract_keywords(text: str, max_items: int = 8) -> List[str]:

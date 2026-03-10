@@ -107,16 +107,22 @@ class JobSourceFiltersApiTests(unittest.TestCase):
         self.assertEqual(str(payload.get("job_company") or ""), "Tener")
 
         filters = payload.get("filters") or {}
-        self.assertEqual(str(filters.get("title") or ""), "Senior Backend Engineer")
-        self.assertEqual(str(filters.get("primary_query") or ""), "Senior Backend Engineer")
+        self.assertEqual(str(filters.get("title") or ""), "\"Backend Engineer\"")
+        self.assertEqual(str(filters.get("job_title_query") or ""), "\"Backend Engineer\"")
+        self.assertEqual(str(filters.get("primary_query") or ""), "\"Backend Engineer\"")
+        self.assertEqual(str(filters.get("keyword_query") or ""), "\"python\" AND \"django\" AND \"aws\" AND \"docker\"")
         self.assertEqual(str(filters.get("location") or ""), "Germany")
         self.assertEqual(str(filters.get("seniority") or ""), "senior")
         self.assertEqual(filters.get("preferred_languages") or [], ["en", "de"])
         self.assertEqual(filters.get("filters") or {}, {
             "location": "Germany",
-            "skills": ["python", "django", "aws"],
+            "keywords": "\"python\" AND \"django\" AND \"aws\" AND \"docker\"",
+            "must_terms": ["python", "django", "aws"],
+            "optional_terms": ["docker"],
             "profile_language": ["en", "de"],
         })
+        self.assertEqual(filters.get("keyword_terms") or [], ["python", "django", "aws"])
+        self.assertEqual(filters.get("optional_keyword_terms") or [], ["docker"])
         self.assertEqual(filters.get("must_have_skills") or [], ["python", "django", "aws"])
         self.assertEqual(filters.get("nice_to_have_skills") or [], ["docker"])
         self.assertEqual(filters.get("questionable_skills") or [], ["recruiting"])

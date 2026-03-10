@@ -2316,7 +2316,9 @@
       const company = String(preview.job_company || "").trim();
       const location = String(filters.location || "").trim();
       const seniority = String(filters.seniority || "").trim();
-      const appliedSkills = Array.isArray(appliedFilters.skills) ? appliedFilters.skills : [];
+      const keywordQuery = String(filters.keyword_query || appliedFilters.keywords || "").trim();
+      const appliedMustTerms = Array.isArray(appliedFilters.must_terms) ? appliedFilters.must_terms : [];
+      const appliedOptionalTerms = Array.isArray(appliedFilters.optional_terms) ? appliedFilters.optional_terms : [];
       const appliedLanguages = Array.isArray(appliedFilters.profile_language) ? appliedFilters.profile_language : [];
       const mustHaveSkills = Array.isArray(filters.must_have_skills) ? filters.must_have_skills : [];
       const niceToHaveSkills = Array.isArray(filters.nice_to_have_skills) ? filters.nice_to_have_skills : [];
@@ -2336,7 +2338,7 @@
         location ? `location: ${location}` : "",
         seniority ? `seniority: ${seniority}` : "",
         languages.length ? `languages: ${languages.join(", ")}` : "",
-        appliedSkills.length ? `skills: ${appliedSkills.join(", ")}` : "",
+        keywordQuery ? `keywords: ${keywordQuery}` : "",
         `${queries.length} fallback quer${queries.length === 1 ? "y" : "ies"}`,
       ].filter(Boolean);
       summaryEl.textContent = summaryParts.join(" • ");
@@ -2345,8 +2347,14 @@
       if (appliedFilters.location) {
         chips.push(`<span class="source-filter-chip">location: ${escapeHtml(String(appliedFilters.location))}</span>`);
       }
-      appliedSkills.forEach((item) => {
-        chips.push(`<span class="source-filter-chip">skill: ${escapeHtml(String(item))}</span>`);
+      if (keywordQuery) {
+        chips.push(`<span class="source-filter-chip">keywords: ${escapeHtml(keywordQuery)}</span>`);
+      }
+      appliedMustTerms.forEach((item) => {
+        chips.push(`<span class="source-filter-chip">must: ${escapeHtml(String(item))}</span>`);
+      });
+      appliedOptionalTerms.forEach((item) => {
+        chips.push(`<span class="source-filter-chip">optional: ${escapeHtml(String(item))}</span>`);
       });
       appliedLanguages.forEach((item) => {
         chips.push(`<span class="source-filter-chip">lang: ${escapeHtml(String(item))}</span>`);

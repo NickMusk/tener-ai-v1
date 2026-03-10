@@ -145,14 +145,21 @@ class MatchingEngine:
             # If no skills are detected in JD, the role is broad; do not penalize heavily.
             must_have_match = 0.6
             matched_skills = []
+            weak_matched_skills: List[str] = []
+            skill_evidence: Dict[str, str] = {}
         else:
-            matched_skills = [skill for skill in required_skills if skill in candidate_skills]
+            skill_match = self._match_skills_with_evidence(profile=profile, skills=required_skills)
+            matched_skills = skill_match["strong_matches"]
+            weak_matched_skills = skill_match["weak_matches"]
+            skill_evidence = skill_match["evidence"]
             effective_required_count = min(len(required_skills), 6)
-            must_have_match = min(1.0, len(matched_skills) / effective_required_count)
+            must_have_match = min(1.0, float(skill_match["weight"]) / effective_required_count)
 
-        matched_nice_to_have = [skill for skill in nice_to_have_skills if skill in candidate_skills]
+        nice_match = self._match_skills_with_evidence(profile=profile, skills=nice_to_have_skills)
+        matched_nice_to_have = nice_match["strong_matches"]
+        weak_matched_nice_to_have = nice_match["weak_matches"]
         nice_to_have_match = (
-            min(1.0, len(matched_nice_to_have) / max(1, len(nice_to_have_skills)))
+            min(1.0, float(nice_match["weight"]) / max(1, len(nice_to_have_skills)))
             if nice_to_have_skills
             else 0.0
         )
@@ -182,7 +189,11 @@ class MatchingEngine:
             "nice_to_have_skills": list(nice_to_have_skills),
             "questionable_skills": list(questionable_skills),
             "matched_skills": matched_skills,
+            "weak_skill_matches": weak_matched_skills,
+            "skill_evidence": skill_evidence,
             "matched_nice_to_have_skills": matched_nice_to_have,
+            "weak_nice_to_have_matches": weak_matched_nice_to_have,
+            "nice_to_have_evidence": nice_match["evidence"],
             "effective_required_skills_count": min(len(required_skills), 6) if required_skills else 0,
             "target_seniority": target_seniority,
             "candidate_years_experience": years,
@@ -210,6 +221,13 @@ class MatchingEngine:
             location_match=round(location_match, 3),
             language_match=round(language_match, 3),
         )
+        evidence_summary = self._format_skill_evidence_summary(
+            strong_matches=matched_skills,
+            weak_matches=weak_matched_skills,
+            evidence=skill_evidence,
+        )
+        if evidence_summary:
+            notes["human_explanation"] = f"{notes['human_explanation']} Evidence: {evidence_summary}."
         return MatchResult(score=round(score, 3), status=status, notes=notes)
 
     def build_job_requirements(
@@ -618,12 +636,148 @@ class MatchingEngine:
 
     def _candidate_skills(self, profile: Dict[str, Any]) -> Set[str]:
         skills = {s.lower() for s in profile.get("skills", []) if isinstance(s, str) and s.strip()}
-        if skills:
-            return skills
-        headline = str(profile.get("headline") or "").lower()
         dictionary = [s.lower() for s in self.rules.get("skill_dictionary", [])]
-        inferred = {skill for skill in dictionary if skill in headline}
-        return inferred
+        evidence = self._match_skills_with_evidence(profile=profile, skills=dictionary)
+        inferred = {skill.lower() for skill in evidence["strong_matches"] + evidence["weak_matches"]}
+        return skills | inferred
+
+    def _match_skills_with_evidence(self, *, profile: Dict[str, Any], skills: List[str]) -> Dict[str, Any]:
+        if not skills:
+            return {"weight": 0.0, "strong_matches": [], "weak_matches": [], "evidence": {}}
+
+        buckets = self._profile_text_buckets(profile)
+        skill_set = {s.lower() for s in profile.get("skills", []) if isinstance(s, str) and s.strip()}
+        evidence: Dict[str, str] = {}
+        strong_matches: List[str] = []
+        weak_matches: List[str] = []
+        total_weight = 0.0
+
+        source_order = (
+            ("summary", 1.0),
+            ("experience", 1.0),
+            ("headline", 0.75),
+            ("article", 0.6),
+            ("generic", 0.5),
+        )
+        for skill in skills:
+            normalized_skill = str(skill or "").strip().lower()
+            if not normalized_skill:
+                continue
+
+            matched_source = ""
+            matched_weight = 0.0
+            for source_name, source_weight in source_order:
+                if self._text_contains_term(buckets.get(source_name, ""), normalized_skill):
+                    matched_source = source_name
+                    matched_weight = source_weight
+                    break
+
+            if matched_source:
+                evidence[normalized_skill] = matched_source
+                if matched_weight >= 0.75:
+                    strong_matches.append(normalized_skill)
+                else:
+                    weak_matches.append(normalized_skill)
+                total_weight += matched_weight
+                continue
+
+            if normalized_skill in skill_set:
+                evidence[normalized_skill] = "skills"
+                weak_matches.append(normalized_skill)
+                total_weight += 0.5
+
+        return {
+            "weight": total_weight,
+            "strong_matches": strong_matches,
+            "weak_matches": weak_matches,
+            "evidence": evidence,
+        }
+
+    def _profile_text_buckets(self, profile: Dict[str, Any]) -> Dict[str, str]:
+        buckets: Dict[str, List[str]] = {
+            "summary": [],
+            "experience": [],
+            "headline": [],
+            "article": [],
+            "generic": [],
+        }
+        headline = str(profile.get("headline") or "").strip()
+        if headline:
+            buckets["headline"].append(headline)
+
+        for key in ("summary", "about", "bio", "description"):
+            value = str(profile.get(key) or "").strip()
+            if value:
+                target = "summary" if key in {"summary", "about", "bio"} else "generic"
+                buckets[target].append(value)
+
+        raw = profile.get("raw")
+        if isinstance(raw, dict):
+            self._collect_profile_text_buckets(raw, buckets=buckets, path=[])
+
+        return {bucket: " ".join(values).lower() for bucket, values in buckets.items() if values}
+
+    def _collect_profile_text_buckets(self, payload: Any, *, buckets: Dict[str, List[str]], path: List[str]) -> None:
+        if isinstance(payload, dict):
+            for key, value in payload.items():
+                self._collect_profile_text_buckets(value, buckets=buckets, path=path + [str(key).lower()])
+            return
+        if isinstance(payload, list):
+            for item in payload:
+                self._collect_profile_text_buckets(item, buckets=buckets, path=path)
+            return
+        if not isinstance(payload, str):
+            return
+
+        text = payload.strip()
+        if not text:
+            return
+
+        bucket = self._classify_profile_text_bucket(path)
+        if bucket:
+            buckets[bucket].append(text)
+
+    @staticmethod
+    def _classify_profile_text_bucket(path: List[str]) -> str | None:
+        joined = " ".join(path)
+        if any(token in joined for token in ("skill", "endorsement")):
+            return None
+        if any(token in joined for token in ("summary", "about", "bio")):
+            return "summary"
+        if any(token in joined for token in ("experience", "position", "employment", "occupation", "work_history", "description")):
+            return "experience"
+        if any(token in joined for token in ("article", "post", "publication")):
+            return "article"
+        if "headline" in joined:
+            return "headline"
+        if any(token in joined for token in ("search", "detail", "raw", "profile", "data")):
+            return "generic"
+        return None
+
+    @staticmethod
+    def _text_contains_term(text: str, term: str) -> bool:
+        normalized_text = str(text or "").lower()
+        normalized_term = str(term or "").strip().lower()
+        if not normalized_text or not normalized_term:
+            return False
+        pattern = re.sub(r"\s+", r"\\s+", re.escape(normalized_term))
+        return re.search(rf"(?<![a-z0-9]){pattern}(?![a-z0-9])", normalized_text) is not None
+
+    @staticmethod
+    def _format_skill_evidence_summary(
+        *,
+        strong_matches: List[str],
+        weak_matches: List[str],
+        evidence: Dict[str, str],
+    ) -> str:
+        parts: List[str] = []
+        if strong_matches:
+            strong_sources = ", ".join(f"{skill} via {evidence.get(skill, 'text')}" for skill in strong_matches[:4])
+            parts.append(f"text-backed matches: {strong_sources}")
+        weak_skills_only = [skill for skill in weak_matches if evidence.get(skill) == "skills"]
+        if weak_skills_only:
+            parts.append("skills-only signals: " + ", ".join(weak_skills_only[:4]))
+        return "; ".join(parts)
 
     def _extract_jd_keywords(self, jd_text: str, max_items: int = 6) -> List[str]:
         stopwords = {
