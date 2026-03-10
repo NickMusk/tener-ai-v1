@@ -1,0 +1,1165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Candidate Results — LiveRamp</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fb;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f3f4f6;
+            --accent: #00c389;
+            --accent-light: #34d3a2;
+            --accent-dim: rgba(0, 195, 137, 0.08);
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --text-dim: #9ca3af;
+            --border: #e5e7eb;
+            --border-strong: #d1d5db;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --purple: #8b5cf6;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        nav {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255,255,255,0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .logo {
+            font-size: 1.3rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            text-decoration: none;
+            color: var(--text-primary);
+        }
+
+        .logo-icon {
+            width: 28px; height: 28px;
+            background: var(--accent);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-job {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.8rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .nav-btn {
+            padding: 0.5rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            transition: all 0.2s;
+        }
+
+        .nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+        .nav-btn.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        /* Main */
+        .main {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 320px;
+            min-height: 100vh;
+            padding-top: 56px;
+        }
+
+        .left-panel {
+            padding: 1.5rem;
+            overflow-y: auto;
+            max-height: calc(100vh - 56px);
+            min-width: 0;
+        }
+
+        /* Success header */
+        .success-header {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            padding: 1.25rem;
+            background: linear-gradient(135deg, var(--accent-dim), rgba(13,148,136,0.03));
+            border: 1px solid rgba(13,148,136,0.2);
+            border-radius: 14px;
+        }
+
+        .success-icon {
+            width: 48px; height: 48px;
+            background: var(--accent);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            color: white;
+        }
+
+        .success-content h1 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-bottom: 0.25rem;
+        }
+
+        .success-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .success-meta strong { color: var(--accent); }
+
+        /* Quick actions */
+        .quick-actions {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .quick-action {
+            padding: 0.6rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.8rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .quick-action:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* Candidate cards */
+        .section-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            margin-bottom: 0.75rem;
+        }
+
+        .candidates-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 2rem;
+        }
+
+        .candidate-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.25rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .candidate-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 4px 16px rgba(13,148,136,0.08);
+        }
+
+        .candidate-card.selected {
+            border-color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        .card-top {
+            display: flex;
+            align-items: flex-start;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            min-width: 0;
+        }
+
+        .card-avatar {
+            width: 48px; height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        .card-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .card-name {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 0.15rem;
+        }
+
+        .card-title {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            line-height: 1.4;
+        }
+
+        .card-score-wrap {
+            text-align: right;
+            min-width: 88px;
+            padding-right: 3rem;
+            flex-shrink: 0;
+        }
+
+        .card-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .card-score-label {
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .card-checkbox {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            width: 22px; height: 22px;
+            border: 2px solid var(--border);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .card-checkbox.checked {
+            background: var(--accent);
+            border-color: var(--accent);
+        }
+
+        .card-checkbox.checked::after {
+            content: '✓';
+            color: white;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        /* Behavioral signals */
+        .signals-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+            margin-bottom: 0.75rem;
+            min-width: 0;
+        }
+
+        .signal-tag {
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.7rem;
+            font-weight: 500;
+        }
+
+        .signal-green {
+            background: rgba(16,185,129,0.08);
+            color: var(--success);
+        }
+
+        .signal-purple {
+            background: rgba(139,92,246,0.08);
+            color: var(--purple);
+        }
+
+        .signal-accent {
+            background: var(--accent-dim);
+            color: var(--accent);
+        }
+
+        .signal-orange {
+            background: rgba(245,158,11,0.08);
+            color: var(--warning);
+        }
+
+        /* Source + details row */
+        .card-details {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 0.75rem;
+            row-gap: 0.5rem;
+            padding-top: 0.75rem;
+            border-top: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            min-width: 0;
+        }
+
+        .detail-item {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            min-width: 0;
+        }
+
+        .card-details .expand-btn {
+            margin-left: auto;
+            padding: 0.3rem 0.6rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.7rem;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        /* Right panel */
+        .right-panel {
+            background: var(--bg-card);
+            border-left: 1px solid var(--border);
+            padding: 1.25rem;
+            overflow-y: auto;
+            max-height: calc(100vh - 56px);
+            position: sticky;
+            top: 56px;
+        }
+
+        .panel-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+        }
+
+        /* Diversity meter */
+        .diversity-card {
+            padding: 1rem;
+            background: rgba(139,92,246,0.04);
+            border: 1px solid rgba(139,92,246,0.15);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+        }
+
+        .diversity-title {
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .diversity-bar-bg {
+            height: 8px;
+            background: var(--bg-secondary);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .diversity-bar-fill {
+            height: 100%;
+            background: var(--purple);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+
+        .diversity-stats {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .diversity-stats strong { color: var(--purple); }
+
+        /* Funnel summary */
+        .funnel-summary {
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+        }
+
+        .funnel-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.5rem 0;
+            font-size: 0.8rem;
+        }
+
+        .funnel-row + .funnel-row { border-top: 1px solid var(--border); }
+
+        .funnel-label { color: var(--text-secondary); }
+
+        .funnel-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+        }
+
+        /* Source breakdown */
+        .source-breakdown {
+            margin-bottom: 1rem;
+        }
+
+        .source-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0;
+            font-size: 0.8rem;
+        }
+
+        .source-icon { font-size: 14px; width: 20px; text-align: center; }
+        .source-name { flex: 1; color: var(--text-secondary); }
+
+        .source-count {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 600;
+            font-size: 0.8rem;
+        }
+
+        /* Compliance */
+        .compliance-section { margin-bottom: 1rem; }
+
+        .compliance-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .compliance-check { color: var(--success); font-weight: bold; }
+
+        /* Action buttons */
+        .panel-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .panel-btn {
+            padding: 0.75rem;
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .panel-btn.primary {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .panel-btn.secondary {
+            background: var(--bg-card);
+            color: var(--text-secondary);
+        }
+
+        .panel-btn:hover { opacity: 0.9; }
+
+        /* Selection bar */
+        .selection-bar {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 320px;
+            padding: 1rem 1.5rem;
+            background: var(--accent);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 50;
+            transform: translateY(100%);
+            transition: transform 0.3s ease;
+        }
+
+        .selection-bar.visible { transform: translateY(0); }
+
+        .selection-info { font-weight: 600; font-size: 0.95rem; }
+
+        .selection-actions { display: flex; gap: 0.5rem; }
+
+        .sel-btn {
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+        }
+
+        .sel-btn.white { background: white; color: var(--accent); }
+        .sel-btn.ghost { background: rgba(255,255,255,0.15); color: white; }
+
+        /* Popup */
+        .popup-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.4);
+            z-index: 200;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s;
+        }
+
+        .popup-overlay.visible {
+            opacity: 1;
+            pointer-events: all;
+        }
+
+        .popup-card {
+            background: var(--bg-card);
+            border-radius: 20px;
+            width: 90%;
+            max-width: 520px;
+            max-height: 85vh;
+            overflow-y: auto;
+            box-shadow: 0 24px 64px rgba(0,0,0,0.15);
+        }
+
+        .popup-header {
+            padding: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .popup-avatar {
+            width: 56px; height: 56px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 20px;
+        }
+
+        .popup-name { font-size: 1.2rem; font-weight: 700; }
+        .popup-subtitle { font-size: 0.85rem; color: var(--text-secondary); }
+
+        .popup-score {
+            margin-left: auto;
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .popup-body { padding: 1.5rem; }
+
+        .popup-section {
+            margin-bottom: 1.25rem;
+        }
+
+        .popup-section-title {
+            font-size: 0.7rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            margin-bottom: 0.5rem;
+        }
+
+        .popup-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+        }
+
+        .popup-field-label {
+            font-size: 0.7rem;
+            color: var(--text-dim);
+        }
+
+        .popup-field-value {
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .popup-signals {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.4rem;
+        }
+
+        .popup-signal {
+            padding: 0.35rem 0.7rem;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+
+        .popup-signal.positive {
+            background: rgba(16,185,129,0.08);
+            color: var(--success);
+        }
+
+        .popup-signal.highlight {
+            background: rgba(139,92,246,0.08);
+            color: var(--purple);
+        }
+
+        .popup-signal.neutral {
+            background: rgba(245,158,11,0.08);
+            color: var(--warning);
+        }
+
+        .popup-actions {
+            display: flex;
+            gap: 0.75rem;
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .popup-btn {
+            flex: 1;
+            padding: 0.75rem;
+            border-radius: 10px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            text-align: center;
+            border: 1px solid var(--border);
+            text-decoration: none;
+            transition: all 0.2s;
+        }
+
+        .popup-btn.primary { background: var(--accent); border-color: var(--accent); color: white; }
+        .popup-btn.secondary { background: var(--bg-card); color: var(--text-secondary); }
+
+        @media (max-width: 1280px) {
+            .main {
+                grid-template-columns: 1fr;
+            }
+
+            .right-panel {
+                position: static;
+                max-height: none;
+                border-left: none;
+                border-top: 1px solid var(--border);
+            }
+
+            .selection-bar {
+                right: 0;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .nav-left,
+            .nav-right,
+            .success-header,
+            .success-meta,
+            .card-top {
+                flex-wrap: wrap;
+            }
+
+            .card-score-wrap {
+                padding-right: 0;
+                min-width: 0;
+                width: 100%;
+                text-align: left;
+            }
+
+            .card-checkbox {
+                top: 1rem;
+                right: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="nav-left">
+            <a class="logo" href="index.html">
+                <div class="logo-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                </div>
+                Tener
+            </a>
+            <div class="nav-job">🔒 Offensive Security Engineer · LiveRamp · Remote (US)</div>
+        </div>
+        <div class="nav-right">
+            <button class="nav-btn" onclick="window.location.href='searching.html'">← Back to Search</button>
+            <button class="nav-btn">📥 Export to ATS</button>
+            <button class="nav-btn primary" onclick="window.location.href='outreach.html'">📨 Start Outreach</button>
+        </div>
+    </nav>
+
+    <div class="main">
+        <div class="left-panel">
+            <div class="success-header">
+                <div class="success-icon">✓</div>
+                <div class="success-content">
+                    <h1>12 Candidates Ready for Review</h1>
+                    <div class="success-meta">
+                        <span>Sourced from <strong>6 channels</strong></span>
+                        <span>·</span>
+                        <span><strong>36</strong> cert / equivalent signals</span>
+                        <span>·</span>
+                        <span>Processed in <strong>41 seconds</strong></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="quick-actions">
+                <button class="quick-action">⬇ Export Search Brief</button>
+                <button class="quick-action">📧 Share with Security Lead</button>
+                <button class="quick-action">🔗 Push to ATS</button>
+                <button class="quick-action">📊 Download Signal Report</button>
+            </div>
+
+            <div class="section-title">Top Candidates — Ranked by Exploit Depth and Remediation Fit</div>
+
+            <div class="candidates-grid" id="candidates">
+
+                <div class="candidate-card" onclick="openPopup(0)" data-idx="0">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(0,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#8b5cf6;">LW</div>
+                        <div class="card-info">
+                            <div class="card-name">Maya Chen</div>
+                            <div class="card-title">Staff Offensive Security Engineer · 9 years · NCC Group → Stripe → Independent Consultant</div>
+                        </div>
+                        <div class="card-score-wrap">
+                            <div class="card-score">96%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ OSWE holder</span>
+                        <span class="signal-tag signal-purple">✓ Maintains Burp extension for API auth testing</span>
+                        <span class="signal-tag signal-accent">✓ Led purple-team drills at Stripe</span>
+                        <span class="signal-tag signal-green">✓ Developer-ready remediation notes</span>
+                        <span class="signal-tag signal-orange">⚡ Open to full-time after consulting</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">💼 LinkedIn + 🎤 Conference</div>
+                        <div class="detail-item">📍 Seattle (remote)</div>
+                        <div class="detail-item">💬 Interested</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(1)" data-idx="1">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(1,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:var(--accent);">AK</div>
+                        <div class="card-info">
+                            <div class="card-name">Rafael Torres</div>
+                            <div class="card-title">Senior Offensive Security Engineer · 8 years · Bishop Fox → Okta</div>
+                        </div>
+                        <div class="card-score-wrap">
+                            <div class="card-score">94%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ OSEP + GXPN</span>
+                        <span class="signal-tag signal-purple">✓ AWS/GCP cloud pentest lead</span>
+                        <span class="signal-tag signal-accent">✓ Python and Go tooling for test harnesses</span>
+                        <span class="signal-tag signal-green">✓ Strong API authz testing depth</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">🐙 GitHub + ⚔️ Referrals</div>
+                        <div class="detail-item">📍 Austin (remote)</div>
+                        <div class="detail-item">⏳ Awaiting Response</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(2)" data-idx="2">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(2,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#f59e0b;">MP</div>
+                        <div class="card-info">
+                            <div class="card-name">Priya Nair</div>
+                            <div class="card-title">Principal AppSec Engineer · 10 years · Mandiant → Snowflake</div>
+                        </div>
+                        <div class="card-score-wrap">
+                            <div class="card-score">93%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ Validates API exploit chains end-to-end</span>
+                        <span class="signal-tag signal-purple">✓ Writes remediation from the developer POV</span>
+                        <span class="signal-tag signal-accent">✓ Led threat modeling for customer-facing systems</span>
+                        <span class="signal-tag signal-orange">⚡ Open to principal-to-staff transition</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">💼 LinkedIn + 🧪 Writeups</div>
+                        <div class="detail-item">📍 New York (remote)</div>
+                        <div class="detail-item">💬 Interested</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(3)" data-idx="3">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(3,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#ec4899;">SN</div>
+                        <div class="card-info">
+                            <div class="card-name">Jordan Blake</div>
+                            <div class="card-title">Offensive Security Engineer · 7 years · HackerOne → Datadog</div>
+                        </div>
+                        <div class="card-score-wrap">
+                            <div class="card-score">91%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ Top-tier bug bounty history</span>
+                        <span class="signal-tag signal-purple">✓ Container breakout research</span>
+                        <span class="signal-tag signal-accent">✓ Manual PoC exploit validation</span>
+                        <span class="signal-tag signal-green">✓ Strong writeups on real auth flaws</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">🐞 Bug bounty + 🧪 Labs</div>
+                        <div class="detail-item">📍 San Francisco (remote)</div>
+                        <div class="detail-item">💬 Interested</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(4)" data-idx="4">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(4,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#6366f1;">JH</div>
+                        <div class="card-info">
+                            <div class="card-name">Elena Petrova</div>
+                            <div class="card-title">Senior Cloud Security Engineer · 8 years · AWS Red Team → Wiz</div>
+                        </div>
+                        <div class="card-score-wrap">
+                            <div class="card-score">90%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ Cloud validation across AWS and GCP</span>
+                        <span class="signal-tag signal-accent">✓ Purple-team partner for detection tuning</span>
+                        <span class="signal-tag signal-orange">⚡ Recently started new role</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">💼 LinkedIn + ☁️ Cloud</div>
+                        <div class="detail-item">📍 Remote (US)</div>
+                        <div class="detail-item">❌ Not now</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(5)" data-idx="5">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(5,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#14b8a6;">CM</div>
+                        <div class="card-info">
+                            <div class="card-name">Omar Haddad</div>
+                            <div class="card-title">Offensive Security Engineer · 6 years · Trail of Bits → Modern SaaS Startup</div>
+                        </div>
+                        <div class="card-score-wrap">
+                            <div class="card-score">89%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ Manual exploit chains across auth and logic flaws</span>
+                        <span class="signal-tag signal-purple">✓ BloodHound and lateral movement expertise</span>
+                        <span class="signal-tag signal-accent">✓ Python automation for repeatable testing</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">🐙 GitHub + 🧪 Writeups</div>
+                        <div class="detail-item">📍 Chicago (remote)</div>
+                        <div class="detail-item">⏳ Awaiting</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+                <div class="candidate-card" onclick="openPopup(6)" data-idx="6">
+                    <div class="card-checkbox" onclick="event.stopPropagation();toggleSelect(6,this)"></div>
+                    <div class="card-top">
+                        <div class="card-avatar" style="background:#0ea5e9;">AZ</div>
+                        <div class="card-info">
+                            <div class="card-name">Nina Park</div>
+                            <div class="card-title">Staff Security Engineer · 11 years · Microsoft → Slack</div>
+                        </div>
+                        <div class="card-score-wrap">
+                            <div class="card-score">87%</div>
+                            <div class="card-score-label">match</div>
+                        </div>
+                    </div>
+                    <div class="signals-row">
+                        <span class="signal-tag signal-green">✓ Security design review + exploit validation bridge</span>
+                        <span class="signal-tag signal-accent">✓ Built automation around secure CI checks</span>
+                        <span class="signal-tag signal-orange">⚡ Actively looking</span>
+                    </div>
+                    <div class="card-details">
+                        <div class="detail-item">🐙 GitHub</div>
+                        <div class="detail-item">📍 New York (remote)</div>
+                        <div class="detail-item">⏳ Awaiting</div>
+                        <button class="expand-btn">View Details</button>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Right Panel -->
+        <div class="right-panel">
+            <div class="panel-title">Search Summary</div>
+
+            <div class="diversity-card">
+                <div class="diversity-title">Search Focus</div>
+                <div class="diversity-bar-bg">
+                    <div class="diversity-bar-fill" style="width:100%;"></div>
+                </div>
+                <div class="diversity-stats">
+                    <span>Web + API + cloud</span>
+                    <strong>Operator-grade</strong>
+                    <span>Target: exploit + remediation credibility</span>
+                </div>
+            </div>
+
+            <div class="funnel-summary">
+                <div class="funnel-row">
+                    <span class="funnel-label">🔍 Profiles sourced</span>
+                    <span class="funnel-value">286</span>
+                </div>
+                <div class="funnel-row">
+                    <span class="funnel-label">⚡ Passed screening</span>
+                    <span class="funnel-value">82</span>
+                </div>
+                <div class="funnel-row">
+                    <span class="funnel-label">🧠 Signal analyzed</span>
+                    <span class="funnel-value">39</span>
+                </div>
+                <div class="funnel-row">
+                    <span class="funnel-label">⭐ Final shortlist</span>
+                    <span class="funnel-value" style="color:var(--accent);">12</span>
+                </div>
+            </div>
+
+            <div class="panel-title">Source Breakdown</div>
+            <div class="source-breakdown">
+                <div class="source-row"><span class="source-icon">💼</span><span class="source-name">LinkedIn</span><span class="source-count">127</span></div>
+                <div class="source-row"><span class="source-icon">🐙</span><span class="source-name">GitHub</span><span class="source-count">84</span></div>
+                <div class="source-row"><span class="source-icon">🐞</span><span class="source-name">Bug Bounty</span><span class="source-count">34</span></div>
+                <div class="source-row"><span class="source-icon">⚔️</span><span class="source-name">Red Team Referrals</span><span class="source-count">28</span></div>
+                <div class="source-row"><span class="source-icon">🧪</span><span class="source-name">Writeups / Labs</span><span class="source-count">41</span></div>
+                <div class="source-row"><span class="source-icon">🎤</span><span class="source-name">Security Talks</span><span class="source-count">26</span></div>
+            </div>
+
+            <div class="panel-title">Compliance</div>
+            <div class="compliance-section">
+                <div class="compliance-item"><span class="compliance-check">✓</span> Public evidence only — no secrets or exploit payloads stored</div>
+                <div class="compliance-item"><span class="compliance-check">✓</span> Recruiter-safe summaries — no offensive tradecraft exposed in detail</div>
+                <div class="compliance-item"><span class="compliance-check">✓</span> ATS export — candidate notes normalized for hiring team review</div>
+                <div class="compliance-item"><span class="compliance-check">✓</span> Multi-cloud relevance verified against AWS / GCP patterns</div>
+                <div class="compliance-item"><span class="compliance-check">✓</span> Evidence weighted above keyword matching</div>
+            </div>
+
+            <div class="panel-actions">
+                <button class="panel-btn primary">📥 Export All to ATS</button>
+                <button class="panel-btn secondary">📧 Email Report to Security Lead</button>
+                <button class="panel-btn secondary">📊 Download Signal Brief</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Selection bar -->
+    <div class="selection-bar" id="selection-bar">
+        <span class="selection-info"><span id="selected-count">0</span> candidates selected</span>
+        <div class="selection-actions">
+            <button class="sel-btn white">📅 Schedule Interviews</button>
+            <button class="sel-btn white">📥 Export to ATS</button>
+            <button class="sel-btn ghost" onclick="clearAll()">Clear</button>
+        </div>
+    </div>
+
+    <!-- Detail popup -->
+    <div class="popup-overlay" id="popup" onclick="if(event.target===this)closePopup()">
+        <div class="popup-card">
+            <div class="popup-header">
+                <div class="popup-avatar" id="p-avatar" style="background:var(--accent);">LW</div>
+                <div>
+                    <div class="popup-name" id="p-name">Maya Chen</div>
+                    <div class="popup-subtitle" id="p-subtitle">Staff Offensive Security Engineer · 9 years experience</div>
+                </div>
+                <div class="popup-score" id="p-score">96%</div>
+            </div>
+            <div class="popup-body">
+                <div class="popup-section">
+                    <div class="popup-section-title">Contact & Location</div>
+                    <div class="popup-grid">
+                        <div><div class="popup-field-label">LinkedIn</div><div class="popup-field-value" id="p-linkedin">linkedin.com/in/mayachen-security</div></div>
+                        <div><div class="popup-field-label">Location</div><div class="popup-field-value" id="p-location">Seattle, WA</div></div>
+                        <div><div class="popup-field-label">Coverage</div><div class="popup-field-value" id="p-langs">Web, API, cloud, purple team</div></div>
+                        <div><div class="popup-field-label">Salary Range</div><div class="popup-field-value" id="p-salary">$190k-$205k (est.)</div></div>
+                    </div>
+                </div>
+                <div class="popup-section">
+                    <div class="popup-section-title">High-Signal Evidence Detected</div>
+                    <div class="popup-signals" id="p-signals">
+                        <span class="popup-signal positive">✓ OSWE holder</span>
+                        <span class="popup-signal positive">✓ Maintains a Burp extension for API auth testing</span>
+                        <span class="popup-signal positive">✓ Led internal purple-team exercises at Stripe scale</span>
+                        <span class="popup-signal positive">✓ Writes remediation notes engineers can act on</span>
+                        <span class="popup-signal neutral">⚡ Independent consultant open to full-time role</span>
+                    </div>
+                </div>
+                <div class="popup-section">
+                    <div class="popup-section-title">Why This Candidate Scores High</div>
+                    <div style="font-size:0.85rem;color:var(--text-secondary);line-height:1.6;" id="p-why">
+                        Maya combines deep application security testing, API auth expertise, and hands-on cloud validation experience with a rare ability to translate offensive findings into developer-ready remediation steps. Her tooling footprint and purple-team leadership make her directly relevant to a SaaS platform role that needs both technical depth and cross-functional maturity.
+                    </div>
+                </div>
+            </div>
+            <div class="popup-actions">
+                <button class="popup-btn primary">📅 Schedule Interview</button>
+                <button class="popup-btn secondary" onclick="closePopup()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const selected = new Set();
+
+        const candidates = [
+            { avatar:'LW', color:'#8b5cf6', name:'Maya Chen', subtitle:'Staff Offensive Security Engineer · 9 years experience', score:'96%', linkedin:'linkedin.com/in/mayachen-security', location:'Seattle, WA (remote)', langs:'Web, API, cloud, purple team', salary:'$190k-$205k (est.)', signals:['✓ OSWE holder','✓ Maintains a Burp extension for API auth testing','✓ Led internal purple-team exercises at Stripe scale','✓ Writes remediation notes engineers can act on','⚡ Independent consultant open to full-time role'], why:'Maya combines deep application security testing, API auth expertise, and hands-on cloud validation experience with a rare ability to translate offensive findings into developer-ready remediation steps. Her tooling footprint and purple-team leadership make her directly relevant to a SaaS platform role that needs both technical depth and cross-functional maturity.' },
+            { avatar:'AK', color:'var(--accent)', name:'Rafael Torres', subtitle:'Senior Offensive Security Engineer · 8 years experience', score:'94%', linkedin:'linkedin.com/in/rafaeltorres-offsec', location:'Austin, TX (remote)', langs:'Cloud, APIs, AWS, GCP', salary:'$182k-$198k (est.)', signals:['✓ OSEP + GXPN','✓ Leads AWS and GCP cloud pentests','✓ Builds Python and Go tooling for repeatable testing','✓ Strong API authz / authn depth','⚡ Open after current assessment cycle'], why:'Rafael has the blend this role asks for: offensive depth across web, APIs, and cloud plus enough engineering fluency to build internal tooling and deliver reproducible findings. He looks especially strong for a multi-cloud SaaS environment.' },
+            { avatar:'MP', color:'#f59e0b', name:'Priya Nair', subtitle:'Principal AppSec Engineer · 10 years experience', score:'93%', linkedin:'linkedin.com/in/priyanair-security', location:'New York, NY', langs:'Apps, APIs, design review, threat modeling', salary:'$195k-$203k (est.)', signals:['✓ Validates API exploit chains end-to-end','✓ Writes remediation from the developer POV','✓ Led threat modeling for customer-facing systems','✓ Strong customer-facing security review experience','⚡ Open to principal-to-staff transition'], why:'Priya stands out because she bridges offensive discovery and engineering follow-through. Her experience turning complex findings into developer action is unusually aligned with a role that explicitly requires remediation partnership, not just vuln discovery.' },
+            { avatar:'SN', color:'#ec4899', name:'Jordan Blake', subtitle:'Offensive Security Engineer · 7 years experience', score:'91%', linkedin:'linkedin.com/in/jordanblake-offsec', location:'San Francisco, CA (remote)', langs:'Bug bounty, web, APIs, containers', salary:'$171k-$188k (est.)', signals:['✓ Top-tier bug bounty history','✓ Container breakout research','✓ Manual PoC exploit validation','✓ Strong writeups on real auth flaws','⚡ Open to a staff-track role'], why:'Jordan is less enterprise-polished on paper, but the public evidence is strong: real exploit validation, sharp writeups, and solid web/API depth. This is exactly the kind of candidate keyword-first recruiting tends to underrate.' },
+            { avatar:'JH', color:'#6366f1', name:'Elena Petrova', subtitle:'Senior Cloud Security Engineer · 8 years experience', score:'90%', linkedin:'linkedin.com/in/elenapetrova-cloudsec', location:'Remote (US)', langs:'Cloud, Kubernetes, purple team', salary:'$175k-$191k (est.)', signals:['✓ Cloud validation across AWS and GCP','✓ Purple-team partner for detection tuning','✓ Kubernetes and IAM misconfiguration depth','⚡ Recently started a new role — revisit in 6 months'], why:'Elena is highly relevant on the technical axis, especially for cloud and platform security, but availability is the main issue. She should still stay in the talent map because the role fit is unusually strong.' },
+            { avatar:'CM', color:'#14b8a6', name:'Omar Haddad', subtitle:'Offensive Security Engineer · 6 years experience', score:'89%', linkedin:'linkedin.com/in/omarhaddad-redteam', location:'Chicago, IL (remote)', langs:'Auth, logic flaws, lateral movement', salary:'$165k-$182k (est.)', signals:['✓ Manual exploit chains across auth and logic flaws','✓ BloodHound and lateral movement expertise','✓ Python automation for repeatable testing','⚡ Available after two weeks notice'], why:'Omar brings sharper hands-on operator signals than his job titles suggest. The combination of manual exploitation depth and practical automation makes him a strong fit for a role that spans validation, red/purple team work, and tooling support.' },
+            { avatar:'AZ', color:'#0ea5e9', name:'Nina Park', subtitle:'Staff Security Engineer · 11 years experience', score:'87%', linkedin:'linkedin.com/in/ninapark-security', location:'New York, NY (remote)', langs:'AppSec, secure design, automation', salary:'$185k-$199k (est.)', signals:['✓ Security design review + exploit validation bridge','✓ Built automation around secure CI checks','✓ Strong mentoring and review discipline','⚡ Actively looking after org restructure'], why:'Nina is the most engineering-partner-oriented profile in the slate. If LiveRamp wants someone who can operate offensively but also raise the maturity of surrounding teams, she is a high-leverage option.' },
+        ];
+
+        function openPopup(idx) {
+            const c = candidates[idx];
+            document.getElementById('p-avatar').textContent = c.avatar;
+            document.getElementById('p-avatar').style.background = c.color;
+            document.getElementById('p-name').textContent = c.name;
+            document.getElementById('p-subtitle').textContent = c.subtitle;
+            document.getElementById('p-score').textContent = c.score;
+            document.getElementById('p-linkedin').textContent = c.linkedin;
+            document.getElementById('p-location').textContent = c.location;
+            document.getElementById('p-langs').textContent = c.langs;
+            document.getElementById('p-salary').textContent = c.salary;
+            document.getElementById('p-signals').innerHTML = c.signals.map(s => {
+                const cls = s.startsWith('⚡') ? 'neutral' : 'positive';
+                return `<span class="popup-signal ${cls}">${s}</span>`;
+            }).join('');
+            document.getElementById('p-why').textContent = c.why;
+            document.getElementById('popup').classList.add('visible');
+        }
+
+        function closePopup() {
+            document.getElementById('popup').classList.remove('visible');
+        }
+
+        function toggleSelect(idx, el) {
+            if (selected.has(idx)) {
+                selected.delete(idx);
+                el.classList.remove('checked');
+                el.closest('.candidate-card').classList.remove('selected');
+            } else {
+                selected.add(idx);
+                el.classList.add('checked');
+                el.closest('.candidate-card').classList.add('selected');
+            }
+            document.getElementById('selected-count').textContent = selected.size;
+            document.getElementById('selection-bar').classList.toggle('visible', selected.size > 0);
+        }
+
+        function clearAll() {
+            selected.clear();
+            document.querySelectorAll('.card-checkbox').forEach(cb => cb.classList.remove('checked'));
+            document.querySelectorAll('.candidate-card').forEach(c => c.classList.remove('selected'));
+            document.getElementById('selection-bar').classList.remove('visible');
+        }
+    </script>
+</body>
+</html>

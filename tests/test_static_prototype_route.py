@@ -67,6 +67,30 @@ class StaticPrototypeRouteTests(unittest.TestCase):
         status, _, _ = self._request_raw("/zalando/../README.md")
         self.assertEqual(status, 404)
 
+    def test_liveramp_root_redirects_to_trailing_slash(self) -> None:
+        opener = request.build_opener(_NoRedirectHandler)
+        req = request.Request(url=f"{self.base_url}/liveramp", method="GET")
+        with self.assertRaises(error.HTTPError) as ctx:
+            opener.open(req, timeout=20)
+        self.assertEqual(ctx.exception.code, 301)
+        self.assertEqual(str(ctx.exception.headers.get("Location") or ""), "/liveramp/")
+
+    def test_liveramp_index_is_served(self) -> None:
+        status, raw, headers = self._request_raw("/liveramp/")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", str(headers.get("Content-Type") or ""))
+        self.assertIn("Enterprise AI Sourcing for LiveRamp", raw.decode("utf-8"))
+
+    def test_liveramp_linked_pages_are_served(self) -> None:
+        status, raw, headers = self._request_raw("/liveramp/searching.html")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", str(headers.get("Content-Type") or ""))
+        self.assertIn("Offensive Security Search", raw.decode("utf-8"))
+
+    def test_liveramp_path_traversal_is_blocked(self) -> None:
+        status, _, _ = self._request_raw("/liveramp/../README.md")
+        self.assertEqual(status, 404)
+
 
 if __name__ == "__main__":
     unittest.main()
