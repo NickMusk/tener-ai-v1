@@ -1652,6 +1652,7 @@
         rejected: 0,
         added: 0,
       },
+      progressStepStatuses: {},
       selectedSnapshotStep: "source",
       stepSnapshots: defaultStepSnapshots(),
       pipelineTracker: {
@@ -1859,6 +1860,16 @@
     function _metricValue(id) {
       const raw = Number(($(id) || {}).textContent || 0);
       return Number.isFinite(raw) && raw > 0 ? raw : 0;
+    }
+
+    async function syncCandidateMetrics(jobId) {
+      const safeJobId = Number(jobId || 0) || null;
+      if (!safeJobId) return;
+      try {
+        const data = await api(`/api/jobs/${safeJobId}/candidates`);
+        applyCandidateMetricsFallback(data.items || []);
+      } catch {
+      }
     }
 
     function applyCandidateMetricsFallback(items) {
@@ -2423,6 +2434,7 @@
 
     async function loadJobProgress(jobId, { preserveCurrentVisuals = false } = {}) {
       if (!jobId) {
+        state.progressStepStatuses = {};
         resetPipelineMemory();
         resetPipelineVisuals();
         state.candidateMetrics = {
@@ -2471,6 +2483,9 @@
 
       const rawItems = Array.isArray(data.items) ? data.items : [];
       const tracker = state.pipelineTracker || {};
+      const previousStepStatuses = {
+        ...(state.progressStepStatuses || {}),
+      };
       let items = rawItems;
       if (preserveCurrentVisuals && tracker.active && Number(tracker.jobId || 0) === Number(jobId || 0)) {
         const startedAtMs = Number(tracker.startedAt || 0);
@@ -2504,9 +2519,11 @@
       }
       let latestStep = "source";
       let latestUpdated = "";
+      const nextStepStatuses = {};
 
       stepsInOrder.forEach((step) => {
         const item = byStep[step];
+        if (step !== "workflow") nextStepStatuses[step] = item ? String(item.status || "idle") : "idle";
         if (!item) return;
         const status = String(item.status || "idle");
         const payload = item.output_json || {};
@@ -2525,6 +2542,14 @@
           latestStep = step;
         }
       });
+      state.progressStepStatuses = nextStepStatuses;
+
+      const shouldSyncMetrics = PIPELINE_STEPS.some(
+        (step) => previousStepStatuses[step] === "running" && nextStepStatuses[step] === "success"
+      );
+      if (shouldSyncMetrics) {
+        await syncCandidateMetrics(jobId);
+      }
 
       if (latestStep && Object.prototype.hasOwnProperty.call(state.stepSnapshots, latestStep)) {
         state.selectedSnapshotStep = latestStep;
