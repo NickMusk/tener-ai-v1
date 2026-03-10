@@ -109,6 +109,51 @@ class SourceReadDatabaseTests(unittest.TestCase):
         self.assertFalse(status["available"])
         self.assertIn("no such table", str(status["last_error"]).lower())
 
+    def test_job_requirements_are_loaded_when_columns_exist(self) -> None:
+        conn = sqlite3.connect(str(self.db_path))
+        conn.executescript(
+            """
+            CREATE TABLE jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                title TEXT NOT NULL,
+                jd_text TEXT NOT NULL,
+                location TEXT,
+                preferred_languages TEXT,
+                seniority TEXT,
+                must_have_skills TEXT,
+                nice_to_have_skills TEXT,
+                questionable_skills TEXT,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO jobs
+            (id, title, jd_text, location, preferred_languages, seniority, must_have_skills, nice_to_have_skills, questionable_skills, created_at)
+            VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "Manual QA",
+                "JD text",
+                "Remote",
+                '["en"]',
+                "middle",
+                '["manual testing","api testing"]',
+                '["sql"]',
+                '["recruiting"]',
+                "2026-03-10T00:00:00+00:00",
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        source = SourceReadDatabase(str(self.db_path))
+        job = source.get_job(1)
+        self.assertEqual(job.get("must_have_skills"), ["manual testing", "api testing"])
+        self.assertEqual(job.get("nice_to_have_skills"), ["sql"])
+        self.assertEqual(job.get("questionable_skills"), ["recruiting"])
+
 
 if __name__ == "__main__":
     unittest.main()

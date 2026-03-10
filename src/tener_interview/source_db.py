@@ -96,7 +96,13 @@ class SourceReadDatabase:
     @staticmethod
     def _row_to_dict(row: sqlite3.Row) -> Dict[str, Any]:
         item = dict(row)
-        for key in ("preferred_languages", "company_culture_profile"):
+        for key in (
+            "preferred_languages",
+            "must_have_skills",
+            "nice_to_have_skills",
+            "questionable_skills",
+            "company_culture_profile",
+        ):
             raw = item.get(key)
             if not raw:
                 continue
@@ -112,6 +118,13 @@ class SourceReadDatabase:
         columns = set(self._table_columns("jobs"))
         company_expr = f"{job_alias}.company" if "company" in columns else "NULL AS company"
         website_expr = f"{job_alias}.company_website" if "company_website" in columns else "NULL AS company_website"
+        must_have_expr = f"{job_alias}.must_have_skills" if "must_have_skills" in columns else "NULL AS must_have_skills"
+        nice_to_have_expr = (
+            f"{job_alias}.nice_to_have_skills" if "nice_to_have_skills" in columns else "NULL AS nice_to_have_skills"
+        )
+        questionable_expr = (
+            f"{job_alias}.questionable_skills" if "questionable_skills" in columns else "NULL AS questionable_skills"
+        )
         has_culture_table = self._table_exists("job_culture_profiles")
         join_clause = (
             f"LEFT JOIN job_culture_profiles cp ON cp.job_id = {job_alias}.id"
@@ -128,7 +141,7 @@ class SourceReadDatabase:
         select_columns = (
             f"{job_alias}.id, {job_alias}.title, {company_expr}, {website_expr}, "
             f"{job_alias}.jd_text, {job_alias}.location, {job_alias}.preferred_languages, "
-            f"{job_alias}.seniority, {job_alias}.created_at, "
+            f"{job_alias}.seniority, {must_have_expr}, {nice_to_have_expr}, {questionable_expr}, {job_alias}.created_at, "
             f"{culture_profile_expr}, {culture_status_expr}, {culture_generated_expr}"
         )
         return select_columns, join_clause

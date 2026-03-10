@@ -47,12 +47,24 @@ DEFAULT_GUIDELINES: Dict[str, Any] = {
         "api testing",
         "regression testing",
         "test case design",
+        "bug reporting",
+        "automation testing",
         "ml",
         "machine learning",
         "llm",
         "nlp",
     ],
 }
+
+QA_FOCUS_AREAS = [
+    "web applications and APIs",
+    "end-to-end candidate pipelines",
+    "external integrations",
+    "release readiness",
+    "AI-driven workflows",
+    "recruiter dashboards",
+    "candidate data consistency",
+]
 
 
 class InterviewQuestionGenerator:
@@ -76,29 +88,21 @@ class InterviewQuestionGenerator:
             else {}
         )
         values = self._company_values(job_culture_profile=job_culture_profile)
-        culture_questions = self._culture_interview_questions(job_culture_profile=job_culture_profile)
-        top_skills = self._extract_skills(jd_text, max_items=6)
+        requirements = self._job_requirements(job)
+        top_skills = list(requirements.get("must_have_skills") or []) or self._extract_skills(jd_text, max_items=6)
+        explicit_behavioral = self._behavioral_profile_questions(job_culture_profile=job_culture_profile)
 
         defaults = self.guidelines.get("defaults") if isinstance(self.guidelines.get("defaults"), dict) else {}
         time_to_answer = max(30, int(self._to_int(defaults.get("time_to_answer"), 120)))
         time_to_think = max(5, int(self._to_int(defaults.get("time_to_think"), 12)))
         retakes = max(0, int(self._to_int(defaults.get("retakes"), 1)))
 
-        mission = str(job_culture_profile.get("summary_200_300_words") or "").strip()
-        if not mission:
-            mission = str((job_culture_profile.get("mission_orientation") or {}).get("assessment") or "").strip()
-        if not mission:
-            mission = str(self.company_profile.get("mission") or "").strip()
-        if not mission:
-            mission = f"At {company_name}, we build teams that deliver measurable impact."
-        mission_short = mission[:220].rstrip()
-
         context = self._derive_job_context(
             title=title,
             jd_text=jd_text,
-            skills=top_skills,
             company_name=company_name,
             values=values,
+            requirements=requirements,
             job_culture_profile=job_culture_profile,
         )
 
@@ -111,36 +115,30 @@ class InterviewQuestionGenerator:
 
         for category in category_plan:
             category_index[category] = category_index.get(category, 0) + 1
-            idx = category_index[category]
-
             if category == "hard_skills":
                 item = self._hard_skills_question(
-                    index=idx,
+                    index=category_index[category],
                     company_name=company_name,
                     job_title=title,
                     context=context,
                 )
-            elif category == "cultural_fit":
-                item = self._cultural_fit_question(
-                    index=idx,
-                    company_name=company_name,
-                    mission_short=mission_short,
-                    value_primary=values[0] if values else "clear communication",
-                    profile_question=culture_questions[idx - 1] if idx - 1 < len(culture_questions) else None,
-                    context=context,
-                )
             else:
-                item = self._soft_skills_question(
-                    index=idx,
+                explicit_question = None
+                if category == "cultural_fit":
+                    explicit_idx = category_index[category] - 1
+                    if explicit_idx < len(explicit_behavioral):
+                        explicit_question = explicit_behavioral[explicit_idx]
+                item = self._behavioral_question(
+                    index=category_index[category],
+                    category=category,
                     company_name=company_name,
-                    value_secondary=values[1] if len(values) > 1 else "ownership",
                     context=context,
+                    explicit_question=explicit_question,
                 )
 
             if not self._question_is_relevant(item=item, category=category, context=context):
                 item = self._fallback_question(category=category, company_name=company_name, job_title=title, context=context)
 
-            # Keep output deterministic while avoiding duplicate titles.
             title_key = re.sub(r"\s+", " ", str(item.get("title") or "").strip().lower())
             seen_titles[title_key] = seen_titles.get(title_key, 0) + 1
             if seen_titles[title_key] > 1:
@@ -161,6 +159,7 @@ class InterviewQuestionGenerator:
             "company_profile": self.company_profile,
             "role_family": context.get("role_family"),
             "jd_highlights": context.get("highlights"),
+            "requirements": requirements,
         }
         generation_hash = hashlib.sha256(
             json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -229,51 +228,38 @@ class InterviewQuestionGenerator:
         context: Dict[str, Any],
     ) -> Dict[str, Any]:
         role_family = str(context.get("role_family") or "general")
-        primary_req = str(context.get("primary_requirement") or f"the core scope of {job_title}")
-        primary_workflow = str(context.get("primary_workflow") or "your highest-risk workflow")
-        competency = self._pick_context_item(context.get("competencies"), index, fallback="core skills")
-        culture_trait = str(context.get("culture_trait") or "high quality under delivery pressure")
-        architecture_emphasis = bool(context.get("architecture_emphasis"))
+        primary_workflow = self._pick_context_item(context.get("workflows"), index, fallback=f"core workflows for {job_title}")
+        secondary_workflow = self._pick_context_item(context.get("risk_areas"), index, fallback=primary_workflow)
+        primary_skill = self._pick_context_item(context.get("core_skills"), index, fallback="core execution")
+        secondary_skill = self._pick_context_item(context.get("supporting_skills"), index + 1, fallback="reliable delivery")
+        nice_skill = self._pick_context_item(context.get("nice_to_have_skills"), index, fallback="automation")
+        skill_pair = self._join_terms([primary_skill, secondary_skill], max_items=2)
 
         if role_family == "qa":
             prompts = [
                 (
-                    f"[Hard Skills] For {company_name}, how would you build a manual test strategy for {primary_workflow}?",
-                    f"Cover acceptance criteria, edge cases, and risk-based prioritization around {primary_req}.",
+                    f"How would you design manual coverage for {primary_workflow} at {company_name}?",
+                    f"Explain scope, acceptance criteria, edge cases, and how you would use {skill_pair} before release.",
                 ),
                 (
-                    f"[Hard Skills] Walk us through how you would validate API, UI, and data consistency for {primary_req}.",
-                    "Describe concrete test cases, observability, and release gating decisions.",
+                    f"Walk us through how you would validate UI, API, and data consistency for {secondary_workflow}.",
+                    "Describe the checks you would run, the evidence you would collect, and the release risks you would watch.",
                 ),
                 (
-                    f"[Hard Skills] Tell us about a severe bug you handled in {competency}.",
-                    "Explain reproduction, severity calibration, root-cause collaboration, and prevention steps.",
+                    f"Tell us about a severe issue you investigated in {secondary_workflow}.",
+                    f"Cover reproduction, isolation, debugging path, and how {primary_skill} helped you get to root cause.",
                 ),
                 (
-                    f"[Hard Skills] In a culture that values {culture_trait}, what would you automate first and what would you keep manual?",
-                    "Justify tradeoffs with expected defect detection impact and maintenance cost.",
-                ),
-            ]
-            title, description = prompts[(index - 1) % len(prompts)]
-            return {"title": title, "description": description}
-
-        if architecture_emphasis:
-            prompts = [
-                (
-                    f"[Hard Skills] Describe the most complex technical problem you solved relevant to {job_title} at {company_name}.",
-                    f"Ground your answer in this scope: {primary_req}.",
+                    f"What would your regression strategy look like for a release touching {primary_workflow} and {secondary_workflow}?",
+                    "Describe prioritization under time pressure, high-risk paths, and how you would decide whether to ship.",
                 ),
                 (
-                    f"[Hard Skills] For {company_name}, how would you design and scale {primary_workflow}?",
-                    "Walk through reliability, performance, and security tradeoffs.",
+                    f"How would you test AI-driven or partially nondeterministic behavior inside {primary_workflow}?",
+                    "Explain how you separate acceptable variance from a real defect and how you keep recruiter trust high.",
                 ),
                 (
-                    "[Hard Skills] How do you debug and stabilize production incidents in your core stack?",
-                    "Share a real incident, root cause analysis, and long-term prevention changes.",
-                ),
-                (
-                    "[Hard Skills] Tell us about a code quality or architecture improvement you led.",
-                    "Include baseline metrics, intervention choices, and measurable outcomes.",
+                    f"What would you automate first, and what would you keep manual, for {primary_workflow}?",
+                    f"Use {nice_skill} only if it clearly improves coverage, speed, or confidence without creating brittle maintenance cost.",
                 ),
             ]
             title, description = prompts[(index - 1) % len(prompts)]
@@ -281,123 +267,97 @@ class InterviewQuestionGenerator:
 
         prompts = [
             (
-                f"[Hard Skills] Walk us through how you delivered {primary_workflow} in a production environment.",
-                f"Focus on implementation choices, constraints, and outcomes tied to {primary_req}.",
+                f"At {company_name}, walk us through how you would deliver {primary_workflow} in production.",
+                f"Focus on implementation choices, constraints, and outcomes tied to {primary_skill}.",
             ),
             (
-                f"[Hard Skills] What is your approach to validating quality and reliability for {primary_req}?",
+                f"What is your approach to validating quality and reliability for {primary_workflow}?",
                 "Explain concrete checks, rollout controls, and failure handling.",
             ),
             (
-                f"[Hard Skills] Describe a deep technical challenge involving {competency}.",
+                f"Describe a deep technical challenge involving {primary_skill}.",
                 "Cover diagnostics, option analysis, and final resolution.",
             ),
             (
-                f"[Hard Skills] In {company_name}, how would you improve delivery quality for {primary_workflow}?",
+                f"In {company_name}, how would you improve delivery quality for {secondary_workflow}?",
                 "Prioritize high-impact technical improvements and explain why.",
             ),
         ]
         title, description = prompts[(index - 1) % len(prompts)]
         return {"title": title, "description": description}
 
-    def _soft_skills_question(
+    def _behavioral_question(
         self,
         *,
         index: int,
+        category: str,
         company_name: str,
-        value_secondary: str,
         context: Dict[str, Any],
+        explicit_question: str | None,
     ) -> Dict[str, Any]:
-        role_family = str(context.get("role_family") or "general")
-        primary_workflow = str(context.get("primary_workflow") or "cross-functional delivery")
-        culture_trait = str(context.get("culture_trait") or value_secondary)
-
-        if role_family == "qa":
-            prompts = [
-                (
-                    f"[Soft Skills] In {company_name}, we value {value_secondary}. Describe a high-stakes bug triage conversation you led.",
-                    "Explain how you aligned engineering and product on severity, timeline, and release decision.",
-                ),
-                (
-                    f"[Soft Skills] Tell us about a time you pushed back on a release due to quality risk in {primary_workflow}.",
-                    "Describe stakeholder management, evidence you used, and final outcome.",
-                ),
-                (
-                    f"[Soft Skills] Our culture emphasizes {culture_trait}. How do you communicate test findings to drive action quickly?",
-                    "Use one concrete example with message framing and impact.",
-                ),
-            ]
-            title, description = prompts[(index - 1) % len(prompts)]
-            return {"title": title, "description": description}
-
-        prompts = [
-            (
-                f"[Soft Skills] We value {value_secondary}. Tell us about a high-stakes cross-functional collaboration.",
-                "Describe your communication strategy, stakeholder alignment, and measurable result.",
-            ),
-            (
-                f"[Soft Skills] In {company_name}, how do you handle disagreement with product or engineering stakeholders?",
-                "Use a real example and explain how you moved the team to a decision.",
-            ),
-            (
-                f"[Soft Skills] Describe a time you gave or received difficult feedback while delivering {primary_workflow}.",
-                "Focus on behavior change and impact on team performance.",
-            ),
-        ]
-        title, description = prompts[(index - 1) % len(prompts)]
-        return {"title": title, "description": description}
-
-    def _cultural_fit_question(
-        self,
-        *,
-        index: int,
-        company_name: str,
-        mission_short: str,
-        value_primary: str,
-        profile_question: str | None,
-        context: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        explicit = str(profile_question or "").strip()
-        if explicit:
+        if explicit_question:
             return {
-                "title": f"[Cultural Fit] {explicit}",
-                "description": "Use a concrete experience and explain your reasoning.",
+                "title": explicit_question,
+                "description": "Use a concrete example, the tradeoff you faced, and the outcome.",
             }
 
         role_family = str(context.get("role_family") or "general")
-        primary_workflow = str(context.get("primary_workflow") or "your core scope")
-        culture_trait = str(context.get("culture_trait") or value_primary)
+        primary_workflow = self._pick_context_item(context.get("workflows"), index, fallback="cross-functional delivery")
+        secondary_workflow = self._pick_context_item(context.get("risk_areas"), index + 1, fallback=primary_workflow)
+        value_primary = self._pick_context_item(context.get("company_values"), index, fallback="ownership")
+        value_secondary = self._pick_context_item(context.get("company_values"), index + 1, fallback="clear communication")
+        release_signal = self._pick_context_item(context.get("release_signals"), index, fallback="quality risk")
 
         if role_family == "qa":
-            prompts = [
-                (
-                    f"[Cultural Fit] In {company_name}, how do you balance delivery speed and quality when testing critical releases?",
-                    "Use one real example with your decision framework.",
-                ),
-                (
-                    f"[Cultural Fit] We value {culture_trait}. Tell us how that shows up in your QA decision-making.",
-                    "Describe a concrete tradeoff and why you chose that path.",
-                ),
-                (
-                    f"[Cultural Fit] What team behaviors help you deliver your best work on {primary_workflow}?",
-                    "Be specific about accountability, communication cadence, and escalation style.",
-                ),
-            ]
+            if category == "soft_skills":
+                prompts = [
+                    (
+                        f"Tell us about a time you pushed back on a release because of {release_signal}.",
+                        f"Explain how you aligned product and engineering, what evidence you used, and what happened next in {primary_workflow}.",
+                    ),
+                    (
+                        f"Describe a high-stakes bug triage conversation you led around {secondary_workflow}.",
+                        "Focus on severity calibration, stakeholder alignment, and how you kept the team moving.",
+                    ),
+                    (
+                        f"How do you communicate test findings so people act quickly without feeling blocked?",
+                        f"Use one real example tied to {primary_workflow} and show how you framed risk and next steps.",
+                    ),
+                    (
+                        f"Describe a disagreement you had with engineers or product about release readiness.",
+                        "Walk through the evidence, the decision path, and how you handled the relationship after the call.",
+                    ),
+                ]
+            else:
+                prompts = [
+                    (
+                        f"Describe a time you protected quality under pressure in a fast-moving environment.",
+                        f"Show how your judgment balanced speed, correctness, and accountability during {primary_workflow}.",
+                    ),
+                    (
+                        f"What evidence do you need before you are comfortable recommending a release?",
+                        f"Answer in the context of {secondary_workflow} and be specific about your quality bar.",
+                    ),
+                    (
+                        f"What team behaviors help you do your best QA work?",
+                        f"Be concrete about accountability, escalation style, and collaboration norms when testing {primary_workflow}.",
+                    ),
+                    (
+                        f"In a startup that values {value_primary} and {value_secondary}, how do you avoid being either a bottleneck or a rubber stamp?",
+                        "Use a real example or a concrete operating model that shows your decision-making style.",
+                    ),
+                ]
             title, description = prompts[(index - 1) % len(prompts)]
             return {"title": title, "description": description}
 
         prompts = [
             (
-                f"[Cultural Fit] At {company_name}, why does this mission resonate with you?",
-                f"Reference this mission in your answer: {mission_short}",
+                f"At {company_name}, we value {value_secondary}. Tell us about a high-stakes cross-functional collaboration.",
+                "Describe your communication strategy, stakeholder alignment, and measurable result.",
             ),
             (
-                f"[Cultural Fit] In {company_name}, we value {value_primary}. Share a situation where you embodied this value.",
-                "Explain decisions you made and how they aligned with company culture.",
-            ),
-            (
-                f"[Cultural Fit] For {company_name}, what type of team culture helps you deliver your best work?",
-                "Be specific about behaviors, accountability, and collaboration norms.",
+                f"In {company_name}, we value {value_primary}. Share a situation where you embodied this value.",
+                "Explain the tradeoff you faced and how it affected the outcome.",
             ),
         ]
         title, description = prompts[(index - 1) % len(prompts)]
@@ -408,85 +368,28 @@ class InterviewQuestionGenerator:
         *,
         title: str,
         jd_text: str,
-        skills: List[str],
         company_name: str,
         values: List[str],
+        requirements: Dict[str, List[str]],
         job_culture_profile: Dict[str, Any],
     ) -> Dict[str, Any]:
         text = f"{title}\n{jd_text}".strip().lower()
         role_family = self._detect_role_family(text)
-        sentences = self._collect_jd_sentences(jd_text)
 
-        highlight_markers = [
-            "must",
-            "required",
-            "responsib",
-            "you will",
-            "key",
-            "ownership",
-            "test",
-            "qa",
-            "automation",
-            "api",
-            "quality",
-            "collaborat",
-            "stakeholder",
-            "bug",
-            "incident",
-            "release",
-        ]
-        highlights: List[str] = []
-        for sentence in sentences:
-            low = sentence.lower()
-            if any(marker in low for marker in highlight_markers):
-                highlights.append(self._compact_snippet(sentence))
-            if len(highlights) >= 8:
-                break
-        if not highlights:
-            highlights = [self._compact_snippet(sentence) for sentence in sentences[:4]]
-
-        workflows: List[str] = []
-        workflow_markers = [
-            "test",
-            "validate",
-            "triage",
-            "debug",
-            "release",
-            "build",
-            "ship",
-            "design",
-            "review",
-            "analyze",
-            "document",
-            "improve",
-        ]
-        for sentence in highlights:
-            low = sentence.lower()
-            if any(marker in low for marker in workflow_markers):
-                workflows.append(self._compact_snippet(sentence))
-
-        competencies = skills[:6]
-        if not competencies:
-            competencies = self._extract_skills(jd_text, max_items=6)
-
-        architecture_emphasis = any(
-            marker in text
-            for marker in (
-                "architecture",
-                "distributed",
-                "microservices",
-                "system design",
-                "scalable",
-                "high-scale",
-            )
-        )
-
+        highlights = self._extract_highlights(jd_text)
+        workflows = self._extract_workflows(jd_text, role_family=role_family)
+        risk_areas = self._extract_risk_areas(jd_text, role_family=role_family, workflows=workflows)
+        core_skills = list(requirements.get("must_have_skills") or [])
+        nice_to_have_skills = list(requirements.get("nice_to_have_skills") or [])
+        questionable_skills = {str(item).strip().lower() for item in (requirements.get("questionable_skills") or []) if str(item).strip()}
+        supporting_skills = [skill for skill in core_skills + nice_to_have_skills if skill.lower() not in questionable_skills]
         culture_trait = self._culture_context_hint(job_culture_profile=job_culture_profile, values=values)
+        release_signals = self._release_signals(job_culture_profile=job_culture_profile, workflows=workflows, risk_areas=risk_areas)
 
         keywords = set()
-        for token in competencies:
+        for token in supporting_skills[:8]:
             keywords.add(token.lower())
-        for sentence in highlights[:5] + workflows[:5]:
+        for sentence in workflows[:4] + risk_areas[:4]:
             for token in re.findall(r"[a-zA-Z][a-zA-Z0-9+#.-]{3,}", sentence.lower()):
                 if token in {"with", "from", "that", "this", "have", "will", "your", "their", "team"}:
                     continue
@@ -495,25 +398,112 @@ class InterviewQuestionGenerator:
         return {
             "role_family": role_family,
             "highlights": highlights,
+            "workflows": workflows,
+            "risk_areas": risk_areas,
             "primary_requirement": highlights[0] if highlights else f"delivery scope for {title}",
-            "secondary_requirement": highlights[1] if len(highlights) > 1 else highlights[0] if highlights else "core requirements",
-            "primary_workflow": workflows[0] if workflows else highlights[0] if highlights else "critical workflow",
-            "competencies": competencies,
-            "architecture_emphasis": architecture_emphasis,
+            "primary_workflow": workflows[0] if workflows else f"critical workflows for {title}",
+            "core_skills": core_skills,
+            "nice_to_have_skills": nice_to_have_skills,
+            "supporting_skills": supporting_skills or core_skills or nice_to_have_skills,
+            "questionable_skills": sorted(questionable_skills),
             "culture_trait": culture_trait,
             "keywords": sorted(keywords),
             "company_name": company_name,
+            "company_values": values,
+            "release_signals": release_signals,
         }
+
+    def _extract_highlights(self, jd_text: str) -> List[str]:
+        sentences = self._collect_jd_sentences(jd_text)
+        highlights: List[str] = []
+        for sentence in sentences:
+            low = sentence.lower()
+            if self._is_noise_sentence(sentence):
+                continue
+            if any(marker in low for marker in ("responsib", "requirement", "test", "release", "integrat", "workflow")):
+                highlights.append(self._compact_snippet(sentence))
+            if len(highlights) >= 8:
+                break
+        if highlights:
+            return highlights
+        return [self._compact_snippet(sentence) for sentence in sentences[:4] if not self._is_noise_sentence(sentence)]
+
+    def _extract_workflows(self, jd_text: str, *, role_family: str) -> List[str]:
+        bullet_lines = self._section_bullets(
+            jd_text,
+            sections={"responsibilities", "what you'll work on", "what youll work on", "examples of areas you will test"},
+        )
+        scored: List[tuple[int, int, str]] = []
+        for line in bullet_lines:
+            if self._is_noise_sentence(line):
+                continue
+            low = line.lower()
+            if any(marker in low for marker in ("test", "validate", "verify", "reproduce", "release", "integrat", "workflow", "dashboard", "pipeline")):
+                normalized = self._normalize_workflow(line)
+                score = 0
+                if any(marker in low for marker in ("api", "platform", "integrat", "workflow", "dashboard", "pipeline", "release")):
+                    score += 4
+                if any(marker in low for marker in ("ai", "ml")):
+                    score += 2
+                if any(marker in low for marker in ("test case", "bug")):
+                    score += 1
+                scored.append((score, -len(scored), normalized))
+        if scored:
+            ordered = [item[2] for item in sorted(scored, reverse=True)]
+            return self._dedupe_keep_order(ordered)[:6]
+        if role_family == "qa":
+            return list(QA_FOCUS_AREAS[:4])
+        return []
+
+    def _extract_risk_areas(self, jd_text: str, *, role_family: str, workflows: List[str]) -> List[str]:
+        low = jd_text.lower()
+        out = list(workflows[:3])
+        if "ai" in low or "ml" in low:
+            out.append("AI-driven workflows")
+        if "integrat" in low:
+            out.append("external integrations")
+        if "dashboard" in low:
+            out.append("recruiter dashboards")
+        if "release" in low:
+            out.append("release readiness")
+        if "data pipeline" in low or "candidate data" in low:
+            out.append("candidate data consistency")
+        if role_family == "qa" and not out:
+            out.extend(QA_FOCUS_AREAS[:4])
+        return self._dedupe_keep_order(out)[:6]
+
+    @staticmethod
+    def _normalize_workflow(text: str) -> str:
+        low = str(text or "").lower()
+        if "web applications" in low and "api" in low:
+            return "web applications and APIs"
+        if "ai-driven" in low and ("interview" in low or "scoring" in low or "evaluation" in low):
+            return "AI-driven interviews and scoring workflows"
+        if "integrat" in low and any(token in low for token in ("ats", "linkedin", "messaging", "hiring platform")):
+            return "ATS, LinkedIn, and messaging integrations"
+        if "candidate pipeline" in low:
+            return "end-to-end candidate pipelines"
+        if "candidate data" in low:
+            return "candidate data pipelines"
+        if "dashboard" in low:
+            return "recruiter dashboards"
+        if "release" in low:
+            return "release readiness"
+        if "test case" in low:
+            return "test cases and acceptance coverage"
+        if "manual functional" in low or "exploratory" in low or "regression" in low:
+            return "manual functional, regression, and exploratory testing"
+        if "reproduce bugs" in low or "document" in low:
+            return "bug reproduction and reporting"
+        return InterviewQuestionGenerator._compact_snippet(str(text or ""))
 
     @staticmethod
     def _compact_snippet(text: str, *, max_words: int = 14, max_chars: int = 96) -> str:
         raw = re.sub(r"\s+", " ", str(text or "")).strip(" \t:;,.!?-")
         if not raw:
             return ""
-
-        first_clause = re.split(r"[,:;]", raw)[0].strip()
+        first_clause = re.split(r"[:;]", raw)[0].strip()
         candidate = first_clause or raw
-
         words = candidate.split()
         if len(words) > max_words:
             candidate = " ".join(words[:max_words]).rstrip(" .")
@@ -527,15 +517,12 @@ class InterviewQuestionGenerator:
         qa_markers = ["manual qa", "qa engineer", "quality assurance", "sdet", "test engineer", "software tester", "testing"]
         if any(marker in normalized for marker in qa_markers):
             return "qa"
-
         eng_markers = ["backend", "frontend", "fullstack", "software engineer", "developer", "platform engineer"]
         if any(marker in normalized for marker in eng_markers):
             return "engineering"
-
         data_markers = ["data engineer", "machine learning", "ml engineer", "data scientist", "analytics"]
         if any(marker in normalized for marker in data_markers):
             return "data"
-
         return "general"
 
     @staticmethod
@@ -543,7 +530,6 @@ class InterviewQuestionGenerator:
         if not jd_text.strip():
             return []
         normalized = jd_text.replace("\r", "\n")
-        # Split on line breaks, bullets, and sentence boundaries, but keep hyphenated terms intact.
         raw_parts = re.split(r"(?:\r?\n|•)+|(?<=[.!?])\s+", normalized)
         out: List[str] = []
         seen = set()
@@ -556,17 +542,9 @@ class InterviewQuestionGenerator:
                 continue
             seen.add(key)
             out.append(clean)
-            if len(out) >= 60:
+            if len(out) >= 80:
                 break
         return out
-
-    @staticmethod
-    def _pick_context_item(value: Any, index: int, fallback: str) -> str:
-        if isinstance(value, list):
-            clean = [str(x).strip() for x in value if str(x).strip()]
-            if clean:
-                return clean[(max(1, index) - 1) % len(clean)]
-        return fallback
 
     def _question_is_relevant(self, *, item: Dict[str, Any], category: str, context: Dict[str, Any]) -> bool:
         title = str(item.get("title") or "").strip()
@@ -574,55 +552,48 @@ class InterviewQuestionGenerator:
         if not title or not description:
             return False
 
-        role_family = str(context.get("role_family") or "general")
-        architecture_emphasis = bool(context.get("architecture_emphasis"))
         text = f"{title} {description}".lower()
+        banned_fragments = [
+            "we are looking for",
+            "why join",
+            "our goal is",
+            "the environment reads as",
+            "decision-making appears",
+            "mission intensity looks",
+            "summary_200_300_words",
+        ]
+        if any(fragment in text for fragment in banned_fragments):
+            return False
 
-        if role_family == "qa":
-            banned = [
-                "design and scale",
-                "architecture improvement",
-                "distributed systems",
-                "microservices architecture",
-            ]
-            if not architecture_emphasis and any(token in text for token in banned):
-                return False
-            if category == "hard_skills":
-                qa_markers = ["test", "qa", "bug", "regression", "release", "api", "quality"]
-                if not any(marker in text for marker in qa_markers):
+        questionable = context.get("questionable_skills")
+        if isinstance(questionable, list):
+            for skill in questionable:
+                if str(skill).strip().lower() in text and category == "hard_skills":
                     return False
 
-        keywords = context.get("keywords")
-        if isinstance(keywords, list) and keywords and category != "cultural_fit":
-            if not any(str(token).lower() in text for token in keywords[:40]):
+        role_family = str(context.get("role_family") or "general")
+        if role_family == "qa" and category == "hard_skills":
+            if not any(marker in text for marker in ("test", "validate", "release", "bug", "workflow", "api", "integration")):
                 return False
-
+        if category == "cultural_fit" and any(token in text for token in ("underperform", "management style")):
+            return False
         return True
 
     def _fallback_question(self, *, category: str, company_name: str, job_title: str, context: Dict[str, Any]) -> Dict[str, Any]:
-        role_family = str(context.get("role_family") or "general")
-        primary_workflow = str(context.get("primary_workflow") or "your core workflow")
-
+        primary_workflow = self._pick_context_item(context.get("workflows"), 1, fallback=f"core workflows for {job_title}")
         if category == "hard_skills":
-            if role_family == "qa":
-                return {
-                    "title": f"[Hard Skills] For {company_name}, how would you test and de-risk {primary_workflow}?",
-                    "description": "Include test design, prioritization, and release confidence criteria.",
-                }
             return {
-                "title": f"[Hard Skills] Walk us through how you would deliver {primary_workflow} for {job_title}.",
-                "description": "Explain implementation choices, risk controls, and measurable outcomes.",
+                "title": f"How would you test and de-risk {primary_workflow} at {company_name}?",
+                "description": "Include scope, prioritization, risk controls, and the release evidence you would require.",
             }
-
         if category == "soft_skills":
             return {
-                "title": f"[Soft Skills] Describe a difficult stakeholder alignment decision you handled at {company_name}.",
-                "description": "Focus on communication choices, decision path, and resulting impact.",
+                "title": "Describe a time you aligned stakeholders around a quality-risk decision.",
+                "description": "Focus on your communication choices, evidence, and final outcome.",
             }
-
         return {
-            "title": f"[Cultural Fit] What team norms at {company_name} help you do your best work?",
-            "description": "Be specific about accountability, collaboration, and feedback cadence.",
+            "title": "How do you maintain a strong quality bar without slowing the team down?",
+            "description": "Use a concrete example and explain your decision framework.",
         }
 
     @staticmethod
@@ -648,22 +619,52 @@ class InterviewQuestionGenerator:
         default_values = self.guidelines.get("company_values")
         return self._to_str_list(default_values) or ["clear communication", "ownership", "collaboration"]
 
-    def _culture_interview_questions(self, *, job_culture_profile: Dict[str, Any] | None = None) -> List[str]:
+    def _behavioral_profile_questions(self, *, job_culture_profile: Dict[str, Any] | None = None) -> List[str]:
         explicit = self._to_str_list((job_culture_profile or {}).get("culture_interview_questions"))
-        if explicit:
-            return explicit[:3]
-        return []
+        out: List[str] = []
+        for question in explicit:
+            normalized = re.sub(r"\s+", " ", question).strip()
+            if len(normalized) < 20:
+                continue
+            low = normalized.lower()
+            if any(token in low for token in ("management style", "underperform", "why does this mission", "why this company")):
+                continue
+            out.append(normalized)
+            if len(out) >= 3:
+                break
+        return out
 
     def _culture_context_hint(self, *, job_culture_profile: Dict[str, Any], values: List[str]) -> str:
         performance = str((job_culture_profile.get("performance_expectations") or {}).get("assessment") or "").strip()
         if performance:
-            return performance[:120].rstrip(" .")
+            compact = self._compact_snippet(performance, max_words=12, max_chars=80)
+            if compact and not self._is_noise_sentence(compact):
+                return compact
         work_style = self._to_str_list(job_culture_profile.get("work_style"))
-        if work_style:
-            return work_style[0][:120].rstrip(" .")
+        for item in work_style:
+            compact = self._compact_snippet(item, max_words=12, max_chars=80)
+            if compact and not self._is_noise_sentence(compact):
+                return compact
         if values:
             return values[0]
         return "clear communication"
+
+    def _job_requirements(self, job: Dict[str, Any]) -> Dict[str, List[str]]:
+        must_have = self._to_str_list(job.get("must_have_skills"))
+        nice_to_have = self._to_str_list(job.get("nice_to_have_skills"))
+        questionable = self._to_str_list(job.get("questionable_skills"))
+        if must_have or nice_to_have or questionable:
+            return {
+                "must_have_skills": must_have[:6],
+                "nice_to_have_skills": [item for item in nice_to_have if item not in set(must_have)][:6],
+                "questionable_skills": questionable[:6],
+            }
+        extracted = self._extract_skills(str(job.get("jd_text") or ""), max_items=6)
+        return {
+            "must_have_skills": extracted[:6],
+            "nice_to_have_skills": [],
+            "questionable_skills": [],
+        }
 
     def _extract_skills(self, jd_text: str, max_items: int = 4) -> List[str]:
         dictionary = self._to_str_list(self.guidelines.get("skill_dictionary"))
@@ -671,7 +672,6 @@ class InterviewQuestionGenerator:
         found: List[str] = []
         for token in dictionary:
             if self._skill_present(token=token, text=text) and token not in found:
-                # Normalize aliases to avoid noisy variants in output.
                 normalized = "go" if token == "golang" else token
                 if normalized not in found:
                     found.append(normalized)
@@ -707,9 +707,7 @@ class InterviewQuestionGenerator:
         }
         clean: List[str] = []
         for token in raw_tokens:
-            if token in stopwords:
-                continue
-            if token in clean:
+            if token in stopwords or token in clean:
                 continue
             clean.append(token)
             if len(clean) >= max_items:
@@ -722,14 +720,105 @@ class InterviewQuestionGenerator:
         if not token_norm:
             return False
         if token_norm == "go":
-            # Avoid matching "go" as a generic verb in regular prose.
             go_patterns = [r"\bgolang\b", r"\bgo\s+language\b", r"\blanguage\s+go\b"]
             return any(re.search(pattern, text) for pattern in go_patterns)
         return re.search(rf"\b{re.escape(token_norm)}\b", text) is not None
 
     @staticmethod
+    def _section_bullets(jd_text: str, sections: set[str]) -> List[str]:
+        lines = [re.sub(r"\s+", " ", raw).strip() for raw in str(jd_text or "").replace("\r", "\n").split("\n")]
+        current = ""
+        out: List[str] = []
+        for line in lines:
+            if not line:
+                continue
+            normalized = line.lower().strip(" :")
+            if normalized in sections:
+                current = normalized
+                continue
+            if len(line) < 4:
+                continue
+            if line.startswith(("•", "-", "*")):
+                if current in sections:
+                    out.append(line.lstrip("•-* ").strip())
+                continue
+            if current in sections and not line.endswith(":"):
+                out.append(line)
+        return out
+
+    @staticmethod
+    def _release_signals(*, job_culture_profile: Dict[str, Any], workflows: List[str], risk_areas: List[str]) -> List[str]:
+        signals: List[str] = []
+        for item in (job_culture_profile.get("hiring_signals") or []):
+            token = str(item).strip().lower()
+            if not token:
+                continue
+            if "quality bar" in token:
+                signals.append("quality risk")
+            elif "correctness" in token:
+                signals.append("correctness risk")
+        if signals:
+            return InterviewQuestionGenerator._dedupe_keep_order(signals)[:4]
+        fallback = workflows[:2] + risk_areas[:2]
+        return fallback or ["quality risk"]
+
+    @staticmethod
+    def _join_terms(items: List[str], *, max_items: int = 2) -> str:
+        clean = [str(item).strip() for item in items if str(item).strip()]
+        if not clean:
+            return "core workflows"
+        top = clean[:max_items]
+        if len(top) == 1:
+            return top[0]
+        if len(top) == 2:
+            return f"{top[0]} and {top[1]}"
+        return ", ".join(top[:-1]) + f", and {top[-1]}"
+
+    @staticmethod
+    def _pick_context_item(value: Any, index: int, fallback: str) -> str:
+        if isinstance(value, list):
+            clean = [str(x).strip() for x in value if str(x).strip()]
+            if clean:
+                return clean[(max(1, index) - 1) % len(clean)]
+        return fallback
+
+    @staticmethod
+    def _dedupe_keep_order(values: List[str]) -> List[str]:
+        out: List[str] = []
+        seen = set()
+        for value in values:
+            token = str(value or "").strip()
+            if not token:
+                continue
+            key = token.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(token)
+        return out
+
+    @staticmethod
+    def _is_noise_sentence(text: str) -> bool:
+        low = str(text or "").strip().lower()
+        if not low:
+            return True
+        noise_markers = (
+            "about tener",
+            "tener.ai is building",
+            "our goal is",
+            "we are looking for",
+            "why join",
+            "work with experienced founders",
+            "opportunity to grow",
+            "build a product redefining",
+        )
+        return any(marker in low for marker in noise_markers)
+
+    @staticmethod
     def _load_guidelines(path: str) -> Dict[str, Any]:
         base = dict(DEFAULT_GUIDELINES)
+        base["defaults"] = dict(DEFAULT_GUIDELINES["defaults"])
+        base["defaults"]["category_targets"] = dict(DEFAULT_GUIDELINES["defaults"]["category_targets"])
         if not path:
             return base
         file_path = Path(path)
@@ -743,7 +832,14 @@ class InterviewQuestionGenerator:
             return base
         out = dict(base)
         for key, value in loaded.items():
-            out[key] = value
+            if key == "defaults" and isinstance(value, dict):
+                merged_defaults = dict(base["defaults"])
+                merged_defaults.update(value)
+                targets = value.get("category_targets") if isinstance(value.get("category_targets"), dict) else {}
+                merged_defaults["category_targets"] = {**base["defaults"]["category_targets"], **targets}
+                out["defaults"] = merged_defaults
+            else:
+                out[key] = value
         return out
 
     @staticmethod

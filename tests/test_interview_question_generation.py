@@ -257,6 +257,86 @@ class InterviewQuestionGenerationTests(unittest.TestCase):
             self.assertNotIn("design and scale", joined)
             self.assertNotIn("architecture improvement", joined)
             self.assertNotIn("distributed systems", joined)
+            self.assertNotIn("we are looking for", joined)
+            self.assertNotIn("the environment reads as", joined)
+
+    def test_generation_prefers_normalized_job_requirements_over_noisy_jd_copy(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            guidelines_path = Path(tmpdir) / "guidelines.json"
+            profile_path = Path(tmpdir) / "company_profile.json"
+
+            guidelines_path.write_text(
+                json.dumps(
+                    {
+                        "version": "test-v5",
+                        "defaults": {"question_count": 6},
+                        "skill_dictionary": ["sql", "ml", "postman", "selenium"],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            profile_path.write_text(
+                json.dumps({"mission": "Build reliable hiring systems", "values": ["ownership", "clarity"]}),
+                encoding="utf-8",
+            )
+
+            generator = InterviewQuestionGenerator(
+                guidelines_path=str(guidelines_path),
+                company_profile_path=str(profile_path),
+                company_name="Tener",
+            )
+
+            out = generator.generate_for_job(
+                {
+                    "id": 505,
+                    "company": "Tener",
+                    "title": "Manual QA",
+                    "jd_text": (
+                        "Tener.ai is building an autonomous AI recruiter. "
+                        "We are looking for a Manual QA Engineer. "
+                        "Responsibilities: test web applications and APIs, verify AI-driven workflows, "
+                        "test integrations, ensure stability before releases."
+                    ),
+                    "must_have_skills": [
+                        "manual testing",
+                        "api testing",
+                        "regression testing",
+                        "test case design",
+                        "bug reporting",
+                        "postman",
+                    ],
+                    "nice_to_have_skills": ["sql", "selenium", "automation testing"],
+                    "questionable_skills": ["ml"],
+                    "company_culture_profile": {
+                        "culture_values": ["quality bar", "ownership", "remote-first"],
+                        "culture_interview_questions": [
+                            "Tell us about a time you challenged a decision with data and changed the outcome.",
+                            "What kind of management style makes you underperform?",
+                        ],
+                    },
+                }
+            )
+
+            questions = out.get("questions") if isinstance(out.get("questions"), list) else []
+            titles = [str((q or {}).get("title") or "") for q in questions if isinstance(q, dict)]
+            joined = "\n".join(
+                f"{str((q or {}).get('title') or '')} {str((q or {}).get('description') or '')}"
+                for q in questions
+                if isinstance(q, dict)
+            ).lower()
+
+            self.assertIn("manual coverage", joined)
+            self.assertIn("ui, api, and data consistency", joined)
+            self.assertIn("challenged a decision", joined)
+            self.assertNotIn("management style", joined)
+            self.assertNotIn("underperform", joined)
+            self.assertNotIn("we are looking for", joined)
+            self.assertNotIn(" ml", joined)
+            meta = out.get("meta") if isinstance(out.get("meta"), dict) else {}
+            self.assertEqual(
+                meta.get("skills_detected"),
+                ["manual testing", "api testing", "regression testing", "test case design", "bug reporting", "postman"],
+            )
 
             # Must contain QA-specific signal words, not generic backend-only framing.
             self.assertTrue(
