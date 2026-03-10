@@ -261,6 +261,38 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.assertIn("Manual QA Candidate", all_names)
         self.assertNotIn("Backend Candidate", all_names)
 
+    def test_outreach_ats_board_hides_forced_test_candidates_for_normal_jobs(self) -> None:
+        job_id = self._create_job("Manual QA Engineer")
+
+        forced_candidate = self._create_candidate("forced", "Forced Test Candidate (olena-bachek-b8523121a)")
+        self._attach_match(
+            job_id=job_id,
+            candidate_id=forced_candidate,
+            status="outreached",
+            verification_notes={
+                "forced_test_candidate": True,
+                "forced_test_identifier": "olena-bachek-b8523121a",
+            },
+        )
+
+        normal_candidate = self._create_candidate("normal", "Normal Candidate")
+        self._attach_match(job_id=job_id, candidate_id=normal_candidate, status="verified")
+
+        status, payload = self._request("GET", f"/api/outreach/ats-board?job_id={job_id}")
+        self.assertEqual(status, 200)
+
+        summary = payload.get("summary") or {}
+        self.assertEqual(int(summary.get("total_candidates") or 0), 1)
+        self.assertEqual(int(summary.get("queued") or 0), 1)
+
+        all_names = [
+            str(item.get("candidate_name") or "")
+            for column in (payload.get("columns") or [])
+            for item in (column.get("items") or [])
+        ]
+        self.assertIn("Normal Candidate", all_names)
+        self.assertNotIn("Forced Test Candidate (olena-bachek-b8523121a)", all_names)
+
     def test_outreach_ats_board_groups_terminal_states_into_closed(self) -> None:
         job_id = self._create_job("Manual QA Engineer")
         terminal_statuses = [

@@ -172,6 +172,9 @@ class WorkflowService:
             if self._is_operational_linkedin_account(row)
         ]
 
+    def _list_dispatchable_linkedin_accounts(self, *, limit: int = 500) -> List[Dict[str, Any]]:
+        return self._list_active_linkedin_accounts(limit=limit)
+
     @staticmethod
     def _source_account_priority(account: Dict[str, Any]) -> int:
         metadata = account.get("metadata") if isinstance(account.get("metadata"), dict) else {}
@@ -228,7 +231,7 @@ class WorkflowService:
         profiles: List[Dict[str, Any]] = []
         search_errors: List[str] = []
         source_accounts = sorted(
-            self._list_active_linkedin_accounts(limit=500),
+            self._list_dispatchable_linkedin_accounts(limit=500),
             key=self._source_account_priority,
         )
         if provider is not None and hasattr(provider, "account_id") and source_accounts:
@@ -263,13 +266,19 @@ class WorkflowService:
                 limit=limit,
                 exclude_profile_keys=exclude_profile_keys,
             )
-        profiles = self._inject_forced_test_candidates(
-            job=job,
-            profiles=profiles,
-            limit=limit,
-            forced_identifiers=forced_test_ids,
-            forced_only=forced_only,
-        )
+        if forced_only:
+            profiles = self._inject_forced_test_candidates(
+                job=job,
+                profiles=profiles,
+                limit=limit,
+                forced_identifiers=forced_test_ids,
+                forced_only=True,
+            )
+        else:
+            profiles = self._exclude_forced_test_profiles(
+                profiles=profiles,
+                forced_identifiers=forced_test_ids,
+            )
         included = sorted(
             {
                 matched
@@ -659,6 +668,23 @@ class WorkflowService:
                 failed += 1
                 continue
             match = self.db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
+            if self._is_non_test_forced_candidate(
+                candidate=candidate,
+                match=match,
+                forced_identifiers=forced_lookup,
+                forced_only=forced_only,
+            ):
+                self.db.log_operation(
+                    operation="agent.outreach.production_filter_skip",
+                    status="skipped",
+                    entity_type="candidate",
+                    entity_id=str(candidate_id),
+                    details={
+                        "job_id": job_id,
+                        "reason": "forced_test_candidate_excluded",
+                    },
+                )
+                continue
             if forced_only:
                 forced_identifier = self._forced_test_identifier_for_profile(candidate, forced_lookup)
                 if not forced_identifier:
@@ -772,6 +798,7 @@ class WorkflowService:
                     "pre_resume_session_id": pre_resume_session_id,
                     "delivery_mode": delivery_mode,
                     "planned_action_kind": planned_action_kind,
+                    "allow_forced_test_candidate": bool(forced_only),
                 },
                 selection_state=selection_state,
             )
@@ -873,6 +900,23 @@ class WorkflowService:
                 failed += 1
                 continue
             match = self.db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
+            if self._is_non_test_forced_candidate(
+                candidate=candidate,
+                match=match,
+                forced_identifiers=forced_lookup,
+                forced_only=forced_only,
+            ):
+                self.db.log_operation(
+                    operation="agent.outreach.production_filter_skip",
+                    status="skipped",
+                    entity_type="candidate",
+                    entity_id=str(candidate_id),
+                    details={
+                        "job_id": job_id,
+                        "reason": "forced_test_candidate_excluded",
+                    },
+                )
+                continue
             if forced_only:
                 forced_identifier = self._forced_test_identifier_for_profile(candidate, forced_lookup)
                 if not forced_identifier:
@@ -4206,9 +4250,25 @@ class WorkflowService:
             }
         connect_items: List[Dict[str, Any]] = []
         message_items: List[Dict[str, Any]] = []
+        forced_identifiers = self._build_forced_identifier_lookup(
+            job=job,
+            forced_identifiers=self._load_forced_test_identifiers(),
+        )
+        forced_only = self._effective_test_mode(
+            job=job,
+            test_mode=None,
+            forced_identifiers=forced_identifiers,
+        )
         new_thread_rows = self.db.list_job_outreach_candidates(job_id=job_id, limit=max(1, min(candidate_scan_limit, 1000)))
         for row in new_thread_rows:
             if str(row.get("current_status_key") or "").strip().lower() != "added":
+                continue
+            if self._is_non_test_forced_candidate(
+                candidate=row,
+                match={"verification_notes": row.get("verification_notes")},
+                forced_identifiers=forced_identifiers,
+                forced_only=forced_only,
+            ):
                 continue
             candidate_id = int(row.get("candidate_id") or 0)
             if candidate_id <= 0:
@@ -4228,6 +4288,16 @@ class WorkflowService:
             job_id=job_id,
         )
         for row in recovery_rows:
+            candidate_id = int(row.get("candidate_id") or 0)
+            candidate = self.db.get_candidate(candidate_id) if candidate_id > 0 else None
+            match = self.db.get_candidate_match(job_id=job_id, candidate_id=candidate_id) if candidate_id > 0 else None
+            if self._is_non_test_forced_candidate(
+                candidate=candidate,
+                match=match,
+                forced_identifiers=forced_identifiers,
+                forced_only=forced_only,
+            ):
+                continue
             conversation = self.db.get_conversation(int(row.get("conversation_id") or 0))
             delivery_mode = self._determine_initial_outreach_delivery_mode(
                 action_type="pre_resume_recovery",
@@ -4253,7 +4323,7 @@ class WorkflowService:
             "connect_items": connect_items,
             "message_items": message_items,
             "new_thread_backlog": len([item for item in connect_items if item.get("item_type") == "new_thread"]),
-            "recovery_backlog": len(recovery_rows),
+            "recovery_backlog": len(connect_items) + len(message_items) - len([item for item in connect_items if item.get("item_type") == "new_thread"]),
         }
 
     @staticmethod
@@ -4295,7 +4365,7 @@ class WorkflowService:
         recovery_per_job: int = 25,
         jobs_scan_limit: int = 40,
     ) -> Dict[str, Any]:
-        connected_accounts = self._list_active_linkedin_accounts(limit=20)
+        connected_accounts = self._list_dispatchable_linkedin_accounts(limit=20)
         if not connected_accounts:
             return {
                 "status": "ok",
@@ -4557,6 +4627,35 @@ class WorkflowService:
         planned_action_kind = str(payload.get("planned_action_kind") or "").strip().lower()
         if not planned_action_kind:
             planned_action_kind = self._planned_action_kind_for_delivery_mode(delivery_mode)
+        forced_identifiers = self._build_forced_identifier_lookup(
+            job=job,
+            forced_identifiers=self._load_forced_test_identifiers(),
+        )
+        allow_forced_test_candidate = bool(payload.get("allow_forced_test_candidate"))
+        match = self.db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
+        if self._is_non_test_forced_candidate(
+            candidate=candidate,
+            match=match,
+            forced_identifiers=forced_identifiers,
+            forced_only=allow_forced_test_candidate,
+        ):
+            self._suppress_pre_resume_recovery(
+                conversation_id=conversation_id,
+                reason="forced_test_candidate_excluded",
+            )
+            self.db.complete_outbound_action(
+                action_id=action_id,
+                status="failed",
+                result={"reason": "forced_test_candidate_excluded"},
+                error="forced_test_candidate_excluded",
+            )
+            return {
+                "action_id": action_id,
+                "conversation_id": conversation_id,
+                "candidate_id": candidate_id,
+                "delivery_status": "failed",
+                "error": "forced_test_candidate_excluded",
+            }
 
         account, selection_error = self._resolve_linkedin_account_for_outbound_action(
             row=row,
@@ -5105,7 +5204,7 @@ class WorkflowService:
             if not rows:
                 return [], "manual_assigned_accounts_not_connected"
             return rows, None
-        rows = self._list_active_linkedin_accounts(limit=500)
+        rows = self._list_dispatchable_linkedin_accounts(limit=500)
         if not rows:
             return [], "no_connected_accounts"
         return rows, None
@@ -6117,6 +6216,27 @@ class WorkflowService:
 
         return merged[:target_limit]
 
+    def _exclude_forced_test_profiles(
+        self,
+        *,
+        profiles: List[Dict[str, Any]],
+        forced_identifiers: List[str],
+    ) -> List[Dict[str, Any]]:
+        if not forced_identifiers:
+            return list(profiles)
+        out: List[Dict[str, Any]] = []
+        for profile in profiles:
+            if not isinstance(profile, dict):
+                continue
+            if self._candidate_is_forced_test(
+                candidate=profile,
+                match=None,
+                forced_identifiers=forced_identifiers,
+            ):
+                continue
+            out.append(profile)
+        return out
+
     def _effective_test_mode(self, job: Dict[str, Any], test_mode: bool | None, forced_identifiers: List[str]) -> bool:
         if not forced_identifiers:
             return False
@@ -6290,6 +6410,35 @@ class WorkflowService:
                 if public_identifier:
                     out.add(public_identifier)
         return sorted(out)
+
+    def _candidate_is_forced_test(
+        self,
+        *,
+        candidate: Dict[str, Any] | None,
+        match: Dict[str, Any] | None,
+        forced_identifiers: List[str],
+    ) -> bool:
+        if candidate and self._forced_test_identifier_for_profile(candidate, forced_identifiers):
+            return True
+        if match and self._forced_test_identifier_from_match(match, forced_identifiers):
+            return True
+        return False
+
+    def _is_non_test_forced_candidate(
+        self,
+        *,
+        candidate: Dict[str, Any] | None,
+        match: Dict[str, Any] | None,
+        forced_identifiers: List[str],
+        forced_only: bool,
+    ) -> bool:
+        if forced_only:
+            return False
+        return self._candidate_is_forced_test(
+            candidate=candidate,
+            match=match,
+            forced_identifiers=forced_identifiers,
+        )
 
     @staticmethod
     def _forced_test_identifier_from_match(match: Dict[str, Any] | None, forced_identifiers: List[str]) -> str | None:

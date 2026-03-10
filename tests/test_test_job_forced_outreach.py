@@ -85,7 +85,7 @@ class TestJobForcedOutreachTests(unittest.TestCase):
 
             out = workflow.source_candidates(job_id=job_id, limit=5, test_mode=None)
             self.assertFalse(out.get("test_mode_active"))
-            self.assertEqual(out.get("total"), 2)
+            self.assertEqual(out.get("total"), 1)
             ids = {str(item.get("linkedin_id") or "") for item in (out.get("profiles") or [])}
             self.assertIn("regular-manual-qa", ids)
 
@@ -160,9 +160,9 @@ class TestJobForcedOutreachTests(unittest.TestCase):
             self.assertTrue(out.get("test_job_forced_only_active"))
             self.assertEqual(out.get("test_filter_skipped"), 1)
             self.assertEqual(out.get("total"), 1)
-            self.assertEqual(provider.sent_to, [FORCED_PROVIDER_ID])
+            self.assertEqual([item.get("candidate_id") for item in (out.get("items") or [])], [added["added"][0]["candidate_id"]])
 
-    def test_test_mode_off_allows_non_forced_candidates(self) -> None:
+    def test_production_job_excludes_forced_candidates_when_test_mode_is_off(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "test_job_forced_off.sqlite3"))
@@ -232,8 +232,8 @@ class TestJobForcedOutreachTests(unittest.TestCase):
 
             self.assertFalse(out.get("test_job_forced_only_active"))
             self.assertEqual(out.get("test_filter_skipped"), 0)
-            self.assertEqual(out.get("total"), 2)
-            self.assertEqual(sorted(provider.sent_to), sorted([FORCED_PROVIDER_ID, "regular-candidate-1"]))
+            self.assertEqual(out.get("total"), 1)
+            self.assertEqual([item.get("candidate_id") for item in (out.get("items") or [])], [added["added"][1]["candidate_id"]])
 
     def test_pre_resume_followup_skips_non_forced_candidate_for_test_job(self) -> None:
         root = Path(__file__).resolve().parents[1]

@@ -3532,6 +3532,49 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc)
         items = db.list_outreach_ats_candidates(job_id=job_id, limit=limit)
+        workflow = SERVICES.get("workflow")
+        forced_ids = []
+        if workflow is not None:
+            loader = getattr(workflow, "_load_forced_test_identifiers", None)
+            if callable(loader):
+                try:
+                    forced_ids = list(loader() or [])
+                except Exception:
+                    forced_ids = []
+        if items:
+            job_cache: Dict[int, Dict[str, Any] | None] = {}
+            filtered_items: List[Dict[str, Any]] = []
+            for item in items:
+                include_item = True
+                verification_notes = item.get("verification_notes")
+                if workflow is not None and forced_ids:
+                    row_job_id = int(item.get("job_id") or 0)
+                    if row_job_id > 0:
+                        if row_job_id not in job_cache:
+                            job_cache[row_job_id] = db.get_job(row_job_id)
+                        job = job_cache.get(row_job_id)
+                        if isinstance(job, dict):
+                            lookup_builder = getattr(workflow, "_build_forced_identifier_lookup", None)
+                            mode_resolver = getattr(workflow, "_effective_test_mode", None)
+                            forced_checker = getattr(workflow, "_is_non_test_forced_candidate", None)
+                            if callable(lookup_builder) and callable(mode_resolver) and callable(forced_checker):
+                                forced_lookup = list(lookup_builder(job=job, forced_identifiers=forced_ids) or [])
+                                forced_only = bool(
+                                    mode_resolver(job=job, test_mode=None, forced_identifiers=forced_lookup)
+                                )
+                                include_item = not bool(
+                                    forced_checker(
+                                        candidate=item,
+                                        match={"verification_notes": verification_notes},
+                                        forced_identifiers=forced_lookup,
+                                        forced_only=forced_only,
+                                    )
+                                )
+                if include_item and isinstance(verification_notes, dict):
+                    include_item = not bool(verification_notes.get("forced_test_candidate"))
+                if include_item:
+                    filtered_items.append(item)
+            items = filtered_items
         column_defs = [
             ("queued", "Queued"),
             ("connect_sent", "Connect Sent"),
