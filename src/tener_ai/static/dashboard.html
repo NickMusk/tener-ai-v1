@@ -1141,6 +1141,14 @@
           <div id="source-filters-summary" class="source-filters-summary">Select a job to inspect sourcing filters.</div>
           <div class="source-filters-section-title">Applied Filters</div>
           <div id="source-filter-chips" class="source-filter-chips"></div>
+          <div class="source-filters-section-title">Must-Have Skills</div>
+          <div id="source-must-have-skills" class="source-filter-chips">
+            <span class="muted">No must-have skills extracted.</span>
+          </div>
+          <div class="source-filters-section-title">Nice-to-Have Skills</div>
+          <div id="source-nice-to-have-skills" class="source-filter-chips">
+            <span class="muted">No nice-to-have skills extracted.</span>
+          </div>
           <div class="source-filters-section-title">Questionable Skills</div>
           <div id="source-questionable-skills" class="source-filter-chips">
             <span class="muted">No questionable skills detected.</span>
@@ -2262,6 +2270,8 @@
       const toggleSummaryEl = $("source-filters-toggle-summary");
       const summaryEl = $("source-filters-summary");
       const chipsEl = $("source-filter-chips");
+      const mustHaveEl = $("source-must-have-skills");
+      const niceToHaveEl = $("source-nice-to-have-skills");
       const questionableEl = $("source-questionable-skills");
       const primaryQueryEl = $("source-primary-query");
       const queriesEl = $("source-filters-queries");
@@ -2297,6 +2307,8 @@
       const seniority = String(filters.seniority || "").trim();
       const appliedSkills = Array.isArray(appliedFilters.skills) ? appliedFilters.skills : [];
       const appliedLanguages = Array.isArray(appliedFilters.profile_language) ? appliedFilters.profile_language : [];
+      const mustHaveSkills = Array.isArray(filters.must_have_skills) ? filters.must_have_skills : [];
+      const niceToHaveSkills = Array.isArray(filters.nice_to_have_skills) ? filters.nice_to_have_skills : [];
       const questionableSkills = Array.isArray(filters.questionable_skills) ? filters.questionable_skills : [];
       const compactParts = [
         primaryQuery ? `primary: ${primaryQuery}` : "",
@@ -2329,6 +2341,12 @@
         chips.push(`<span class="source-filter-chip">lang: ${escapeHtml(String(item))}</span>`);
       });
       chipsEl.innerHTML = chips.join("") || '<span class="muted">No applied filters</span>';
+      mustHaveEl.innerHTML = mustHaveSkills.length
+        ? mustHaveSkills.map((item) => `<span class="source-filter-chip">${escapeHtml(String(item || ""))}</span>`).join("")
+        : '<span class="muted">No must-have skills extracted.</span>';
+      niceToHaveEl.innerHTML = niceToHaveSkills.length
+        ? niceToHaveSkills.map((item) => `<span class="source-filter-chip">${escapeHtml(String(item || ""))}</span>`).join("")
+        : '<span class="muted">No nice-to-have skills extracted.</span>';
       questionableEl.innerHTML = questionableSkills.length
         ? questionableSkills.map((item) => `<span class="source-filter-chip">${escapeHtml(String(item || ""))}</span>`).join("")
         : '<span class="muted">No questionable skills detected.</span>';

@@ -117,12 +117,18 @@ class JobSourceFiltersApiTests(unittest.TestCase):
             "skills": ["python", "django", "aws"],
             "profile_language": ["en", "de"],
         })
+        self.assertEqual(filters.get("must_have_skills") or [], ["python", "django", "aws"])
+        self.assertEqual(filters.get("nice_to_have_skills") or [], ["docker"])
         self.assertEqual(filters.get("questionable_skills") or [], ["recruiting"])
         self.assertEqual(filters.get("fallback_queries") or [], [
             "Senior Backend Engineer",
             "Senior Backend Engineer Germany",
             "Senior Backend Engineer python",
             "Senior Backend Engineer Germany python",
+            "Senior Backend Engineer django",
+            "Senior Backend Engineer Germany django",
+            "Senior Backend Engineer aws",
+            "Senior Backend Engineer Germany aws",
         ])
 
     def test_job_source_filters_preview_returns_not_found_for_unknown_job(self) -> None:

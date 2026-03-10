@@ -92,6 +92,17 @@ class _AlwaysFailProvider:
 
 
 class _MatchingEngineStub:
+    def build_job_requirements(self, job: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "title": str(job.get("title") or ""),
+            "target_seniority": str(job.get("seniority") or "middle"),
+            "must_have_skills": ["manual testing", "api testing", "regression"],
+            "nice_to_have_skills": ["sql", "postman"],
+            "questionable_skills": ["recruiting"],
+            "location": job.get("location"),
+            "preferred_languages": job.get("preferred_languages") or [],
+        }
+
     def build_core_profile(self, job: Dict[str, Any], max_skills: int = 6) -> Dict[str, Any]:
         return {
             "title": str(job.get("title") or ""),
@@ -223,6 +234,8 @@ class SourcingAgentLimitTests(unittest.TestCase):
         self.assertEqual((preview.get("filters") or {}).get("location"), "Remote")
         self.assertEqual((preview.get("filters") or {}).get("profile_language"), ["en", "ru"])
         self.assertEqual((preview.get("filters") or {}).get("skills"), ["manual testing", "api testing", "regression"])
+        self.assertEqual(preview.get("must_have_skills") or [], ["manual testing", "api testing", "regression"])
+        self.assertEqual(preview.get("nice_to_have_skills") or [], ["sql", "postman"])
         fallback_queries = preview.get("fallback_queries") or []
         self.assertGreaterEqual(len(fallback_queries), 1)
         self.assertLessEqual(len(fallback_queries), 8)

@@ -40,6 +40,59 @@ QA_QUESTIONABLE_SKILLS = [
     "recruiting",
 ]
 
+QA_GENERIC_ROLE_SKILLS = {"qa", "quality assurance"}
+
+QA_SKILL_ALIASES = {
+    "manual testing": [
+        ("manual testing",),
+        ("manual functional",),
+        ("exploratory testing",),
+        ("web application testing",),
+    ],
+    "api testing": [
+        ("api testing",),
+        ("rest api",),
+        ("rest apis",),
+        ("apis", "test"),
+    ],
+    "regression testing": [
+        ("regression testing",),
+        ("regression",),
+    ],
+    "bug reporting": [
+        ("bug reporting",),
+        ("bug reports",),
+        ("reproduce bugs",),
+    ],
+    "test case design": [
+        ("test case design",),
+        ("test cases",),
+        ("test scenarios",),
+    ],
+    "automation testing": [
+        ("automation testing",),
+        ("automation tools",),
+    ],
+}
+
+QA_SKILL_PRIORITY = [
+    "manual testing",
+    "api testing",
+    "regression testing",
+    "test case design",
+    "bug reporting",
+    "bug triage",
+    "jira",
+    "postman",
+    "automation testing",
+    "sql",
+    "selenium",
+    "playwright",
+    "cypress",
+    "qa",
+    "quality assurance",
+]
+
 
 @dataclass
 class MatchResult:
@@ -179,14 +232,15 @@ class MatchingEngine:
             must_have_skills = explicit_must_have[:max_must_have]
         else:
             extracted_required = self._extract_required_skills(jd_text=jd_text, title=title)
-            must_have_skills = (
-                extracted_required[:max_must_have]
-                if extracted_required
-                else self._extract_jd_keywords(
+            if extracted_required:
+                must_have_skills = extracted_required[:max_must_have]
+            elif role_family == "qa":
+                must_have_skills = []
+            else:
+                must_have_skills = self._extract_jd_keywords(
                     self._fallback_requirement_text(jd_text=jd_text, title=title),
                     max_items=max_must_have,
                 )
-            )
 
         if explicit_nice_to_have:
             nice_to_have_skills = explicit_nice_to_have[:max_nice_to_have]
@@ -306,24 +360,35 @@ class MatchingEngine:
         requirement_text = self._extract_requirement_scope(jd_text=jd_text, title=title)
         found = self._extract_known_skills(requirement_text, dictionary)
         if role_family == "qa":
-            ordered = [skill for skill in QA_MUST_HAVE_SKILLS if skill in found]
-            return ordered
+            return self._ordered_role_skills(
+                exact_skills=found,
+                alias_skills=self._extract_role_alias_skills(requirement_text, role_family=role_family),
+                priority=QA_SKILL_PRIORITY,
+                drop_generic_only=True,
+            )
         return found
 
     def _extract_nice_to_have_skills(self, jd_text: str, title: str = "", max_items: int = 12) -> List[str]:
         role_family = self._infer_role_family(title=title, jd_text=jd_text)
         dictionary = self._skill_dictionary_for_role(role_family)
         nice_scope = self._extract_nice_to_have_scope(jd_text=jd_text, title=title)
+        if not nice_scope:
+            return []
         found = self._extract_known_skills(nice_scope, dictionary)
         if role_family == "qa":
-            ordered = [skill for skill in QA_NICE_TO_HAVE_SKILLS if skill in found]
+            ordered = self._ordered_role_skills(
+                exact_skills=found,
+                alias_skills=self._extract_role_alias_skills(nice_scope, role_family=role_family),
+                priority=QA_NICE_TO_HAVE_SKILLS + QA_SKILL_PRIORITY,
+            )
+            ordered = [skill for skill in ordered if skill in QA_NICE_TO_HAVE_SKILLS]
             if ordered:
                 return ordered[:max_items]
         if len(found) >= max_items:
             return found[:max_items]
         if found:
             return found[:max_items]
-        return self._extract_jd_keywords(nice_scope, max_items=max_items)
+        return []
 
     def _extract_questionable_skills(
         self,
@@ -412,6 +477,43 @@ class MatchingEngine:
                 seen.add(skill)
                 found.append(skill)
         return found
+
+    def _extract_role_alias_skills(self, text: str, *, role_family: str | None) -> List[str]:
+        haystack = str(text or "").lower()
+        if role_family != "qa" or not haystack:
+            return []
+        out: List[str] = []
+        for skill, aliases in QA_SKILL_ALIASES.items():
+            for alias_tokens in aliases:
+                if all(token in haystack for token in alias_tokens):
+                    out.append(skill)
+                    break
+        return out
+
+    @staticmethod
+    def _ordered_role_skills(
+        *,
+        exact_skills: List[str],
+        alias_skills: List[str],
+        priority: List[str],
+        drop_generic_only: bool = False,
+    ) -> List[str]:
+        combined = {str(skill or "").strip().lower() for skill in [*exact_skills, *alias_skills] if str(skill or "").strip()}
+        if not combined:
+            return []
+        ordered: List[str] = []
+        seen: Set[str] = set()
+        for skill in priority:
+            if skill not in combined or skill in seen:
+                continue
+            seen.add(skill)
+            ordered.append(skill)
+        extras = [skill for skill in sorted(combined) if skill not in ordered]
+        out = ordered + extras
+        if drop_generic_only:
+            specific = [skill for skill in out if skill not in QA_GENERIC_ROLE_SKILLS]
+            return specific or []
+        return out
 
     def _infer_seniority(self, jd_text: str) -> str | None:
         tokens = {
@@ -618,10 +720,10 @@ class MatchingEngine:
                 current_section = "required"
                 required_fragments.append(fragment)
                 continue
+            if current_section == "nice" or current_section == "ignore":
+                continue
             if current_section == "required":
                 required_fragments.append(fragment)
-                continue
-            if current_section == "nice" or current_section == "ignore":
                 continue
             if any(token in fragment for token in ("must", "required", "experience with", "testing", "qa", "quality assurance")):
                 required_fragments.append(fragment)
@@ -644,12 +746,26 @@ class MatchingEngine:
                 current_section = "nice"
                 nice_fragments.append(fragment)
                 continue
+            if any(
+                marker in fragment
+                for marker in (
+                    "requirements",
+                    "qualification",
+                    "responsibilities",
+                    "what you'll do",
+                    "what you will do",
+                    "what you'll work on",
+                    "what you will work on",
+                    "location",
+                    "why join",
+                )
+            ):
+                current_section = "neutral"
+                continue
             if current_section == "nice":
                 nice_fragments.append(fragment)
         scope = " ".join(nice_fragments).strip()
-        if scope:
-            return scope
-        return self._fallback_requirement_text(jd_text=jd_text, title=title)
+        return scope
 
     def _fallback_requirement_text(self, jd_text: str, title: str = "") -> str:
         title_hint = str(title or "").strip().lower()

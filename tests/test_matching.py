@@ -159,6 +159,67 @@ class MatchingEngineTests(unittest.TestCase):
         self.assertNotIn("go", requirements["must_have_skills"])
         self.assertNotIn("go", requirements["questionable_skills"])
 
+    def test_real_manual_qa_jd_extracts_required_and_nice_to_have_skills(self) -> None:
+        job = {
+            "title": "Manual QA Engineer",
+            "location": "Remote",
+            "preferred_languages": ["en"],
+            "seniority": "middle",
+            "jd_text": """
+            Tener.ai is building an autonomous AI recruiter.
+
+            Responsibilities
+            - Test web applications and APIs across the Tener.ai platform
+            - Create and maintain detailed test cases and test scenarios
+            - Perform manual functional, regression and exploratory testing
+            - Reproduce bugs, document them clearly and work with engineers on fixes
+
+            Requirements
+            - 3+ years of experience as a Manual QA Engineer
+            - Strong understanding of web application testing
+            - Experience writing clear test cases and bug reports
+            - Understanding of REST APIs and tools like Postman or similar
+            - Experience testing complex user flows and integrations
+
+            Nice to Have
+            - Experience testing AI / ML products
+            - Familiarity with automation tools (Playwright, Cypress, Selenium)
+            - Basic knowledge of SQL
+            """,
+        }
+
+        requirements = self.engine.build_job_requirements(job)
+        self.assertEqual(
+            requirements["must_have_skills"],
+            [
+                "manual testing",
+                "api testing",
+                "regression testing",
+                "test case design",
+                "bug reporting",
+                "postman",
+            ],
+        )
+        self.assertEqual(
+            requirements["nice_to_have_skills"],
+            ["sql", "selenium", "playwright", "cypress", "automation testing"],
+        )
+        self.assertEqual(requirements["questionable_skills"], [])
+
+    def test_short_manual_qa_jd_does_not_promote_title_only_signal_to_must_have(self) -> None:
+        job = {
+            "title": "Manual QA Engineer",
+            "jd_text": "Manual QA",
+            "location": "Remote",
+            "preferred_languages": ["en"],
+            "seniority": "middle",
+        }
+
+        requirements = self.engine.build_job_requirements(job)
+        self.assertEqual(requirements["must_have_skills"], [])
+        self.assertEqual(requirements["nice_to_have_skills"], [])
+        self.assertEqual(requirements["questionable_skills"], [])
+
     def test_middle_roles_penalize_overqualified_candidates(self) -> None:
         job = {
             "title": "Manual QA Engineer",

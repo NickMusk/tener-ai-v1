@@ -85,6 +85,8 @@ class SourcingAgent:
             "preferred_languages": spec.get("preferred_languages") or [],
             "jd_excerpt": spec.get("jd_excerpt"),
             "extracted_keywords": spec.get("keywords") or [],
+            "must_have_skills": spec.get("must_have_skills") or [],
+            "nice_to_have_skills": spec.get("nice_to_have_skills") or [],
             "questionable_skills": spec.get("questionable_skills") or [],
             "primary_query": spec.get("title_query"),
             "filters": spec.get("filters") or {},
@@ -104,6 +106,11 @@ class SourcingAgent:
         ]
         requirements = self._job_requirements(job)
         keywords = [str(item).strip().lower() for item in (requirements.get("must_have_skills") or []) if str(item).strip()]
+        nice_to_have_skills = [
+            str(item).strip().lower()
+            for item in (requirements.get("nice_to_have_skills") or [])
+            if str(item).strip()
+        ]
         questionable_skills = [
             str(item).strip().lower()
             for item in (requirements.get("questionable_skills") or [])
@@ -120,6 +127,8 @@ class SourcingAgent:
             "seniority": seniority,
             "preferred_languages": preferred_languages,
             "keywords": keywords,
+            "must_have_skills": keywords,
+            "nice_to_have_skills": nice_to_have_skills,
             "questionable_skills": questionable_skills,
             "jd_excerpt": jd_text[:280] or None,
             "filters": filters,
