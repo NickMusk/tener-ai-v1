@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tener Interview</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0e14;
+      --bg-card: #141921;
+      --bg-card-alt: #0f141c;
+      --border: #2b3442;
+      --text: #e6edf3;
+      --text-muted: #95a0ad;
+      --text-soft: #6f7987;
+      --accent: #00ff87;
+      --accent-dim: rgba(0, 255, 135, 0.12);
+      --accent-glow: rgba(0, 255, 135, 0.28);
+      --blue: #00bfff;
+      --danger: #ff7b8b;
+      --danger-dim: rgba(255, 123, 139, 0.12);
+    }
+
+    body {
+      min-height: 100vh;
+      font-family: "DM Sans", sans-serif;
+      background:
+        radial-gradient(circle at 18% 12%, rgba(0, 191, 255, 0.10), transparent 32%),
+        radial-gradient(circle at 82% 18%, rgba(0, 255, 135, 0.09), transparent 28%),
+        var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: radial-gradient(circle at center, black 28%, transparent 78%);
+    }
+
+    .shell {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 0 24px;
+    }
+
+    .logo {
+      font-family: "Space Mono", monospace;
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+    }
+
+    .logo span { color: var(--accent); }
+
+    .header-note {
+      color: var(--text-soft);
+      font-size: 0.82rem;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      gap: 28px;
+      align-items: start;
+    }
+
+    .panel {
+      background: rgba(20, 25, 33, 0.92);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      backdrop-filter: blur(14px);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+    }
+
+    .hero {
+      padding: 32px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -12% -28% auto;
+      width: 280px;
+      height: 280px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(0,255,135,0.14), transparent 66%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 12px;
+      margin-bottom: 18px;
+      border: 1px solid rgba(0, 255, 135, 0.22);
+      border-radius: 999px;
+      background: var(--accent-dim);
+      color: var(--accent);
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 0 6px rgba(0,255,135,0.14);
+    }
+
+    .company-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-bottom: 22px;
+    }
+
+    .company-logo {
+      width: 62px;
+      height: 62px;
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 1.4rem;
+      color: #07130d;
+      background: linear-gradient(135deg, var(--accent), var(--blue));
+      box-shadow: 0 12px 28px var(--accent-glow);
+    }
+
+    .company-name {
+      font-size: 1.02rem;
+      font-weight: 700;
+    }
+
+    .company-tagline {
+      color: var(--text-muted);
+      font-size: 0.92rem;
+      margin-top: 2px;
+    }
+
+    .job-title {
+      font-size: clamp(2rem, 4vw, 3rem);
+      line-height: 1.07;
+      letter-spacing: -0.04em;
+      margin-bottom: 16px;
+      max-width: 720px;
+      background: linear-gradient(135deg, #f3fbff 0%, var(--accent) 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+    }
+
+    .job-summary {
+      color: var(--text-muted);
+      font-size: 1.04rem;
+      max-width: 760px;
+      margin-bottom: 22px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 28px;
+    }
+
+    .meta-item {
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(15, 20, 28, 0.92);
+      color: var(--text-muted);
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    .meta-item.accent {
+      color: var(--accent);
+      border-color: rgba(0, 255, 135, 0.36);
+      background: var(--accent-dim);
+    }
+
+    .content-grid {
+      display: grid;
+      gap: 18px;
+    }
+
+    .section {
+      padding: 24px 26px;
+    }
+
+    .section h2 {
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-bottom: 14px;
+    }
+
+    .section p {
+      color: var(--text-muted);
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+      list-style: none;
+    }
+
+    .list li {
+      color: var(--text-muted);
+      padding-left: 18px;
+      position: relative;
+    }
+
+    .list li::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      position: absolute;
+      left: 0;
+      top: 0.62rem;
+      box-shadow: 0 0 0 5px rgba(0,255,135,0.10);
+    }
+
+    .skills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .skill {
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: var(--bg-card-alt);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.86rem;
+      font-weight: 600;
+    }
+
+    .process {
+      display: grid;
+      gap: 12px;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 38px 1fr auto;
+      gap: 14px;
+      align-items: start;
+      padding: 16px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(15, 20, 28, 0.86);
+    }
+
+    .step-index {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid rgba(0,255,135,0.38);
+      font-weight: 700;
+    }
+
+    .step-title {
+      font-size: 0.96rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .step-copy {
+      color: var(--text-muted);
+      font-size: 0.88rem;
+    }
+
+    .step-duration {
+      color: var(--text-soft);
+      font-size: 0.78rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+    }
+
+    .cta-card {
+      position: sticky;
+      top: 24px;
+      padding: 24px;
+    }
+
+    .cta-headline {
+      font-size: 1.45rem;
+      line-height: 1.15;
+      letter-spacing: -0.03em;
+      margin-bottom: 10px;
+    }
+
+    .cta-copy {
+      color: var(--text-muted);
+      margin-bottom: 18px;
+      font-size: 0.95rem;
+    }
+
+    .candidate-pill,
+    .time-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(0, 191, 255, 0.08);
+      border: 1px solid rgba(0, 191, 255, 0.22);
+      color: #a3ddff;
+      font-size: 0.84rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    .candidate-pill.hidden,
+    .time-pill.hidden,
+    .section.hidden,
+    .shell.hidden,
+    .status.hidden { display: none; }
+
+    .cta-points {
+      display: grid;
+      gap: 10px;
+      margin: 8px 0 22px;
+    }
+
+    .cta-point {
+      display: flex;
+      gap: 10px;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+    }
+
+    .cta-point strong { color: var(--text); }
+
+    .cta-point::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex: 0 0 auto;
+      margin-top: 9px;
+    }
+
+    .cta-button {
+      width: 100%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 15px 18px;
+      border-radius: 16px;
+      border: none;
+      background: linear-gradient(135deg, var(--accent), #5effba);
+      color: #041109;
+      font-size: 1rem;
+      font-weight: 800;
+      text-decoration: none;
+      transition: transform 0.18s ease, box-shadow 0.18s ease;
+      box-shadow: 0 14px 34px rgba(0, 255, 135, 0.20);
+    }
+
+    .cta-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 18px 40px rgba(0, 255, 135, 0.24);
+    }
+
+    .cta-button[aria-disabled="true"] {
+      pointer-events: none;
+      opacity: 0.55;
+      box-shadow: none;
+    }
+
+    .privacy,
+    .support {
+      color: var(--text-soft);
+      font-size: 0.82rem;
+      margin-top: 14px;
+      text-align: center;
+    }
+
+    .trust {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      margin-top: 18px;
+      padding-top: 18px;
+      border-top: 1px solid var(--border);
+    }
+
+    .trust-item {
+      color: var(--text-muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .status {
+      max-width: 760px;
+      margin: 70px auto 0;
+      padding: 28px;
+      border-radius: 22px;
+      border: 1px solid var(--border);
+      background: rgba(20, 25, 33, 0.94);
+      text-align: center;
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+    }
+
+    .status.error {
+      border-color: rgba(255, 123, 139, 0.35);
+      background: linear-gradient(180deg, rgba(255,123,139,0.08), rgba(20,25,33,0.94));
+    }
+
+    .status-badge {
+      display: inline-flex;
+      padding: 8px 12px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+      font-size: 0.78rem;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      background: var(--danger-dim);
+      color: var(--danger);
+    }
+
+    .status h1 {
+      font-size: 1.6rem;
+      margin-bottom: 10px;
+    }
+
+    .status p {
+      color: var(--text-muted);
+    }
+
+    .loading {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      text-align: center;
+      padding: 80px 0 20px;
+    }
+
+    @media (max-width: 960px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .cta-card {
+        position: static;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell { padding: 18px; }
+      .hero,
+      .section,
+      .cta-card { padding: 22px; }
+      .company-row { align-items: flex-start; }
+      .step { grid-template-columns: 38px 1fr; }
+      .step-duration { grid-column: 2; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell hidden" id="app-shell">
+    <header class="header">
+      <div class="logo">tener<span>.ai</span></div>
+      <div class="header-note">AI Interview Entry</div>
+    </header>
+
+    <main class="layout">
+      <section>
+        <div class="panel hero">
+          <div class="eyebrow">Next Step</div>
+          <div class="company-row">
+            <div class="company-logo" id="company-logo">T</div>
+            <div>
+              <div class="company-name" id="company-name">Tener</div>
+              <div class="company-tagline" id="company-tagline"></div>
+            </div>
+          </div>
+          <h1 class="job-title" id="job-title">Preparing interview details...</h1>
+          <p class="job-summary" id="job-summary"></p>
+          <div class="meta" id="job-meta"></div>
+        </div>
+
+        <div class="content-grid">
+          <section class="panel section hidden" id="highlights-section">
+            <h2>About The Role</h2>
+            <ul class="list" id="highlights-list"></ul>
+          </section>
+
+          <section class="panel section hidden" id="skills-section">
+            <h2>Core Focus Areas</h2>
+            <div class="skills" id="skills-list"></div>
+          </section>
+
+          <section class="panel section hidden" id="process-section">
+            <h2>Interview Flow</h2>
+            <div class="process" id="process-list"></div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="panel cta-card">
+        <div class="candidate-pill hidden" id="candidate-pill"></div>
+        <h2 class="cta-headline">Ready when you are.</h2>
+        <p class="cta-copy">Review the role details, then continue to the async interview on the next screen.</p>
+        <div class="time-pill hidden" id="time-pill"></div>
+        <div class="cta-points">
+          <div class="cta-point"><strong>Single-use invite.</strong> This page is tied to your application.</div>
+          <div class="cta-point"><strong>Async format.</strong> Complete it when convenient before the link expires.</div>
+          <div class="cta-point"><strong>Direct handoff.</strong> The next click opens the interview provider.</div>
+        </div>
+        <a class="cta-button" id="start-button" href="#" aria-disabled="true">Start Interview</a>
+        <p class="support" id="support-text"></p>
+        <p class="privacy" id="privacy-text"></p>
+        <div class="trust">
+          <div class="trust-item">Secure Link</div>
+          <div class="trust-item">Private Access</div>
+          <div class="trust-item">Verified Session</div>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <div class="status hidden" id="status-card">
+    <div class="status-badge" id="status-badge">Loading</div>
+    <h1 id="status-title">Checking your interview link</h1>
+    <p id="status-copy" class="loading">Loading...</p>
+  </div>
+
+  <script>
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function tokenFromPath() {
+      var parts = window.location.pathname.split("/").filter(Boolean);
+      return parts.length >= 2 ? parts[1] : "";
+    }
+
+    function setStatus(kind, badge, title, copy) {
+      var card = document.getElementById("status-card");
+      var shell = document.getElementById("app-shell");
+      card.classList.remove("hidden");
+      shell.classList.add("hidden");
+      card.classList.toggle("error", kind === "error");
+      document.getElementById("status-badge").textContent = badge;
+      document.getElementById("status-title").textContent = title;
+      document.getElementById("status-copy").textContent = copy;
+    }
+
+    function setText(id, value) {
+      var node = document.getElementById(id);
+      if (!node) return;
+      node.textContent = value || "";
+    }
+
+    function renderMeta(job) {
+      var meta = document.getElementById("job-meta");
+      meta.innerHTML = "";
+      var items = [];
+      if (job.location) items.push({ value: job.location, accent: false });
+      if (job.seniority) items.push({ value: job.seniority, accent: false });
+      if (job.salary_text) items.push({ value: job.salary_text, accent: true });
+      if (Array.isArray(job.preferred_languages) && job.preferred_languages.length) {
+        items.push({ value: "Languages: " + job.preferred_languages.join(", ").toUpperCase(), accent: false });
+      }
+      items.forEach(function(item) {
+        var div = document.createElement("div");
+        div.className = "meta-item" + (item.accent ? " accent" : "");
+        div.textContent = item.value;
+        meta.appendChild(div);
+      });
+    }
+
+    function renderHighlights(items) {
+      var section = document.getElementById("highlights-section");
+      var list = document.getElementById("highlights-list");
+      list.innerHTML = "";
+      if (!Array.isArray(items) || !items.length) {
+        section.classList.add("hidden");
+        return;
+      }
+      items.forEach(function(item) {
+        var li = document.createElement("li");
+        li.textContent = item;
+        list.appendChild(li);
+      });
+      section.classList.remove("hidden");
+    }
+
+    function renderSkills(items) {
+      var section = document.getElementById("skills-section");
+      var list = document.getElementById("skills-list");
+      list.innerHTML = "";
+      if (!Array.isArray(items) || !items.length) {
+        section.classList.add("hidden");
+        return;
+      }
+      items.forEach(function(item) {
+        var span = document.createElement("span");
+        span.className = "skill";
+        span.textContent = item;
+        list.appendChild(span);
+      });
+      section.classList.remove("hidden");
+    }
+
+    function renderProcess(items) {
+      var section = document.getElementById("process-section");
+      var list = document.getElementById("process-list");
+      list.innerHTML = "";
+      if (!Array.isArray(items) || !items.length) {
+        section.classList.add("hidden");
+        return;
+      }
+      items.forEach(function(item, index) {
+        var article = document.createElement("article");
+        article.className = "step";
+        article.innerHTML =
+          '<div class="step-index">' + String(index + 1) + '</div>' +
+          '<div><div class="step-title">' + escapeHtml(item.label) + '</div><div class="step-copy">' + escapeHtml(item.description) + '</div></div>' +
+          '<div class="step-duration">~' + escapeHtml(item.duration_minutes || 0) + ' min</div>';
+        list.appendChild(article);
+      });
+      section.classList.remove("hidden");
+    }
+
+    async function loadEntry() {
+      var token = tokenFromPath();
+      if (!token) {
+        setStatus("error", "Invalid Link", "Interview link is invalid", "The token is missing from this URL.");
+        return;
+      }
+
+      try {
+        var response = await fetch("/api/interviews/entry/" + encodeURIComponent(token), {
+          method: "GET",
+          headers: { "Accept": "application/json" },
+          credentials: "same-origin"
+        });
+        var payload = {};
+        try {
+          payload = await response.json();
+        } catch (_err) {
+          payload = {};
+        }
+
+        if (!response.ok) {
+          if (response.status === 410) {
+            setStatus("error", "Expired", "This interview link has expired", "Please reply to the recruiter if you need a refreshed link.");
+            return;
+          }
+          setStatus("error", "Unavailable", "We could not load this interview", payload.error || "Please try the link again or contact support.");
+          return;
+        }
+
+        var landing = payload.landing || {};
+        var job = landing.job || {};
+        var candidate = landing.candidate || {};
+        var interview = landing.interview || {};
+
+        document.title = (job.title || "Interview") + " | Tener";
+        setText("company-name", job.company || "Tener");
+        setText("company-tagline", job.company_tagline || "");
+        setText("job-title", job.title || "Interview");
+        setText("job-summary", job.summary || "Review the interview details below before you continue.");
+        setText("support-text", interview.support_text || "");
+        setText("privacy-text", interview.privacy_note || "");
+        document.getElementById("company-logo").textContent = String((job.company || job.title || "T").trim().charAt(0) || "T").toUpperCase();
+
+        var candidatePill = document.getElementById("candidate-pill");
+        if (candidate.name) {
+          candidatePill.textContent = "Invite for " + candidate.name;
+          candidatePill.classList.remove("hidden");
+        } else {
+          candidatePill.classList.add("hidden");
+        }
+
+        var timePill = document.getElementById("time-pill");
+        if (interview.estimated_minutes) {
+          timePill.textContent = "~" + interview.estimated_minutes + " minutes total";
+          timePill.classList.remove("hidden");
+        } else {
+          timePill.classList.add("hidden");
+        }
+
+        var startButton = document.getElementById("start-button");
+        startButton.textContent = interview.cta_label || "Start Interview";
+        startButton.href = payload.continue_url || ("/i/" + encodeURIComponent(token) + "/start");
+        startButton.setAttribute("aria-disabled", "false");
+
+        renderMeta(job);
+        renderHighlights(job.highlights || []);
+        renderSkills(job.skills || []);
+        renderProcess(interview.steps || []);
+
+        document.getElementById("status-card").classList.add("hidden");
+        document.getElementById("app-shell").classList.remove("hidden");
+      } catch (err) {
+        setStatus("error", "Unavailable", "We could not load this interview", String((err && err.message) || err || "Unexpected error"));
+      }
+    }
+
+    setStatus("loading", "Loading", "Preparing your interview", "Loading interview details...");
+    loadEntry();
+  </script>
+</body>
+</html>

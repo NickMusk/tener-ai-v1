@@ -55,6 +55,7 @@ class InterviewDatabase:
             language TEXT,
             entry_token_hash TEXT UNIQUE NOT NULL,
             entry_token_expires_at TEXT NOT NULL,
+            entry_context_json TEXT,
             provider_interview_url TEXT,
             started_at TEXT,
             completed_at TEXT,
@@ -147,6 +148,7 @@ class InterviewDatabase:
         """
         with self.transaction() as conn:
             conn.executescript(schema)
+            self._ensure_sqlite_column(conn, "interview_sessions", "entry_context_json", "TEXT")
 
     def insert_session(self, item: Dict[str, Any]) -> None:
         with self.transaction() as conn:
@@ -155,11 +157,11 @@ class InterviewDatabase:
                 INSERT INTO interview_sessions (
                     session_id, job_id, candidate_id, candidate_name, conversation_id,
                     provider, provider_assessment_id, provider_invitation_id, provider_candidate_id,
-                    status, language, entry_token_hash, entry_token_expires_at,
+                    status, language, entry_token_hash, entry_token_expires_at, entry_context_json,
                     provider_interview_url, started_at, completed_at, scored_at,
                     last_sync_at, last_error_code, last_error_message,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     item["session_id"],
@@ -175,6 +177,7 @@ class InterviewDatabase:
                     item.get("language"),
                     item["entry_token_hash"],
                     item["entry_token_expires_at"],
+                    json.dumps(item.get("entry_context_json") or {}),
                     item.get("provider_interview_url"),
                     item.get("started_at"),
                     item.get("completed_at"),
@@ -517,6 +520,7 @@ class InterviewDatabase:
         item = dict(row)
         for field in (
             "payload",
+            "entry_context_json",
             "normalized_json",
             "raw_payload",
             "response_json",
@@ -530,6 +534,14 @@ class InterviewDatabase:
                 except json.JSONDecodeError:
                     pass
         return item
+
+    @staticmethod
+    def _ensure_sqlite_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        existing = {str(row["name"]) for row in rows}
+        if column in existing:
+            return
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 class InterviewPostgresDatabase:
@@ -570,6 +582,7 @@ class InterviewPostgresDatabase:
             language TEXT,
             entry_token_hash TEXT UNIQUE NOT NULL,
             entry_token_expires_at TIMESTAMPTZ NOT NULL,
+            entry_context_json JSONB,
             provider_interview_url TEXT,
             started_at TIMESTAMPTZ,
             completed_at TIMESTAMPTZ,
@@ -663,6 +676,7 @@ class InterviewPostgresDatabase:
         with self._connect() as conn:
             with conn.cursor() as cur:
                 cur.execute(schema)
+                cur.execute("ALTER TABLE interview_sessions ADD COLUMN IF NOT EXISTS entry_context_json JSONB")
 
     def insert_session(self, item: Dict[str, Any]) -> None:
         with self._connect() as conn:
@@ -672,11 +686,11 @@ class InterviewPostgresDatabase:
                     INSERT INTO interview_sessions (
                         session_id, job_id, candidate_id, candidate_name, conversation_id,
                         provider, provider_assessment_id, provider_invitation_id, provider_candidate_id,
-                        status, language, entry_token_hash, entry_token_expires_at,
+                        status, language, entry_token_hash, entry_token_expires_at, entry_context_json,
                         provider_interview_url, started_at, completed_at, scored_at,
                         last_sync_at, last_error_code, last_error_message,
                         created_at, updated_at
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         item["session_id"],
@@ -692,6 +706,7 @@ class InterviewPostgresDatabase:
                         item.get("language"),
                         item["entry_token_hash"],
                         item["entry_token_expires_at"],
+                        self._psycopg.types.json.Json(item.get("entry_context_json") or {}),
                         item.get("provider_interview_url"),
                         item.get("started_at"),
                         item.get("completed_at"),

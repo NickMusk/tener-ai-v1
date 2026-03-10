@@ -1727,6 +1727,37 @@ class WorkflowService:
                         state=state_out,
                     )
                 state_status = str((state_out or {}).get("status") or "").strip().lower()
+                interview_result: Dict[str, Any] | None = None
+                should_attempt_interview = intent == "resume_shared" or (
+                    intent == "default" and self._is_pre_vetting_opt_in_message(text=text)
+                )
+                if should_attempt_interview:
+                    if intent == "default":
+                        intent = "pre_vetting_opt_in"
+                    interview_result = self._send_interview_invite_after_opt_in(
+                        job=job,
+                        candidate=candidate,
+                        conversation=conversation,
+                        language=language,
+                        match=match,
+                    )
+                    if isinstance(state_out, dict):
+                        state_out["awaiting_pre_vetting_opt_in"] = False
+                        if intent == "pre_vetting_opt_in":
+                            state_out["interview_opted_in"] = True
+                            state_out["interview_opted_in_at"] = state_out.get("updated_at")
+                    if isinstance(interview_result, dict) and interview_result.get("started"):
+                        outbound = str(interview_result.get("message") or "").strip() or outbound
+                    if isinstance(state_out, dict):
+                        self.db.upsert_pre_resume_session(
+                            session_id=session_id,
+                            conversation_id=conversation_id,
+                            job_id=int(conversation["job_id"]),
+                            candidate_id=int(conversation["candidate_id"]),
+                            state=state_out,
+                            instruction=self.stage_instructions.get("pre_resume", ""),
+                        )
+                        self.pre_resume_service.seed_session(state_out)
 
                 self.db.insert_pre_resume_event(
                     session_id=session_id,
@@ -1742,7 +1773,7 @@ class WorkflowService:
                     },
                 )
 
-                if outbound:
+                if outbound and not (isinstance(interview_result, dict) and interview_result.get("started")):
                     delivery = self._send_auto_reply(candidate=candidate, message=outbound, conversation=conversation)
                     outbound_id = self.db.add_message(
                         conversation_id=conversation_id,
@@ -1812,6 +1843,8 @@ class WorkflowService:
                     "mode": "pre_resume",
                     "state": state_out,
                 }
+                if interview_result is not None:
+                    response["interview"] = interview_result
                 return response
 
         lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=previous_lang)
@@ -3399,6 +3432,29 @@ class WorkflowService:
         if isinstance(state, dict):
             state["awaiting_pre_vetting_opt_in"] = True
         return f"{text} {prompt}".strip()
+
+    @staticmethod
+    def _is_pre_vetting_opt_in_message(text: str) -> bool:
+        lowered = str(text or "").strip().lower()
+        if not lowered:
+            return False
+        markers = (
+            "what is next",
+            "what's next",
+            "whats next",
+            "next step",
+            "next steps",
+            "sounds interesting",
+            "i am interested",
+            "i'm interested",
+            "interested in moving forward",
+            "let's do it",
+            "lets do it",
+            "happy to proceed",
+            "ready to proceed",
+            "open to it",
+        )
+        return any(marker in lowered for marker in markers)
 
     def _compose_interview_invite_message(
         self,

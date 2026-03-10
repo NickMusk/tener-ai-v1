@@ -131,11 +131,13 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
                     "endpoints": {
                         "health": "GET /health",
                         "start_session": "POST /api/interviews/sessions/start",
+                        "entry_view": "GET /api/interviews/entry/{token}",
                         "get_session": "GET /api/interviews/sessions/{session_id}",
                         "get_scorecard": "GET /api/interviews/sessions/{session_id}/scorecard",
                         "refresh_session": "POST /api/interviews/sessions/{session_id}/refresh",
                         "list_sessions": "GET /api/interviews/sessions?job_id=1&status=in_progress&limit=100",
                         "entry_link": "GET /i/{token}",
+                        "entry_start": "GET /i/{token}/start",
                         "job_leaderboard": "GET /api/jobs/{job_id}/interview-leaderboard?limit=50",
                         "interview_step": "POST /api/steps/interview",
                         "admin_jobs": "GET /api/admin/jobs",
@@ -202,8 +204,30 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if parsed.path.startswith("/i/"):
-            token = parsed.path[len("/i/") :]
+        if parsed.path.startswith("/api/interviews/entry/"):
+            m = re.match(r"^/api/interviews/entry/([^/]+)$", parsed.path)
+            if not m:
+                self._json_response(HTTPStatus.BAD_REQUEST, self._error("INTERVIEW_TOKEN_INVALID", "invalid token"))
+                return
+            token = m.group(1)
+            try:
+                payload = SERVICES["interview"].get_entry_landing(token)
+            except LookupError:
+                self._json_response(HTTPStatus.NOT_FOUND, self._error("INTERVIEW_SESSION_NOT_FOUND", "session not found"))
+                return
+            except ValueError as exc:
+                msg = str(exc)
+                if "expired" in msg:
+                    self._json_response(HTTPStatus.GONE, self._error("INTERVIEW_LINK_EXPIRED", msg))
+                else:
+                    self._json_response(HTTPStatus.NOT_FOUND, self._error("INTERVIEW_TOKEN_INVALID", msg))
+                return
+            payload["continue_url"] = f"/i/{token}/start"
+            self._json_response(HTTPStatus.OK, payload)
+            return
+
+        if parsed.path.startswith("/i/") and parsed.path.endswith("/start"):
+            token = parsed.path[len("/i/") : -len("/start")].rstrip("/")
             try:
                 resolved = SERVICES["interview"].resolve_entry_token(token)
             except LookupError:
@@ -228,6 +252,14 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
             self.send_response(HTTPStatus.FOUND)
             self.send_header("Location", target)
             self.end_headers()
+            return
+
+        if parsed.path.startswith("/i/"):
+            landing = project_root() / "src" / "tener_interview" / "static" / "candidate_landing.html"
+            if not landing.exists():
+                self._json_response(HTTPStatus.NOT_FOUND, self._error("DASHBOARD_NOT_FOUND", "candidate landing file not found"))
+                return
+            self._html_response(HTTPStatus.OK, landing.read_text(encoding="utf-8"))
             return
 
         if parsed.path == "/api/interviews/sessions":

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
@@ -58,6 +59,13 @@ class InterviewService:
         except Exception as exc:
             assessment_error = str(exc)
             assessment_ctx = {}
+        entry_context = self._build_entry_context(
+            job_id=int(job_id),
+            candidate_id=int(candidate_id),
+            candidate_name=candidate_name,
+            language=language,
+            assessment_ctx=assessment_ctx,
+        )
 
         invite_payload = {
             "job_id": job_id,
@@ -109,6 +117,7 @@ class InterviewService:
                 "language": language,
                 "entry_token_hash": token_hash,
                 "entry_token_expires_at": expires_at.isoformat(),
+                "entry_context_json": entry_context,
                 "provider_interview_url": invitation.get("interview_url"),
                 "started_at": None,
                 "completed_at": None,
@@ -155,66 +164,25 @@ class InterviewService:
             },
         }
 
+    def get_entry_landing(self, token: str) -> Dict[str, Any]:
+        session = self._session_for_token(token, mark_started=False)
+        self.db.insert_event(session_id=session["session_id"], event_type="landing_viewed", source="candidate")
+        entry_context = session.get("entry_context_json") if isinstance(session.get("entry_context_json"), dict) else {}
+        return {
+            "session_id": session["session_id"],
+            "status": session.get("status"),
+            "candidate_id": session.get("candidate_id"),
+            "candidate_name": session.get("candidate_name"),
+            "language": session.get("language"),
+            "provider": session.get("provider"),
+            "expires_at": session.get("entry_token_expires_at"),
+            "landing": entry_context,
+        }
+
     def resolve_entry_token(self, token: str) -> Dict[str, Any]:
-        try:
-            self.token_service.parse_and_validate(token)
-        except InvalidTokenError as exc:
-            raise ValueError(str(exc)) from exc
-
-        token_hash = self.token_service.token_hash(token)
-        session = self.db.get_session_by_token_hash(token_hash)
-        if not session:
-            raise LookupError("session not found")
-
-        now = datetime.now(UTC)
-        expires_at = self._parse_iso(session["entry_token_expires_at"])
-        if expires_at and now > expires_at and session.get("status") not in {"completed", "scored", "expired", "canceled", "failed"}:
-            self.db.update_session(
-                session["session_id"],
-                {
-                    "status": "expired",
-                    "updated_at": utc_now_iso(),
-                },
-            )
-            self.db.insert_event(session_id=session["session_id"], event_type="expired", source="system")
-            self.db.upsert_candidate_summary(
-                job_id=int(session["job_id"]),
-                candidate_id=int(session["candidate_id"]),
-                candidate_name=session.get("candidate_name"),
-                session_id=session["session_id"],
-                interview_status="failed",
-                technical_score=None,
-                soft_skills_score=None,
-                culture_fit_score=None,
-                total_score=None,
-                score_confidence=None,
-            )
-            raise ValueError("token expired")
-
-        if session.get("status") in {"created", "invited"}:
-            self.db.update_session(
-                session["session_id"],
-                {
-                    "status": "in_progress",
-                    "started_at": session.get("started_at") or utc_now_iso(),
-                    "updated_at": utc_now_iso(),
-                },
-            )
-            self.db.upsert_candidate_summary(
-                job_id=int(session["job_id"]),
-                candidate_id=int(session["candidate_id"]),
-                candidate_name=session.get("candidate_name"),
-                session_id=session["session_id"],
-                interview_status="in_progress",
-                technical_score=None,
-                soft_skills_score=None,
-                culture_fit_score=None,
-                total_score=None,
-                score_confidence=None,
-            )
-
-        self.db.insert_event(session_id=session["session_id"], event_type="link_opened", source="candidate")
-        updated = self.db.get_session(session["session_id"]) or session
+        updated = self._session_for_token(token, mark_started=True)
+        self.db.insert_event(session_id=updated["session_id"], event_type="link_opened", source="candidate")
+        self.db.insert_event(session_id=updated["session_id"], event_type="interview_started", source="candidate")
         return {
             "session_id": updated["session_id"],
             "provider_url": updated.get("provider_interview_url"),
@@ -713,6 +681,287 @@ class InterviewService:
         if not base:
             base = "http://127.0.0.1:8090"
         return f"{base}/i/{token}"
+
+    def _session_for_token(self, token: str, *, mark_started: bool) -> Dict[str, Any]:
+        try:
+            self.token_service.parse_and_validate(token)
+        except InvalidTokenError as exc:
+            raise ValueError(str(exc)) from exc
+
+        token_hash = self.token_service.token_hash(token)
+        session = self.db.get_session_by_token_hash(token_hash)
+        if not session:
+            raise LookupError("session not found")
+
+        now = datetime.now(UTC)
+        expires_at = self._parse_iso(session.get("entry_token_expires_at"))
+        status = str(session.get("status") or "").strip().lower()
+        if expires_at and now > expires_at and status not in {"completed", "scored", "expired", "canceled", "failed"}:
+            self.db.update_session(
+                session["session_id"],
+                {
+                    "status": "expired",
+                    "updated_at": utc_now_iso(),
+                },
+            )
+            self.db.insert_event(session_id=session["session_id"], event_type="expired", source="system")
+            self.db.upsert_candidate_summary(
+                job_id=int(session["job_id"]),
+                candidate_id=int(session["candidate_id"]),
+                candidate_name=session.get("candidate_name"),
+                session_id=session["session_id"],
+                interview_status="failed",
+                technical_score=None,
+                soft_skills_score=None,
+                culture_fit_score=None,
+                total_score=None,
+                score_confidence=None,
+            )
+            raise ValueError("token expired")
+
+        if mark_started and status in {"created", "invited"}:
+            self.db.update_session(
+                session["session_id"],
+                {
+                    "status": "in_progress",
+                    "started_at": session.get("started_at") or utc_now_iso(),
+                    "updated_at": utc_now_iso(),
+                },
+            )
+            self.db.upsert_candidate_summary(
+                job_id=int(session["job_id"]),
+                candidate_id=int(session["candidate_id"]),
+                candidate_name=session.get("candidate_name"),
+                session_id=session["session_id"],
+                interview_status="in_progress",
+                technical_score=None,
+                soft_skills_score=None,
+                culture_fit_score=None,
+                total_score=None,
+                score_confidence=None,
+            )
+            session = self.db.get_session(session["session_id"]) or session
+        return session
+
+    def _build_entry_context(
+        self,
+        *,
+        job_id: int,
+        candidate_id: int,
+        candidate_name: Optional[str],
+        language: Optional[str],
+        assessment_ctx: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        job: Dict[str, Any] = {}
+        get_job = getattr(self.source_catalog, "get_job", None)
+        if callable(get_job):
+            try:
+                loaded = get_job(int(job_id))
+            except Exception:
+                loaded = {}
+            if isinstance(loaded, dict):
+                job = dict(loaded)
+
+        title = str(job.get("title") or "Interview").strip() or "Interview"
+        company = str(job.get("company") or self._company_name_from_profile(job) or self._company_name_from_job(job) or "").strip()
+        language_code = str(language or "").strip().lower() or "en"
+        questions = self._entry_questions(job_id=job_id, assessment_ctx=assessment_ctx)
+        meta = self._entry_meta(job_id=job_id, assessment_ctx=assessment_ctx)
+        process = self._build_entry_process(questions=questions, meta=meta)
+        salary_text = self._salary_text(job)
+
+        return {
+            "candidate": {
+                "id": int(candidate_id),
+                "name": str(candidate_name or "").strip() or None,
+            },
+            "job": {
+                "id": int(job_id),
+                "title": title,
+                "company": company or None,
+                "company_tagline": self._company_tagline(job),
+                "location": str(job.get("location") or "").strip() or None,
+                "seniority": str(job.get("seniority") or "").strip() or None,
+                "salary_text": salary_text,
+                "summary": self._job_summary(job),
+                "highlights": self._job_highlights(job, meta=meta),
+                "skills": self._job_skills(job, meta=meta),
+                "preferred_languages": self._to_str_list(job.get("preferred_languages")),
+            },
+            "interview": {
+                "provider": str(self.provider.name or "").strip() or None,
+                "estimated_minutes": process.get("estimated_minutes"),
+                "steps": process.get("steps") or [],
+                "cta_label": "Start Interview",
+                "support_text": self._support_text(language_code),
+                "privacy_note": self._privacy_note(language_code),
+            },
+        }
+
+    def _entry_questions(self, *, job_id: int, assessment_ctx: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if isinstance(assessment_ctx, dict) and isinstance(assessment_ctx.get("questions"), list):
+            return [item for item in assessment_ctx.get("questions") or [] if isinstance(item, dict)]
+        stored = self.db.get_job_assessment(int(job_id))
+        questions = stored.get("generated_questions_json") if isinstance(stored, dict) else None
+        return [item for item in questions or [] if isinstance(item, dict)]
+
+    def _entry_meta(self, *, job_id: int, assessment_ctx: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        if isinstance(assessment_ctx, dict) and isinstance(assessment_ctx.get("meta"), dict):
+            return dict(assessment_ctx.get("meta") or {})
+        stored = self.db.get_job_assessment(int(job_id))
+        meta = stored.get("meta_json") if isinstance(stored, dict) else None
+        return dict(meta or {}) if isinstance(meta, dict) else {}
+
+    def _build_entry_process(self, *, questions: List[Dict[str, Any]], meta: Dict[str, Any]) -> Dict[str, Any]:
+        category_counts = meta.get("categories") if isinstance(meta.get("categories"), dict) else {}
+        steps: List[Dict[str, Any]] = []
+        for category, label, description in (
+            ("cultural_fit", "Culture And Values", "Expect questions about team fit, ownership, and working style."),
+            ("hard_skills", "Technical Depth", "Role-specific scenarios focused on the stack and problem solving."),
+            ("soft_skills", "Communication", "Clear communication, prioritization, and collaboration signals."),
+        ):
+            count = int(category_counts.get(category) or 0)
+            if count <= 0:
+                continue
+            steps.append(
+                {
+                    "label": label,
+                    "description": description,
+                    "duration_minutes": max(3, count * 2),
+                }
+            )
+        if not steps:
+            steps = [
+                {
+                    "label": "Async Interview",
+                    "description": "A structured async interview focused on fit, technical depth, and communication.",
+                    "duration_minutes": max(12, len(questions) * 2),
+                }
+            ]
+        estimated_from_questions = self._estimate_question_minutes(questions)
+        estimated_minutes = max(sum(int(item.get("duration_minutes") or 0) for item in steps), estimated_from_questions or 0)
+        return {
+            "estimated_minutes": estimated_minutes or 15,
+            "steps": steps[:3],
+        }
+
+    @staticmethod
+    def _estimate_question_minutes(questions: List[Dict[str, Any]]) -> int:
+        total_seconds = 0
+        for question in questions:
+            try:
+                total_seconds += int(question.get("timeToAnswer") or 0)
+            except (TypeError, ValueError):
+                pass
+            try:
+                total_seconds += int(question.get("timeToThink") or 0)
+            except (TypeError, ValueError):
+                pass
+        if total_seconds <= 0:
+            return max(0, len(questions) * 2)
+        return max(1, int(round(total_seconds / 60.0)))
+
+    def _job_summary(self, job: Dict[str, Any]) -> str:
+        jd_text = str(job.get("jd_text") or "").strip()
+        if not jd_text:
+            return "This async interview is the next step in the process."
+        paragraphs = [part.strip() for part in re.split(r"\n\s*\n", jd_text) if part.strip()]
+        if paragraphs:
+            return paragraphs[0][:420].strip()
+        sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", jd_text) if part.strip()]
+        return " ".join(sentences[:2])[:420].strip()
+
+    def _job_highlights(self, job: Dict[str, Any], *, meta: Dict[str, Any]) -> List[str]:
+        highlights = [str(item).strip() for item in (meta.get("jd_highlights") or []) if str(item).strip()]
+        if highlights:
+            return highlights[:5]
+        jd_text = str(job.get("jd_text") or "").strip()
+        bullets = []
+        for line in jd_text.splitlines():
+            normalized = line.strip().lstrip("-*0123456789. ").strip()
+            if normalized and normalized not in bullets:
+                bullets.append(normalized)
+            if len(bullets) >= 5:
+                break
+        return bullets[:5]
+
+    def _job_skills(self, job: Dict[str, Any], *, meta: Dict[str, Any]) -> List[str]:
+        skills: List[str] = []
+        for raw in (
+            self._to_str_list(job.get("must_have_skills")),
+            self._to_str_list(job.get("nice_to_have_skills")),
+            [str(item).strip() for item in (meta.get("skills_detected") or []) if str(item).strip()],
+        ):
+            for item in raw:
+                if item and item not in skills:
+                    skills.append(item)
+        return skills[:10]
+
+    @staticmethod
+    def _to_str_list(value: Any) -> List[str]:
+        if not isinstance(value, list):
+            return []
+        return [str(item).strip() for item in value if str(item).strip()]
+
+    @staticmethod
+    def _salary_text(job: Dict[str, Any]) -> Optional[str]:
+        salary_min = job.get("salary_min")
+        salary_max = job.get("salary_max")
+        currency = str(job.get("salary_currency") or "").strip().upper()
+        symbol = {"USD": "$", "EUR": "EUR ", "GBP": "GBP "}.get(currency, f"{currency} " if currency else "")
+        try:
+            min_value = float(salary_min) if salary_min is not None else None
+        except (TypeError, ValueError):
+            min_value = None
+        try:
+            max_value = float(salary_max) if salary_max is not None else None
+        except (TypeError, ValueError):
+            max_value = None
+        if min_value is None and max_value is None:
+            return None
+        if min_value is not None and max_value is not None:
+            return f"{symbol}{min_value:,.0f} - {symbol}{max_value:,.0f}"
+        if min_value is not None:
+            return f"{symbol}{min_value:,.0f}+"
+        return f"Up to {symbol}{max_value:,.0f}"
+
+    @staticmethod
+    def _company_name_from_profile(job: Dict[str, Any]) -> str:
+        profile = job.get("company_culture_profile") if isinstance(job.get("company_culture_profile"), dict) else {}
+        return str(profile.get("company_name") or "").strip()
+
+    @staticmethod
+    def _company_name_from_job(job: Dict[str, Any]) -> str:
+        return str(job.get("company_name") or job.get("company") or "").strip()
+
+    def _company_tagline(self, job: Dict[str, Any]) -> Optional[str]:
+        parts: List[str] = []
+        seniority = str(job.get("seniority") or "").strip()
+        location = str(job.get("location") or "").strip()
+        languages = self._to_str_list(job.get("preferred_languages"))
+        if seniority:
+            parts.append(seniority.title())
+        if location:
+            parts.append(location)
+        if languages:
+            parts.append("/".join(lang.upper() for lang in languages[:3]))
+        return " • ".join(parts) if parts else None
+
+    @staticmethod
+    def _support_text(language_code: str) -> str:
+        copy = {
+            "ru": "Интервью можно пройти в удобное время. После завершения ответ просто появится в системе Tener.",
+            "es": "Puedes completarlo cuando te convenga. Cuando termines, tu respuesta quedara registrada en Tener.",
+        }
+        return copy.get(language_code, "You can complete it when convenient. Once finished, your interview will be recorded in Tener.")
+
+    @staticmethod
+    def _privacy_note(language_code: str) -> str:
+        copy = {
+            "ru": "Ссылка персональная и привязана к этой заявке.",
+            "es": "Este enlace es personal y esta vinculado a esta candidatura.",
+        }
+        return copy.get(language_code, "This link is personal and tied to this application.")
 
     @staticmethod
     def _parse_iso(value: Optional[str]) -> Optional[datetime]:
