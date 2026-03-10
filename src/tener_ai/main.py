@@ -497,6 +497,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if self._serve_static_directory(prefix="/zalando/", directory=project_root() / "Zalando-prototype", path=parsed.path):
                 return
 
+        if parsed.path == "/liveramp":
+            self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/liveramp/")
+            return
+
+        if parsed.path.startswith("/liveramp/"):
+            if self._serve_static_directory(prefix="/liveramp/", directory=project_root() / "LiveRamp-prototype", path=parsed.path):
+                return
+
         if parsed.path == "/dashboard/emulator":
             dashboard = project_root() / "src" / "tener_ai" / "static" / "emulator_dashboard.html"
             if not dashboard.exists():
@@ -4402,6 +4410,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         }:
             return True
         if normalized == "/zalando" or normalized.startswith("/zalando/"):
+            return True
+        if normalized == "/liveramp" or normalized.startswith("/liveramp/"):
             return True
         if normalized.startswith("/candidate/"):
             return True
