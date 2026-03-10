@@ -1884,14 +1884,22 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if not updated:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
                 return
+            refreshed_job = SERVICES["db"].get_job(job_id)
+            requirements = self._compute_job_requirements(refreshed_job or {"jd_text": jd_text})
+            SERVICES["db"].update_job_requirements(
+                job_id=job_id,
+                must_have_skills=requirements.get("must_have_skills"),
+                nice_to_have_skills=requirements.get("nice_to_have_skills"),
+                questionable_skills=requirements.get("questionable_skills"),
+            )
             SERVICES["db"].log_operation(
                 operation="job.jd.updated",
                 status="ok",
                 entity_type="job",
                 entity_id=str(job_id),
-                details={"length": len(jd_text)},
+                details={"length": len(jd_text), **requirements},
             )
-            self._json_response(HTTPStatus.OK, {"job_id": job_id, "jd_text": jd_text})
+            self._json_response(HTTPStatus.OK, {"job_id": job_id, "jd_text": jd_text, **requirements})
             return
 
         if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/requirements"):
@@ -1903,21 +1911,39 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
                 return
-            must_have_raw = body.get("must_have_skills") or []
-            if not isinstance(must_have_raw, list):
-                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "must_have_skills must be an array"})
+            job = SERVICES["db"].get_job(job_id)
+            if not job:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
                 return
-            nice_to_have_raw = body.get("nice_to_have_skills") or []
-            if not isinstance(nice_to_have_raw, list):
-                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "nice_to_have_skills must be an array"})
-                return
-
-            must_have_skills = self._normalize_text_list(must_have_raw)
-            nice_to_have_skills = self._normalize_text_list(nice_to_have_raw)
+            manual_override = any(
+                key in body for key in ("must_have_skills", "nice_to_have_skills", "questionable_skills")
+            )
+            if manual_override:
+                must_have_raw = body.get("must_have_skills") or []
+                if not isinstance(must_have_raw, list):
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": "must_have_skills must be an array"})
+                    return
+                nice_to_have_raw = body.get("nice_to_have_skills") or []
+                if not isinstance(nice_to_have_raw, list):
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": "nice_to_have_skills must be an array"})
+                    return
+                questionable_raw = body.get("questionable_skills") or []
+                if not isinstance(questionable_raw, list):
+                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": "questionable_skills must be an array"})
+                    return
+                must_have_skills = self._normalize_text_list(must_have_raw)
+                nice_to_have_skills = self._normalize_text_list(nice_to_have_raw)
+                questionable_skills = self._normalize_text_list(questionable_raw)
+            else:
+                requirements = self._compute_job_requirements(job)
+                must_have_skills = requirements.get("must_have_skills") or []
+                nice_to_have_skills = requirements.get("nice_to_have_skills") or []
+                questionable_skills = requirements.get("questionable_skills") or []
             updated = SERVICES["db"].update_job_requirements(
                 job_id=job_id,
                 must_have_skills=must_have_skills,
                 nice_to_have_skills=nice_to_have_skills,
+                questionable_skills=questionable_skills,
             )
             if not updated:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
@@ -1930,6 +1956,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 details={
                     "must_have_skills": must_have_skills,
                     "nice_to_have_skills": nice_to_have_skills,
+                    "questionable_skills": questionable_skills,
+                    "mode": "manual_override" if manual_override else "auto_extract",
                 },
             )
             self._json_response(
@@ -1938,6 +1966,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     "job_id": job_id,
                     "must_have_skills": must_have_skills,
                     "nice_to_have_skills": nice_to_have_skills,
+                    "questionable_skills": questionable_skills,
                 },
             )
             return
@@ -2282,22 +2311,27 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if not isinstance(preferred_languages, list):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "preferred_languages must be an array"})
                 return
-            must_have_raw = body.get("must_have_skills") or []
-            if not isinstance(must_have_raw, list):
-                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "must_have_skills must be an array"})
-                return
-            nice_to_have_raw = body.get("nice_to_have_skills") or []
-            if not isinstance(nice_to_have_raw, list):
-                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "nice_to_have_skills must be an array"})
-                return
+            normalized_languages = [str(x).lower() for x in preferred_languages if str(x).strip()]
+            requirements = self._compute_job_requirements(
+                {
+                    "title": title,
+                    "jd_text": jd_text,
+                    "company": company,
+                    "company_website": company_website,
+                    "location": body.get("location"),
+                    "preferred_languages": normalized_languages,
+                    "seniority": (str(body.get("seniority")).lower() if body.get("seniority") else None),
+                }
+            )
 
             job_id = SERVICES["db"].insert_job(
                 title=title,
                 jd_text=jd_text,
                 location=body.get("location"),
-                preferred_languages=[str(x).lower() for x in preferred_languages if str(x).strip()],
-                must_have_skills=self._normalize_text_list(must_have_raw),
-                nice_to_have_skills=self._normalize_text_list(nice_to_have_raw),
+                preferred_languages=normalized_languages,
+                must_have_skills=requirements.get("must_have_skills"),
+                nice_to_have_skills=requirements.get("nice_to_have_skills"),
+                questionable_skills=requirements.get("questionable_skills"),
                 seniority=(str(body.get("seniority")).lower() if body.get("seniority") else None),
                 company=company,
                 company_website=company_website,
@@ -2331,6 +2365,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 HTTPStatus.CREATED,
                 {
                     "job_id": job_id,
+                    "requirements": requirements,
                     "company_culture_profile": culture_profile,
                     "interview_assessment": interview_assessment,
                 },
@@ -3073,6 +3108,35 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             seen.add(value)
             out.append(value)
         return out
+
+    def _compute_job_requirements(self, job_like: Dict[str, Any]) -> Dict[str, Any]:
+        matching_engine = SERVICES.get("matching_engine")
+        builder = getattr(matching_engine, "build_job_requirements", None)
+        if not callable(builder):
+            return {
+                "must_have_skills": [],
+                "nice_to_have_skills": [],
+                "questionable_skills": [],
+            }
+        try:
+            requirements = builder(job_like)
+        except Exception:
+            return {
+                "must_have_skills": [],
+                "nice_to_have_skills": [],
+                "questionable_skills": [],
+            }
+        if not isinstance(requirements, dict):
+            return {
+                "must_have_skills": [],
+                "nice_to_have_skills": [],
+                "questionable_skills": [],
+            }
+        return {
+            "must_have_skills": self._normalize_text_list(requirements.get("must_have_skills") or []),
+            "nice_to_have_skills": self._normalize_text_list(requirements.get("nice_to_have_skills") or []),
+            "questionable_skills": self._normalize_text_list(requirements.get("questionable_skills") or []),
+        }
 
     def _start_company_culture_profile_pipeline(self, *, job_id: int) -> Dict[str, Any]:
         job = SERVICES["db"].get_job(int(job_id))

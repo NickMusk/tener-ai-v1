@@ -16,6 +16,7 @@ os.environ.setdefault("TENER_DB_PATH", str(Path(gettempdir()) / "tener_job_archi
 from tener_ai import main as api_main
 from tener_ai.db import Database
 from tener_ai.db_dual import DualWriteDatabase
+from tener_ai.matching import MatchingEngine
 
 
 class JobArchivingTests(unittest.TestCase):
@@ -50,6 +51,9 @@ class JobArchivingTests(unittest.TestCase):
         api_main.SERVICES = {
             "db": self.db,
             "read_db": self.db,
+            "matching_engine": MatchingEngine(
+                rules_path=str(api_main.project_root() / "config" / "matching_rules.json")
+            ),
         }
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), api_main.TenerRequestHandler)
         self.base_url = f"http://127.0.0.1:{self.server.server_port}"
@@ -132,10 +136,36 @@ class JobArchivingTests(unittest.TestCase):
         self.assertEqual(status_update, 200)
         self.assertEqual(payload_update.get("must_have_skills"), ["manual testing", "api testing", "regression"])
         self.assertEqual(payload_update.get("nice_to_have_skills"), ["sql", "postman"])
+        self.assertEqual(payload_update.get("questionable_skills"), [])
 
         job = self.db.get_job(self.manual_job_id) or {}
         self.assertEqual(job.get("must_have_skills"), ["manual testing", "api testing", "regression"])
         self.assertEqual(job.get("nice_to_have_skills"), ["sql", "postman"])
+        self.assertEqual(job.get("questionable_skills"), [])
+
+    def test_jobs_api_auto_extracts_requirements_from_jd(self) -> None:
+        status_create, payload_create = self._request(
+            "POST",
+            "/api/jobs",
+            {
+                "title": "Manual QA Engineer",
+                "company": "Tener",
+                "jd_text": (
+                    "About Tener.ai recruiting platform. Requirements: manual testing, api testing, regression testing. "
+                    "Nice to have: ci/cd. We also mention go and recruiting in company copy."
+                ),
+                "location": "Eastern Europe",
+                "preferred_languages": ["en"],
+                "seniority": "middle",
+            },
+        )
+        self.assertEqual(status_create, 201)
+        requirements = payload_create.get("requirements") if isinstance(payload_create.get("requirements"), dict) else {}
+        self.assertIn("manual testing", requirements.get("must_have_skills") or [])
+        self.assertIn("api testing", requirements.get("must_have_skills") or [])
+        self.assertIn("regression testing", requirements.get("must_have_skills") or [])
+        self.assertIn("ci/cd", requirements.get("nice_to_have_skills") or [])
+        self.assertIn("go", requirements.get("questionable_skills") or [])
 
     def test_archive_job_stops_pending_outreach_and_pre_resume_followups(self) -> None:
         candidate_id = self.db.upsert_candidate(

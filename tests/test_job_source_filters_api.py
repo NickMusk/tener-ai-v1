@@ -23,6 +23,17 @@ class _SourceProvider:
 
 
 class _MatchingEngineStub:
+    def build_job_requirements(self, job: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "title": str(job.get("title") or ""),
+            "target_seniority": str(job.get("seniority") or "middle"),
+            "must_have_skills": ["python", "django", "aws"],
+            "nice_to_have_skills": ["docker"],
+            "questionable_skills": ["recruiting"],
+            "location": job.get("location"),
+            "preferred_languages": job.get("preferred_languages") or [],
+        }
+
     def build_core_profile(self, job: Dict[str, Any], max_skills: int = 6) -> Dict[str, Any]:
         return {
             "title": str(job.get("title") or ""),
@@ -106,6 +117,7 @@ class JobSourceFiltersApiTests(unittest.TestCase):
             "skills": ["python", "django", "aws"],
             "profile_language": ["en", "de"],
         })
+        self.assertEqual(filters.get("questionable_skills") or [], ["recruiting"])
         self.assertEqual(filters.get("fallback_queries") or [], [
             "Senior Backend Engineer",
             "Senior Backend Engineer Germany",

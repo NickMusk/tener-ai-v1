@@ -121,6 +121,7 @@ class CandidateProfileService:
                 "seniority": str(match.get("job_seniority") or "").strip() or None,
                 "must_have_skills": match.get("job_must_have_skills") if isinstance(match.get("job_must_have_skills"), list) else [],
                 "nice_to_have_skills": match.get("job_nice_to_have_skills") if isinstance(match.get("job_nice_to_have_skills"), list) else [],
+                "questionable_skills": match.get("job_questionable_skills") if isinstance(match.get("job_questionable_skills"), list) else [],
                 "company_culture_profile": (
                     match.get("job_company_culture_profile")
                     if isinstance(match.get("job_company_culture_profile"), dict)
@@ -604,6 +605,11 @@ class CandidateProfileService:
         if not nice_to_have:
             core_skills = [str(item).strip() for item in (core_profile.get("core_skills") or []) if str(item).strip()]
             nice_to_have = [item for item in core_skills if item.lower() not in required_norm]
+        questionable_skills = [
+            str(item).strip()
+            for item in (job_requirements.get("questionable_skills") or [])
+            if str(item).strip()
+        ]
         missing_nice = [item for item in nice_to_have if item.lower() not in candidate_skills_norm]
         matched_nice = [item for item in nice_to_have if item.lower() in candidate_skills_norm]
         culture_fit = self._build_culture_fit(
@@ -658,6 +664,7 @@ class CandidateProfileService:
                 "matched": matched_nice,
                 "missing": missing_nice,
             },
+            "questionable_skills": questionable_skills,
             "culture_fit": culture_fit,
             "candidate_snapshot": {
                 "skills": candidate_skills,

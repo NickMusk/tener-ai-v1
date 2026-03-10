@@ -54,10 +54,10 @@ class PostgresMirrorWriter:
                     """
                     INSERT INTO jobs (
                         id, title, company, company_website, jd_text, location,
-                        preferred_languages, must_have_skills, nice_to_have_skills,
+                        preferred_languages, must_have_skills, nice_to_have_skills, questionable_skills,
                         seniority, linkedin_routing_mode, archived_at, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT(id) DO UPDATE SET
                         title = EXCLUDED.title,
                         company = EXCLUDED.company,
@@ -67,6 +67,7 @@ class PostgresMirrorWriter:
                         preferred_languages = EXCLUDED.preferred_languages,
                         must_have_skills = EXCLUDED.must_have_skills,
                         nice_to_have_skills = EXCLUDED.nice_to_have_skills,
+                        questionable_skills = EXCLUDED.questionable_skills,
                         seniority = EXCLUDED.seniority,
                         linkedin_routing_mode = EXCLUDED.linkedin_routing_mode,
                         archived_at = EXCLUDED.archived_at
@@ -81,6 +82,7 @@ class PostgresMirrorWriter:
                         self._json(row.get("preferred_languages") or []),
                         self._json(row.get("must_have_skills") or []),
                         self._json(row.get("nice_to_have_skills") or []),
+                        self._json(row.get("questionable_skills") or []),
                         row.get("seniority"),
                         row.get("linkedin_routing_mode") or "auto",
                         (str(row.get("archived_at") or "").strip() or None),

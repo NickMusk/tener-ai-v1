@@ -86,6 +86,7 @@ class SourcingAgent:
             "preferred_languages": spec.get("preferred_languages") or [],
             "jd_excerpt": spec.get("jd_excerpt"),
             "extracted_keywords": spec.get("keywords") or [],
+            "questionable_skills": spec.get("questionable_skills") or [],
             "primary_query": spec.get("title_query"),
             "filters": spec.get("filters") or {},
             "fallback_queries": spec.get("fallback_queries") or [],
@@ -102,7 +103,13 @@ class SourcingAgent:
             for item in (job.get("preferred_languages") or [])
             if str(item).strip()
         ]
-        keywords = self._core_skills(job)
+        requirements = self._job_requirements(job)
+        keywords = [str(item).strip().lower() for item in (requirements.get("must_have_skills") or []) if str(item).strip()]
+        questionable_skills = [
+            str(item).strip().lower()
+            for item in (requirements.get("questionable_skills") or [])
+            if str(item).strip()
+        ]
         filters: Dict[str, Any] = {
             "location": location,
             "skills": keywords[:3],
@@ -114,6 +121,7 @@ class SourcingAgent:
             "seniority": seniority,
             "preferred_languages": preferred_languages,
             "keywords": keywords,
+            "questionable_skills": questionable_skills,
             "jd_excerpt": jd_text[:280] or None,
             "filters": filters,
             "fallback_queries": self._build_fallback_queries(
@@ -181,6 +189,19 @@ class SourcingAgent:
     def _build_queries(self, job: Dict[str, Any]) -> List[str]:
         spec = self.build_search_spec(job)
         return list(spec.get("fallback_queries") or [])
+
+    def _job_requirements(self, job: Dict[str, Any]) -> Dict[str, Any]:
+        if self.matching_engine is not None and hasattr(self.matching_engine, "build_job_requirements"):
+            try:
+                requirements = self.matching_engine.build_job_requirements(job)
+            except Exception:
+                requirements = {}
+            if isinstance(requirements, dict):
+                return requirements
+        return {
+            "must_have_skills": self._core_skills(job),
+            "questionable_skills": [],
+        }
 
     @staticmethod
     def _extend_unique_profiles(

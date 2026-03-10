@@ -7,6 +7,40 @@ from pathlib import Path
 from typing import Any, Dict, List, Set
 
 
+QA_MUST_HAVE_SKILLS = [
+    "manual testing",
+    "api testing",
+    "regression testing",
+    "bug reporting",
+    "bug triage",
+    "test case design",
+    "qa",
+    "quality assurance",
+    "jira",
+]
+
+QA_NICE_TO_HAVE_SKILLS = [
+    "sql",
+    "postman",
+    "selenium",
+    "playwright",
+    "cypress",
+    "automation testing",
+    "ci/cd",
+]
+
+QA_QUESTIONABLE_SKILLS = [
+    "go",
+    "java",
+    "javascript",
+    "typescript",
+    "node",
+    "react",
+    "llm",
+    "recruiting",
+]
+
+
 @dataclass
 class MatchResult:
     score: float
@@ -52,6 +86,7 @@ class MatchingEngine:
 
         required_skills = requirements.get("must_have_skills") or []
         nice_to_have_skills = requirements.get("nice_to_have_skills") or []
+        questionable_skills = requirements.get("questionable_skills") or []
 
         if not required_skills:
             # If no skills are detected in JD, the role is broad; do not penalize heavily.
@@ -92,6 +127,7 @@ class MatchingEngine:
             "core_profile": core_profile,
             "required_skills": list(required_skills),
             "nice_to_have_skills": list(nice_to_have_skills),
+            "questionable_skills": list(questionable_skills),
             "matched_skills": matched_skills,
             "matched_nice_to_have_skills": matched_nice_to_have,
             "effective_required_skills_count": min(len(required_skills), 6) if required_skills else 0,
@@ -136,6 +172,8 @@ class MatchingEngine:
 
         explicit_must_have = self._normalize_skill_list(job.get("must_have_skills"))
         explicit_nice_to_have = self._normalize_skill_list(job.get("nice_to_have_skills"))
+        explicit_questionable = self._normalize_skill_list(job.get("questionable_skills"))
+        role_family = self._infer_role_family(title=title, jd_text=jd_text)
 
         if explicit_must_have:
             must_have_skills = explicit_must_have[:max_must_have]
@@ -161,11 +199,23 @@ class MatchingEngine:
             must_set = {item.lower() for item in must_have_skills}
             nice_to_have_skills = [item for item in fallback_keywords if item.lower() not in must_set][:max_nice_to_have]
 
+        if explicit_questionable:
+            questionable_skills = explicit_questionable
+        else:
+            questionable_skills = self._extract_questionable_skills(
+                jd_text=jd_text,
+                title=title,
+                must_have_skills=must_have_skills,
+                nice_to_have_skills=nice_to_have_skills,
+                role_family=role_family,
+            )
+
         return {
             "title": title,
             "target_seniority": target_seniority,
             "must_have_skills": must_have_skills,
             "nice_to_have_skills": nice_to_have_skills,
+            "questionable_skills": questionable_skills,
             "location": job.get("location"),
             "preferred_languages": job.get("preferred_languages") or [],
         }
@@ -177,6 +227,7 @@ class MatchingEngine:
             "target_seniority": requirements.get("target_seniority"),
             "core_skills": requirements.get("must_have_skills") or [],
             "nice_to_have_skills": requirements.get("nice_to_have_skills") or [],
+            "questionable_skills": requirements.get("questionable_skills") or [],
             "location": requirements.get("location"),
             "preferred_languages": requirements.get("preferred_languages") or [],
         }
@@ -250,61 +301,53 @@ class MatchingEngine:
         return f"key requirements from {title}"
 
     def _extract_required_skills(self, jd_text: str, title: str = "") -> List[str]:
-        dictionary = [s.lower() for s in self.rules.get("skill_dictionary", [])]
-        dictionary.extend(
-            [
-                "manual testing",
-                "api testing",
-                "regression testing",
-                "bug reporting",
-                "bug triage",
-                "postman",
-                "selenium",
-                "playwright",
-                "cypress",
-                "sql",
-                "jira",
-                "test case design",
-            ]
-        )
+        role_family = self._infer_role_family(title=title, jd_text=jd_text)
+        dictionary = self._skill_dictionary_for_role(role_family)
         requirement_text = self._extract_requirement_scope(jd_text=jd_text, title=title)
-        seen: Set[str] = set()
-        found: List[str] = []
-        for skill in dictionary:
-            if skill in requirement_text and skill not in seen:
-                seen.add(skill)
-                found.append(skill)
+        found = self._extract_known_skills(requirement_text, dictionary)
+        if role_family == "qa":
+            ordered = [skill for skill in QA_MUST_HAVE_SKILLS if skill in found]
+            return ordered
         return found
 
     def _extract_nice_to_have_skills(self, jd_text: str, title: str = "", max_items: int = 12) -> List[str]:
-        dictionary = [s.lower() for s in self.rules.get("skill_dictionary", [])]
-        dictionary.extend(
-            [
-                "manual testing",
-                "api testing",
-                "regression testing",
-                "bug reporting",
-                "postman",
-                "selenium",
-                "playwright",
-                "cypress",
-                "sql",
-                "jira",
-                "test case design",
-            ]
-        )
+        role_family = self._infer_role_family(title=title, jd_text=jd_text)
+        dictionary = self._skill_dictionary_for_role(role_family)
         nice_scope = self._extract_nice_to_have_scope(jd_text=jd_text, title=title)
-        found: List[str] = []
-        seen: Set[str] = set()
-        for skill in dictionary:
-            if skill in nice_scope and skill not in seen:
-                seen.add(skill)
-                found.append(skill)
-            if len(found) >= max_items:
-                break
+        found = self._extract_known_skills(nice_scope, dictionary)
+        if role_family == "qa":
+            ordered = [skill for skill in QA_NICE_TO_HAVE_SKILLS if skill in found]
+            if ordered:
+                return ordered[:max_items]
+        if len(found) >= max_items:
+            return found[:max_items]
         if found:
-            return found
+            return found[:max_items]
         return self._extract_jd_keywords(nice_scope, max_items=max_items)
+
+    def _extract_questionable_skills(
+        self,
+        *,
+        jd_text: str,
+        title: str,
+        must_have_skills: List[str],
+        nice_to_have_skills: List[str],
+        role_family: str | None,
+        max_items: int = 8,
+    ) -> List[str]:
+        if role_family != "qa":
+            return []
+        detected = self._extract_known_skills(
+            jd_text,
+            self._skill_dictionary_for_role(role_family),
+        )
+        allowed = {item.lower() for item in [*must_have_skills, *nice_to_have_skills]}
+        questionable = [
+            skill
+            for skill in QA_QUESTIONABLE_SKILLS
+            if skill in detected and skill not in allowed
+        ]
+        return questionable[:max_items]
 
     @staticmethod
     def _normalize_skill_list(values: Any) -> List[str]:
@@ -317,6 +360,58 @@ class MatchingEngine:
             seen.add(value)
             out.append(value)
         return out
+
+    @staticmethod
+    def _infer_role_family(title: str, jd_text: str) -> str | None:
+        haystack = f"{str(title or '').lower()} {str(jd_text or '').lower()}"
+        if any(token in haystack for token in ("manual qa", "qa engineer", "quality assurance", "tester", "testing")):
+            return "qa"
+        return None
+
+    def _skill_dictionary_for_role(self, role_family: str | None) -> List[str]:
+        dictionary = [s.lower() for s in self.rules.get("skill_dictionary", [])]
+        dictionary.extend(QA_MUST_HAVE_SKILLS)
+        dictionary.extend(QA_NICE_TO_HAVE_SKILLS)
+        dictionary.extend(QA_QUESTIONABLE_SKILLS)
+        seen: Set[str] = set()
+        ordered: List[str] = []
+        for skill in dictionary:
+            normalized = str(skill or "").strip().lower()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            ordered.append(normalized)
+        if role_family == "qa":
+            prioritized = QA_MUST_HAVE_SKILLS + QA_NICE_TO_HAVE_SKILLS + QA_QUESTIONABLE_SKILLS
+            seen.clear()
+            out: List[str] = []
+            for skill in prioritized + ordered:
+                normalized = str(skill or "").strip().lower()
+                if not normalized or normalized in seen:
+                    continue
+                seen.add(normalized)
+                out.append(normalized)
+            return out
+        return ordered
+
+    @staticmethod
+    def _contains_skill(text: str, skill: str) -> bool:
+        escaped = re.escape(str(skill or "").lower())
+        if not escaped:
+            return False
+        pattern = re.compile(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])")
+        return bool(pattern.search(str(text or "").lower()))
+
+    def _extract_known_skills(self, text: str, dictionary: List[str]) -> List[str]:
+        found: List[str] = []
+        seen: Set[str] = set()
+        for skill in dictionary:
+            if skill in seen:
+                continue
+            if self._contains_skill(text, skill):
+                seen.add(skill)
+                found.append(skill)
+        return found
 
     def _infer_seniority(self, jd_text: str) -> str | None:
         tokens = {

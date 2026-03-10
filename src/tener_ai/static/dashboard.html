@@ -1141,6 +1141,10 @@
           <div id="source-filters-summary" class="source-filters-summary">Select a job to inspect sourcing filters.</div>
           <div class="source-filters-section-title">Applied Filters</div>
           <div id="source-filter-chips" class="source-filter-chips"></div>
+          <div class="source-filters-section-title">Questionable Skills</div>
+          <div id="source-questionable-skills" class="source-filter-chips">
+            <span class="muted">No questionable skills detected.</span>
+          </div>
           <div class="source-filters-section-title">Primary Query</div>
           <div id="source-primary-query" class="source-filters-summary">-</div>
           <div class="source-filters-section-title">Fallback Queries</div>
@@ -1212,17 +1216,8 @@
             <label class="muted">JD Description (agent context)</label>
             <textarea id="agent-jd-text" placeholder="Paste job description here..."></textarea>
           </div>
-          <div>
-            <label class="muted">Must-have Skills (comma)</label>
-            <textarea id="agent-must-have-skills" placeholder="manual testing, api testing, regression"></textarea>
-          </div>
-          <div>
-            <label class="muted">Nice-to-have Skills (comma)</label>
-            <textarea id="agent-nice-to-have-skills" placeholder="sql, postman, jira"></textarea>
-          </div>
           <div class="full button-row" style="justify-content:flex-start;">
             <button id="agent-save-jd-btn">Save JD</button>
-            <button id="agent-save-requirements-btn">Save Requirements</button>
             <button id="agent-refresh-accounts-btn">Refresh Accounts</button>
           </div>
         </div>
@@ -1556,14 +1551,6 @@
           <input id="job-languages" placeholder="en, ru">
         </div>
         <div class="full">
-          <label class="muted">Must-have Skills (comma)</label>
-          <textarea id="job-must-have-skills" placeholder="manual testing, api testing, regression"></textarea>
-        </div>
-        <div class="full">
-          <label class="muted">Nice-to-have Skills (comma)</label>
-          <textarea id="job-nice-to-have-skills" placeholder="sql, postman, jira"></textarea>
-        </div>
-        <div class="full">
           <label class="muted">JD Text</label>
           <textarea id="job-jd" placeholder="Need Python, Django, AWS, Docker, PostgreSQL..."></textarea>
         </div>
@@ -1653,8 +1640,6 @@
       location: "Germany",
       seniority: "senior",
       preferred_languages: "en",
-      must_have_skills: "python, django, aws, docker",
-      nice_to_have_skills: "postgresql, terraform, kubernetes",
       jd_text: "Need Python, Django, AWS, Docker, PostgreSQL for backend microservices."
     };
 
@@ -2198,9 +2183,10 @@
       const toggleSummaryEl = $("source-filters-toggle-summary");
       const summaryEl = $("source-filters-summary");
       const chipsEl = $("source-filter-chips");
+      const questionableEl = $("source-questionable-skills");
       const primaryQueryEl = $("source-primary-query");
       const queriesEl = $("source-filters-queries");
-      if (!summaryEl || !chipsEl || !queriesEl || !toggleSummaryEl || !primaryQueryEl) return;
+      if (!summaryEl || !chipsEl || !queriesEl || !toggleSummaryEl || !primaryQueryEl || !questionableEl) return;
       const selected = selectedJobId();
       const preview = state.sourceFiltersPreview || {};
       const filters = preview.filters || {};
@@ -2208,6 +2194,7 @@
         toggleSummaryEl.textContent = "Select a job to inspect sourcing filters.";
         summaryEl.textContent = "Select a job to inspect sourcing filters.";
         chipsEl.innerHTML = "";
+        questionableEl.innerHTML = '<span class="muted">No questionable skills detected.</span>';
         primaryQueryEl.textContent = "-";
         queriesEl.innerHTML = '<li class="muted">No generated queries yet.</li>';
         return;
@@ -2216,6 +2203,7 @@
         toggleSummaryEl.textContent = "Source filters unavailable";
         summaryEl.textContent = String(preview.error || "Failed to load source filters");
         chipsEl.innerHTML = "";
+        questionableEl.innerHTML = '<span class="muted">No questionable skills detected.</span>';
         primaryQueryEl.textContent = "-";
         queriesEl.innerHTML = '<li class="muted">Source filters unavailable.</li>';
         return;
@@ -2230,6 +2218,7 @@
       const seniority = String(filters.seniority || "").trim();
       const appliedSkills = Array.isArray(appliedFilters.skills) ? appliedFilters.skills : [];
       const appliedLanguages = Array.isArray(appliedFilters.profile_language) ? appliedFilters.profile_language : [];
+      const questionableSkills = Array.isArray(filters.questionable_skills) ? filters.questionable_skills : [];
       const compactParts = [
         primaryQuery ? `primary: ${primaryQuery}` : "",
         `${Object.values(appliedFilters).filter((value) => Array.isArray(value) ? value.length : !!value).length} filter${Object.values(appliedFilters).filter((value) => Array.isArray(value) ? value.length : !!value).length === 1 ? "" : "s"}`,
@@ -2261,6 +2250,9 @@
         chips.push(`<span class="source-filter-chip">lang: ${escapeHtml(String(item))}</span>`);
       });
       chipsEl.innerHTML = chips.join("") || '<span class="muted">No applied filters</span>';
+      questionableEl.innerHTML = questionableSkills.length
+        ? questionableSkills.map((item) => `<span class="source-filter-chip">${escapeHtml(String(item || ""))}</span>`).join("")
+        : '<span class="muted">No questionable skills detected.</span>';
       queriesEl.innerHTML = queries.length
         ? queries.map((query) => `<li>${escapeHtml(String(query || ""))}</li>`).join("")
         : '<li class="muted">No fallback queries.</li>';
@@ -2433,15 +2425,11 @@
       if (allJobs) {
         $("agent-job-title").textContent = "all jobs";
         $("agent-jd-text").value = "";
-        if ($("agent-must-have-skills")) $("agent-must-have-skills").value = "";
-        if ($("agent-nice-to-have-skills")) $("agent-nice-to-have-skills").value = "";
         return;
       }
       if (!job) {
         $("agent-job-title").textContent = "no job selected";
         $("agent-jd-text").value = "";
-        if ($("agent-must-have-skills")) $("agent-must-have-skills").value = "";
-        if ($("agent-nice-to-have-skills")) $("agent-nice-to-have-skills").value = "";
         return;
       }
       const company = String(job.company || "").trim();
@@ -2449,8 +2437,6 @@
         ? `#${job.id} ${job.title} (${company})`
         : `#${job.id} ${job.title}`;
       $("agent-jd-text").value = job.jd_text || "";
-      if ($("agent-must-have-skills")) $("agent-must-have-skills").value = Array.isArray(job.must_have_skills) ? job.must_have_skills.join(", ") : "";
-      if ($("agent-nice-to-have-skills")) $("agent-nice-to-have-skills").value = Array.isArray(job.nice_to_have_skills) ? job.nice_to_have_skills.join(", ") : "";
     }
 
     function syncJobSelectors() {
@@ -2535,8 +2521,6 @@
       $("job-location").value = DEFAULT_JOB_TEMPLATE.location;
       $("job-seniority").value = DEFAULT_JOB_TEMPLATE.seniority;
       $("job-languages").value = DEFAULT_JOB_TEMPLATE.preferred_languages;
-      $("job-must-have-skills").value = DEFAULT_JOB_TEMPLATE.must_have_skills;
-      $("job-nice-to-have-skills").value = DEFAULT_JOB_TEMPLATE.nice_to_have_skills;
       $("job-jd").value = DEFAULT_JOB_TEMPLATE.jd_text;
     }
 
@@ -2783,14 +2767,6 @@
         preferred_languages: $("job-languages").value
           .split(',')
           .map(x => x.trim().toLowerCase())
-          .filter(Boolean),
-        must_have_skills: $("job-must-have-skills").value
-          .split(',')
-          .map(x => x.trim().toLowerCase())
-          .filter(Boolean),
-        nice_to_have_skills: $("job-nice-to-have-skills").value
-          .split(',')
-          .map(x => x.trim().toLowerCase())
           .filter(Boolean)
       };
 
@@ -2814,31 +2790,6 @@
       snapshot('agent.jd_saved', out);
       await loadJobs();
       await onSelectedJobChanged(jobId);
-    }
-
-    async function saveAgentRequirements() {
-      const jobId = selectedAgentJobId();
-      if (!jobId) return alert('Select a specific job (not All jobs)');
-      const mustHaveSkills = $("agent-must-have-skills").value
-        .split(',')
-        .map(x => x.trim().toLowerCase())
-        .filter(Boolean);
-      const niceToHaveSkills = $("agent-nice-to-have-skills").value
-        .split(',')
-        .map(x => x.trim().toLowerCase())
-        .filter(Boolean);
-      const out = await api(`/api/jobs/${jobId}/requirements`, {
-        method: 'POST',
-        body: JSON.stringify({
-          must_have_skills: mustHaveSkills,
-          nice_to_have_skills: niceToHaveSkills,
-        })
-      });
-      snapshot('agent.requirements_saved', out);
-      await loadJobs();
-      await onSelectedJobChanged(jobId);
-      await onSelectedAgentJobChanged(jobId);
-      await refreshSourceFilters(jobId);
     }
 
     function normalizeLinkedinRoutingMode(value) {
@@ -4068,7 +4019,6 @@
         refreshCandidates();
       });
       $("agent-save-jd-btn").addEventListener('click', () => saveAgentJd().catch(e => alert(e.message)));
-      $("agent-save-requirements-btn").addEventListener('click', () => saveAgentRequirements().catch(e => alert(e.message)));
       $("agent-refresh-accounts-btn").addEventListener('click', () => refreshAgentAccounts().catch(e => alert(e.message)));
       $("casey-health-refresh-btn").addEventListener('click', () => refreshOutreachOps().catch(e => alert(e.message)));
       $("ops-refresh-btn").addEventListener('click', () => refreshOutreachOps().catch(e => alert(e.message)));

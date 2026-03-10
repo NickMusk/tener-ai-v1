@@ -45,6 +45,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
         company_website: Optional[str] = None,
         must_have_skills: Optional[List[str]] = None,
         nice_to_have_skills: Optional[List[str]] = None,
+        questionable_skills: Optional[List[str]] = None,
         linkedin_routing_mode: str = "auto",
     ) -> int:
         routing_mode = self._normalize_linkedin_routing_mode(linkedin_routing_mode)
@@ -54,10 +55,10 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                     """
                     INSERT INTO jobs (
                         title, company, company_website, jd_text, location,
-                        preferred_languages, must_have_skills, nice_to_have_skills,
+                        preferred_languages, must_have_skills, nice_to_have_skills, questionable_skills,
                         seniority, linkedin_routing_mode, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -69,6 +70,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                         self._json(preferred_languages or []),
                         self._json(Database._normalize_skill_list(must_have_skills)),
                         self._json(Database._normalize_skill_list(nice_to_have_skills)),
+                        self._json(Database._normalize_skill_list(questionable_skills)),
                         seniority,
                         routing_mode,
                         utc_now_iso(),
@@ -96,6 +98,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
         job_id: int,
         must_have_skills: Optional[List[str]],
         nice_to_have_skills: Optional[List[str]],
+        questionable_skills: Optional[List[str]] = None,
     ) -> bool:
         with self.transaction() as conn:
             with conn.cursor() as cur:
@@ -103,12 +106,14 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                     """
                     UPDATE jobs
                     SET must_have_skills = %s,
-                        nice_to_have_skills = %s
+                        nice_to_have_skills = %s,
+                        questionable_skills = %s
                     WHERE id = %s
                     """,
                     (
                         self._json(Database._normalize_skill_list(must_have_skills)),
                         self._json(Database._normalize_skill_list(nice_to_have_skills)),
+                        self._json(Database._normalize_skill_list(questionable_skills)),
                         int(job_id),
                     ),
                 )

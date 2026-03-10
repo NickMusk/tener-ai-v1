@@ -136,6 +136,28 @@ class MatchingEngineTests(unittest.TestCase):
         self.assertNotIn("recruiting", requirements["must_have_skills"])
         self.assertNotIn("go", requirements["must_have_skills"])
         self.assertIn("ci/cd", requirements["nice_to_have_skills"])
+        self.assertIn("go", requirements["questionable_skills"])
+        self.assertIn("recruiting", requirements["questionable_skills"])
+
+    def test_short_skill_names_do_not_match_inside_unrelated_words(self) -> None:
+        job = {
+            "title": "Manual QA Engineer",
+            "jd_text": """
+            About our growth and good engineering discipline.
+            Requirements:
+            - manual testing
+            - api testing
+            Nice to have:
+            - ci/cd
+            """,
+            "location": "Remote",
+            "preferred_languages": ["en"],
+            "seniority": "middle",
+        }
+
+        requirements = self.engine.build_job_requirements(job)
+        self.assertNotIn("go", requirements["must_have_skills"])
+        self.assertNotIn("go", requirements["questionable_skills"])
 
     def test_middle_roles_penalize_overqualified_candidates(self) -> None:
         job = {

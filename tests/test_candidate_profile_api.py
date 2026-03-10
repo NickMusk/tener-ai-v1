@@ -374,6 +374,7 @@ class CandidateProfileApiTests(unittest.TestCase):
             seniority="middle",
             must_have_skills=["manual testing", "api testing", "regression testing"],
             nice_to_have_skills=["sql", "postman"],
+            questionable_skills=["go", "recruiting"],
         )
         candidate_id = self.db.upsert_candidate(
             {
@@ -412,6 +413,7 @@ class CandidateProfileApiTests(unittest.TestCase):
         )
         self.assertNotIn("go", must_have.get("required") or [])
         self.assertNotIn("recruiting", must_have.get("required") or [])
+        self.assertEqual(fit_breakdown.get("questionable_skills") or [], ["go", "recruiting"])
 
 
 if __name__ == "__main__":

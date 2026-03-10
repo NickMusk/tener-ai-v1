@@ -50,6 +50,7 @@ class Database:
             preferred_languages TEXT,
             must_have_skills TEXT,
             nice_to_have_skills TEXT,
+            questionable_skills TEXT,
             seniority TEXT,
             linkedin_routing_mode TEXT NOT NULL DEFAULT 'auto',
             archived_at TEXT,
@@ -423,6 +424,7 @@ class Database:
         company_website: Optional[str] = None,
         must_have_skills: Optional[List[str]] = None,
         nice_to_have_skills: Optional[List[str]] = None,
+        questionable_skills: Optional[List[str]] = None,
         linkedin_routing_mode: str = "auto",
     ) -> int:
         routing_mode = self._normalize_linkedin_routing_mode(linkedin_routing_mode)
@@ -431,10 +433,10 @@ class Database:
                 """
                 INSERT INTO jobs (
                     title, company, company_website, jd_text, location,
-                    preferred_languages, must_have_skills, nice_to_have_skills,
+                    preferred_languages, must_have_skills, nice_to_have_skills, questionable_skills,
                     seniority, linkedin_routing_mode, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     title,
@@ -445,6 +447,7 @@ class Database:
                     json.dumps(preferred_languages),
                     json.dumps(self._normalize_skill_list(must_have_skills)),
                     json.dumps(self._normalize_skill_list(nice_to_have_skills)),
+                    json.dumps(self._normalize_skill_list(questionable_skills)),
                     seniority,
                     routing_mode,
                     utc_now_iso(),
@@ -486,17 +489,19 @@ class Database:
         job_id: int,
         must_have_skills: Optional[List[str]],
         nice_to_have_skills: Optional[List[str]],
+        questionable_skills: Optional[List[str]] = None,
     ) -> bool:
         with self.transaction() as conn:
             cur = conn.execute(
                 """
                 UPDATE jobs
-                SET must_have_skills = ?, nice_to_have_skills = ?
+                SET must_have_skills = ?, nice_to_have_skills = ?, questionable_skills = ?
                 WHERE id = ?
                 """,
                 (
                     json.dumps(self._normalize_skill_list(must_have_skills)),
                     json.dumps(self._normalize_skill_list(nice_to_have_skills)),
+                    json.dumps(self._normalize_skill_list(questionable_skills)),
                     int(job_id),
                 ),
             )
@@ -1211,6 +1216,7 @@ class Database:
             j.seniority AS job_seniority,
             j.must_have_skills AS job_must_have_skills,
             j.nice_to_have_skills AS job_nice_to_have_skills,
+            j.questionable_skills AS job_questionable_skills,
             cp.profile_json AS job_company_culture_profile,
             conv.id AS conversation_id,
             conv.status AS conversation_status,
@@ -3573,6 +3579,9 @@ class Database:
         if "nice_to_have_skills" not in job_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN nice_to_have_skills TEXT")
+        if "questionable_skills" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN questionable_skills TEXT")
         if "linkedin_routing_mode" not in job_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN linkedin_routing_mode TEXT")
@@ -3861,8 +3870,10 @@ class Database:
             "preferred_languages",
             "must_have_skills",
             "nice_to_have_skills",
+            "questionable_skills",
             "job_must_have_skills",
             "job_nice_to_have_skills",
+            "job_questionable_skills",
             "languages",
             "skills",
             "verification_notes",
