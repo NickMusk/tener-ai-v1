@@ -5227,7 +5227,7 @@ class WorkflowService:
         daily_connect_sent = int((daily or {}).get("connect_sent") or 0)
         weekly_connect_sent = int((weekly or {}).get("connect_sent") or 0)
         weekly_cap = self._policy_weekly_connect_cap()
-        allowed_today = self._policy_allowed_connects_today(account)
+        allowed_today = effective_daily_connect_limit(account, self.linkedin_outreach_policy)
         return max(0, min(max(0, weekly_cap - weekly_connect_sent), max(0, allowed_today - daily_connect_sent)))
 
     def _can_send_connect_request(self, account: Dict[str, Any]) -> bool:

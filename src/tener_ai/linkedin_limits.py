@@ -99,39 +99,7 @@ def policy_allowed_connects_today(
     *,
     now: datetime | None = None,
 ) -> int:
-    now_utc = now or datetime.now(timezone.utc)
     weekly_cap = policy_weekly_connect_cap(policy)
-    connected_at = _parse_iso_datetime(str(account.get("connected_at") or ""))
-    created_at = _parse_iso_datetime(str(account.get("created_at") or ""))
-    anchor = connected_at or created_at or now_utc
-    age_days = max(1, int((now_utc - anchor).days) + 1)
-
-    warmup = policy.get("warmup") if isinstance(policy, Mapping) and isinstance(policy.get("warmup"), dict) else {}
-    invite_ramp = warmup.get("invite_ramp") if isinstance(warmup.get("invite_ramp"), list) else []
-    early_max = 3
-    increment_max = 2
-    if invite_ramp:
-        first = invite_ramp[0] if isinstance(invite_ramp[0], dict) else {}
-        first_range = first.get("invites_per_day") if isinstance(first.get("invites_per_day"), dict) else {}
-        try:
-            early_max = max(1, int(first_range.get("max")))
-        except (TypeError, ValueError):
-            early_max = 3
-        if len(invite_ramp) > 1 and isinstance(invite_ramp[1], dict):
-            second = invite_ramp[1]
-            inc = second.get("daily_increment") if isinstance(second.get("daily_increment"), dict) else {}
-            try:
-                increment_max = max(1, int(inc.get("max")))
-            except (TypeError, ValueError):
-                increment_max = 2
-
-    if age_days <= 2:
-        return 0
-    if age_days <= 7:
-        return early_max
-    if age_days <= 21:
-        value = early_max + ((age_days - 7) * increment_max)
-        return max(1, min(value, weekly_cap))
     return max(1, min(weekly_cap // 7, weekly_cap))
 
 

@@ -134,7 +134,10 @@ class LinkedInAccountLimitsTests(unittest.TestCase):
                 new_threads_delta=4,
             )
 
-            selected, err = workflow._select_linkedin_account_for_new_thread(job_id=job_id)
+            selected, err = workflow._select_linkedin_account_for_new_thread(
+                job_id=job_id,
+                planned_action_kind="message",
+            )
             self.assertIsNone(err)
             self.assertIsNotNone(selected)
             self.assertEqual(int(selected["id"]), account_2)
@@ -170,6 +173,21 @@ class LinkedInAccountLimitsTests(unittest.TestCase):
             )
             account = db.get_linkedin_account(account_id)
             self.assertFalse(workflow._can_send_connect_request(account))
+
+    def test_freshly_connected_account_gets_full_policy_connect_limit_without_warmup(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "linkedin_limits_no_warmup.sqlite3"))
+            db.init_schema()
+            workflow = _build_workflow(db)
+            account_id = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-connect-limit-fresh",
+                status="connected",
+                connected_at="2026-03-09T14:19:36+00:00",
+            )
+            account = db.get_linkedin_account(account_id)
+            self.assertEqual(effective_daily_connect_limit(account, workflow.linkedin_outreach_policy), 14)
+            self.assertTrue(workflow._can_send_connect_request(account))
 
 
 if __name__ == "__main__":
