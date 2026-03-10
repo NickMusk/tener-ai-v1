@@ -10,12 +10,12 @@ from tener_ai.matching import MatchingEngine
 
 
 class _DuplicateHeavyProvider:
-    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def search_profiles(self, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 1), 100))
-        shared_count = min(25, safe_limit)
-        out: List[Dict[str, Any]] = []
-        for idx in range(shared_count):
-            out.append(
+        slug = re.sub(r"[^a-z0-9]+", "-", query.lower()).strip("-") or "q"
+        full: List[Dict[str, Any]] = []
+        for idx in range(25):
+            full.append(
                 {
                     "linkedin_id": f"shared-{idx}",
                     "full_name": f"Shared Candidate {idx}",
@@ -28,22 +28,22 @@ class _DuplicateHeavyProvider:
                 }
             )
 
-        if safe_limit > 25:
-            slug = re.sub(r"[^a-z0-9]+", "-", query.lower()).strip("-") or "q"
-            for idx in range(safe_limit - 25):
-                out.append(
-                    {
-                        "linkedin_id": f"{slug}-extra-{idx}",
-                        "full_name": f"{slug} Extra {idx}",
-                        "headline": "Senior Backend Engineer",
-                        "location": "Remote",
-                        "languages": ["en"],
-                        "skills": ["python", "go"],
-                        "years_experience": 6,
-                        "raw": {"query": query},
-                    }
-                )
-        return out
+        for idx in range(175):
+            full.append(
+                {
+                    "linkedin_id": f"{slug}-extra-{idx}",
+                    "full_name": f"{slug} Extra {idx}",
+                    "headline": "Senior Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python", "go"],
+                    "years_experience": 6,
+                    "raw": {"query": query},
+                }
+            )
+
+        safe_offset = max(0, int(offset or 0))
+        return full[safe_offset : safe_offset + safe_limit]
 
     def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
         return dict(profile)
@@ -56,7 +56,7 @@ class _FlakyProvider:
     def __init__(self) -> None:
         self.calls = 0
 
-    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def search_profiles(self, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         self.calls += 1
         if self.calls == 1:
             raise RuntimeError("transient unipile error")
@@ -81,7 +81,7 @@ class _FlakyProvider:
 
 
 class _AlwaysFailProvider:
-    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def search_profiles(self, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         raise RuntimeError("provider unavailable")
 
     def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -103,8 +103,8 @@ class _MatchingEngineStub:
 
 
 class _WideStructuredProvider:
-    def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
-        return [
+    def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+        rows = [
             {
                 "linkedin_id": "ee-mid-1",
                 "full_name": "EE Mid One",
@@ -146,8 +146,11 @@ class _WideStructuredProvider:
                 "raw": {"stage": spec.get("stage_key")},
             },
         ]
+        safe_limit = max(1, min(int(limit or 1), 100))
+        safe_offset = max(0, int(offset or 0))
+        return rows[safe_offset : safe_offset + safe_limit]
 
-    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def search_profiles(self, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         return []
 
     def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -243,14 +246,14 @@ class SourcingAgentLimitTests(unittest.TestCase):
 
     def test_find_candidates_uses_expanded_fallback_queries_to_reach_target(self) -> None:
         class _KeywordWindowProvider:
-            def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
+            def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
                 return []
 
-            def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+            def search_profiles(self, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
                 slug = re.sub(r"[^a-z0-9]+", "-", query.lower()).strip("-") or "q"
-                out: List[Dict[str, Any]] = []
-                for idx in range(3):
-                    out.append(
+                full: List[Dict[str, Any]] = []
+                for idx in range(12):
+                    full.append(
                         {
                             "linkedin_id": f"{slug}-{idx}",
                             "full_name": f"{slug} {idx}",
@@ -262,7 +265,9 @@ class SourcingAgentLimitTests(unittest.TestCase):
                             "raw": {"query": query},
                         }
                     )
-                return out
+                safe_limit = max(1, min(int(limit or 1), 100))
+                safe_offset = max(0, int(offset or 0))
+                return full[safe_offset : safe_offset + safe_limit]
 
             def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
                 return dict(profile)
@@ -282,6 +287,92 @@ class SourcingAgentLimitTests(unittest.TestCase):
         self.assertEqual(len(out), 12)
         ids = [str(item.get("linkedin_id") or "") for item in out]
         self.assertEqual(len(ids), len(set(ids)))
+
+    def test_find_candidates_collects_across_structured_pages_until_target(self) -> None:
+        class _PagedStructuredProvider:
+            def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+                stage = str(spec.get("stage_key") or "")
+                page = max(0, int(offset or 0)) // max(1, int(limit or 1))
+                if stage != "strict":
+                    return []
+                full: List[Dict[str, Any]] = []
+                for idx in range(180):
+                    full.append(
+                        {
+                            "linkedin_id": f"qa-{idx}",
+                            "full_name": f"QA Candidate {idx}",
+                            "headline": "Manual QA Engineer",
+                            "location": "Kyiv, Ukraine",
+                            "languages": ["en"],
+                            "skills": ["manual testing", "api testing", "jira"],
+                            "years_experience": 4,
+                            "raw": {"page": page},
+                        }
+                    )
+                safe_limit = max(1, min(int(limit or 1), 100))
+                return full[offset : offset + safe_limit]
+
+            def search_profiles(self, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+                return []
+
+            def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+                return dict(profile)
+
+            def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+                return {"sent": False}
+
+        agent = SourcingAgent(_PagedStructuredProvider(), matching_engine=_MatchingEngineStub())
+        job = {
+            "title": "Manual QA Engineer",
+            "location": "Remote, Eastern Europe, Ukraine",
+            "seniority": "middle",
+            "preferred_languages": ["en", "ru"],
+            "jd_text": "Manual testing, api testing, jira, bug reporting, regression testing.",
+        }
+
+        out = agent.find_candidates(job=job, limit=100)
+        self.assertEqual(len(out), 100)
+        self.assertEqual(len({str(item.get("linkedin_id") or "") for item in out}), 100)
+
+    def test_find_candidates_stops_below_target_when_search_space_is_exhausted(self) -> None:
+        class _ExhaustedPagedProvider:
+            def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+                full = [
+                    {
+                        "linkedin_id": f"qa-{idx}",
+                        "full_name": f"QA Candidate {idx}",
+                        "headline": "Manual QA Engineer",
+                        "location": "Kyiv, Ukraine",
+                        "languages": ["en"],
+                        "skills": ["manual testing", "api testing", "jira"],
+                        "years_experience": 4,
+                    }
+                    for idx in range(17)
+                ]
+                safe_limit = max(1, min(int(limit or 1), 100))
+                safe_offset = max(0, int(offset or 0))
+                return full[safe_offset : safe_offset + safe_limit]
+
+            def search_profiles(self, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
+                return []
+
+            def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+                return dict(profile)
+
+            def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+                return {"sent": False}
+
+        agent = SourcingAgent(_ExhaustedPagedProvider(), matching_engine=_MatchingEngineStub())
+        job = {
+            "title": "Manual QA Engineer",
+            "location": "Remote, Eastern Europe, Ukraine",
+            "seniority": "middle",
+            "preferred_languages": ["en", "ru"],
+            "jd_text": "Manual testing, api testing, jira, bug reporting, regression testing.",
+        }
+
+        out = agent.find_candidates(job=job, limit=100)
+        self.assertEqual(len(out), 17)
 
 
 if __name__ == "__main__":

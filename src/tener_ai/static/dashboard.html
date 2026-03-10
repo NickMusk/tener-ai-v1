@@ -1808,6 +1808,13 @@
       $("metric-outreached").textContent = outreached;
     }
 
+    function parseProgressTimestampMs(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return 0;
+      const parsed = Date.parse(raw);
+      return Number.isFinite(parsed) ? parsed : 0;
+    }
+
     function getCandidateMetrics() {
       return state.candidateMetrics || {
         total: 0,
@@ -2215,6 +2222,20 @@
       state.selectedSnapshotStep = "source";
     }
 
+    function preparePipelineRunVisuals(mode) {
+      const normalized = String(mode || "workflow").trim().toLowerCase();
+      $("step-enrich-meta").textContent = "Profiles: 0, Failed: 0";
+      $("step-verify-meta").textContent = "Verified: 0, Needs resume: 0, Rejected: 0";
+      $("step-add-meta").textContent = "Added: 0";
+      $("step-outreach-meta").textContent = "Total: 0, Sent: 0, Pending: 0, Failed: 0";
+      setStepStatus("source", "running");
+      ["enrich", "verify", "add"].forEach((step) => setStepStatus(step, "idle"));
+      if (normalized === "source_top_up") {
+        return;
+      }
+      setStepStatus("outreach", "idle");
+    }
+
     function renderSourceFilters() {
       const toggleSummaryEl = $("source-filters-toggle-summary");
       const summaryEl = $("source-filters-summary");
@@ -2408,7 +2429,20 @@
         outreached: currentMetrics.outreached || 0,
       });
 
-      const items = Array.isArray(data.items) ? data.items : [];
+      const rawItems = Array.isArray(data.items) ? data.items : [];
+      const tracker = state.pipelineTracker || {};
+      let items = rawItems;
+      if (preserveCurrentVisuals && tracker.active && Number(tracker.jobId || 0) === Number(jobId || 0)) {
+        const startedAtMs = Number(tracker.startedAt || 0);
+        const freshnessFloor = startedAtMs > 0 ? startedAtMs - 1500 : 0;
+        const recentItems = rawItems.filter((item) => parseProgressTimestampMs((item || {}).updated_at) >= freshnessFloor);
+        if (!recentItems.length) {
+          renderSnapshotTabs();
+          renderSelectedSnapshot();
+          return;
+        }
+        items = recentItems;
+      }
       const byStep = {};
       items.forEach((item) => {
         if (item && item.step && !byStep[item.step]) {
@@ -3857,7 +3891,7 @@
       const jobId = selectedJobId();
       if (!jobId) return alert('Select a job');
       startPipelineTracking({ jobId, mode: 'full_pipeline' });
-      setStepStatus('source', 'running');
+      preparePipelineRunVisuals('full_pipeline');
 
       let finalTone = 'success';
       let finalTitle = 'Full pipeline finished';
@@ -3894,7 +3928,7 @@
       const jobId = selectedJobId();
       if (!jobId) return alert('Select a job');
       startPipelineTracking({ jobId, mode: 'source_top_up' });
-      setStepStatus('source', 'running');
+      preparePipelineRunVisuals('source_top_up');
       let finalTone = 'success';
       let finalTitle = 'Source top-up finished';
       let finalDetail = 'Step progress synchronized.';

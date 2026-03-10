@@ -12,7 +12,7 @@ from .attachments import descriptors_to_text, extract_attachment_descriptors_fro
 
 
 class LinkedInProvider:
-    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def search_profiles(self, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         raise NotImplementedError
 
     def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
@@ -36,7 +36,7 @@ class MockLinkedInProvider(LinkedInProvider):
         self.dataset_path = dataset_path
         self._profiles = self._load_profiles()
 
-    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def search_profiles(self, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         q = (query or "").lower()
         scored = []
         for profile in self._profiles:
@@ -53,9 +53,11 @@ class MockLinkedInProvider(LinkedInProvider):
         ranked = [p for score, p in sorted(scored, key=lambda x: x[0], reverse=True) if score > 0]
         if not ranked:
             ranked = self._profiles
-        return ranked[: max(1, min(limit, 200))]
+        safe_limit = max(1, min(limit, 200))
+        safe_offset = max(0, int(offset or 0))
+        return ranked[safe_offset : safe_offset + safe_limit]
 
-    def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
+    def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         filters = spec.get("filters") if isinstance(spec.get("filters"), dict) else {}
         query_parts = [
             str(spec.get("title_query") or "").strip(),
@@ -63,7 +65,7 @@ class MockLinkedInProvider(LinkedInProvider):
             " ".join(str(item).strip() for item in (filters.get("skills") or []) if str(item).strip()),
         ]
         query = " ".join(part for part in query_parts if part).strip()
-        return self.search_profiles(query=query, limit=limit)
+        return self.search_profiles(query=query, limit=limit, offset=offset)
 
     def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
         return {
@@ -144,15 +146,16 @@ class UnipileLinkedInProvider(LinkedInProvider):
         self.search_parameters_path = os.environ.get("UNIPILE_LINKEDIN_SEARCH_PARAMETERS_PATH", "/api/v1/linkedin/search/parameters")
         self._search_parameter_cache: Dict[str, Optional[str]] = {}
 
-    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def search_profiles(self, query: str, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         if not self.account_id:
             raise RuntimeError("UNIPILE_ACCOUNT_ID is required for Unipile search")
 
         limit = max(1, min(limit, 100))
+        safe_offset = max(0, int(offset or 0))
         last_error = "unipile_search_unknown_error"
         for path in self._candidate_search_paths():
             endpoint = self._with_account_id(self._build_url(path), self.account_id)
-            for method, payload, query_params in self._search_attempts(path=path, query=query, limit=limit):
+            for method, payload, query_params in self._search_attempts(path=path, query=query, limit=limit, offset=safe_offset):
                 try:
                     if method == "GET":
                         url = f"{endpoint}{'&' if '?' in endpoint else '?'}{parse.urlencode(query_params)}"
@@ -178,12 +181,13 @@ class UnipileLinkedInProvider(LinkedInProvider):
 
         raise RuntimeError(f"Unipile search failed: {last_error}")
 
-    def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
+    def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         if not self.account_id:
             raise RuntimeError("UNIPILE_ACCOUNT_ID is required for Unipile search")
         safe_limit = max(1, min(int(limit or 1), 100))
+        safe_offset = max(0, int(offset or 0))
         endpoint = self._with_account_id(self._build_url("/api/v1/linkedin/search"), self.account_id)
-        payload = self._build_structured_search_payload(spec=spec, limit=safe_limit)
+        payload = self._build_structured_search_payload(spec=spec, limit=safe_limit, offset=safe_offset)
         response = self._request_json("POST", endpoint, payload)
         items = self._extract_results(response)
         if self._looks_like_search_placeholder(items):
@@ -601,7 +605,7 @@ class UnipileLinkedInProvider(LinkedInProvider):
             out.append(p)
         return out
 
-    def _build_structured_search_payload(self, spec: Dict[str, Any], limit: int) -> Dict[str, Any]:
+    def _build_structured_search_payload(self, spec: Dict[str, Any], limit: int, offset: int = 0) -> Dict[str, Any]:
         filters = spec.get("filters") if isinstance(spec.get("filters"), dict) else {}
         title_query = str(spec.get("title_query") or "").strip()
         api_value = self.api_type or "classic"
@@ -610,6 +614,8 @@ class UnipileLinkedInProvider(LinkedInProvider):
             "category": "people",
             "limit": int(limit),
         }
+        if offset > 0:
+            payload["offset"] = int(offset)
         if title_query:
             payload["keywords"] = title_query
             if api_value == "recruiter":
@@ -748,30 +754,31 @@ class UnipileLinkedInProvider(LinkedInProvider):
             payloads = with_api + payloads
         return payloads
 
-    def _search_attempts(self, path: str, query: str, limit: int) -> List[tuple[str, Optional[Dict[str, Any]], Dict[str, Any]]]:
+    def _search_attempts(self, path: str, query: str, limit: int, offset: int = 0) -> List[tuple[str, Optional[Dict[str, Any]], Dict[str, Any]]]:
         attempts: List[tuple[str, Optional[Dict[str, Any]], Dict[str, Any]]] = []
+        safe_offset = max(0, int(offset or 0))
 
         # Dedicated payload schema for this endpoint: api/category/keywords.
         if path == "/api/v1/linkedin/search":
             api_value = self.api_type or "classic"
             attempts.extend(
                 [
-                    ("POST", {"api": api_value, "category": "people", "keywords": query, "limit": limit}, {}),
-                    ("POST", {"api": api_value, "category": "people", "keywords": query}, {}),
-                    ("POST", {"api": "classic", "category": "people", "keywords": query, "limit": limit}, {}),
-                    ("POST", {"api": "classic", "category": "people", "keywords": query}, {}),
+                    ("POST", {"api": api_value, "category": "people", "keywords": query, "limit": limit, "offset": safe_offset}, {}),
+                    ("POST", {"api": api_value, "category": "people", "keywords": query, "offset": safe_offset}, {}),
+                    ("POST", {"api": "classic", "category": "people", "keywords": query, "limit": limit, "offset": safe_offset}, {}),
+                    ("POST", {"api": "classic", "category": "people", "keywords": query, "offset": safe_offset}, {}),
                 ]
             )
 
         attempts.extend(
             [
-            ("POST", {"query": query, "limit": limit}, {}),
-            ("POST", {"keywords": query, "limit": limit}, {}),
-            ("POST", {"text": query, "limit": limit}, {}),
-            ("GET", None, {"q": query, "limit": limit}),
-            ("GET", None, {"query": query, "limit": limit}),
-            ("GET", None, {"keywords": query, "limit": limit}),
-            ("GET", None, {"text": query, "limit": limit}),
+            ("POST", {"query": query, "limit": limit, "offset": safe_offset}, {}),
+            ("POST", {"keywords": query, "limit": limit, "offset": safe_offset}, {}),
+            ("POST", {"text": query, "limit": limit, "offset": safe_offset}, {}),
+            ("GET", None, {"q": query, "limit": limit, "offset": safe_offset}),
+            ("GET", None, {"query": query, "limit": limit, "offset": safe_offset}),
+            ("GET", None, {"keywords": query, "limit": limit, "offset": safe_offset}),
+            ("GET", None, {"text": query, "limit": limit, "offset": safe_offset}),
             ]
         )
         return attempts

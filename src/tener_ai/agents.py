@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import json
 import re
 from pathlib import Path
@@ -26,7 +27,10 @@ class SourcingAgent:
         spec = self.build_search_spec(job)
         queries = list(spec.get("fallback_queries") or [])
         collection_target = min(limit * 4, 400)
-        per_query_limit = min(100, max(50, int(limit)))
+        per_query_limit = min(100, max(50, min(int(limit), 100)))
+        max_pages_per_stage = 5
+        max_pages_per_query = 3
+        max_total_fetched = max(collection_target * 2, 200)
 
         seen: set[str] = {
             str(item or "").strip().lower()
@@ -41,36 +45,31 @@ class SourcingAgent:
             for stage in self._build_structured_search_stages(spec):
                 if len(collected) >= collection_target:
                     break
-                try:
-                    profiles = structured_search(spec=stage, limit=per_query_limit)
-                except Exception as exc:
-                    search_errors.append(f"structured_search[{stage.get('stage_key')}] error={exc}")
-                    continue
-                self._extend_unique_profiles(collected=collected, seen=seen, profiles=profiles or [])
+                self._collect_structured_stage(
+                    search_fn=structured_search,
+                    stage=stage,
+                    per_page_limit=per_query_limit,
+                    target_count=collection_target,
+                    max_pages=max_pages_per_stage,
+                    max_total_fetched=max_total_fetched,
+                    collected=collected,
+                    seen=seen,
+                    search_errors=search_errors,
+                )
 
-        # Pass 1: text fallback query set.
         for query in queries:
             if len(collected) >= collection_target:
                 break
-            try:
-                profiles = self.linkedin_provider.search_profiles(query=query, limit=per_query_limit)
-            except Exception as exc:
-                search_errors.append(f"query={query[:120]} error={exc}")
-                continue
-            self._extend_unique_profiles(collected=collected, seen=seen, profiles=profiles)
-
-        # Pass 2: widen query windows if still below target.
-        if len(collected) < collection_target:
-            expanded_limit = 100
-            for query in queries:
-                if len(collected) >= collection_target:
-                    break
-                try:
-                    profiles = self.linkedin_provider.search_profiles(query=query, limit=expanded_limit)
-                except Exception as exc:
-                    search_errors.append(f"query={query[:120]} error={exc}")
-                    continue
-                self._extend_unique_profiles(collected=collected, seen=seen, profiles=profiles)
+            self._collect_text_query(
+                query=query,
+                per_page_limit=per_query_limit,
+                target_count=collection_target,
+                max_pages=max_pages_per_query,
+                max_total_fetched=max_total_fetched,
+                collected=collected,
+                seen=seen,
+                search_errors=search_errors,
+            )
 
         if not collected and search_errors:
             raise RuntimeError("; ".join(search_errors[:5]))
@@ -209,13 +208,95 @@ class SourcingAgent:
         collected: List[Dict[str, Any]],
         seen: set[str],
         profiles: List[Dict[str, Any]],
-    ) -> None:
+    ) -> int:
+        added = 0
         for profile in profiles or []:
             key = SourcingAgent._candidate_key(profile)
             if key in seen:
                 continue
             seen.add(key)
             collected.append(profile)
+            added += 1
+        return added
+
+    def _collect_structured_stage(
+        self,
+        *,
+        search_fn: Any,
+        stage: Dict[str, Any],
+        per_page_limit: int,
+        target_count: int,
+        max_pages: int,
+        max_total_fetched: int,
+        collected: List[Dict[str, Any]],
+        seen: set[str],
+        search_errors: List[str],
+    ) -> None:
+        fetched = 0
+        for page_index in range(max_pages):
+            if len(collected) >= target_count or fetched >= max_total_fetched:
+                break
+            offset = page_index * per_page_limit
+            try:
+                profiles = self._invoke_search_with_offset(
+                    search_fn,
+                    spec=stage,
+                    limit=per_page_limit,
+                    offset=offset,
+                )
+            except Exception as exc:
+                search_errors.append(f"structured_search[{stage.get('stage_key')}:{page_index}] error={exc}")
+                break
+            profiles = profiles or []
+            fetched += len(profiles)
+            added = self._extend_unique_profiles(collected=collected, seen=seen, profiles=profiles)
+            if not profiles or len(profiles) < per_page_limit or added == 0:
+                break
+
+    def _collect_text_query(
+        self,
+        *,
+        query: str,
+        per_page_limit: int,
+        target_count: int,
+        max_pages: int,
+        max_total_fetched: int,
+        collected: List[Dict[str, Any]],
+        seen: set[str],
+        search_errors: List[str],
+    ) -> None:
+        fetched = 0
+        for page_index in range(max_pages):
+            if len(collected) >= target_count or fetched >= max_total_fetched:
+                break
+            offset = page_index * per_page_limit
+            try:
+                profiles = self._invoke_search_with_offset(
+                    self.linkedin_provider.search_profiles,
+                    query=query,
+                    limit=per_page_limit,
+                    offset=offset,
+                )
+            except Exception as exc:
+                search_errors.append(f"query={query[:120]}:{page_index} error={exc}")
+                break
+            profiles = profiles or []
+            fetched += len(profiles)
+            added = self._extend_unique_profiles(collected=collected, seen=seen, profiles=profiles)
+            if not profiles or len(profiles) < per_page_limit or added == 0:
+                break
+
+    @staticmethod
+    def _invoke_search_with_offset(search_fn: Any, **kwargs: Any) -> List[Dict[str, Any]]:
+        try:
+            signature = inspect.signature(search_fn)
+        except (TypeError, ValueError):
+            signature = None
+        if signature is not None and "offset" in signature.parameters:
+            return search_fn(**kwargs)
+        fallback_kwargs = dict(kwargs)
+        fallback_kwargs.pop("offset", None)
+        return search_fn(**fallback_kwargs)
 
     def _build_structured_search_stages(self, spec: Dict[str, Any]) -> List[Dict[str, Any]]:
         filters = spec.get("filters") if isinstance(spec.get("filters"), dict) else {}
