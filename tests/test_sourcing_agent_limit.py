@@ -222,7 +222,7 @@ class SourcingAgentLimitTests(unittest.TestCase):
         self.assertEqual((preview.get("filters") or {}).get("skills"), ["manual testing", "api testing", "regression"])
         fallback_queries = preview.get("fallback_queries") or []
         self.assertGreaterEqual(len(fallback_queries), 1)
-        self.assertLessEqual(len(fallback_queries), 4)
+        self.assertLessEqual(len(fallback_queries), 8)
         self.assertEqual(fallback_queries[0], "Manual QA Engineer")
         self.assertFalse(any("about tener.ai" in str(item).lower() for item in fallback_queries))
 
@@ -240,6 +240,48 @@ class SourcingAgentLimitTests(unittest.TestCase):
         out = agent.find_candidates(job=job, limit=2)
         ids = [str(item.get("linkedin_id") or "") for item in out]
         self.assertEqual(ids, ["ee-mid-1", "ee-mid-2"])
+
+    def test_find_candidates_uses_expanded_fallback_queries_to_reach_target(self) -> None:
+        class _KeywordWindowProvider:
+            def search_profiles_structured(self, spec: Dict[str, Any], limit: int = 50) -> List[Dict[str, Any]]:
+                return []
+
+            def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+                slug = re.sub(r"[^a-z0-9]+", "-", query.lower()).strip("-") or "q"
+                out: List[Dict[str, Any]] = []
+                for idx in range(3):
+                    out.append(
+                        {
+                            "linkedin_id": f"{slug}-{idx}",
+                            "full_name": f"{slug} {idx}",
+                            "headline": "Manual QA Engineer",
+                            "location": "Remote, Eastern Europe",
+                            "languages": ["en"],
+                            "skills": ["manual testing", "api testing", "jira"],
+                            "years_experience": 4,
+                            "raw": {"query": query},
+                        }
+                    )
+                return out
+
+            def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+                return dict(profile)
+
+            def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+                return {"sent": False}
+
+        agent = SourcingAgent(_KeywordWindowProvider(), matching_engine=_MatchingEngineStub())
+        job = {
+            "title": "Manual QA Engineer",
+            "location": "Remote, Eastern Europe, Ukraine",
+            "preferred_languages": ["en", "ru"],
+            "jd_text": "Manual testing, api testing, jira, bug reporting, regression testing.",
+        }
+
+        out = agent.find_candidates(job=job, limit=12)
+        self.assertEqual(len(out), 12)
+        ids = [str(item.get("linkedin_id") or "") for item in out]
+        self.assertEqual(len(ids), len(set(ids)))
 
 
 if __name__ == "__main__":

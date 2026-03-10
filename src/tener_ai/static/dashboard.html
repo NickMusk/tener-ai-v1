@@ -949,15 +949,15 @@
     <section id="view-pipeline" class="view-section active">
     <section class="grid-3">
       <div class="card metric">
-        <div class="label">Searched</div>
+        <div class="label">Candidates In Job</div>
         <div class="value" id="metric-searched">0</div>
       </div>
       <div class="card metric">
-        <div class="label">Verified</div>
+        <div class="label">Verified In Job</div>
         <div class="value" id="metric-verified">0</div>
       </div>
       <div class="card metric">
-        <div class="label">Outreached</div>
+        <div class="label">Outreached In Job</div>
         <div class="value" id="metric-outreached">0</div>
       </div>
     </section>
@@ -1022,7 +1022,7 @@
     <section class="steps">
       <article class="step-card">
         <div class="step-title"><span>1. Source <span class="muted mono" id="agent-name-sourcing-inline">Reed AI (Talent Scout)</span></span><span id="status-source" class="status">idle</span></div>
-        <div id="step-source-meta" class="step-metrics">Profiles: 0</div>
+        <div id="step-source-meta" class="step-metrics">Candidates in job: 0</div>
         <div class="step-actions">
           <button id="run-source-btn">Run</button>
           <button id="run-source-topup-btn">Top Up</button>
@@ -1784,7 +1784,7 @@
         if (!tracker.active || tracker.pollBusy || !tracker.jobId) return;
         tracker.pollBusy = true;
         try {
-          await loadJobProgress(tracker.jobId);
+          await loadJobProgress(tracker.jobId, { preserveCurrentVisuals: true });
           await refreshLogs();
         } catch {
         } finally {
@@ -1827,9 +1827,7 @@
       };
       setMetrics(merged);
 
-      if (String($("step-source-meta").textContent || "").includes("Profiles: 0")) {
-        $("step-source-meta").textContent = `Profiles: ${merged.searched}`;
-      }
+      $("step-source-meta").textContent = `Candidates in job: ${searchedFromCandidates}`;
       if (String($("step-enrich-meta").textContent || "").includes("Profiles: 0")) {
         $("step-enrich-meta").textContent = `Profiles: ${merged.searched}, Failed: 0`;
       }
@@ -2159,7 +2157,7 @@
     }
 
     function resetPipelineVisuals() {
-      $("step-source-meta").textContent = "Profiles: 0";
+      $("step-source-meta").textContent = "Candidates in job: 0";
       $("step-enrich-meta").textContent = "Profiles: 0, Failed: 0";
       $("step-verify-meta").textContent = "Verified: 0, Needs resume: 0, Rejected: 0";
       $("step-add-meta").textContent = "Added: 0";
@@ -2280,8 +2278,6 @@
       const out = output || {};
       if (step === "source") {
         state.sourceProfiles = out.profiles || [];
-        $("step-source-meta").textContent = `Profiles: ${out.total || 0}`;
-        setMetrics({ searched: out.total || 0, verified: state.verifyItems.filter(x => x.status === "verified").length, outreached: state.outreachItems.length });
         return;
       }
       if (step === "enrich") {
@@ -2296,11 +2292,6 @@
           $("step-enrich-meta").textContent = `Profiles: ${out.enriched_total || 0}, Failed: ${out.enrich_failed || 0}`;
         }
         renderVerificationExplanations(state.verifyItems);
-        setMetrics({
-          searched: state.sourceProfiles.length || Number(out.enriched_total || 0),
-          verified: out.verified || 0,
-          outreached: state.outreachItems.length
-        });
         return;
       }
       if (step === "add") {
@@ -2315,41 +2306,27 @@
         } else {
           $("step-outreach-meta").textContent = `Total: ${out.total || 0}, Sent: ${out.sent || 0}, Pending: ${out.pending_connection || 0}, Failed: ${out.failed || 0}`;
         }
-        setMetrics({
-          searched: state.sourceProfiles.length,
-          verified: state.verifyItems.filter(x => x.status === "verified").length,
-          outreached: out.total || out.sent || 0
-        });
         return;
       }
       if (step === "workflow") {
         if (out.mode === "source_top_up") {
-          $("step-source-meta").textContent = `Profiles: ${out.searched || 0}`;
           $("step-enrich-meta").textContent = `Profiles: ${out.searched || 0}, Failed: 0`;
           $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Needs resume: ${out.needs_resume || 0}, Rejected: ${out.rejected || 0}`;
           $("step-add-meta").textContent = `Added: ${out.added || 0}`;
-          setMetrics({
-            searched: out.searched || 0,
-            verified: out.verified || 0,
-            outreached: state.outreachItems.length
-          });
           return;
         }
-        $("step-source-meta").textContent = `Profiles: ${out.searched || 0}`;
         $("step-enrich-meta").textContent = `Profiles: ${out.searched || 0}, Failed: 0`;
         $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Needs resume: ${out.needs_resume || 0}, Rejected: ${out.rejected || 0}`;
         $("step-add-meta").textContent = `Added: ${(out.verified || 0) + (out.needs_resume || 0)}`;
         $("step-outreach-meta").textContent = `Total: ${out.outreached || 0}, Sent: ${out.outreach_sent || 0}, Pending: ${out.outreach_pending_connection || 0}, Failed: ${out.outreach_failed || 0}`;
-        setMetrics({ searched: out.searched || 0, verified: out.verified || 0, outreached: out.outreached || 0 });
       }
     }
 
-    async function loadJobProgress(jobId) {
-      resetPipelineMemory();
-      resetPipelineVisuals();
-      renderVerificationExplanations([]);
-
+    async function loadJobProgress(jobId, { preserveCurrentVisuals = false } = {}) {
       if (!jobId) {
+        resetPipelineMemory();
+        resetPipelineVisuals();
+        renderVerificationExplanations([]);
         renderSnapshotTabs();
         renderSelectedSnapshot();
         return;
@@ -2359,10 +2336,19 @@
       try {
         data = await api(`/api/jobs/${jobId}/progress`);
       } catch {
+        if (!preserveCurrentVisuals) {
+          resetPipelineMemory();
+          resetPipelineVisuals();
+          renderVerificationExplanations([]);
+        }
         renderSnapshotTabs();
         renderSelectedSnapshot();
         return;
       }
+
+      resetPipelineMemory();
+      resetPipelineVisuals();
+      renderVerificationExplanations([]);
 
       const items = Array.isArray(data.items) ? data.items : [];
       const byStep = {};
@@ -2373,6 +2359,17 @@
       });
 
       const stepsInOrder = ["source", "enrich", "verify", "add", "outreach", "workflow"];
+      const pipelineItems = stepsInOrder
+        .filter((step) => step !== "workflow")
+        .map((step) => byStep[step])
+        .filter(Boolean);
+      const trackerActive = Boolean((state.pipelineTracker || {}).active);
+      const hasNonIdlePipelineState = pipelineItems.some((item) => String((item || {}).status || "idle") !== "idle");
+      if (preserveCurrentVisuals && trackerActive && pipelineItems.length && !hasNonIdlePipelineState) {
+        renderSnapshotTabs();
+        renderSelectedSnapshot();
+        return;
+      }
       let latestStep = "source";
       let latestUpdated = "";
 
@@ -3628,7 +3625,6 @@
         state.verifyItems = [];
         state.addedCandidates = [];
         state.outreachItems = [];
-        $("step-source-meta").textContent = `Profiles: ${out.total || 0}`;
         $("step-enrich-meta").textContent = "Profiles: 0, Failed: 0";
         $("step-verify-meta").textContent = "Verified: 0, Needs resume: 0, Rejected: 0";
         $("step-add-meta").textContent = "Added: 0";
@@ -3638,7 +3634,6 @@
         setStepStatus('add', 'idle');
         setStepStatus('outreach', 'idle');
         renderVerificationExplanations([]);
-        setMetrics({ searched: out.total || 0, verified: 0, outreached: 0 });
         setStepStatus('source', 'success');
         snapshot('source.result', out);
       } catch (e) {
@@ -3804,7 +3799,7 @@
       const jobId = selectedJobId();
       if (!jobId) return alert('Select a job');
       startPipelineTracking({ jobId, mode: 'full_pipeline' });
-      ['source', 'enrich', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'running'));
+      setStepStatus('source', 'running');
 
       let finalTone = 'success';
       let finalTitle = 'Full pipeline finished';
@@ -3816,21 +3811,8 @@
           body: JSON.stringify({ job_id: jobId, limit, test_mode: isTestModeEnabled() })
         });
 
-        $("step-source-meta").textContent = `Profiles: ${out.searched || 0}`;
-        $("step-enrich-meta").textContent = `Profiles: ${out.searched || 0}, Failed: 0`;
-        $("step-verify-meta").textContent = `Verified: ${out.verified || 0}, Needs resume: ${out.needs_resume || 0}, Rejected: ${out.rejected || 0}`;
-        $("step-add-meta").textContent = `Added: ${(out.verified || 0) + (out.needs_resume || 0)}`;
-        $("step-outreach-meta").textContent = `Total: ${out.outreached || 0}, Sent: ${out.outreach_sent || 0}, Pending: ${out.outreach_pending_connection || 0}, Failed: ${out.outreach_failed || 0}`;
-
-        ['source', 'enrich', 'verify', 'add'].forEach(s => setStepStatus(s, 'success'));
-        if ((out.outreach_failed || 0) > 0 && (out.outreach_sent || 0) === 0 && (out.outreach_pending_connection || 0) === 0) {
-          setStepStatus('outreach', 'error');
-        } else {
-          setStepStatus('outreach', 'success');
-        }
-        setMetrics({ searched: out.searched || 0, verified: out.verified || 0, outreached: out.outreached || 0 });
         snapshot('workflow.execute', out);
-        finalDetail = `Searched ${out.searched || 0}, verified ${out.verified || 0}, outreached ${out.outreached || 0}.`;
+        finalDetail = `Found ${out.searched || 0} this run, verified ${out.verified || 0}, outreached ${out.outreached || 0}.`;
       } catch (e) {
         ['source', 'enrich', 'verify', 'add', 'outreach'].forEach(s => setStepStatus(s, 'error'));
         snapshot('workflow.error', { error: e.message });
@@ -3849,7 +3831,7 @@
       const jobId = selectedJobId();
       if (!jobId) return alert('Select a job');
       startPipelineTracking({ jobId, mode: 'source_top_up' });
-      ['source', 'enrich', 'verify', 'add'].forEach(s => setStepStatus(s, 'running'));
+      setStepStatus('source', 'running');
       let finalTone = 'success';
       let finalTitle = 'Source top-up finished';
       let finalDetail = 'Step progress synchronized.';

@@ -26,7 +26,7 @@ class SourcingAgent:
         spec = self.build_search_spec(job)
         queries = list(spec.get("fallback_queries") or [])
         collection_target = min(limit * 4, 400)
-        per_query_limit = max(25, min(100, max(limit, collection_target // max(len(queries) + 4, 1))))
+        per_query_limit = min(100, max(50, int(limit)))
 
         seen: set[str] = {
             str(item or "").strip().lower()
@@ -61,7 +61,7 @@ class SourcingAgent:
 
         # Pass 2: widen query windows if still below target.
         if len(collected) < collection_target:
-            expanded_limit = min(100, max(per_query_limit + 25, int(limit)))
+            expanded_limit = 100
             for query in queries:
                 if len(collected) >= collection_target:
                     break
@@ -240,8 +240,11 @@ class SourcingAgent:
         stages = [
             stage("strict", include_location=True, include_languages=True, stage_skills=skills[:3]),
             stage("focused", include_location=True, include_languages=True, stage_skills=skills[:1]),
+            stage("location_skills", include_location=True, include_languages=False, stage_skills=skills[:3]),
             stage("location_lang", include_location=True, include_languages=True, stage_skills=[]),
             stage("location_only", include_location=True, include_languages=False, stage_skills=[]),
+            stage("skills_only", include_location=False, include_languages=False, stage_skills=skills[:3]),
+            stage("skills_primary", include_location=False, include_languages=False, stage_skills=skills[:1]),
             stage("title_only", include_location=False, include_languages=False, stage_skills=[]),
         ]
         out: List[Dict[str, Any]] = []
@@ -337,12 +340,14 @@ class SourcingAgent:
 
     @staticmethod
     def _build_fallback_queries(*, title: str, location: Optional[str], keywords: List[str]) -> List[str]:
+        top_keywords = [str(item or "").strip() for item in keywords[:3] if str(item or "").strip()]
         candidates = [
             title.strip(),
             f"{title} {location or ''}".strip(),
-            f"{title} {keywords[0] if keywords else ''}".strip(),
-            f"{title} {location or ''} {keywords[0] if keywords else ''}".strip(),
         ]
+        for keyword in top_keywords:
+            candidates.append(f"{title} {keyword}".strip())
+            candidates.append(f"{title} {location or ''} {keyword}".strip())
         out: List[str] = []
         seen: set[str] = set()
         for item in candidates:
@@ -354,7 +359,7 @@ class SourcingAgent:
                 continue
             seen.add(lowered)
             out.append(query)
-        return out[:4]
+        return out[:8]
 
     @staticmethod
     def _extract_keywords(text: str, max_items: int = 8) -> List[str]:

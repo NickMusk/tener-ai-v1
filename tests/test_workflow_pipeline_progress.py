@@ -83,6 +83,69 @@ class _PriorityAwareProvider:
         return {"provider": "stub", "sent": False, "reason": "stub_no_delivery"}
 
 
+class _MultiAccountProvider:
+    def __init__(self) -> None:
+        self.account_id: str | None = None
+        self.calls: List[str] = []
+
+    def search_profiles(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
+        account_id = str(self.account_id or "")
+        self.calls.append(account_id)
+        if account_id == "acc-a":
+            return [
+                {
+                    "linkedin_id": "shared-1",
+                    "full_name": "Shared One",
+                    "headline": "Manual QA Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["qa", "manual testing"],
+                    "years_experience": 4,
+                    "raw": {"query": query, "account_id": account_id},
+                },
+                {
+                    "linkedin_id": "a-only-1",
+                    "full_name": "A Only One",
+                    "headline": "Manual QA Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["qa", "manual testing"],
+                    "years_experience": 4,
+                    "raw": {"query": query, "account_id": account_id},
+                },
+            ]
+        if account_id == "acc-b":
+            return [
+                {
+                    "linkedin_id": "shared-1",
+                    "full_name": "Shared One",
+                    "headline": "Manual QA Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["qa", "manual testing"],
+                    "years_experience": 4,
+                    "raw": {"query": query, "account_id": account_id},
+                },
+                {
+                    "linkedin_id": "b-only-1",
+                    "full_name": "B Only One",
+                    "headline": "Manual QA Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["qa", "manual testing"],
+                    "years_experience": 4,
+                    "raw": {"query": query, "account_id": account_id},
+                },
+            ]
+        return []
+
+    def enrich_profile(self, profile: Dict[str, Any]) -> Dict[str, Any]:
+        return dict(profile)
+
+    def send_message(self, candidate_profile: Dict[str, Any], message: str) -> Dict[str, Any]:
+        return {"provider": "stub", "sent": False, "reason": "stub_no_delivery"}
+
+
 class _TopUpProvider:
     def __init__(self) -> None:
         self.account_id: str | None = None
@@ -209,6 +272,8 @@ class WorkflowPipelineProgressTests(unittest.TestCase):
                 status="connected",
                 connected_at=utc_now_iso(),
             )
+            for step in ("source", "enrich", "verify", "add", "outreach", "workflow"):
+                db.upsert_job_step_progress(job_id=job_id, step=step, status="success", output={"stale": True})
 
             with self.assertRaises(RuntimeError):
                 workflow.execute_job_workflow(job_id=job_id, limit=5)
@@ -245,6 +310,31 @@ class WorkflowPipelineProgressTests(unittest.TestCase):
             self.assertEqual(int(out.get("total") or 0), 1)
             self.assertTrue(provider.seen_accounts)
             self.assertEqual(provider.seen_accounts[0], "acc-recruiter")
+
+    def test_source_candidates_can_accumulate_unique_profiles_across_accounts(self) -> None:
+        with TemporaryDirectory() as td:
+            provider = _MultiAccountProvider()
+            db, workflow = self._build_workflow(Path(td), provider)
+            job_id = self._insert_job(db)
+            db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-a",
+                status="connected",
+                connected_at=utc_now_iso(),
+            )
+            db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-b",
+                status="connected",
+                connected_at=utc_now_iso(),
+            )
+
+            out = workflow.source_candidates(job_id=job_id, limit=3)
+            self.assertEqual(int(out.get("total") or 0), 3)
+            ids = [str(item.get("linkedin_id") or "") for item in (out.get("profiles") or [])]
+            self.assertEqual(set(ids), {"shared-1", "a-only-1", "b-only-1"})
+            self.assertIn("acc-a", provider.calls)
+            self.assertIn("acc-b", provider.calls)
 
     def test_source_top_up_adds_only_new_candidates_without_touching_outreach(self) -> None:
         with TemporaryDirectory() as td:

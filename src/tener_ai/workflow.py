@@ -151,6 +151,10 @@ class WorkflowService:
             output=output or {},
         )
 
+    def _reset_step_progress(self, *, job_id: int, steps: List[str]) -> None:
+        for step in steps:
+            self._persist_step_progress(job_id=job_id, step=step, status="idle", output={})
+
     @staticmethod
     def _is_removed_provider_error(exc: Exception | str) -> bool:
         text = str(exc or "").lower()
@@ -230,6 +234,11 @@ class WorkflowService:
         original_account_id = getattr(provider, "account_id", None) if provider is not None and hasattr(provider, "account_id") else None
         profiles: List[Dict[str, Any]] = []
         search_errors: List[str] = []
+        seen_profile_keys: set[str] = {
+            str(item or "").strip().lower()
+            for item in (exclude_profile_keys or set())
+            if str(item or "").strip()
+        }
         source_accounts = sorted(
             self._list_dispatchable_linkedin_accounts(limit=500),
             key=self._source_account_priority,
@@ -237,23 +246,33 @@ class WorkflowService:
         if provider is not None and hasattr(provider, "account_id") and source_accounts:
             try:
                 for account in source_accounts:
+                    if len(profiles) >= limit:
+                        break
                     provider_account_id = str(account.get("provider_account_id") or "").strip()
                     if not provider_account_id:
                         continue
                     setattr(provider, "account_id", provider_account_id)
                     try:
-                        profiles = self.sourcing_agent.find_candidates(
+                        batch = self.sourcing_agent.find_candidates(
                             job=job,
-                            limit=limit,
-                            exclude_profile_keys=exclude_profile_keys,
+                            limit=max(1, limit - len(profiles)),
+                            exclude_profile_keys=seen_profile_keys,
                         )
                     except Exception as exc:
                         if self._is_removed_provider_error(exc):
                             self._mark_linkedin_account_removed(account=account, reason=str(exc))
                         search_errors.append(f"account_id={provider_account_id} error={exc}")
                         continue
-                    if profiles:
-                        break
+                    if not batch:
+                        continue
+                    for profile in batch:
+                        key = self.sourcing_agent._candidate_key(profile)
+                        if key in seen_profile_keys:
+                            continue
+                        seen_profile_keys.add(key)
+                        profiles.append(profile)
+                        if len(profiles) >= limit:
+                            break
             finally:
                 setattr(provider, "account_id", original_account_id)
             if not profiles and search_errors:
@@ -335,6 +354,7 @@ class WorkflowService:
                 "test_mode_requested": test_mode,
             },
         )
+        self._reset_step_progress(job_id=job_id, steps=["source", "enrich", "verify", "add", "workflow"])
         self._persist_step_progress(
             job_id=job_id,
             step="workflow",
@@ -1433,6 +1453,7 @@ class WorkflowService:
             entity_id=str(job_id),
             details={"limit": limit, "test_mode_active": effective_test_mode, "test_mode_requested": test_mode},
         )
+        self._reset_step_progress(job_id=job_id, steps=["source", "enrich", "verify", "add", "outreach", "workflow"])
         self._persist_step_progress(job_id=job_id, step="workflow", status="running", output={"limit": limit, "test_mode_requested": test_mode})
 
         steps_order = ["source", "enrich", "verify", "add", "outreach"]
