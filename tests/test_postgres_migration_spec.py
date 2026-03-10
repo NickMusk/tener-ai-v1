@@ -30,6 +30,7 @@ class PostgresMigrationSpecTests(unittest.TestCase):
             "contact_requests",
             "pre_resume_sessions",
             "pre_resume_events",
+            "candidate_prescreens",
             "webhook_events",
             "job_step_progress",
             "candidate_agent_assessments",
@@ -67,6 +68,25 @@ class PostgresMigrationSpecTests(unittest.TestCase):
         }
         missing = sorted(expected_auth_tables - tables)
         self.assertFalse(missing, f"Missing auth tables in postgres migrations: {missing}")
+
+    def test_job_budget_and_candidate_prescreen_columns_are_present(self) -> None:
+        migrations_sql = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted((self.root / "migrations").glob("*.sql"))
+        )
+        normalized = migrations_sql.lower()
+        for column in ("salary_min", "salary_max", "salary_currency", "work_authorization_required"):
+            self.assertIn(column, normalized)
+        for column in (
+            "must_have_answers_json",
+            "salary_expectation_min",
+            "salary_expectation_max",
+            "salary_expectation_currency",
+            "location_confirmed",
+            "work_authorization_confirmed",
+            "cv_received",
+        ):
+            self.assertIn(column, normalized)
 
 
 if __name__ == "__main__":

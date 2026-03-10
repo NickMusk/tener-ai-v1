@@ -46,6 +46,9 @@ class _FakeMirror:
     def upsert_pre_resume_event(self, row: Dict[str, Any]) -> None:
         self._call("upsert_pre_resume_event")
 
+    def upsert_candidate_prescreen(self, row: Dict[str, Any]) -> None:
+        self._call("upsert_candidate_prescreen")
+
     def insert_webhook_event(self, *, event_key: str, source: str, payload: Dict[str, Any] | None = None) -> None:
         self._call("insert_webhook_event")
 
@@ -119,6 +122,14 @@ class DualWriteDatabaseTests(unittest.TestCase):
                 state_status="awaiting_reply",
                 details={"source": "test"},
             )
+            db.upsert_candidate_prescreen(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                conversation_id=conversation_id,
+                status="incomplete",
+                must_have_answers_json=[],
+                cv_received=False,
+            )
             db.record_webhook_event("event-1", "unipile", payload={"x": 1})
             db.upsert_candidate_agent_assessment(
                 job_id=job_id,
@@ -148,6 +159,7 @@ class DualWriteDatabaseTests(unittest.TestCase):
                 "upsert_job_step_progress",
                 "upsert_pre_resume_session",
                 "upsert_pre_resume_event",
+                "upsert_candidate_prescreen",
                 "insert_webhook_event",
                 "upsert_candidate_agent_assessment",
                 "insert_operation_log",

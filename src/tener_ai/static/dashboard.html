@@ -1550,6 +1550,24 @@
           <label class="muted">Preferred Languages (comma)</label>
           <input id="job-languages" placeholder="en, ru">
         </div>
+        <div>
+          <label class="muted">Salary Min</label>
+          <input id="job-salary-min" type="number" placeholder="120000">
+        </div>
+        <div>
+          <label class="muted">Salary Max</label>
+          <input id="job-salary-max" type="number" placeholder="150000">
+        </div>
+        <div>
+          <label class="muted">Salary Currency</label>
+          <input id="job-salary-currency" placeholder="USD">
+        </div>
+        <div style="display:flex;align-items:flex-end;">
+          <label class="muted" style="display:flex;gap:8px;align-items:center;">
+            <input id="job-work-authorization-required" type="checkbox">
+            Work Authorization Required
+          </label>
+        </div>
         <div class="full">
           <label class="muted">JD Text</label>
           <textarea id="job-jd" placeholder="Need Python, Django, AWS, Docker, PostgreSQL..."></textarea>
@@ -1648,6 +1666,10 @@
       location: "Germany",
       seniority: "senior",
       preferred_languages: "en",
+      salary_min: "120000",
+      salary_max: "150000",
+      salary_currency: "USD",
+      work_authorization_required: true,
       jd_text: "Need Python, Django, AWS, Docker, PostgreSQL for backend microservices."
     };
 
@@ -2610,6 +2632,10 @@
       $("job-location").value = DEFAULT_JOB_TEMPLATE.location;
       $("job-seniority").value = DEFAULT_JOB_TEMPLATE.seniority;
       $("job-languages").value = DEFAULT_JOB_TEMPLATE.preferred_languages;
+      $("job-salary-min").value = DEFAULT_JOB_TEMPLATE.salary_min;
+      $("job-salary-max").value = DEFAULT_JOB_TEMPLATE.salary_max;
+      $("job-salary-currency").value = DEFAULT_JOB_TEMPLATE.salary_currency;
+      $("job-work-authorization-required").checked = !!DEFAULT_JOB_TEMPLATE.work_authorization_required;
       $("job-jd").value = DEFAULT_JOB_TEMPLATE.jd_text;
     }
 
@@ -2798,12 +2824,16 @@
         const company = escapeHtml(job.company || '-');
         const routing = escapeHtml(job.linkedin_routing_mode || 'auto');
         const created = escapeHtml(formatJobCreatedAt(job.created_at));
+        const budget = (job.salary_min || job.salary_max)
+          ? `${job.salary_min ? Number(job.salary_min).toLocaleString() : "?"}-${job.salary_max ? Number(job.salary_max).toLocaleString() : "?"} ${escapeHtml(job.salary_currency || "")}`.trim()
+          : "budget n/a";
+        const auth = job.work_authorization_required ? "work auth required" : "work auth flexible";
         return `
           <tr class="job-row${isActive ? ' active' : ''}" data-job-id="${jobId}" title="Open job details">
             <td><input type="checkbox" class="job-select-checkbox" data-job-id="${jobId}" ${isChecked ? 'checked' : ''} aria-label="Select job #${jobId}"></td>
             <td class="mono">#${jobId}</td>
             <td>${escapeHtml(job.title || '-')}</td>
-            <td>${company}</td>
+            <td><div>${company}</div><div class="muted mono" style="font-size:11px;">${budget} • ${escapeHtml(auth)}</div></td>
             <td class="mono">${routing}</td>
             <td class="mono">${created}</td>
             <td><button class="job-archive-btn" data-job-id="${jobId}">Archive</button></td>
@@ -2853,6 +2883,10 @@
         company_website: $("job-company-website").value.trim() || null,
         location: $("job-location").value.trim() || null,
         seniority: $("job-seniority").value || null,
+        salary_min: $("job-salary-min").value ? Number($("job-salary-min").value) : null,
+        salary_max: $("job-salary-max").value ? Number($("job-salary-max").value) : null,
+        salary_currency: $("job-salary-currency").value.trim().toUpperCase() || null,
+        work_authorization_required: $("job-work-authorization-required").checked,
         preferred_languages: $("job-languages").value
           .split(',')
           .map(x => x.trim().toLowerCase())
@@ -4013,6 +4047,10 @@
         body.innerHTML = filteredItems.map((x) => {
           const skills = (x.skills || []).slice(0, 6).join(', ');
           const currentStatus = escapeHtml(x.current_status_label || x.status || '-');
+          const prescreenStatus = String(x.candidate_prescreen_status || '').trim() || 'n/a';
+          const salaryExpectation = (x.candidate_prescreen_salary_expectation_min || x.candidate_prescreen_salary_expectation_max)
+            ? `${x.candidate_prescreen_salary_expectation_min ? Number(x.candidate_prescreen_salary_expectation_min).toLocaleString() : "?"}-${x.candidate_prescreen_salary_expectation_max ? Number(x.candidate_prescreen_salary_expectation_max).toLocaleString() : "?"} ${String(x.candidate_prescreen_salary_expectation_currency || '').toUpperCase()}`.trim()
+            : 'salary n/a';
           const lifecycleLabel = escapeHtml(x.candidate_lifecycle_label || '-');
           const lifecycleParts = [];
           if (x.planned_action_label) lifecycleParts.push(String(x.planned_action_label));
@@ -4031,12 +4069,16 @@
               <td>
                 <div>${currentStatus}</div>
                 <div class="muted mono" style="font-size:11px;">${escapeHtml(lifecycleText)}</div>
+                <div class="muted mono" style="font-size:11px;">prescreen: ${escapeHtml(prescreenStatus)} • ${escapeHtml(salaryExpectation)}</div>
               </td>
               <td>${formatAgentAssessmentCell(scorecard, 'sourcing_vetting')}</td>
               <td>${formatAgentAssessmentCell(scorecard, 'communication')}</td>
               <td>${formatAgentAssessmentCell(scorecard, 'interview_evaluation')}</td>
               <td>${formatOverallCell(x)}</td>
-              <td>${escapeHtml(x.location || '-')}</td>
+              <td>
+                <div>${escapeHtml(x.location || '-')}</div>
+                <div class="muted mono" style="font-size:11px;">location: ${escapeHtml(String(x.candidate_prescreen_location_confirmed))} • auth: ${escapeHtml(String(x.candidate_prescreen_work_authorization_confirmed))}</div>
+              </td>
               <td>${escapeHtml(skills || '-')}</td>
             </tr>
           `;

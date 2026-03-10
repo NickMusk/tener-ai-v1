@@ -1923,6 +1923,39 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if not job:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
                 return
+            salary_min = self._safe_float(body.get("salary_min"), None) if "salary_min" in body else None
+            salary_max = self._safe_float(body.get("salary_max"), None) if "salary_max" in body else None
+            if "salary_min" in body and salary_min is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "salary_min must be numeric"})
+                return
+            if "salary_max" in body and salary_max is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "salary_max must be numeric"})
+                return
+            if salary_min is not None and salary_max is not None and salary_min > salary_max:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "salary_min must be less than or equal to salary_max"})
+                return
+            salary_currency = str(body.get("salary_currency") or "").strip().upper() or None if "salary_currency" in body else None
+            work_authorization_required = (
+                self._safe_bool(body.get("work_authorization_required"), None)
+                if "work_authorization_required" in body
+                else None
+            )
+            location = str(body.get("location") or "").strip() or None if "location" in body else None
+            seniority = str(body.get("seniority") or "").strip().lower() or None if "seniority" in body else None
+            if any(
+                key in body
+                for key in ("location", "seniority", "salary_min", "salary_max", "salary_currency", "work_authorization_required")
+            ):
+                SERVICES["db"].update_job_details(
+                    job_id=job_id,
+                    location=location,
+                    seniority=seniority,
+                    salary_min=salary_min,
+                    salary_max=salary_max,
+                    salary_currency=salary_currency,
+                    work_authorization_required=work_authorization_required,
+                )
+                job = SERVICES["db"].get_job(job_id) or job
             manual_override = any(
                 key in body for key in ("must_have_skills", "nice_to_have_skills", "questionable_skills")
             )
@@ -1966,12 +1999,24 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     "nice_to_have_skills": nice_to_have_skills,
                     "questionable_skills": questionable_skills,
                     "mode": "manual_override" if manual_override else "auto_extract",
+                    "location": location if "location" in body else None,
+                    "seniority": seniority if "seniority" in body else None,
+                    "salary_min": salary_min if "salary_min" in body else None,
+                    "salary_max": salary_max if "salary_max" in body else None,
+                    "salary_currency": salary_currency if "salary_currency" in body else None,
+                    "work_authorization_required": work_authorization_required,
                 },
             )
             self._json_response(
                 HTTPStatus.OK,
                 {
                     "job_id": job_id,
+                    "location": (job or {}).get("location"),
+                    "seniority": (job or {}).get("seniority"),
+                    "salary_min": (job or {}).get("salary_min"),
+                    "salary_max": (job or {}).get("salary_max"),
+                    "salary_currency": (job or {}).get("salary_currency"),
+                    "work_authorization_required": (job or {}).get("work_authorization_required"),
                     "must_have_skills": must_have_skills,
                     "nice_to_have_skills": nice_to_have_skills,
                     "questionable_skills": questionable_skills,
@@ -2320,6 +2365,19 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 self._json_response(HTTPStatus.BAD_REQUEST, {"error": "preferred_languages must be an array"})
                 return
             normalized_languages = [str(x).lower() for x in preferred_languages if str(x).strip()]
+            salary_min = self._safe_float(body.get("salary_min"), None)
+            salary_max = self._safe_float(body.get("salary_max"), None)
+            if body.get("salary_min") is not None and salary_min is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "salary_min must be numeric"})
+                return
+            if body.get("salary_max") is not None and salary_max is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "salary_max must be numeric"})
+                return
+            if salary_min is not None and salary_max is not None and salary_min > salary_max:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "salary_min must be less than or equal to salary_max"})
+                return
+            salary_currency = str(body.get("salary_currency") or "").strip().upper() or None
+            work_authorization_required = bool(self._safe_bool(body.get("work_authorization_required"), False))
             requirements = self._compute_job_requirements(
                 {
                     "title": title,
@@ -2343,13 +2401,25 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 seniority=(str(body.get("seniority")).lower() if body.get("seniority") else None),
                 company=company,
                 company_website=company_website,
+                salary_min=salary_min,
+                salary_max=salary_max,
+                salary_currency=salary_currency,
+                work_authorization_required=work_authorization_required,
             )
             SERVICES["db"].log_operation(
                 operation="job.created",
                 status="ok",
                 entity_type="job",
                 entity_id=str(job_id),
-                details={"title": title, "company": company, "company_website": company_website},
+                details={
+                    "title": title,
+                    "company": company,
+                    "company_website": company_website,
+                    "salary_min": salary_min,
+                    "salary_max": salary_max,
+                    "salary_currency": salary_currency,
+                    "work_authorization_required": work_authorization_required,
+                },
             )
             culture_profile = self._start_company_culture_profile_pipeline(job_id=job_id)
             if str(culture_profile.get("status") or "").strip().lower() in {"pending", "running"}:
@@ -3527,6 +3597,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     def _safe_int(value: Any, default: Optional[int]) -> Optional[int]:
         try:
             return int(value)
+        except (TypeError, ValueError):
+            return default
+
+    @staticmethod
+    def _safe_float(value: Any, default: Optional[float]) -> Optional[float]:
+        try:
+            return float(value)
         except (TypeError, ValueError):
             return default
 

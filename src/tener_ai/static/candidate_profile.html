@@ -778,12 +778,17 @@
       $("jobs-list").innerHTML = jobs.map((item) => {
         const job = item.job || {};
         const overall = item.overall_scoring || {};
+        const prescreen = item.prescreen || {};
         const active = Number(job.id) === Number(state.selectedJobId) ? "active" : "";
         const status = String(overall.overall_status || "review");
+        const budget = (job.salary_min || job.salary_max)
+          ? `${job.salary_min || "?"}-${job.salary_max || "?"} ${job.salary_currency || ""}`.trim()
+          : "budget n/a";
+        const prescreenStatus = String(prescreen.status || "n/a");
         return `
           <button class="job-btn ${active}" data-job-id="${Number(job.id || 0)}">
             <div class="job-title">#${Number(job.id || 0)} ${escapeHtml(job.title || "-")}</div>
-            <div class="job-sub">${escapeHtml(job.company || "No company")}</div>
+            <div class="job-sub">${escapeHtml(job.company || "No company")} · ${escapeHtml(budget)} · ${escapeHtml(prescreenStatus)}</div>
             <div class="pill">${escapeHtml(status)} · ${escapeHtml(formatScore(overall.overall_score))}</div>
           </button>
         `;
@@ -878,6 +883,8 @@
       const must = fit.must_have || {};
       const nice = fit.nice_to_have || {};
       const culture = fit.culture_fit || {};
+      const prescreen = item.prescreen || {};
+      const salaryFit = fit.salary_fit || {};
       const analysis = culture.analysis || {};
       const risks = Array.isArray(fit.risk_flags) ? fit.risk_flags : [];
       const riskClass = risks.length ? "fit-risk" : "";
@@ -913,6 +920,17 @@
             ${risks.map((x) => `<li>${escapeHtml(x.message || x.type || "risk")}</li>`).join("") || "<li>no critical risks</li>"}
           </ul>
         </div>
+        <div class="fit-cell">
+          <div class="fit-title">Prescreen + Budget</div>
+          <ul class="fit-list">
+            <li>Prescreen status: ${escapeHtml(String(prescreen.status || "n/a"))}</li>
+            <li>Candidate salary: ${escapeHtml(String(salaryFit.candidate_salary_min || "?"))} - ${escapeHtml(String(salaryFit.candidate_salary_max || "?"))} ${escapeHtml(String(salaryFit.currency || ""))}</li>
+            <li>Job budget: ${escapeHtml(String(salaryFit.job_salary_min || "?"))} - ${escapeHtml(String(salaryFit.job_salary_max || "?"))} ${escapeHtml(String(salaryFit.currency || ""))}</li>
+            <li>Salary fit: ${escapeHtml(String(salaryFit.status || "unknown"))}</li>
+            <li>Location confirmed: ${escapeHtml(String(prescreen.location_confirmed))}</li>
+            <li>Work authorization confirmed: ${escapeHtml(String(prescreen.work_authorization_confirmed))}</li>
+          </ul>
+        </div>
       `;
 
       const internal = $("internal-notes");
@@ -928,6 +946,8 @@
         if (predictive.length) lines.push(`Predictive signals: ${predictive.slice(0, 1).join('; ')}`);
         const risk = risks[0]?.message;
         if (risk) lines.push(`Primary risk: ${risk}`);
+        if (prescreen.status) lines.push(`Prescreen: ${prescreen.status}`);
+        if (salaryFit.status) lines.push(`Salary fit: ${salaryFit.status}`);
         internal.value = lines.join('\n');
       }
     }

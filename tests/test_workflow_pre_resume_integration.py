@@ -43,7 +43,7 @@ class _FailingSecondFollowupProvider:
 
 
 class WorkflowPreResumeIntegrationTests(unittest.TestCase):
-    def test_needs_resume_chat_flow_until_resume_received(self) -> None:
+    def test_prescreen_first_chat_flow_until_ready_for_screening_call(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "workflow_pre_resume.sqlite3"))
@@ -67,9 +67,13 @@ class WorkflowPreResumeIntegrationTests(unittest.TestCase):
             job_id = db.insert_job(
                 title="Senior Backend Engineer",
                 jd_text="Need Python, AWS and distributed systems.",
-                location="Remote",
+                location="Berlin",
                 preferred_languages=["en"],
                 seniority="senior",
+                salary_min=120000,
+                salary_max=150000,
+                salary_currency="USD",
+                work_authorization_required=True,
             )
             profile = {
                 "linkedin_id": "ln-pre-resume-1",
@@ -96,22 +100,33 @@ class WorkflowPreResumeIntegrationTests(unittest.TestCase):
             prs = db.get_pre_resume_session_by_conversation(conversation_id)
             self.assertIsNotNone(prs)
             self.assertEqual(prs["status"], "awaiting_reply")
+            prescreen = db.get_candidate_prescreen(job_id=job_id, candidate_id=candidate_id)
+            self.assertIsNotNone(prescreen)
+            self.assertEqual(prescreen["status"], "incomplete")
 
-            first_reply = workflow.process_inbound_message(conversation_id=conversation_id, text="What is salary range?")
+            first_reply = workflow.process_inbound_message(conversation_id=conversation_id, text="I'm targeting 145k USD.")
             self.assertEqual(first_reply["mode"], "pre_resume")
-            self.assertIn(first_reply["intent"], {"salary", "default"})
-            self.assertIn("CV", first_reply["reply"])
+            self.assertIn("What hands-on experience", first_reply["reply"])
 
             second_reply = workflow.process_inbound_message(
                 conversation_id=conversation_id,
                 text="Here is my resume https://example.com/candidate-one-resume.pdf",
             )
             self.assertEqual(second_reply["mode"], "pre_resume")
-            self.assertEqual(second_reply["state"]["status"], "resume_received")
+            self.assertEqual(second_reply["state"]["prescreen_status"], "cv_received_pending_answers")
+
+            third_reply = workflow.process_inbound_message(
+                conversation_id=conversation_id,
+                text="I have 6 years of Python and AWS experience, I am based in Berlin, and I have full work authorization.",
+            )
+            self.assertEqual(third_reply["mode"], "pre_resume")
+            self.assertEqual(third_reply["state"]["prescreen_status"], "ready_for_screening_call")
 
             match_rows = db.list_candidates_for_job(job_id)
             self.assertEqual(len(match_rows), 1)
             self.assertEqual(match_rows[0]["status"], "resume_received")
+            self.assertEqual(match_rows[0]["candidate_prescreen_status"], "ready_for_screening_call")
+            self.assertEqual(match_rows[0]["candidate_prescreen_salary_expectation_min"], 145000.0)
 
             events = db.list_pre_resume_events(limit=20, session_id=session_id)
             event_types = {x["event_type"] for x in events}
@@ -249,6 +264,7 @@ class WorkflowPreResumeIntegrationTests(unittest.TestCase):
                 instruction="",
             )
             pre_resume.seed_session(state)
+            provider.calls = 1
 
             result = workflow.run_due_pre_resume_followups(job_id=job_id, limit=5)
             self.assertEqual(result["errors"], 1)

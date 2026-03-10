@@ -46,6 +46,10 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
         must_have_skills: Optional[List[str]] = None,
         nice_to_have_skills: Optional[List[str]] = None,
         questionable_skills: Optional[List[str]] = None,
+        salary_min: Optional[float] = None,
+        salary_max: Optional[float] = None,
+        salary_currency: Optional[str] = None,
+        work_authorization_required: bool = False,
         linkedin_routing_mode: str = "auto",
     ) -> int:
         routing_mode = self._normalize_linkedin_routing_mode(linkedin_routing_mode)
@@ -56,9 +60,10 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                     INSERT INTO jobs (
                         title, company, company_website, jd_text, location,
                         preferred_languages, must_have_skills, nice_to_have_skills, questionable_skills,
-                        seniority, linkedin_routing_mode, created_at
+                        seniority, salary_min, salary_max, salary_currency, work_authorization_required,
+                        linkedin_routing_mode, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     RETURNING id
                     """,
                     (
@@ -72,6 +77,10 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                         self._json(Database._normalize_skill_list(nice_to_have_skills)),
                         self._json(Database._normalize_skill_list(questionable_skills)),
                         seniority,
+                        float(salary_min) if salary_min is not None else None,
+                        float(salary_max) if salary_max is not None else None,
+                        str(salary_currency or "").strip().upper() or None,
+                        bool(work_authorization_required),
                         routing_mode,
                         utc_now_iso(),
                     ),
@@ -117,6 +126,46 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                         int(job_id),
                     ),
                 )
+                return int(cur.rowcount or 0) > 0
+
+    def update_job_details(
+        self,
+        *,
+        job_id: int,
+        location: Optional[str] = None,
+        seniority: Optional[str] = None,
+        salary_min: Optional[float] = None,
+        salary_max: Optional[float] = None,
+        salary_currency: Optional[str] = None,
+        work_authorization_required: Optional[bool] = None,
+    ) -> bool:
+        assignments: List[str] = []
+        params: List[Any] = []
+        if location is not None:
+            assignments.append("location = %s")
+            params.append(location)
+        if seniority is not None:
+            assignments.append("seniority = %s")
+            params.append(seniority)
+        if salary_min is not None:
+            assignments.append("salary_min = %s")
+            params.append(float(salary_min))
+        if salary_max is not None:
+            assignments.append("salary_max = %s")
+            params.append(float(salary_max))
+        if salary_currency is not None:
+            assignments.append("salary_currency = %s")
+            params.append(str(salary_currency or "").strip().upper() or None)
+        if work_authorization_required is not None:
+            assignments.append("work_authorization_required = %s")
+            params.append(bool(work_authorization_required))
+        if not assignments:
+            return False
+        params.append(int(job_id))
+        sql = f"UPDATE jobs SET {', '.join(assignments)} WHERE id = %s"
+        with self.transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, tuple(params))
                 return int(cur.rowcount or 0) > 0
 
     def upsert_job_culture_profile(
@@ -429,6 +478,13 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
             j.location AS job_location,
             j.preferred_languages AS job_preferred_languages,
             j.seniority AS job_seniority,
+            j.must_have_skills AS job_must_have_skills,
+            j.nice_to_have_skills AS job_nice_to_have_skills,
+            j.questionable_skills AS job_questionable_skills,
+            j.salary_min AS job_salary_min,
+            j.salary_max AS job_salary_max,
+            j.salary_currency AS job_salary_currency,
+            j.work_authorization_required AS job_work_authorization_required,
             cp.profile_json AS job_company_culture_profile,
             conv.id AS conversation_id,
             conv.status AS conversation_status,
@@ -440,6 +496,17 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
             prs.next_followup_at AS pre_resume_next_followup_at,
             prs.resume_links AS pre_resume_resume_links,
             prs.state_json AS pre_resume_state_json,
+            cps.status AS candidate_prescreen_status,
+            cps.must_have_answers_json AS candidate_prescreen_must_have_answers,
+            cps.salary_expectation_min AS candidate_prescreen_salary_expectation_min,
+            cps.salary_expectation_max AS candidate_prescreen_salary_expectation_max,
+            cps.salary_expectation_currency AS candidate_prescreen_salary_expectation_currency,
+            cps.location_confirmed AS candidate_prescreen_location_confirmed,
+            cps.work_authorization_confirmed AS candidate_prescreen_work_authorization_confirmed,
+            cps.cv_received AS candidate_prescreen_cv_received,
+            cps.summary AS candidate_prescreen_summary,
+            cps.notes AS candidate_prescreen_notes,
+            cps.updated_at AS candidate_prescreen_updated_at,
             (
                 SELECT msg.direction
                 FROM messages msg
@@ -473,6 +540,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
             LIMIT 1
         )
         LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+        LEFT JOIN candidate_prescreens cps ON cps.job_id = m.job_id AND cps.candidate_id = m.candidate_id
         WHERE m.candidate_id = %s
         ORDER BY m.created_at DESC, m.id DESC
         """
@@ -618,6 +686,10 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                         c.languages,
                         c.skills,
                         c.years_experience,
+                        j.salary_min AS job_salary_min,
+                        j.salary_max AS job_salary_max,
+                        j.salary_currency AS job_salary_currency,
+                        j.work_authorization_required AS job_work_authorization_required,
                         conv.id AS conversation_id,
                         conv.status AS conversation_status,
                         conv.external_chat_id,
@@ -1886,6 +1958,118 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 )
                 row = cur.fetchone()
                 return int(row[0] if row else 0)
+
+    def upsert_candidate_prescreen(
+        self,
+        *,
+        job_id: int,
+        candidate_id: int,
+        conversation_id: Optional[int],
+        status: str,
+        must_have_answers_json: Optional[List[Dict[str, Any]]] = None,
+        salary_expectation_min: Optional[float] = None,
+        salary_expectation_max: Optional[float] = None,
+        salary_expectation_currency: Optional[str] = None,
+        location_confirmed: Optional[bool] = None,
+        work_authorization_confirmed: Optional[bool] = None,
+        cv_received: bool = False,
+        summary: Optional[str] = None,
+        notes: Optional[str] = None,
+        created_at: Optional[str] = None,
+        updated_at: Optional[str] = None,
+    ) -> None:
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO candidate_prescreens (
+                        job_id, candidate_id, conversation_id, status, must_have_answers_json,
+                        salary_expectation_min, salary_expectation_max, salary_expectation_currency,
+                        location_confirmed, work_authorization_confirmed, cv_received,
+                        summary, notes, created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(job_id, candidate_id) DO UPDATE SET
+                        conversation_id = EXCLUDED.conversation_id,
+                        status = EXCLUDED.status,
+                        must_have_answers_json = EXCLUDED.must_have_answers_json,
+                        salary_expectation_min = EXCLUDED.salary_expectation_min,
+                        salary_expectation_max = EXCLUDED.salary_expectation_max,
+                        salary_expectation_currency = EXCLUDED.salary_expectation_currency,
+                        location_confirmed = EXCLUDED.location_confirmed,
+                        work_authorization_confirmed = EXCLUDED.work_authorization_confirmed,
+                        cv_received = EXCLUDED.cv_received,
+                        summary = EXCLUDED.summary,
+                        notes = EXCLUDED.notes,
+                        created_at = COALESCE(candidate_prescreens.created_at, EXCLUDED.created_at),
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        int(job_id),
+                        int(candidate_id),
+                        int(conversation_id) if conversation_id is not None else None,
+                        str(status or "incomplete").strip().lower() or "incomplete",
+                        self._json(must_have_answers_json or []),
+                        float(salary_expectation_min) if salary_expectation_min is not None else None,
+                        float(salary_expectation_max) if salary_expectation_max is not None else None,
+                        str(salary_expectation_currency or "").strip().upper() or None,
+                        location_confirmed,
+                        work_authorization_confirmed,
+                        bool(cv_received),
+                        str(summary or "").strip() or None,
+                        str(notes or "").strip() or None,
+                        created_at or now,
+                        updated_at or now,
+                    ),
+                )
+
+    def get_candidate_prescreen(self, *, job_id: int, candidate_id: int) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM candidate_prescreens
+                    WHERE job_id = %s AND candidate_id = %s
+                    LIMIT 1
+                    """,
+                    (int(job_id), int(candidate_id)),
+                )
+                row = cur.fetchone()
+        return self._row_to_dict(dict(row)) if row else None
+
+    def list_candidate_prescreens_for_candidate(self, candidate_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM candidate_prescreens
+                    WHERE candidate_id = %s
+                    ORDER BY updated_at DESC, job_id DESC
+                    LIMIT %s
+                    """,
+                    (int(candidate_id), max(1, min(int(limit or 200), 2000))),
+                )
+                rows = cur.fetchall()
+        return [self._row_to_dict(dict(r)) for r in rows]
+
+    def list_candidate_prescreens_for_job(self, job_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM candidate_prescreens
+                    WHERE job_id = %s
+                    ORDER BY updated_at DESC, candidate_id DESC
+                    LIMIT %s
+                    """,
+                    (int(job_id), max(1, min(int(limit or 200), 2000))),
+                )
+                rows = cur.fetchall()
+        return [self._row_to_dict(dict(r)) for r in rows]
 
     def list_pre_resume_events(self, limit: int = 200, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 200), 2000))

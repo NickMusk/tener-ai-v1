@@ -31,6 +31,7 @@ class CandidateScoringPolicyTests(unittest.TestCase):
         out = self.policy.compute_overall(
             scorecard=self._scorecard(source=90.0, communication=80.0, interview=85.0),
             current_status_key="cv_received",
+            row={},
         )
         self.assertEqual(out["overall_status"], "shortlist")
         self.assertGreaterEqual(float(out["overall_score"]), 80.0)
@@ -39,6 +40,7 @@ class CandidateScoringPolicyTests(unittest.TestCase):
         out = self.policy.compute_overall(
             scorecard=self._scorecard(source=95.0, communication=90.0, interview=88.0, communication_status="not_interested"),
             current_status_key="not_interested",
+            row={},
         )
         self.assertEqual(out["overall_status"], "blocked")
         self.assertEqual(float(out["overall_score"]), 0.0)
@@ -47,6 +49,7 @@ class CandidateScoringPolicyTests(unittest.TestCase):
         out = self.policy.compute_overall(
             scorecard=self._scorecard(source=95.0, communication=95.0, interview=None),
             current_status_key="in_dialogue",
+            row={},
         )
         self.assertIsNone(out["overall_score"])
         self.assertEqual(out["overall_status"], "review")
@@ -56,6 +59,7 @@ class CandidateScoringPolicyTests(unittest.TestCase):
         out = self.policy.compute_overall(
             scorecard=self._scorecard(source=100.0, communication=100.0, interview=None),
             current_status_key="cv_received",
+            row={},
         )
         self.assertIsNone(out["overall_score"])
         self.assertEqual(out["overall_status"], "review")
@@ -65,6 +69,7 @@ class CandidateScoringPolicyTests(unittest.TestCase):
         out = self.policy.compute_overall(
             scorecard=self._scorecard(source=90.0, communication=80.0, interview=70.0),
             current_status_key="in_dialogue",
+            row={},
         )
         self.assertEqual(float(out["overall_score"]), 81.0)
         self.assertTrue(bool(out["has_all_scores"]))
@@ -79,10 +84,26 @@ class CandidateScoringPolicyTests(unittest.TestCase):
                 communication_stage="outreach",
             ),
             current_status_key="in_dialogue",
+            row={},
         )
         inputs = out.get("inputs") if isinstance(out.get("inputs"), dict) else {}
         self.assertIsNone(inputs.get("communication"))
         self.assertIsNone(out["overall_score"])
+
+    def test_salary_fit_affects_score(self) -> None:
+        out = self.policy.compute_overall(
+            scorecard=self._scorecard(source=90.0, communication=85.0, interview=90.0),
+            current_status_key="cv_received",
+            row={
+                "job_salary_max": 150000,
+                "job_salary_currency": "USD",
+                "candidate_prescreen_salary_expectation_min": 170000,
+                "candidate_prescreen_salary_expectation_currency": "USD",
+            },
+        )
+        self.assertEqual((out.get("salary_fit") or {}).get("status"), "slightly_above")
+        self.assertIn("salary_fit:slightly_above", out.get("gates_applied") or [])
+        self.assertLess(float(out.get("overall_score") or 0.0), 89.0)
 
 
 if __name__ == "__main__":

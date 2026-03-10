@@ -105,6 +105,10 @@ class CandidateProfileApiTests(unittest.TestCase):
             location="Remote",
             preferred_languages=["en"],
             seniority="senior",
+            salary_min=120000,
+            salary_max=150000,
+            salary_currency="USD",
+            work_authorization_required=True,
         )
         candidate_id = self.db.upsert_candidate(
             {
@@ -184,8 +188,16 @@ class CandidateProfileApiTests(unittest.TestCase):
         )
         state = {
             "session_id": f"pre-{conversation_id}",
-            "status": "resume_received",
+            "status": "ready_for_screening_call",
+            "prescreen_status": "ready_for_screening_call",
             "resume_links": ["https://example.com/candidate-cv.pdf"],
+            "cv_received": True,
+            "must_have_answer": "6 years of Python and AWS backend work.",
+            "salary_expectation_min": 145000,
+            "salary_expectation_max": 145000,
+            "salary_expectation_currency": "USD",
+            "location_confirmed": True,
+            "work_authorization_confirmed": True,
             "updated_at": "2026-02-20T10:00:00+00:00",
         }
         self.db.upsert_pre_resume_session(
@@ -203,8 +215,22 @@ class CandidateProfileApiTests(unittest.TestCase):
             intent="resume_shared",
             inbound_text="attached resume",
             outbound_text="thanks",
-            state_status="resume_received",
+            state_status="ready_for_screening_call",
             details={"reason": "resume_detected"},
+        )
+        self.db.upsert_candidate_prescreen(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            conversation_id=conversation_id,
+            status="ready_for_screening_call",
+            must_have_answers_json=[{"question": "must_have_experience", "answer": "6 years of Python and AWS backend work."}],
+            salary_expectation_min=145000,
+            salary_expectation_max=145000,
+            salary_expectation_currency="USD",
+            location_confirmed=True,
+            work_authorization_confirmed=True,
+            cv_received=True,
+            summary="Written prescreen complete. Ready for 10 to 15 minute screening call.",
         )
         self.db.log_operation(
             operation="candidate.profile.test",
@@ -237,6 +263,11 @@ class CandidateProfileApiTests(unittest.TestCase):
         self.assertEqual(str(conversation.get("linkedin_account_label") or ""), "Nick Recruiter")
         self.assertEqual(str(conversation.get("external_chat_id") or ""), "chat-candidate-profile-1")
         self.assertIn("/dashboard?view=agent", str(conversation.get("dashboard_path") or ""))
+        prescreen = first.get("prescreen") if isinstance(first.get("prescreen"), dict) else {}
+        self.assertEqual(str(prescreen.get("status") or ""), "ready_for_screening_call")
+        self.assertEqual(float(prescreen.get("salary_expectation_min") or 0.0), 145000.0)
+        self.assertTrue(bool(prescreen.get("work_authorization_confirmed")))
+        self.assertEqual(float(((first.get("job") or {}).get("salary_max") or 0.0)), 150000.0)
         kinds = {str(x.get("kind") or "") for x in (first.get("signals_timeline") or [])}
         self.assertIn("assessment_signal", kinds)
         self.assertIn("pre_resume_event", kinds)

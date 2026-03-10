@@ -34,7 +34,7 @@ from .linkedin_provider import UnipileLinkedInProvider
 from .pre_resume_service import PreResumeCommunicationService, parse_resume_links
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
-TERMINAL_PRE_RESUME_STATUSES = {"resume_received", "not_interested", "unreachable", "stalled"}
+TERMINAL_PRE_RESUME_STATUSES = {"ready_for_screening_call", "not_interested", "unreachable", "stalled"}
 ACTIVE_INTERVIEW_STATUSES = {"invited", "in_progress"}
 TERMINAL_INTERVIEW_STATUSES = {"completed", "scored", "failed", "expired", "canceled"}
 AGENT_ROLES = {
@@ -751,6 +751,11 @@ class WorkflowService:
                         )
                         or self.outreach_agent.matching_engine.summarize_scope(job),
                         language=str((candidate.get("languages") or ["en"])[0]).lower(),
+                        job_location=str(job.get("location") or "").strip() or None,
+                        salary_min=self._safe_float(job.get("salary_min"), None),
+                        salary_max=self._safe_float(job.get("salary_max"), None),
+                        salary_currency=str(job.get("salary_currency") or "").strip() or None,
+                        work_authorization_required=bool(job.get("work_authorization_required")),
                     )
                     session_state = started["state"]
                     language = str(session_state.get("language") or "en")
@@ -764,6 +769,13 @@ class WorkflowService:
                     state=session_state,
                     instruction=self.stage_instructions.get("pre_resume", ""),
                 )
+                if isinstance(session_state, dict):
+                    self._sync_candidate_prescreen_from_state(
+                        job=job,
+                        candidate_id=candidate_id,
+                        conversation_id=conversation_id,
+                        state=session_state,
+                    )
                 if not message:
                     language, message = self.outreach_agent.compose_screening_message(
                         job=job,
@@ -983,6 +995,11 @@ class WorkflowService:
                         )
                         or self.outreach_agent.matching_engine.summarize_scope(job),
                         language=str((candidate.get("languages") or ["en"])[0]).lower(),
+                        job_location=str(job.get("location") or "").strip() or None,
+                        salary_min=self._safe_float(job.get("salary_min"), None),
+                        salary_max=self._safe_float(job.get("salary_max"), None),
+                        salary_currency=str(job.get("salary_currency") or "").strip() or None,
+                        work_authorization_required=bool(job.get("work_authorization_required")),
                     )
                     session_state = started["state"]
                     language = str(session_state.get("language") or "en")
@@ -996,6 +1013,13 @@ class WorkflowService:
                     state=session_state,
                     instruction=self.stage_instructions.get("pre_resume", ""),
                 )
+                if isinstance(session_state, dict):
+                    self._sync_candidate_prescreen_from_state(
+                        job=job,
+                        candidate_id=candidate_id,
+                        conversation_id=conversation_id,
+                        state=session_state,
+                    )
                 if not message:
                     language, message = self.outreach_agent.compose_screening_message(
                         job=job,
@@ -1346,6 +1370,11 @@ class WorkflowService:
                     )
                     or self.outreach_agent.matching_engine.summarize_scope(job),
                     language=normalized_lang,
+                    job_location=str(job.get("location") or "").strip() or None,
+                    salary_min=self._safe_float(job.get("salary_min"), None),
+                    salary_max=self._safe_float(job.get("salary_max"), None),
+                    salary_currency=str(job.get("salary_currency") or "").strip() or None,
+                    work_authorization_required=bool(job.get("work_authorization_required")),
                 )
                 state = started.get("state") if isinstance(started.get("state"), dict) else None
                 initial_outbound = str(started.get("outbound") or "").strip()
@@ -1358,6 +1387,12 @@ class WorkflowService:
                     candidate_id=candidate_id,
                     state=state,
                     instruction=self.stage_instructions.get("pre_resume", ""),
+                )
+                self._sync_candidate_prescreen_from_state(
+                    job=job,
+                    candidate_id=candidate_id,
+                    conversation_id=conversation_id,
+                    state=state,
                 )
 
         if not initial_outbound:
@@ -1669,12 +1704,6 @@ class WorkflowService:
                     language=language,
                     state=state_out if isinstance(state_out, dict) else None,
                 )
-                outbound = self._append_interview_opt_in_prompt(
-                    outbound=outbound,
-                    language=language,
-                    state=state_out if isinstance(state_out, dict) else None,
-                    match=match,
-                )
                 if isinstance(state_out, dict):
                     self.db.upsert_pre_resume_session(
                         session_id=session_id,
@@ -1685,23 +1714,13 @@ class WorkflowService:
                         instruction=self.stage_instructions.get("pre_resume", ""),
                     )
                     self.pre_resume_service.seed_session(state_out)
-                interview_result: Dict[str, Any] | None = None
-                outbound_sent_via_invite = False
-                state_status = str((state_out or {}).get("status") or "").strip().lower()
-                should_send_interview_invite = intent == "pre_vetting_opt_in" or state_status == "resume_received"
-                if should_send_interview_invite:
-                    interview_result = self._send_interview_invite_after_opt_in(
+                    self._sync_candidate_prescreen_from_state(
                         job=job,
-                        candidate=candidate,
-                        conversation=conversation,
-                        language=language,
-                        match=match,
+                        candidate_id=int(conversation["candidate_id"]),
+                        conversation_id=conversation_id,
+                        state=state_out,
                     )
-                    if (interview_result or {}).get("started"):
-                        invite_message = str((interview_result or {}).get("message") or "").strip()
-                        if invite_message:
-                            outbound = invite_message
-                        outbound_sent_via_invite = True
+                state_status = str((state_out or {}).get("status") or "").strip().lower()
 
                 self.db.insert_pre_resume_event(
                     session_id=session_id,
@@ -1713,12 +1732,11 @@ class WorkflowService:
                     state_status=(state_out or {}).get("status"),
                     details={
                         "result_event": result.get("event"),
-                        "invite_started": bool((interview_result or {}).get("started")),
-                        "invite_reason": (interview_result or {}).get("reason"),
+                        "prescreen_status": (state_out or {}).get("prescreen_status"),
                     },
                 )
 
-                if outbound and not outbound_sent_via_invite:
+                if outbound:
                     delivery = self._send_auto_reply(candidate=candidate, message=outbound, conversation=conversation)
                     outbound_id = self.db.add_message(
                         conversation_id=conversation_id,
@@ -1748,17 +1766,16 @@ class WorkflowService:
                         },
                     )
 
-                if state_status == "resume_received":
-                    has_interview_session = bool(str((interview_result or {}).get("session_id") or "").strip())
-                    if not has_interview_session:
-                        self.db.update_candidate_match_status(
-                            job_id=int(conversation["job_id"]),
-                            candidate_id=int(conversation["candidate_id"]),
-                            status="resume_received",
-                            extra_notes={"resume_received_at": (state_out or {}).get("updated_at")},
-                        )
+                prescreen_status = str((state_out or {}).get("prescreen_status") or "").strip().lower()
+                if prescreen_status == "ready_for_screening_call":
+                    self.db.update_candidate_match_status(
+                        job_id=int(conversation["job_id"]),
+                        candidate_id=int(conversation["candidate_id"]),
+                        status="resume_received",
+                        extra_notes={"resume_received_at": (state_out or {}).get("updated_at")},
+                    )
                     self.db.log_operation(
-                        operation="candidate.resume.received",
+                        operation="candidate.prescreen.completed",
                         status="ok",
                         entity_type="candidate",
                         entity_id=str(conversation["candidate_id"]),
@@ -1789,8 +1806,6 @@ class WorkflowService:
                     "mode": "pre_resume",
                     "state": state_out,
                 }
-                if interview_result:
-                    response["interview"] = interview_result
                 return response
 
         lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=previous_lang)
@@ -1830,6 +1845,43 @@ class WorkflowService:
         )
 
         return {"language": lang, "intent": intent, "reply": reply}
+
+    def _sync_candidate_prescreen_from_state(
+        self,
+        *,
+        job: Dict[str, Any],
+        candidate_id: int,
+        conversation_id: int,
+        state: Dict[str, Any] | None,
+    ) -> None:
+        state_payload = state if isinstance(state, dict) else {}
+        if not state_payload:
+            return
+        must_have_answer = str(state_payload.get("must_have_answer") or "").strip()
+        must_have_answers = [{"question": "must_have_experience", "answer": must_have_answer}] if must_have_answer else []
+        salary_currency = str(
+            state_payload.get("salary_expectation_currency") or state_payload.get("salary_currency") or job.get("salary_currency") or ""
+        ).strip().upper() or None
+        self.db.upsert_candidate_prescreen(
+            job_id=int(job.get("id") or job.get("job_id") or 0),
+            candidate_id=int(candidate_id),
+            conversation_id=int(conversation_id),
+            status=str(state_payload.get("prescreen_status") or state_payload.get("status") or "incomplete"),
+            must_have_answers_json=must_have_answers,
+            salary_expectation_min=self._safe_float(state_payload.get("salary_expectation_min"), None),
+            salary_expectation_max=self._safe_float(state_payload.get("salary_expectation_max"), None),
+            salary_expectation_currency=salary_currency,
+            location_confirmed=self._safe_bool(state_payload.get("location_confirmed"), None),
+            work_authorization_confirmed=self._safe_bool(state_payload.get("work_authorization_confirmed"), None),
+            cv_received=bool(state_payload.get("cv_received")) or bool(state_payload.get("resume_links")),
+            summary=(
+                "Written prescreen complete. Ready for 10 to 15 minute screening call."
+                if str(state_payload.get("prescreen_status") or "").strip().lower() == "ready_for_screening_call"
+                else None
+            ),
+            notes=None,
+            updated_at=str(state_payload.get("updated_at") or utc_now_iso()),
+        )
 
     def _normalize_inbound_meta(self, inbound_meta: Dict[str, Any] | None) -> Dict[str, Any]:
         out: Dict[str, Any] = {"type": "candidate_message"}
@@ -2745,6 +2797,12 @@ class WorkflowService:
                 state=state,
                 instruction=self.stage_instructions.get("pre_resume", ""),
             )
+            self._sync_candidate_prescreen_from_state(
+                job=self.db.get_job(job_ref) or {"id": job_ref},
+                candidate_id=candidate_id,
+                conversation_id=conversation_id,
+                state=state,
+            )
             outbound = str(result.get("outbound") or "").strip()
             candidate = self.db.get_candidate(candidate_id)
             conversation = self.db.get_conversation(conversation_id)
@@ -3561,6 +3619,30 @@ class WorkflowService:
         except (TypeError, ValueError):
             return int(fallback)
 
+    @staticmethod
+    def _safe_float(value: Any, fallback: float | None = 0.0) -> float | None:
+        try:
+            return float(value) if value is not None else fallback
+        except (TypeError, ValueError):
+            return fallback
+
+    @staticmethod
+    def _safe_bool(value: Any, fallback: bool | None = False) -> bool | None:
+        if value is None:
+            return fallback
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        lowered = str(value or "").strip().lower()
+        if not lowered:
+            return fallback
+        if lowered in {"1", "true", "yes", "y", "si", "sí"}:
+            return True
+        if lowered in {"0", "false", "no", "n"}:
+            return False
+        return fallback
+
     def _list_candidates_for_jobs(self, job_id: int | None, limit: int = 500) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 500), 2000))
         job_ids: List[int] = []
@@ -3761,10 +3843,12 @@ class WorkflowService:
 
         if normalized_mode == "pre_resume":
             mapping = {
-                "resume_received": (94.0, "cv_received", "Candidate shared CV/resume."),
-                "interview_opt_in": (84.0, "interview_opt_in", "Candidate confirmed async pre-vetting interview."),
+                "ready_for_screening_call": (94.0, "cv_received", "Written prescreen complete and CV received."),
+                "ready_for_cv": (84.0, "written_prescreen_complete", "Written prescreen complete. Waiting for CV."),
+                "cv_received_pending_answers": (80.0, "cv_received", "CV received before written prescreen was complete."),
                 "resume_promised": (80.0, "resume_promised", "Candidate promised to share CV later."),
                 "engaged_no_resume": (72.0, "in_dialogue", "Candidate is engaged in dialogue before CV."),
+                "incomplete": (72.0, "in_dialogue", "Written prescreen is still in progress."),
                 "awaiting_reply": (66.0, "awaiting_reply", "Awaiting candidate response after follow-up."),
                 "not_interested": (35.0, "not_interested", "Candidate is not interested."),
                 "stalled": (25.0, "stalled", "Dialogue stalled without response."),
@@ -3774,7 +3858,15 @@ class WorkflowService:
                 state_status,
                 (66.0, "in_dialogue", f"Dialogue update captured (status: {state_status or 'unknown'})."),
             )
-            if state_status in {"resume_received", "interview_opt_in", "resume_promised", "engaged_no_resume", "awaiting_reply"}:
+            if state_status in {
+                "ready_for_screening_call",
+                "ready_for_cv",
+                "cv_received_pending_answers",
+                "resume_promised",
+                "engaged_no_resume",
+                "incomplete",
+                "awaiting_reply",
+            }:
                 score = self._normalize_percentage(score + quality_adjustment)
         else:
             score = 68.0
@@ -3854,7 +3946,6 @@ class WorkflowService:
             adjustment += 2.5
 
         intent_adjustments = {
-            "pre_vetting_opt_in": 4.0,
             "resume_shared": 5.0,
             "will_send_later": 1.5,
             "not_interested": -7.0,
@@ -5442,10 +5533,10 @@ class WorkflowService:
         skills_text = ", ".join(str(x) for x in skills[:7] if str(x).strip())
         skills_line = f"\nMain stack in focus is {skills_text}" if skills_text else ""
         ask_line = (
-            "If you have relevant experience with AI and ML and Python, and especially any hands on work with AI agents, "
-            "please send your CV and salary expectations"
+            "If this sounds relevant, first we'll ask up to three written qualifying questions, then request your CV, "
+            "then move to a short 10-15 minute screening call"
             if request_resume
-            else "If this sounds relevant, send a short reply and your salary expectations"
+            else "If this sounds relevant, send a short reply and we can share the next steps"
         )
         sign_block = (
             "Best,\n"
@@ -5559,7 +5650,7 @@ class WorkflowService:
             "1) Start with Greetings,\n"
             "2) Mention Tener and that we are hiring for the specific position for a long term project with a fast moving US AI startup\n"
             "3) Mention direct collaboration with Founder and CTO on autonomous coding agent, agentic workflows, RAG pipelines, LLM orchestration, and scalable ML infrastructure\n"
-            "4) Ask for CV and salary expectations\n"
+            "4) Explain the process exactly as: first a few written qualifying questions, then CV, then a short 10-15 minute screening call\n"
             f"{signature_rule}"
             "Do not invent recruiter names.\n"
             "Style rules:\n"
@@ -5784,9 +5875,10 @@ class WorkflowService:
     @staticmethod
     def _should_require_resume_cta(state: Dict[str, Any] | None) -> bool:
         if not isinstance(state, dict):
-            return True
+            return False
         status = str(state.get("status") or "").strip().lower()
-        return status not in {"resume_received", "not_interested", "unreachable", "stalled"}
+        prescreen_status = str(state.get("prescreen_status") or "").strip().lower()
+        return status == "ready_for_cv" or prescreen_status == "ready_for_cv"
 
     @staticmethod
     def _has_resume_cta(text: str) -> bool:
@@ -5819,12 +5911,9 @@ class WorkflowService:
         result = str(text or "").strip()
         if not result:
             result = str(fallback or "").strip()
-        if not cls._has_resume_cta(result):
-            cta = cls._extract_resume_cta(fallback, language="en")
-            if cta:
-                result = f"{result}\n\n{cta}".strip()
-        if not cls._has_salary_expectation_cta(result):
-            result = f"{result}\nPlease share your salary expectations as well".strip()
+        process_line = "First we'll ask a few written qualifying questions, then request your CV, then a short 10-15 minute screening call."
+        if "written qualifying" not in result.lower() and "screening call" not in result.lower():
+            result = f"{result}\n\n{process_line}".strip()
         return result
 
     @staticmethod

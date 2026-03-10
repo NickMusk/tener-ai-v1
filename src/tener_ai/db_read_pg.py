@@ -168,6 +168,10 @@ class PostgresReadDatabase:
                         c.languages,
                         c.skills,
                         c.years_experience,
+                        j.salary_min AS job_salary_min,
+                        j.salary_max AS job_salary_max,
+                        j.salary_currency AS job_salary_currency,
+                        j.work_authorization_required AS job_work_authorization_required,
                         conv.id AS conversation_id,
                         conv.status AS conversation_status,
                         conv.external_chat_id,
@@ -175,6 +179,17 @@ class PostgresReadDatabase:
                         prs.session_id AS pre_resume_session_id,
                         prs.status AS pre_resume_status,
                         prs.next_followup_at AS pre_resume_next_followup_at,
+                        cps.status AS candidate_prescreen_status,
+                        cps.must_have_answers_json AS candidate_prescreen_must_have_answers,
+                        cps.salary_expectation_min AS candidate_prescreen_salary_expectation_min,
+                        cps.salary_expectation_max AS candidate_prescreen_salary_expectation_max,
+                        cps.salary_expectation_currency AS candidate_prescreen_salary_expectation_currency,
+                        cps.location_confirmed AS candidate_prescreen_location_confirmed,
+                        cps.work_authorization_confirmed AS candidate_prescreen_work_authorization_confirmed,
+                        cps.cv_received AS candidate_prescreen_cv_received,
+                        cps.summary AS candidate_prescreen_summary,
+                        cps.notes AS candidate_prescreen_notes,
+                        cps.updated_at AS candidate_prescreen_updated_at,
                         (
                             SELECT msg.direction
                             FROM messages msg
@@ -191,6 +206,7 @@ class PostgresReadDatabase:
                         ) AS last_message_created_at
                     FROM candidate_job_matches m
                     JOIN candidates c ON c.id = m.candidate_id
+                    JOIN jobs j ON j.id = m.job_id
                     LEFT JOIN conversations conv ON conv.id = (
                         SELECT c2.id
                         FROM conversations c2
@@ -200,6 +216,7 @@ class PostgresReadDatabase:
                         LIMIT 1
                     )
                     LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+                    LEFT JOIN candidate_prescreens cps ON cps.job_id = m.job_id AND cps.candidate_id = m.candidate_id
                     WHERE m.job_id = %s
                     ORDER BY m.score DESC
                     """,

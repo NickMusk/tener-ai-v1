@@ -119,6 +119,10 @@ class CandidateProfileService:
                 "location": str(match.get("job_location") or "").strip() or None,
                 "preferred_languages": match.get("job_preferred_languages") if isinstance(match.get("job_preferred_languages"), list) else [],
                 "seniority": str(match.get("job_seniority") or "").strip() or None,
+                "salary_min": self._safe_float(match.get("job_salary_min"), None),
+                "salary_max": self._safe_float(match.get("job_salary_max"), None),
+                "salary_currency": str(match.get("job_salary_currency") or "").strip().upper() or None,
+                "work_authorization_required": bool(match.get("job_work_authorization_required")),
                 "must_have_skills": match.get("job_must_have_skills") if isinstance(match.get("job_must_have_skills"), list) else [],
                 "nice_to_have_skills": match.get("job_nice_to_have_skills") if isinstance(match.get("job_nice_to_have_skills"), list) else [],
                 "questionable_skills": match.get("job_questionable_skills") if isinstance(match.get("job_questionable_skills"), list) else [],
@@ -137,7 +141,23 @@ class CandidateProfileService:
             overall_scoring = self.scoring_policy.compute_overall(
                 scorecard=scorecard,
                 current_status_key=current_status_key,
+                row=match,
             )
+            prescreen = {
+                "status": str(match.get("candidate_prescreen_status") or "").strip() or None,
+                "must_have_answers": match.get("candidate_prescreen_must_have_answers")
+                if isinstance(match.get("candidate_prescreen_must_have_answers"), list)
+                else [],
+                "salary_expectation_min": self._safe_float(match.get("candidate_prescreen_salary_expectation_min"), None),
+                "salary_expectation_max": self._safe_float(match.get("candidate_prescreen_salary_expectation_max"), None),
+                "salary_expectation_currency": str(match.get("candidate_prescreen_salary_expectation_currency") or "").strip().upper() or None,
+                "location_confirmed": match.get("candidate_prescreen_location_confirmed"),
+                "work_authorization_confirmed": match.get("candidate_prescreen_work_authorization_confirmed"),
+                "cv_received": bool(match.get("candidate_prescreen_cv_received")),
+                "summary": str(match.get("candidate_prescreen_summary") or "").strip() or None,
+                "notes": str(match.get("candidate_prescreen_notes") or "").strip() or None,
+                "updated_at": match.get("candidate_prescreen_updated_at"),
+            }
             job_events = list(events_by_job.get(job_id, [])) if is_selected_job else []
             job_conversations = list(conversations_by_job.get(job_id, [])) if is_selected_job else []
             resume_entries_for_job = self._collect_resume_entries(
@@ -153,6 +173,7 @@ class CandidateProfileService:
                 pre_resume_events=job_events,
                 conversations=job_conversations,
                 resume_links=resumes_for_job,
+                prescreen=prescreen,
             ) if is_selected_job else {}
             if is_selected_job:
                 job_conversation_ids = conversation_ids_by_job.get(job_id, set())
@@ -213,6 +234,7 @@ class CandidateProfileService:
                         "key": current_status_key,
                         "label": current_status_label,
                     },
+                    "prescreen": prescreen,
                     "scorecard": scorecard,
                     "overall_scoring": overall_scoring,
                     "fit_breakdown": fit_breakdown,
@@ -576,6 +598,7 @@ class CandidateProfileService:
         pre_resume_events: List[Dict[str, Any]],
         conversations: List[Dict[str, Any]],
         resume_links: List[str],
+        prescreen: Dict[str, Any],
     ) -> Dict[str, Any]:
         notes = match.get("verification_notes") if isinstance(match.get("verification_notes"), dict) else {}
         core_profile = notes.get("core_profile") if isinstance(notes.get("core_profile"), dict) else {}
@@ -652,6 +675,41 @@ class CandidateProfileService:
                     "message": "Interview score is not available yet.",
                 }
             )
+        salary_expectation_min = self._safe_float(prescreen.get("salary_expectation_min"), None)
+        salary_expectation_max = self._safe_float(prescreen.get("salary_expectation_max"), None)
+        job_salary_min = self._safe_float(job.get("salary_min"), None)
+        job_salary_max = self._safe_float(job.get("salary_max"), None)
+        salary_currency = str(prescreen.get("salary_expectation_currency") or job.get("salary_currency") or "").strip().upper() or None
+        salary_status = "unknown"
+        if salary_expectation_min is not None or salary_expectation_max is not None:
+            candidate_floor = salary_expectation_min if salary_expectation_min is not None else salary_expectation_max
+            candidate_ceiling = salary_expectation_max if salary_expectation_max is not None else salary_expectation_min
+            if job_salary_max is not None and candidate_floor is not None:
+                overage = candidate_floor - job_salary_max
+                if overage <= 0:
+                    salary_status = "within_budget"
+                elif overage <= max(10000.0, float(job_salary_max) * 0.10):
+                    salary_status = "slightly_above"
+                    risks.append(
+                        {
+                            "type": "salary_fit",
+                            "severity": "medium",
+                            "message": "Salary expectations are slightly above the current budget.",
+                        }
+                    )
+                else:
+                    salary_status = "far_above"
+                    risks.append(
+                        {
+                            "type": "salary_fit",
+                            "severity": "high",
+                            "message": "Salary expectations are materially above the current budget.",
+                        }
+                    )
+            elif job_salary_min is not None and candidate_ceiling is not None and candidate_ceiling < job_salary_min:
+                salary_status = "below_budget"
+            else:
+                salary_status = "unknown"
         return {
             "must_have": {
                 "required": required_skills,
@@ -671,6 +729,15 @@ class CandidateProfileService:
                 "years_experience": candidate.get("years_experience"),
                 "location": candidate.get("location"),
                 "languages": candidate.get("languages") if isinstance(candidate.get("languages"), list) else [],
+            },
+            "prescreen": prescreen,
+            "salary_fit": {
+                "job_salary_min": job_salary_min,
+                "job_salary_max": job_salary_max,
+                "currency": salary_currency,
+                "candidate_salary_min": salary_expectation_min,
+                "candidate_salary_max": salary_expectation_max,
+                "status": salary_status,
             },
             "risk_flags": risks,
             "score_snapshot": {

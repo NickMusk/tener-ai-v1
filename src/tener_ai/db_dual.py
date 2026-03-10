@@ -55,9 +55,10 @@ class PostgresMirrorWriter:
                     INSERT INTO jobs (
                         id, title, company, company_website, jd_text, location,
                         preferred_languages, must_have_skills, nice_to_have_skills, questionable_skills,
-                        seniority, linkedin_routing_mode, archived_at, created_at
+                        seniority, salary_min, salary_max, salary_currency, work_authorization_required,
+                        linkedin_routing_mode, archived_at, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT(id) DO UPDATE SET
                         title = EXCLUDED.title,
                         company = EXCLUDED.company,
@@ -69,6 +70,10 @@ class PostgresMirrorWriter:
                         nice_to_have_skills = EXCLUDED.nice_to_have_skills,
                         questionable_skills = EXCLUDED.questionable_skills,
                         seniority = EXCLUDED.seniority,
+                        salary_min = EXCLUDED.salary_min,
+                        salary_max = EXCLUDED.salary_max,
+                        salary_currency = EXCLUDED.salary_currency,
+                        work_authorization_required = EXCLUDED.work_authorization_required,
                         linkedin_routing_mode = EXCLUDED.linkedin_routing_mode,
                         archived_at = EXCLUDED.archived_at
                     """,
@@ -84,6 +89,10 @@ class PostgresMirrorWriter:
                         self._json(row.get("nice_to_have_skills") or []),
                         self._json(row.get("questionable_skills") or []),
                         row.get("seniority"),
+                        row.get("salary_min"),
+                        row.get("salary_max"),
+                        row.get("salary_currency"),
+                        bool(row.get("work_authorization_required")),
                         row.get("linkedin_routing_mode") or "auto",
                         (str(row.get("archived_at") or "").strip() or None),
                         row.get("created_at") or utc_now_iso(),
@@ -455,6 +464,52 @@ class PostgresMirrorWriter:
                     ),
                 )
 
+    def upsert_candidate_prescreen(self, row: Dict[str, Any]) -> None:
+        with self._transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO candidate_prescreens (
+                        job_id, candidate_id, conversation_id, status, must_have_answers_json,
+                        salary_expectation_min, salary_expectation_max, salary_expectation_currency,
+                        location_confirmed, work_authorization_confirmed, cv_received,
+                        summary, notes, created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT(job_id, candidate_id) DO UPDATE SET
+                        conversation_id = EXCLUDED.conversation_id,
+                        status = EXCLUDED.status,
+                        must_have_answers_json = EXCLUDED.must_have_answers_json,
+                        salary_expectation_min = EXCLUDED.salary_expectation_min,
+                        salary_expectation_max = EXCLUDED.salary_expectation_max,
+                        salary_expectation_currency = EXCLUDED.salary_expectation_currency,
+                        location_confirmed = EXCLUDED.location_confirmed,
+                        work_authorization_confirmed = EXCLUDED.work_authorization_confirmed,
+                        cv_received = EXCLUDED.cv_received,
+                        summary = EXCLUDED.summary,
+                        notes = EXCLUDED.notes,
+                        created_at = COALESCE(candidate_prescreens.created_at, EXCLUDED.created_at),
+                        updated_at = EXCLUDED.updated_at
+                    """,
+                    (
+                        int(row.get("job_id") or 0),
+                        int(row.get("candidate_id") or 0),
+                        int(row.get("conversation_id")) if row.get("conversation_id") is not None else None,
+                        row.get("status") or "incomplete",
+                        self._json(row.get("must_have_answers_json") or []),
+                        row.get("salary_expectation_min"),
+                        row.get("salary_expectation_max"),
+                        row.get("salary_expectation_currency"),
+                        row.get("location_confirmed"),
+                        row.get("work_authorization_confirmed"),
+                        bool(row.get("cv_received")),
+                        row.get("summary"),
+                        row.get("notes"),
+                        row.get("created_at") or utc_now_iso(),
+                        row.get("updated_at") or utc_now_iso(),
+                    ),
+                )
+
     def insert_webhook_event(self, *, event_key: str, source: str, payload: Optional[Dict[str, Any]] = None) -> None:
         with self._transaction() as conn:
             with conn.cursor() as cur:
@@ -713,6 +768,15 @@ class DualWriteDatabase:
                 self._mirror_call("update_job_requirements", lambda: self._mirror.upsert_job(row))
         return updated
 
+    def update_job_details(self, *args: Any, **kwargs: Any) -> bool:
+        updated = bool(self._primary.update_job_details(*args, **kwargs))
+        if updated:
+            job_id = int(kwargs.get("job_id") if "job_id" in kwargs else args[0])
+            row = self._primary.get_job(job_id)
+            if isinstance(row, dict):
+                self._mirror_call("update_job_details", lambda: self._mirror.upsert_job(row))
+        return updated
+
     def set_job_archived(self, *args: Any, **kwargs: Any) -> bool:
         updated = bool(self._primary.set_job_archived(*args, **kwargs))
         if updated:
@@ -883,6 +947,14 @@ class DualWriteDatabase:
         if isinstance(row, dict):
             self._mirror_call("insert_pre_resume_event", lambda: self._mirror.upsert_pre_resume_event(row))
         return event_id
+
+    def upsert_candidate_prescreen(self, *args: Any, **kwargs: Any) -> None:
+        self._primary.upsert_candidate_prescreen(*args, **kwargs)
+        job_id = int(kwargs.get("job_id") if "job_id" in kwargs else args[0])
+        candidate_id = int(kwargs.get("candidate_id") if "candidate_id" in kwargs else args[1])
+        row = self._primary.get_candidate_prescreen(job_id=job_id, candidate_id=candidate_id)
+        if isinstance(row, dict):
+            self._mirror_call("upsert_candidate_prescreen", lambda: self._mirror.upsert_candidate_prescreen(row))
 
     def record_webhook_event(self, *args: Any, **kwargs: Any) -> bool:
         created = bool(self._primary.record_webhook_event(*args, **kwargs))

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 
 DEFAULT_SCORING_POLICY: Dict[str, Any] = {
@@ -16,6 +16,12 @@ DEFAULT_SCORING_POLICY: Dict[str, Any] = {
         "blocked_statuses": ["not_interested", "unreachable"],
         "cap_without_cv": 70.0,
         "cap_without_interview_score": 80.0,
+        "salary_far_above_block_over_budget": 20000.0,
+        "salary_far_above_block_percent": 0.20,
+        "salary_moderate_penalty_over_budget": 10000.0,
+        "salary_moderate_penalty_percent": 0.10,
+        "salary_moderate_penalty_points": 12.0,
+        "salary_far_above_penalty_points": 30.0,
     },
     "decisions": {
         "shortlist_min": 80.0,
@@ -36,14 +42,19 @@ class CandidateScoringPolicy:
         item = dict(row)
         scorecard = item.get("agent_scorecard") if isinstance(item.get("agent_scorecard"), dict) else {}
         current_status_key = str(item.get("current_status_key") or "").strip().lower()
-        overall = self.compute_overall(scorecard=scorecard, current_status_key=current_status_key)
+        overall = self.compute_overall(scorecard=scorecard, current_status_key=current_status_key, row=item)
         item["overall_scoring"] = overall
         item["overall_score"] = overall.get("overall_score")
         item["overall_status"] = overall.get("overall_status")
         item["overall_block_reason"] = overall.get("block_reason")
         return item
 
-    def compute_overall(self, scorecard: Dict[str, Any], current_status_key: str) -> Dict[str, Any]:
+    def compute_overall(
+        self,
+        scorecard: Dict[str, Any],
+        current_status_key: str,
+        row: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         weights = self._weights()
         decisions = self._decisions()
         gates = self._gates()
@@ -98,6 +109,18 @@ class CandidateScoringPolicy:
             final_score = gates["cap_without_interview_score"]
             gate_reasons.append("cap_without_interview_score")
 
+        salary_fit = self._salary_fit(row or {}, gates)
+        salary_status = str(salary_fit.get("status") or "unknown")
+        salary_penalty = float(salary_fit.get("penalty_points") or 0.0)
+        if salary_penalty > 0:
+            final_score = max(0.0, float(final_score) - salary_penalty)
+            gate_reasons.append(f"salary_fit:{salary_status}")
+        if bool(salary_fit.get("blocked")):
+            blocked = True
+            final_score = 0.0
+            block_reason = f"salary_fit:{salary_status}"
+            gate_reasons.append(f"blocked:{block_reason}")
+
         if blocked:
             overall_status = "blocked"
         elif not has_all_scores:
@@ -123,6 +146,7 @@ class CandidateScoringPolicy:
             "has_cv": has_cv,
             "has_interview_score": has_interview_score,
             "has_all_scores": has_all_scores,
+            "salary_fit": salary_fit,
         }
 
     def to_dict(self) -> Dict[str, Any]:
@@ -145,6 +169,12 @@ class CandidateScoringPolicy:
             "blocked_statuses": normalized_blocked or ["not_interested", "unreachable"],
             "cap_without_cv": self._safe_float(raw.get("cap_without_cv"), 70.0),
             "cap_without_interview_score": self._safe_float(raw.get("cap_without_interview_score"), 80.0),
+            "salary_far_above_block_over_budget": self._safe_float(raw.get("salary_far_above_block_over_budget"), 20000.0),
+            "salary_far_above_block_percent": self._safe_float(raw.get("salary_far_above_block_percent"), 0.20),
+            "salary_moderate_penalty_over_budget": self._safe_float(raw.get("salary_moderate_penalty_over_budget"), 10000.0),
+            "salary_moderate_penalty_percent": self._safe_float(raw.get("salary_moderate_penalty_percent"), 0.10),
+            "salary_moderate_penalty_points": self._safe_float(raw.get("salary_moderate_penalty_points"), 12.0),
+            "salary_far_above_penalty_points": self._safe_float(raw.get("salary_far_above_penalty_points"), 30.0),
         }
 
     def _decisions(self) -> Dict[str, float]:
@@ -207,3 +237,60 @@ class CandidateScoringPolicy:
         if not isinstance(data, dict):
             return dict(DEFAULT_SCORING_POLICY)
         return data
+
+    @classmethod
+    def _salary_fit(cls, row: Dict[str, Any], gates: Dict[str, Any]) -> Dict[str, Any]:
+        job_max = cls._coerce_optional_float(row.get("job_salary_max"))
+        job_min = cls._coerce_optional_float(row.get("job_salary_min"))
+        candidate_min = cls._coerce_optional_float(row.get("candidate_prescreen_salary_expectation_min"))
+        candidate_max = cls._coerce_optional_float(row.get("candidate_prescreen_salary_expectation_max"))
+        currency = str(
+            row.get("candidate_prescreen_salary_expectation_currency") or row.get("job_salary_currency") or ""
+        ).strip().upper() or None
+        if (candidate_min is None and candidate_max is None) or (job_min is None and job_max is None):
+            return {"status": "unknown", "blocked": False, "penalty_points": 0.0, "currency": currency}
+
+        candidate_floor = candidate_min if candidate_min is not None else candidate_max
+        candidate_ceiling = candidate_max if candidate_max is not None else candidate_min
+        if job_max is not None and candidate_floor is not None:
+            over_budget = candidate_floor - job_max
+            if over_budget <= 0:
+                return {"status": "within_budget", "blocked": False, "penalty_points": 0.0, "currency": currency}
+            moderate_cutoff = max(
+                float(gates["salary_moderate_penalty_over_budget"]),
+                float(job_max) * float(gates["salary_moderate_penalty_percent"]),
+            )
+            block_cutoff = max(
+                float(gates["salary_far_above_block_over_budget"]),
+                float(job_max) * float(gates["salary_far_above_block_percent"]),
+            )
+            if over_budget >= block_cutoff:
+                return {
+                    "status": "far_above",
+                    "blocked": True,
+                    "penalty_points": float(gates["salary_far_above_penalty_points"]),
+                    "currency": currency,
+                }
+            if over_budget >= moderate_cutoff:
+                return {
+                    "status": "slightly_above",
+                    "blocked": False,
+                    "penalty_points": float(gates["salary_moderate_penalty_points"]),
+                    "currency": currency,
+                }
+            return {
+                "status": "slightly_above",
+                "blocked": False,
+                "penalty_points": float(gates["salary_moderate_penalty_points"]) / 2.0,
+                "currency": currency,
+            }
+        if job_min is not None and candidate_ceiling is not None and candidate_ceiling < job_min:
+            return {"status": "below_budget", "blocked": False, "penalty_points": 0.0, "currency": currency}
+        return {"status": "unknown", "blocked": False, "penalty_points": 0.0, "currency": currency}
+
+    @staticmethod
+    def _coerce_optional_float(value: Any) -> float | None:
+        try:
+            return float(value) if value is not None else None
+        except (TypeError, ValueError):
+            return None

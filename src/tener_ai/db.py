@@ -52,6 +52,10 @@ class Database:
             nice_to_have_skills TEXT,
             questionable_skills TEXT,
             seniority TEXT,
+            salary_min REAL,
+            salary_max REAL,
+            salary_currency TEXT,
+            work_authorization_required INTEGER NOT NULL DEFAULT 0,
             linkedin_routing_mode TEXT NOT NULL DEFAULT 'auto',
             archived_at TEXT,
             created_at TEXT NOT NULL
@@ -197,6 +201,32 @@ class Database:
             details TEXT,
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS candidate_prescreens (
+            job_id INTEGER NOT NULL,
+            candidate_id INTEGER NOT NULL,
+            conversation_id INTEGER,
+            status TEXT NOT NULL,
+            must_have_answers_json TEXT,
+            salary_expectation_min REAL,
+            salary_expectation_max REAL,
+            salary_expectation_currency TEXT,
+            location_confirmed INTEGER,
+            work_authorization_confirmed INTEGER,
+            cv_received INTEGER NOT NULL DEFAULT 0,
+            summary TEXT,
+            notes TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            PRIMARY KEY(job_id, candidate_id),
+            FOREIGN KEY(job_id) REFERENCES jobs(id),
+            FOREIGN KEY(candidate_id) REFERENCES candidates(id),
+            FOREIGN KEY(conversation_id) REFERENCES conversations(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_candidate_prescreens_candidate
+            ON candidate_prescreens(candidate_id, updated_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_candidate_prescreens_conversation
+            ON candidate_prescreens(conversation_id, updated_at DESC);
 
         CREATE TABLE IF NOT EXISTS webhook_events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -425,6 +455,10 @@ class Database:
         must_have_skills: Optional[List[str]] = None,
         nice_to_have_skills: Optional[List[str]] = None,
         questionable_skills: Optional[List[str]] = None,
+        salary_min: Optional[float] = None,
+        salary_max: Optional[float] = None,
+        salary_currency: Optional[str] = None,
+        work_authorization_required: bool = False,
         linkedin_routing_mode: str = "auto",
     ) -> int:
         routing_mode = self._normalize_linkedin_routing_mode(linkedin_routing_mode)
@@ -434,9 +468,10 @@ class Database:
                 INSERT INTO jobs (
                     title, company, company_website, jd_text, location,
                     preferred_languages, must_have_skills, nice_to_have_skills, questionable_skills,
-                    seniority, linkedin_routing_mode, created_at
+                    seniority, salary_min, salary_max, salary_currency, work_authorization_required,
+                    linkedin_routing_mode, created_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     title,
@@ -449,6 +484,10 @@ class Database:
                     json.dumps(self._normalize_skill_list(nice_to_have_skills)),
                     json.dumps(self._normalize_skill_list(questionable_skills)),
                     seniority,
+                    salary_min,
+                    salary_max,
+                    (str(salary_currency or "").strip().upper() or None),
+                    1 if work_authorization_required else 0,
                     routing_mode,
                     utc_now_iso(),
                 ),
@@ -505,6 +544,45 @@ class Database:
                     int(job_id),
                 ),
             )
+            return cur.rowcount > 0
+
+    def update_job_details(
+        self,
+        *,
+        job_id: int,
+        location: Optional[str] = None,
+        seniority: Optional[str] = None,
+        salary_min: Optional[float] = None,
+        salary_max: Optional[float] = None,
+        salary_currency: Optional[str] = None,
+        work_authorization_required: Optional[bool] = None,
+    ) -> bool:
+        assignments: List[str] = []
+        params: List[Any] = []
+        if location is not None:
+            assignments.append("location = ?")
+            params.append(str(location or "").strip() or None)
+        if seniority is not None:
+            assignments.append("seniority = ?")
+            params.append(str(seniority or "").strip().lower() or None)
+        if salary_min is not None:
+            assignments.append("salary_min = ?")
+            params.append(float(salary_min))
+        if salary_max is not None:
+            assignments.append("salary_max = ?")
+            params.append(float(salary_max))
+        if salary_currency is not None:
+            assignments.append("salary_currency = ?")
+            params.append(str(salary_currency or "").strip().upper() or None)
+        if work_authorization_required is not None:
+            assignments.append("work_authorization_required = ?")
+            params.append(1 if bool(work_authorization_required) else 0)
+        if not assignments:
+            return False
+        params.append(int(job_id))
+        sql = f"UPDATE jobs SET {', '.join(assignments)} WHERE id = ?"
+        with self.transaction() as conn:
+            cur = conn.execute(sql, tuple(params))
             return cur.rowcount > 0
 
     def list_jobs(self, limit: int = 100, include_archived: bool = False) -> List[Dict[str, Any]]:
@@ -946,6 +1024,10 @@ class Database:
             c.languages,
             c.skills,
             c.years_experience,
+            j.salary_min AS job_salary_min,
+            j.salary_max AS job_salary_max,
+            j.salary_currency AS job_salary_currency,
+            j.work_authorization_required AS job_work_authorization_required,
             conv.id AS conversation_id,
             conv.status AS conversation_status,
             conv.external_chat_id,
@@ -954,6 +1036,17 @@ class Database:
             prs.session_id AS pre_resume_session_id,
             prs.status AS pre_resume_status,
             prs.next_followup_at AS pre_resume_next_followup_at,
+            cps.status AS candidate_prescreen_status,
+            cps.must_have_answers_json AS candidate_prescreen_must_have_answers,
+            cps.salary_expectation_min AS candidate_prescreen_salary_expectation_min,
+            cps.salary_expectation_max AS candidate_prescreen_salary_expectation_max,
+            cps.salary_expectation_currency AS candidate_prescreen_salary_expectation_currency,
+            cps.location_confirmed AS candidate_prescreen_location_confirmed,
+            cps.work_authorization_confirmed AS candidate_prescreen_work_authorization_confirmed,
+            cps.cv_received AS candidate_prescreen_cv_received,
+            cps.summary AS candidate_prescreen_summary,
+            cps.notes AS candidate_prescreen_notes,
+            cps.updated_at AS candidate_prescreen_updated_at,
             (
                 SELECT msg.direction
                 FROM messages msg
@@ -1023,6 +1116,7 @@ class Database:
                 LIMIT 1
             ) AS pending_action_payload_json
         FROM candidate_job_matches m
+        JOIN jobs j ON j.id = m.job_id
         JOIN candidates c ON c.id = m.candidate_id
         LEFT JOIN conversations conv ON conv.id = (
             SELECT c2.id
@@ -1033,6 +1127,7 @@ class Database:
             LIMIT 1
         )
         LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+        LEFT JOIN candidate_prescreens cps ON cps.job_id = m.job_id AND cps.candidate_id = m.candidate_id
         WHERE m.job_id = ?
         ORDER BY m.score DESC
         """
@@ -1217,6 +1312,10 @@ class Database:
             j.must_have_skills AS job_must_have_skills,
             j.nice_to_have_skills AS job_nice_to_have_skills,
             j.questionable_skills AS job_questionable_skills,
+            j.salary_min AS job_salary_min,
+            j.salary_max AS job_salary_max,
+            j.salary_currency AS job_salary_currency,
+            j.work_authorization_required AS job_work_authorization_required,
             cp.profile_json AS job_company_culture_profile,
             conv.id AS conversation_id,
             conv.status AS conversation_status,
@@ -1228,6 +1327,17 @@ class Database:
             prs.next_followup_at AS pre_resume_next_followup_at,
             prs.resume_links AS pre_resume_resume_links,
             prs.state_json AS pre_resume_state_json,
+            cps.status AS candidate_prescreen_status,
+            cps.must_have_answers_json AS candidate_prescreen_must_have_answers,
+            cps.salary_expectation_min AS candidate_prescreen_salary_expectation_min,
+            cps.salary_expectation_max AS candidate_prescreen_salary_expectation_max,
+            cps.salary_expectation_currency AS candidate_prescreen_salary_expectation_currency,
+            cps.location_confirmed AS candidate_prescreen_location_confirmed,
+            cps.work_authorization_confirmed AS candidate_prescreen_work_authorization_confirmed,
+            cps.cv_received AS candidate_prescreen_cv_received,
+            cps.summary AS candidate_prescreen_summary,
+            cps.notes AS candidate_prescreen_notes,
+            cps.updated_at AS candidate_prescreen_updated_at,
             (
                 SELECT msg.direction
                 FROM messages msg
@@ -1314,6 +1424,7 @@ class Database:
             LIMIT 1
         )
         LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+        LEFT JOIN candidate_prescreens cps ON cps.job_id = m.job_id AND cps.candidate_id = m.candidate_id
         WHERE m.candidate_id = ?
         ORDER BY m.created_at DESC, m.id DESC
         """
@@ -2859,6 +2970,103 @@ class Database:
             )
             return int(cur.lastrowid)
 
+    def upsert_candidate_prescreen(
+        self,
+        *,
+        job_id: int,
+        candidate_id: int,
+        conversation_id: Optional[int],
+        status: str,
+        must_have_answers_json: Optional[List[Dict[str, Any]]] = None,
+        salary_expectation_min: Optional[float] = None,
+        salary_expectation_max: Optional[float] = None,
+        salary_expectation_currency: Optional[str] = None,
+        location_confirmed: Optional[bool] = None,
+        work_authorization_confirmed: Optional[bool] = None,
+        cv_received: bool = False,
+        summary: Optional[str] = None,
+        notes: Optional[str] = None,
+        created_at: Optional[str] = None,
+        updated_at: Optional[str] = None,
+    ) -> None:
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            existing = conn.execute(
+                """
+                SELECT created_at
+                FROM candidate_prescreens
+                WHERE job_id = ? AND candidate_id = ?
+                LIMIT 1
+                """,
+                (int(job_id), int(candidate_id)),
+            ).fetchone()
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO candidate_prescreens (
+                    job_id, candidate_id, conversation_id, status, must_have_answers_json,
+                    salary_expectation_min, salary_expectation_max, salary_expectation_currency,
+                    location_confirmed, work_authorization_confirmed, cv_received,
+                    summary, notes, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(job_id),
+                    int(candidate_id),
+                    int(conversation_id) if conversation_id is not None else None,
+                    str(status or "incomplete").strip().lower() or "incomplete",
+                    json.dumps(must_have_answers_json or []),
+                    float(salary_expectation_min) if salary_expectation_min is not None else None,
+                    float(salary_expectation_max) if salary_expectation_max is not None else None,
+                    str(salary_expectation_currency or "").strip().upper() or None,
+                    None if location_confirmed is None else (1 if bool(location_confirmed) else 0),
+                    None if work_authorization_confirmed is None else (1 if bool(work_authorization_confirmed) else 0),
+                    1 if bool(cv_received) else 0,
+                    str(summary or "").strip() or None,
+                    str(notes or "").strip() or None,
+                    created_at or (str(existing["created_at"]) if existing is not None else now),
+                    updated_at or now,
+                ),
+            )
+
+    def get_candidate_prescreen(self, *, job_id: int, candidate_id: int) -> Optional[Dict[str, Any]]:
+        row = self._conn.execute(
+            """
+            SELECT *
+            FROM candidate_prescreens
+            WHERE job_id = ? AND candidate_id = ?
+            LIMIT 1
+            """,
+            (int(job_id), int(candidate_id)),
+        ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def list_candidate_prescreens_for_candidate(self, candidate_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            """
+            SELECT *
+            FROM candidate_prescreens
+            WHERE candidate_id = ?
+            ORDER BY updated_at DESC, job_id DESC
+            LIMIT ?
+            """,
+            (int(candidate_id), max(1, min(int(limit or 200), 2000))),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def list_candidate_prescreens_for_job(self, job_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        rows = self._conn.execute(
+            """
+            SELECT *
+            FROM candidate_prescreens
+            WHERE job_id = ?
+            ORDER BY updated_at DESC, candidate_id DESC
+            LIMIT ?
+            """,
+            (int(job_id), max(1, min(int(limit or 200), 2000))),
+        ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def list_pre_resume_events(self, limit: int = 200, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(limit, 2000))
         if session_id:
@@ -3582,6 +3790,21 @@ class Database:
         if "questionable_skills" not in job_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN questionable_skills TEXT")
+        if "salary_min" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN salary_min REAL")
+        if "salary_max" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN salary_max REAL")
+        if "salary_currency" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN salary_currency TEXT")
+        if "work_authorization_required" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN work_authorization_required INTEGER")
+                conn.execute(
+                    "UPDATE jobs SET work_authorization_required = 0 WHERE work_authorization_required IS NULL"
+                )
         if "linkedin_routing_mode" not in job_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN linkedin_routing_mode TEXT")
@@ -3750,6 +3973,34 @@ class Database:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_contact_requests_created ON contact_requests(created_at DESC, id DESC)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS candidate_prescreens (
+                    job_id INTEGER NOT NULL,
+                    candidate_id INTEGER NOT NULL,
+                    conversation_id INTEGER,
+                    status TEXT NOT NULL,
+                    must_have_answers_json TEXT,
+                    salary_expectation_min REAL,
+                    salary_expectation_max REAL,
+                    salary_expectation_currency TEXT,
+                    location_confirmed INTEGER,
+                    work_authorization_confirmed INTEGER,
+                    cv_received INTEGER NOT NULL DEFAULT 0,
+                    summary TEXT,
+                    notes TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(job_id, candidate_id)
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_candidate_prescreens_candidate ON candidate_prescreens(candidate_id, updated_at DESC)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_candidate_prescreens_conversation ON candidate_prescreens(conversation_id, updated_at DESC)"
+            )
 
         columns = self._table_columns("conversations")
         if "external_chat_id" not in columns:
@@ -3896,13 +4147,43 @@ class Database:
             "job_company_culture_profile",
             "signal_meta",
             "parsed_json",
+            "must_have_answers_json",
+            "candidate_prescreen_must_have_answers",
         ):
             if field in item and item[field]:
                 try:
                     item[field] = json.loads(item[field])
                 except json.JSONDecodeError:
                     pass
+        for field in (
+            "work_authorization_required",
+            "location_confirmed",
+            "work_authorization_confirmed",
+            "cv_received",
+            "candidate_prescreen_location_confirmed",
+            "candidate_prescreen_work_authorization_confirmed",
+            "candidate_prescreen_cv_received",
+        ):
+            if field in item:
+                item[field] = Database._coerce_boolish(item.get(field))
         return item
+
+    @staticmethod
+    def _coerce_boolish(value: Any) -> Optional[bool]:
+        if value is None:
+            return None
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, (int, float)):
+            return bool(value)
+        text = str(value or "").strip().lower()
+        if not text:
+            return None
+        if text in {"1", "true", "t", "yes", "y"}:
+            return True
+        if text in {"0", "false", "f", "no", "n"}:
+            return False
+        return bool(text)
 
     @staticmethod
     def _normalize_skill_list(values: Optional[List[Any]]) -> List[str]:
@@ -3951,6 +4232,8 @@ class Database:
         match_status = str(item.get("status") or "").strip().lower()
         conversation_status = str(item.get("conversation_status") or "").strip().lower()
         pre_resume_status = str(item.get("pre_resume_status") or "").strip().lower()
+        prescreen_status = str(item.get("candidate_prescreen_status") or "").strip().lower()
+        prescreen_cv_received = bool(item.get("candidate_prescreen_cv_received"))
         last_message_direction = str(item.get("last_message_direction") or "").strip().lower()
         verification_notes = item.get("verification_notes") if isinstance(item.get("verification_notes"), dict) else {}
         interview_status = str((verification_notes or {}).get("interview_status") or "").strip().lower()
@@ -3974,6 +4257,16 @@ class Database:
         if match_status in {"interview_invited", "interview_in_progress", "interview_completed", "interview_scored", "interview_failed"}:
             return match_status, match_status.replace("_", " ").title()
 
+        if prescreen_status in {"not_interested", "unreachable", "stalled"}:
+            return prescreen_status, prescreen_status.replace("_", " ").title()
+        if prescreen_status == "ready_for_screening_call":
+            return "cv_received", "CV Received"
+        if prescreen_status in {"ready_for_cv", "cv_received_pending_answers", "incomplete"}:
+            if prescreen_cv_received:
+                return "in_dialogue", "In Dialogue"
+            if pre_resume_status in {"awaiting_reply"}:
+                return "outreached", "Outreached"
+            return "in_dialogue", "In Dialogue"
         if pre_resume_status == "resume_received" or match_status == "resume_received":
             return "cv_received", "CV Received"
         if pre_resume_status == "not_interested":
@@ -4049,7 +4342,11 @@ class Database:
         elif current_status_key == "cv_received":
             lifecycle_key = "resume_received"
             lifecycle_label = "Resume received"
-            lifecycle_detail = "CV or resume received"
+            prescreen_status = str(item.get("candidate_prescreen_status") or "").strip().lower()
+            if prescreen_status == "ready_for_screening_call":
+                lifecycle_detail = "Written prescreen complete and ready for 10 to 15 min screening call"
+            else:
+                lifecycle_detail = "CV or resume received"
         elif current_status_key == "interview_passed":
             lifecycle_key = "interview_passed"
             lifecycle_label = "Interview passed"
@@ -4098,6 +4395,7 @@ class Database:
         pending_action_status = str(item.get("pending_action_status") or item.get("pending_action_status_label") or "").strip().lower()
         pending_action_at = str(item.get("pending_action_not_before") or "").strip() or None
         interview_score = Database._candidate_interview_score(item)
+        prescreen_status = str(item.get("candidate_prescreen_status") or "").strip().lower()
 
         closed_statuses = {"not_interested", "unreachable", "rejected", "stalled"}
         interview_pending_statuses = {"interview_invited", "interview_in_progress", "interview_completed"}
@@ -4143,8 +4441,12 @@ class Database:
         elif current_status_key == "cv_received":
             stage_key = "cv_received"
             stage_label = "CV Received"
-            stage_detail = lifecycle_detail or current_status_label or "Resume received"
-            next_action_kind = "review_resume"
+            if prescreen_status == "ready_for_screening_call":
+                stage_detail = "Written prescreen complete. Ready to book a 10 to 15 min screening call"
+                next_action_kind = "screening_call"
+            else:
+                stage_detail = lifecycle_detail or current_status_label or "Resume received"
+                next_action_kind = "review_resume"
             next_action_at = None
             stage_rank = 40
         elif lifecycle_key == "planned_message" or (

@@ -104,6 +104,10 @@ class JobCreationCultureProfileTests(unittest.TestCase):
                 "company": "Tener",
                 "jd_text": "Need Python and AWS",
                 "company_website": "https://www.tener.ai",
+                "salary_min": 120000,
+                "salary_max": 150000,
+                "salary_currency": "USD",
+                "work_authorization_required": True,
             },
         )
         self.assertEqual(status, 201)
@@ -124,8 +128,47 @@ class JobCreationCultureProfileTests(unittest.TestCase):
         status_job, job = self._request("GET", f"/api/jobs/{job_id}")
         self.assertEqual(status_job, 200)
         self.assertEqual(str(job.get("company_website") or ""), "https://tener.ai/")
+        self.assertEqual(float(job.get("salary_min") or 0.0), 120000.0)
+        self.assertEqual(float(job.get("salary_max") or 0.0), 150000.0)
+        self.assertEqual(str(job.get("salary_currency") or ""), "USD")
+        self.assertTrue(bool(job.get("work_authorization_required")))
         culture = job.get("company_culture_profile") if isinstance(job.get("company_culture_profile"), dict) else {}
         self.assertGreater(len(culture.get("culture_interview_questions") or []), 0)
+
+    def test_update_job_requirements_can_update_budget_fields(self) -> None:
+        status_create, created = self._request(
+            "POST",
+            "/api/jobs",
+            {
+                "title": "Senior Backend Engineer",
+                "company": "Tener",
+                "jd_text": "Need Python and AWS",
+            },
+        )
+        self.assertEqual(status_create, 201)
+        job_id = int(created.get("job_id") or 0)
+        self.assertGreater(job_id, 0)
+
+        status_update, updated = self._request(
+            "POST",
+            f"/api/jobs/{job_id}/requirements",
+            {
+                "salary_min": 130000,
+                "salary_max": 170000,
+                "salary_currency": "EUR",
+                "work_authorization_required": True,
+                "location": "Berlin",
+                "must_have_skills": ["python"],
+                "nice_to_have_skills": ["aws"],
+                "questionable_skills": [],
+            },
+        )
+        self.assertEqual(status_update, 200)
+        self.assertEqual(float(updated.get("salary_min") or 0.0), 130000.0)
+        self.assertEqual(float(updated.get("salary_max") or 0.0), 170000.0)
+        self.assertEqual(str(updated.get("salary_currency") or ""), "EUR")
+        self.assertTrue(bool(updated.get("work_authorization_required")))
+        self.assertEqual(str(updated.get("location") or ""), "Berlin")
 
 
 if __name__ == "__main__":
