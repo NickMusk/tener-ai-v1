@@ -362,17 +362,21 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
         linkedin_id = str(profile.get("linkedin_id") or "").strip()
         if not linkedin_id:
             raise ValueError("linkedin_id is required")
+        identity = Database.extract_candidate_provider_identity(profile)
         linkedin_public_url = Database.extract_linkedin_public_url(profile)
         with self.transaction() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     """
                     INSERT INTO candidates (
-                        linkedin_id, linkedin_public_url, full_name, headline, location, languages,
-                        skills, years_experience, source, created_at
+                        linkedin_id, provider_id, unipile_profile_id, attendee_provider_id, linkedin_public_url,
+                        full_name, headline, location, languages, skills, years_experience, source, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT(linkedin_id) DO UPDATE SET
+                        provider_id = COALESCE(EXCLUDED.provider_id, candidates.provider_id),
+                        unipile_profile_id = COALESCE(EXCLUDED.unipile_profile_id, candidates.unipile_profile_id),
+                        attendee_provider_id = COALESCE(EXCLUDED.attendee_provider_id, candidates.attendee_provider_id),
                         linkedin_public_url = COALESCE(EXCLUDED.linkedin_public_url, candidates.linkedin_public_url),
                         full_name = EXCLUDED.full_name,
                         headline = EXCLUDED.headline,
@@ -385,6 +389,9 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                     """,
                     (
                         linkedin_id,
+                        identity.get("provider_id"),
+                        identity.get("unipile_profile_id"),
+                        identity.get("attendee_provider_id"),
                         linkedin_public_url,
                         profile.get("full_name"),
                         profile.get("headline"),
@@ -409,7 +416,19 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
     def get_candidate_by_linkedin_id(self, linkedin_id: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
             with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
-                cur.execute("SELECT * FROM candidates WHERE linkedin_id = %s", (str(linkedin_id),))
+                cur.execute(
+                    """
+                    SELECT *
+                    FROM candidates
+                    WHERE linkedin_id = %s
+                       OR attendee_provider_id = %s
+                       OR unipile_profile_id = %s
+                       OR provider_id = %s
+                    ORDER BY id DESC
+                    LIMIT 1
+                    """,
+                    (str(linkedin_id), str(linkedin_id), str(linkedin_id), str(linkedin_id)),
+                )
                 row = cur.fetchone()
         return self._row_to_dict(dict(row)) if row else None
 
@@ -679,6 +698,9 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                         j.title AS job_title,
                         c.id AS candidate_id,
                         c.linkedin_id,
+                        c.provider_id,
+                        c.unipile_profile_id,
+                        c.attendee_provider_id,
                         c.linkedin_public_url,
                         c.full_name,
                         c.headline,
@@ -697,6 +719,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                         conv.last_message_at,
                         prs.session_id AS pre_resume_session_id,
                         prs.status AS pre_resume_status,
+                        prs.last_error AS pre_resume_last_error,
                         prs.next_followup_at AS pre_resume_next_followup_at,
                         (
                             SELECT msg.direction

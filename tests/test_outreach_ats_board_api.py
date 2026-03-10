@@ -336,6 +336,37 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         failed_names = {str(item.get("candidate_name") or "") for item in (columns.get("interview_failed") or {}).get("items", [])}
         self.assertEqual(failed_names, {"Interview Failed Candidate"})
 
+    def test_outreach_ats_board_surfaces_delivery_blocked_identity_separately_from_closed(self) -> None:
+        job_id = self._create_job("Manual QA Engineer")
+        candidate_id = self._create_candidate("delivery-blocked", "Delivery Blocked Candidate")
+        self._attach_match(job_id=job_id, candidate_id=candidate_id, status="needs_resume")
+        conversation_id = self.db.create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+        self.db.upsert_pre_resume_session(
+            session_id="ats-pre-delivery-blocked",
+            conversation_id=conversation_id,
+            job_id=job_id,
+            candidate_id=candidate_id,
+            state={
+                "status": "delivery_blocked_identity",
+                "language": "en",
+                "last_error": "invalid_candidate_identity",
+            },
+            instruction="",
+        )
+
+        status, payload = self._request("GET", "/api/outreach/ats-board")
+        self.assertEqual(status, 200)
+        summary = payload.get("summary") or {}
+        self.assertEqual(int(summary.get("delivery_blocked") or 0), 1)
+        self.assertEqual(int(summary.get("closed") or 0), 0)
+
+        columns = {str(item.get("key") or ""): item for item in (payload.get("columns") or [])}
+        blocked_names = {
+            str(item.get("candidate_name") or "")
+            for item in (columns.get("delivery_blocked") or {}).get("items", [])
+        }
+        self.assertEqual(blocked_names, {"Delivery Blocked Candidate"})
+
 
 if __name__ == "__main__":
     unittest.main()

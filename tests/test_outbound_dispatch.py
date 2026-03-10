@@ -332,7 +332,7 @@ class OutboundDispatchTests(unittest.TestCase):
             not_before = datetime.fromisoformat(str((action or {}).get("not_before") or "").replace("Z", "+00:00"))
             self.assertGreater(not_before, datetime.now(timezone.utc))
 
-    def test_invalid_candidate_identity_stalls_recovery_for_conversation(self) -> None:
+    def test_invalid_candidate_identity_blocks_delivery_without_marking_candidate_closed(self) -> None:
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "outbound_dispatch_invalid_identity.sqlite3"))
             db.init_schema()
@@ -371,7 +371,7 @@ class OutboundDispatchTests(unittest.TestCase):
 
             session = db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
             self.assertIsNotNone(session)
-            self.assertEqual(str((session or {}).get("status") or ""), "stalled")
+            self.assertEqual(str((session or {}).get("status") or ""), "delivery_blocked_identity")
             self.assertIn("invalid_candidate_identity", str((session or {}).get("last_error") or ""))
 
             recovery_rows = db.list_unassigned_outreach_conversations(limit=10, job_id=job_id)

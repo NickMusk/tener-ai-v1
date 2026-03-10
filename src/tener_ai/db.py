@@ -79,6 +79,9 @@ class Database:
         CREATE TABLE IF NOT EXISTS candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             linkedin_id TEXT UNIQUE NOT NULL,
+            provider_id TEXT,
+            unipile_profile_id TEXT,
+            attendee_provider_id TEXT,
             linkedin_public_url TEXT,
             full_name TEXT NOT NULL,
             headline TEXT,
@@ -924,6 +927,7 @@ class Database:
         return [self._row_to_dict(r) for r in rows]
 
     def upsert_candidate(self, profile: Dict[str, Any], source: str = "linkedin") -> int:
+        identity = self.extract_candidate_provider_identity(profile)
         linkedin_public_url = self.extract_linkedin_public_url(profile)
         with self.transaction() as conn:
             existing = conn.execute(
@@ -935,10 +939,16 @@ class Database:
                 conn.execute(
                     """
                     UPDATE candidates
-                    SET full_name = ?, headline = ?, location = ?, languages = ?, skills = ?, years_experience = ?, source = ?, linkedin_public_url = COALESCE(?, linkedin_public_url)
+                    SET provider_id = COALESCE(?, provider_id),
+                        unipile_profile_id = COALESCE(?, unipile_profile_id),
+                        attendee_provider_id = COALESCE(?, attendee_provider_id),
+                        full_name = ?, headline = ?, location = ?, languages = ?, skills = ?, years_experience = ?, source = ?, linkedin_public_url = COALESCE(?, linkedin_public_url)
                     WHERE id = ?
                     """,
                     (
+                        identity.get("provider_id"),
+                        identity.get("unipile_profile_id"),
+                        identity.get("attendee_provider_id"),
                         profile.get("full_name"),
                         profile.get("headline"),
                         profile.get("location"),
@@ -955,11 +965,17 @@ class Database:
             cur = conn.execute(
                 """
                 INSERT INTO candidates
-                (linkedin_id, linkedin_public_url, full_name, headline, location, languages, skills, years_experience, source, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (
+                    linkedin_id, provider_id, unipile_profile_id, attendee_provider_id, linkedin_public_url,
+                    full_name, headline, location, languages, skills, years_experience, source, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     profile.get("linkedin_id"),
+                    identity.get("provider_id"),
+                    identity.get("unipile_profile_id"),
+                    identity.get("attendee_provider_id"),
                     linkedin_public_url,
                     profile.get("full_name"),
                     profile.get("headline"),
@@ -1017,6 +1033,9 @@ class Database:
             m.verification_notes,
             c.id AS candidate_id,
             c.linkedin_id,
+            c.provider_id,
+            c.unipile_profile_id,
+            c.attendee_provider_id,
             c.linkedin_public_url,
             c.full_name,
             c.headline,
@@ -1035,6 +1054,7 @@ class Database:
             conv.last_message_at,
             prs.session_id AS pre_resume_session_id,
             prs.status AS pre_resume_status,
+            prs.last_error AS pre_resume_last_error,
             prs.next_followup_at AS pre_resume_next_followup_at,
             cps.status AS candidate_prescreen_status,
             cps.must_have_answers_json AS candidate_prescreen_must_have_answers,
@@ -1592,8 +1612,17 @@ class Database:
 
     def get_candidate_by_linkedin_id(self, linkedin_id: str) -> Optional[Dict[str, Any]]:
         row = self._conn.execute(
-            "SELECT * FROM candidates WHERE linkedin_id = ?",
-            (linkedin_id,),
+            """
+            SELECT *
+            FROM candidates
+            WHERE linkedin_id = ?
+               OR attendee_provider_id = ?
+               OR unipile_profile_id = ?
+               OR provider_id = ?
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (linkedin_id, linkedin_id, linkedin_id, linkedin_id),
         ).fetchone()
         return self._row_to_dict(row) if row else None
 
@@ -3820,9 +3849,22 @@ class Database:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE linkedin_accounts ADD COLUMN daily_connect_limit INTEGER")
         candidate_columns = self._table_columns("candidates")
+        if "provider_id" not in candidate_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE candidates ADD COLUMN provider_id TEXT")
+        if "unipile_profile_id" not in candidate_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE candidates ADD COLUMN unipile_profile_id TEXT")
+        if "attendee_provider_id" not in candidate_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE candidates ADD COLUMN attendee_provider_id TEXT")
         if "linkedin_public_url" not in candidate_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE candidates ADD COLUMN linkedin_public_url TEXT")
+        with self.transaction() as conn:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_provider_id ON candidates(provider_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_unipile_profile_id ON candidates(unipile_profile_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_attendee_provider_id ON candidates(attendee_provider_id)")
 
         with self.transaction() as conn:
             conn.execute(
@@ -4031,6 +4073,48 @@ class Database:
         if fallback_text:
             return fallback_text
         return None
+
+    @classmethod
+    def extract_candidate_provider_identity(cls, profile: Dict[str, Any]) -> Dict[str, Optional[str]]:
+        if not isinstance(profile, dict):
+            return {
+                "provider_id": None,
+                "unipile_profile_id": None,
+                "attendee_provider_id": None,
+            }
+
+        provider_id = None
+        unipile_profile_id = None
+        attendee_provider_id = None
+        buckets: List[Dict[str, Any]] = [profile]
+        raw = profile.get("raw")
+        if isinstance(raw, dict):
+            buckets.extend(cls._iter_nested_profile_dicts(raw))
+        for bucket in buckets:
+            if provider_id is None:
+                value = str(bucket.get("provider_id") or bucket.get("id") or "").strip()
+                provider_id = value or provider_id
+            if unipile_profile_id is None:
+                value = str(bucket.get("unipile_profile_id") or bucket.get("provider_id") or bucket.get("id") or "").strip()
+                unipile_profile_id = value or unipile_profile_id
+            if attendee_provider_id is None:
+                value = str(bucket.get("attendee_provider_id") or bucket.get("provider_id") or bucket.get("id") or "").strip()
+                attendee_provider_id = value or attendee_provider_id
+            if provider_id and unipile_profile_id and attendee_provider_id:
+                break
+
+        if not provider_id:
+            provider_id = str(profile.get("provider_id") or "").strip() or None
+        if not unipile_profile_id:
+            unipile_profile_id = str(profile.get("unipile_profile_id") or provider_id or "").strip() or None
+        if not attendee_provider_id:
+            attendee_provider_id = str(profile.get("attendee_provider_id") or unipile_profile_id or provider_id or "").strip() or None
+
+        return {
+            "provider_id": provider_id,
+            "unipile_profile_id": unipile_profile_id,
+            "attendee_provider_id": attendee_provider_id,
+        }
 
     @classmethod
     def extract_linkedin_public_url(cls, profile: Dict[str, Any]) -> Optional[str]:
@@ -4256,9 +4340,23 @@ class Database:
             return "interview_passed", "Interview Passed"
         if match_status in {"interview_invited", "interview_in_progress", "interview_completed", "interview_scored", "interview_failed"}:
             return match_status, match_status.replace("_", " ").title()
+        if conversation_status == "waiting_connection" or match_status == "outreach_pending_connection":
+            return "outreach_pending_connection", "Outreach Pending Connection"
+        if pre_resume_status == "resume_received" or match_status == "resume_received":
+            return "cv_received", "CV Received"
+        if pre_resume_status == "not_interested":
+            return "not_interested", "Not Interested"
+        if pre_resume_status == "unreachable":
+            return "unreachable", "Unreachable"
+        if pre_resume_status == "delivery_blocked_identity":
+            return "delivery_blocked_identity", "Delivery Blocked"
+        if pre_resume_status == "stalled":
+            return "stalled", "Stalled"
 
         if prescreen_status in {"not_interested", "unreachable", "stalled"}:
             return prescreen_status, prescreen_status.replace("_", " ").title()
+        if prescreen_status == "delivery_blocked_identity":
+            return "delivery_blocked_identity", "Delivery Blocked"
         if prescreen_status == "ready_for_screening_call":
             return "cv_received", "CV Received"
         if prescreen_status in {"ready_for_cv", "cv_received_pending_answers", "incomplete"}:
@@ -4267,20 +4365,10 @@ class Database:
             if pre_resume_status in {"awaiting_reply"}:
                 return "outreached", "Outreached"
             return "in_dialogue", "In Dialogue"
-        if pre_resume_status == "resume_received" or match_status == "resume_received":
-            return "cv_received", "CV Received"
-        if pre_resume_status == "not_interested":
-            return "not_interested", "Not Interested"
-        if pre_resume_status == "unreachable":
-            return "unreachable", "Unreachable"
-        if pre_resume_status == "stalled":
-            return "stalled", "Stalled"
         if pre_resume_status in {"engaged_no_resume", "will_send_later"}:
             return "in_dialogue", "In Dialogue"
         if match_status == "rejected":
             return "rejected", "Rejected"
-        if conversation_status == "waiting_connection" or match_status == "outreach_pending_connection":
-            return "outreach_pending_connection", "Outreach Pending Connection"
         if conversation_status == "active" and last_message_direction == "inbound":
             return "in_dialogue", "In Dialogue"
         if (
@@ -4314,6 +4402,7 @@ class Database:
         current_status_key = str(item.get("current_status_key") or "").strip().lower()
         conversation_status = str(item.get("conversation_status") or "").strip().lower()
         pre_resume_status = str(item.get("pre_resume_status") or "").strip().lower()
+        pre_resume_last_error = str(item.get("pre_resume_last_error") or "").strip()
         last_message_direction = str(item.get("last_message_direction") or "").strip().lower()
         last_outbound_meta = item.get("last_outbound_meta") if isinstance(item.get("last_outbound_meta"), dict) else {}
         last_outbound_type = str(last_outbound_meta.get("type") or "").strip().lower()
@@ -4361,6 +4450,10 @@ class Database:
             lifecycle_key = "interview_failed"
             lifecycle_label = "Interview failed"
             lifecycle_detail = "Candidate did not pass interview"
+        elif current_status_key == "delivery_blocked_identity":
+            lifecycle_key = "delivery_blocked"
+            lifecycle_label = "Delivery blocked"
+            lifecycle_detail = pre_resume_last_error or "Candidate identity needs provider refresh before outreach can continue"
         elif current_status_key == "outreached":
             lifecycle_key = "message_sent"
             lifecycle_label = "Message sent"
@@ -4407,7 +4500,14 @@ class Database:
         next_action_at = pending_action_at
         stage_rank = 10
 
-        if current_status_key in closed_statuses:
+        if current_status_key == "delivery_blocked_identity":
+            stage_key = "delivery_blocked"
+            stage_label = "Delivery Blocked"
+            stage_detail = lifecycle_detail or current_status_label or "Candidate identity needs provider refresh"
+            next_action_kind = "repair_identity"
+            next_action_at = None
+            stage_rank = 55
+        elif current_status_key in closed_statuses:
             stage_key = "closed"
             stage_label = "Closed"
             stage_detail = current_status_label or lifecycle_label or current_status_key.replace("_", " ").title()

@@ -143,11 +143,14 @@ class PostgresMirrorWriter:
                 cur.execute(
                     """
                     INSERT INTO candidates (
-                        id, linkedin_id, linkedin_public_url, full_name, headline, location,
-                        languages, skills, years_experience, source, created_at
+                        id, linkedin_id, provider_id, unipile_profile_id, attendee_provider_id, linkedin_public_url,
+                        full_name, headline, location, languages, skills, years_experience, source, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT(linkedin_id) DO UPDATE SET
+                        provider_id = COALESCE(EXCLUDED.provider_id, candidates.provider_id),
+                        unipile_profile_id = COALESCE(EXCLUDED.unipile_profile_id, candidates.unipile_profile_id),
+                        attendee_provider_id = COALESCE(EXCLUDED.attendee_provider_id, candidates.attendee_provider_id),
                         linkedin_public_url = COALESCE(EXCLUDED.linkedin_public_url, candidates.linkedin_public_url),
                         full_name = EXCLUDED.full_name,
                         headline = EXCLUDED.headline,
@@ -160,6 +163,9 @@ class PostgresMirrorWriter:
                     (
                         int(row.get("id") or 0),
                         row.get("linkedin_id"),
+                        row.get("provider_id"),
+                        row.get("unipile_profile_id"),
+                        row.get("attendee_provider_id"),
                         row.get("linkedin_public_url"),
                         row.get("full_name"),
                         row.get("headline"),

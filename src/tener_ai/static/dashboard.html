@@ -3222,8 +3222,9 @@
         `${Number(summary.dialogue || 0)} active dialogue`,
         `${Number(summary.cv_received || 0)} cv received`,
         `${Number(summary.interview_pending || 0)} interview pending`,
-        `${Number(summary.interview_passed || 0)} passed`,
-        `${Number(summary.interview_failed || 0)} failed`,
+        `${Number(summary.interview_passed || 0)} interview passed`,
+        `${Number(summary.delivery_blocked || 0)} delivery blocked`,
+        `${Number(summary.interview_failed || 0)} interview failed`,
         `${Number(summary.closed || 0)} closed`,
       ];
       summaryEl.textContent = summaryParts.join(" • ");
@@ -3240,6 +3241,7 @@
         if (normalized === "await_reply") return "Next: wait reply";
         if (normalized === "review_resume") return "Next: review CV";
         if (normalized === "await_interview") return "Next: wait interview";
+        if (normalized === "repair_identity") return "Next: repair identity";
         return `Next: ${normalized.replace(/_/g, " ")}`;
       };
       boardEl.innerHTML = columns.map((column) => {
@@ -3542,6 +3544,8 @@
             cv_received: 0,
             interview_pending: 0,
             interview_passed: 0,
+            delivery_blocked: 0,
+            interview_failed: 0,
             closed: 0,
           },
           columns: [],

@@ -11,7 +11,7 @@ from .language import detect_language_from_text
 
 
 UTC = timezone.utc
-TERMINAL_STATUSES = {"ready_for_screening_call", "not_interested", "unreachable", "stalled"}
+TERMINAL_STATUSES = {"ready_for_screening_call", "not_interested", "unreachable", "stalled", "delivery_blocked_identity"}
 REMOTE_LOCATION_MARKERS = {"remote", "global", "worldwide", "anywhere", "hybrid", "distributed"}
 
 

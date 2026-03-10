@@ -3732,6 +3732,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             ("cv_received", "CV Received"),
             ("interview_pending", "Interview Pending"),
             ("interview_passed", "Interview Passed"),
+            ("delivery_blocked", "Delivery Blocked"),
             ("interview_failed", "Interview Failed"),
             ("closed", "Closed"),
         ]
@@ -3745,6 +3746,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             "cv_received": 0,
             "interview_pending": 0,
             "interview_passed": 0,
+            "delivery_blocked": 0,
             "interview_failed": 0,
             "closed": 0,
         }

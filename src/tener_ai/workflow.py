@@ -34,7 +34,13 @@ from .linkedin_provider import UnipileLinkedInProvider
 from .pre_resume_service import PreResumeCommunicationService, parse_resume_links
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
-TERMINAL_PRE_RESUME_STATUSES = {"ready_for_screening_call", "not_interested", "unreachable", "stalled"}
+TERMINAL_PRE_RESUME_STATUSES = {
+    "ready_for_screening_call",
+    "not_interested",
+    "unreachable",
+    "stalled",
+    "delivery_blocked_identity",
+}
 ACTIVE_INTERVIEW_STATUSES = {"invited", "in_progress"}
 TERMINAL_INTERVIEW_STATUSES = {"completed", "scored", "failed", "expired", "canceled"}
 AGENT_ROLES = {
@@ -3850,6 +3856,7 @@ class WorkflowService:
                 "engaged_no_resume": (72.0, "in_dialogue", "Candidate is engaged in dialogue before CV."),
                 "incomplete": (72.0, "in_dialogue", "Written prescreen is still in progress."),
                 "awaiting_reply": (66.0, "awaiting_reply", "Awaiting candidate response after follow-up."),
+                "delivery_blocked_identity": (32.0, "delivery_blocked", "Delivery blocked because provider identity is missing or invalid."),
                 "not_interested": (35.0, "not_interested", "Candidate is not interested."),
                 "stalled": (25.0, "stalled", "Dialogue stalled without response."),
                 "unreachable": (15.0, "unreachable", "Candidate unreachable through current channel."),
@@ -6099,7 +6106,7 @@ class WorkflowService:
                 state = {}
         except json.JSONDecodeError:
             state = {}
-        state["status"] = "stalled"
+        state["status"] = "delivery_blocked_identity"
         state["next_followup_at"] = None
         state["updated_at"] = utc_now_iso()
         state["last_error"] = reason
@@ -6114,11 +6121,11 @@ class WorkflowService:
         self.db.insert_pre_resume_event(
             session_id=session_id,
             conversation_id=conversation_id,
-            event_type="system_stalled",
+            event_type="system_delivery_blocked",
             intent=None,
             inbound_text=None,
             outbound_text=None,
-            state_status="stalled",
+            state_status="delivery_blocked_identity",
             details={"reason": reason},
         )
 

@@ -107,9 +107,10 @@ class CandidateCurrentStatusTests(unittest.TestCase):
                 text="Here is my resume https://example.com/status-candidate-cv.pdf",
             )
             rows = db.list_candidates_for_job(job_id)
-            self.assertEqual(rows[0]["current_status_key"], "cv_received")
-            self.assertEqual(rows[0]["current_status_label"], "CV Received")
-            self.assertEqual(rows[0]["candidate_lifecycle_key"], "resume_received")
+            self.assertEqual(rows[0]["current_status_key"], "in_dialogue")
+            self.assertEqual(rows[0]["current_status_label"], "In Dialogue")
+            self.assertEqual(rows[0]["candidate_lifecycle_key"], "dialogue_started")
+            self.assertEqual(rows[0]["candidate_prescreen_status"], "cv_received_pending_answers")
 
     def test_candidate_status_marks_interview_passed_when_scored_above_threshold(self) -> None:
         root = Path(__file__).resolve().parents[1]

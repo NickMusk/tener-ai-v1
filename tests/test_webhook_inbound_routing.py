@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from tener_ai.agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from tener_ai.db import Database
@@ -20,6 +20,19 @@ class _WebhookStubProvider:
             "provider": "stub",
             "chat_id": "chat-123",
             "candidate": candidate_profile.get("linkedin_id"),
+        }
+
+    def send_connection_request(self, candidate_profile: Dict[str, Any], message: Optional[str] = None) -> Dict[str, Any]:
+        return {
+            "sent": True,
+            "provider": "stub",
+            "request_id": "req-webhook-1",
+        }
+
+    def check_connection_status(self, candidate_profile: Dict[str, Any]) -> Dict[str, Any]:
+        return {
+            "provider": "stub",
+            "connected": True,
         }
 
 
@@ -70,6 +83,9 @@ class WebhookInboundRoutingTests(unittest.TestCase):
             outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
             self.assertEqual(outreach["total"], 1)
             conversation_id = int(outreach["items"][0]["conversation_id"])
+            polled = workflow.poll_pending_connections(job_id=job_id, limit=20)
+            self.assertEqual(polled["connected"], 1)
+            self.assertEqual(polled["sent"], 1)
 
             conversation = db.get_conversation(conversation_id)
             self.assertEqual(conversation.get("external_chat_id"), "chat-123")
@@ -81,10 +97,10 @@ class WebhookInboundRoutingTests(unittest.TestCase):
             self.assertTrue(routed["processed"])
             self.assertEqual(routed["conversation_id"], conversation_id)
             self.assertEqual(routed["result"]["mode"], "pre_resume")
-            self.assertEqual(routed["result"]["state"]["status"], "resume_received")
+            self.assertEqual(routed["result"]["state"]["status"], "cv_received_pending_answers")
 
             matches = db.list_candidates_for_job(job_id)
-            self.assertEqual(matches[0]["status"], "resume_received")
+            self.assertEqual(matches[0]["candidate_prescreen_status"], "cv_received_pending_answers")
             assets = db.list_resume_assets_for_candidate(candidate_id=candidate_id, job_id=job_id, limit=20)
             self.assertGreaterEqual(len(assets), 1)
             self.assertEqual(str(assets[0].get("processing_status")), "stored_unparsed")

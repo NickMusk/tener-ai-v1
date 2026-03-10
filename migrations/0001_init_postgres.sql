@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE TABLE IF NOT EXISTS candidates (
     id BIGSERIAL PRIMARY KEY,
     linkedin_id TEXT NOT NULL UNIQUE,
+    provider_id TEXT,
+    unipile_profile_id TEXT,
+    attendee_provider_id TEXT,
     full_name TEXT NOT NULL,
     headline TEXT,
     location TEXT,
@@ -165,4 +168,3 @@ CREATE TABLE IF NOT EXISTS auth_audit_events (
     details_json JSONB,
     created_at TIMESTAMPTZ NOT NULL
 );
-

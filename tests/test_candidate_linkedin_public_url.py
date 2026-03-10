@@ -93,6 +93,53 @@ class CandidateLinkedinPublicUrlTests(unittest.TestCase):
                 "https://www.linkedin.com/in/ln-public-url-2",
             )
 
+    def test_upsert_persists_provider_identity_and_lookup_matches_provider_id(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "db.sqlite3"))
+            db.init_schema()
+
+            candidate_id = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-provider-1",
+                    "provider_id": "provider-1",
+                    "unipile_profile_id": "provider-1",
+                    "attendee_provider_id": "provider-1",
+                    "full_name": "Provider Identity Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python"],
+                    "years_experience": 6,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+
+            row = db.get_candidate(candidate_id)
+            self.assertEqual(str((row or {}).get("provider_id") or ""), "provider-1")
+            self.assertEqual(str((row or {}).get("unipile_profile_id") or ""), "provider-1")
+            self.assertEqual(str((row or {}).get("attendee_provider_id") or ""), "provider-1")
+
+            db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-provider-1",
+                    "full_name": "Provider Identity Candidate Updated",
+                    "headline": "Staff Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": ["python", "aws"],
+                    "years_experience": 7,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+            updated = db.get_candidate(candidate_id)
+            self.assertEqual(str((updated or {}).get("attendee_provider_id") or ""), "provider-1")
+
+            by_provider = db.get_candidate_by_linkedin_id("provider-1")
+            self.assertIsNotNone(by_provider)
+            self.assertEqual(int((by_provider or {}).get("id") or 0), candidate_id)
+
 
 if __name__ == "__main__":
     unittest.main()
