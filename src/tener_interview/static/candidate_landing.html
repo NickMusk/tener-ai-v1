@@ -612,7 +612,6 @@
       var items = [];
       if (job.location) items.push({ value: job.location, accent: false });
       if (job.seniority) items.push({ value: job.seniority, accent: false });
-      if (job.salary_text) items.push({ value: job.salary_text, accent: true });
       if (Array.isArray(job.preferred_languages) && job.preferred_languages.length) {
         items.push({ value: "Languages: " + job.preferred_languages.join(", ").toUpperCase(), accent: false });
       }

@@ -158,6 +158,10 @@ class InterviewEntryLandingTests(unittest.TestCase):
         self.assertEqual(parsed["meta_json"]["categories"]["hard_skills"], 3)
         self.assertEqual(parsed["created_at"], "2026-03-11T00:00:00+00:00")
 
+    def test_candidate_landing_template_does_not_render_salary_meta(self) -> None:
+        template = Path("src/tener_interview/static/candidate_landing.html").read_text(encoding="utf-8")
+        self.assertNotIn("job.salary_text", template)
+
     @staticmethod
     def _request(method: str, url: str):
         req = request.Request(url=url, method=method)
