@@ -94,6 +94,25 @@ def apply_agent_instructions(services: Dict[str, Any]) -> None:
     services["pre_resume"].instruction = instructions.get("pre_resume")
 
 
+def _run_outreach_connection_poll_scheduler_tick(*, poll_limit: int) -> Dict[str, Any]:
+    result = SERVICES["workflow"].poll_pending_connections(limit=poll_limit)
+    if int(result.get("checked") or 0) > 0:
+        SERVICES["db"].log_operation(
+            operation="scheduler.outreach.poll_connections",
+            status="ok",
+            entity_type="scheduler",
+            entity_id="outreach_connection_poll",
+            details={
+                "checked": int(result.get("checked") or 0),
+                "connected": int(result.get("connected") or 0),
+                "sent": int(result.get("sent") or 0),
+                "still_waiting": int(result.get("still_waiting") or 0),
+                "failed": int(result.get("failed") or 0),
+            },
+        )
+    return result
+
+
 def build_services() -> Dict[str, Any]:
     root = project_root()
     db_backend = str(os.environ.get("TENER_DB_BACKEND", "sqlite") or "sqlite").strip().lower()
@@ -3944,6 +3963,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
             if operation == "scheduler.outreach.dispatch" and status == "ok" and created_dt and created_dt >= flow_window:
                 flow_detected_recently = True
+            if (
+                operation == "scheduler.outreach.poll_connections"
+                and status == "ok"
+                and created_dt
+                and created_dt >= flow_window
+                and (int(details.get("connected") or 0) > 0 or int(details.get("sent") or 0) > 0)
+            ):
+                flow_detected_recently = True
 
             if operation == "agent.outreach.send":
                 delivery_status = str(details.get("delivery_status") or "").strip().lower()
@@ -3991,6 +4018,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "agent.outreach.delivery_error",
                 "agent.outreach.dispatch",
                 "scheduler.outreach.dispatch",
+                "scheduler.outreach.poll_connections",
                 "scheduler.outreach.rebalance",
             } and len(recent_events) < max_recent_events:
                 recent_events.append(
@@ -4754,6 +4782,39 @@ def run() -> None:
 
         threading.Thread(target=_outbound_dispatch_loop, daemon=True, name="outbound-dispatch-scheduler").start()
         print(f"Outbound dispatch scheduler enabled: every {dispatch_interval_seconds}s")
+
+    if env_bool("TENER_OUTREACH_CONNECTION_POLL_SCHEDULER_ENABLED", True):
+        connection_poll_interval_seconds = max(
+            15,
+            int(os.environ.get("TENER_OUTREACH_CONNECTION_POLL_INTERVAL_SECONDS", "45")),
+        )
+        connection_poll_limit = max(
+            1,
+            int(os.environ.get("TENER_OUTREACH_CONNECTION_POLL_LIMIT", "200")),
+        )
+        if scheduler_stop is None:
+            scheduler_stop = threading.Event()
+
+        def _outreach_connection_poll_loop() -> None:
+            while not scheduler_stop.is_set():
+                try:
+                    _run_outreach_connection_poll_scheduler_tick(poll_limit=connection_poll_limit)
+                except Exception as exc:
+                    SERVICES["db"].log_operation(
+                        operation="scheduler.outreach.poll_connections",
+                        status="error",
+                        entity_type="scheduler",
+                        entity_id="outreach_connection_poll",
+                        details={"error": str(exc)},
+                    )
+                scheduler_stop.wait(connection_poll_interval_seconds)
+
+        threading.Thread(
+            target=_outreach_connection_poll_loop,
+            daemon=True,
+            name="outreach-connection-poll-scheduler",
+        ).start()
+        print(f"Outreach connection poll scheduler enabled: every {connection_poll_interval_seconds}s")
 
     if env_bool("TENER_OUTREACH_REBALANCE_SCHEDULER_ENABLED", True):
         rebalance_interval_seconds = max(30, int(os.environ.get("TENER_OUTREACH_REBALANCE_INTERVAL_SECONDS", "90")))
