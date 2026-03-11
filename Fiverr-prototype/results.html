@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fiverr Elite | Curated AI Team Options</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f4f7f2;
+            --panel: #ffffff;
+            --text: #0b1426;
+            --muted: #637188;
+            --border: rgba(11, 20, 38, 0.08);
+            --green: #1dbf73;
+            --green-strong: #14975b;
+            --green-soft: rgba(29, 191, 115, 0.12);
+            --blue: #15357a;
+            --blue-soft: rgba(21, 53, 122, 0.08);
+            --gold: #cf9e43;
+            --gold-soft: rgba(207, 158, 67, 0.12);
+            --shadow: 0 22px 60px rgba(11, 20, 38, 0.08);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(29,191,115,0.12), transparent 28%),
+                radial-gradient(circle at top right, rgba(21,53,122,0.10), transparent 26%),
+                var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+        }
+
+        .shell {
+            max-width: 1480px;
+            margin: 0 auto;
+            padding: 24px 24px 40px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            align-items: center;
+            padding: 18px 20px;
+            border-radius: 28px;
+            background: rgba(255, 255, 255, 0.84);
+            border: 1px solid rgba(255, 255, 255, 0.84);
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(16px);
+        }
+
+        .topbar-left, .topbar-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .brand-mark {
+            width: 40px;
+            height: 40px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--green), #40d78f);
+            display: grid;
+            place-items: center;
+            color: white;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .brand-copy h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 24px;
+            letter-spacing: -0.03em;
+        }
+
+        .brand-copy p {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .chip, .ghost-btn, .primary-btn {
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-size: 13px;
+            font-weight: 800;
+        }
+
+        .chip {
+            background: var(--blue-soft);
+            color: var(--blue);
+            border: 1px solid rgba(21, 53, 122, 0.10);
+        }
+
+        .ghost-btn, .primary-btn {
+            border: 1px solid var(--border);
+            background: white;
+            color: var(--text);
+            cursor: pointer;
+            transition: 0.2s ease;
+        }
+
+        .primary-btn {
+            background: var(--green);
+            color: white;
+            border-color: transparent;
+            box-shadow: 0 18px 34px rgba(29, 191, 115, 0.22);
+        }
+
+        .hero {
+            margin-top: 22px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 340px;
+            gap: 18px;
+        }
+
+        .hero-main, .hero-side {
+            border-radius: 30px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+        }
+
+        .hero-main {
+            background: linear-gradient(145deg, rgba(13, 30, 73, 0.98), rgba(9, 22, 56, 0.98));
+            color: white;
+            padding: 28px;
+        }
+
+        .hero-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(29, 191, 115, 0.16);
+            color: #9ef3ca;
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .hero-main h2 {
+            margin-top: 18px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: clamp(34px, 5vw, 56px);
+            line-height: 0.96;
+            letter-spacing: -0.05em;
+            max-width: 820px;
+        }
+
+        .hero-main p {
+            margin-top: 14px;
+            color: rgba(255, 255, 255, 0.72);
+            font-size: 16px;
+            line-height: 1.7;
+            max-width: 760px;
+        }
+
+        .hero-stats {
+            margin-top: 24px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .stat {
+            min-width: 152px;
+            padding: 16px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .stat strong {
+            display: block;
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+
+        .stat span {
+            color: rgba(255, 255, 255, 0.68);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .hero-side {
+            background: rgba(255,255,255,0.86);
+            border: 1px solid rgba(255,255,255,0.84);
+        }
+
+        .hero-side .inner {
+            padding: 22px;
+        }
+
+        .side-title {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 24px;
+            letter-spacing: -0.03em;
+        }
+
+        .side-copy {
+            margin-top: 10px;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .mix-summary {
+            margin-top: 18px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .mix-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: white;
+            border: 1px solid var(--border);
+            font-size: 13px;
+        }
+
+        .mix-row strong { font-size: 18px; color: var(--blue); }
+
+        .tabs {
+            margin-top: 22px;
+            display: inline-grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            padding: 6px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255,255,255,0.84);
+            box-shadow: var(--shadow);
+        }
+
+        .tabs button {
+            border: none;
+            border-radius: 14px;
+            background: transparent;
+            color: var(--muted);
+            font: inherit;
+            font-size: 14px;
+            font-weight: 800;
+            padding: 12px 16px;
+            cursor: pointer;
+        }
+
+        .tabs button.active {
+            background: white;
+            color: var(--blue);
+        }
+
+        .content {
+            margin-top: 18px;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 340px;
+            gap: 18px;
+        }
+
+        .list {
+            display: grid;
+            gap: 16px;
+        }
+
+        .team-card, .expert-card, .side-panel {
+            border-radius: 28px;
+            background: rgba(255, 255, 255, 0.86);
+            border: 1px solid rgba(255,255,255,0.84);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .team-card.selected {
+            border-color: rgba(29, 191, 115, 0.28);
+            box-shadow: 0 24px 56px rgba(29, 191, 115, 0.14);
+        }
+
+        .team-head {
+            padding: 22px;
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            align-items: flex-start;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .team-head h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 30px;
+            letter-spacing: -0.04em;
+        }
+
+        .team-head p {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 720px;
+        }
+
+        .score {
+            min-width: 100px;
+            text-align: right;
+        }
+
+        .score strong {
+            display: block;
+            color: var(--green-strong);
+            font-size: 34px;
+            line-height: 1;
+        }
+
+        .score span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .team-meta {
+            padding: 0 22px 22px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .meta-chip {
+            padding: 10px 12px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .meta-chip.market { background: var(--green-soft); color: var(--green-strong); }
+        .meta-chip.external { background: var(--gold-soft); color: #9d6b13; }
+        .meta-chip.neutral { background: var(--blue-soft); color: var(--blue); }
+
+        .team-body {
+            padding: 0 22px 22px;
+            display: grid;
+            grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+            gap: 16px;
+        }
+
+        .member-list, .team-notes {
+            display: grid;
+            gap: 12px;
+        }
+
+        .member {
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            background: white;
+            padding: 16px;
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+        }
+
+        .member-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            display: grid;
+            place-items: center;
+            color: white;
+            font-weight: 800;
+            flex-shrink: 0;
+            background: linear-gradient(135deg, var(--blue), #2852ba);
+        }
+
+        .member-avatar.green { background: linear-gradient(135deg, var(--green), #44d894); }
+        .member-avatar.gold { background: linear-gradient(135deg, #bb8c30, #dfba67); }
+
+        .member-copy {
+            flex: 1;
+        }
+
+        .member-copy strong {
+            display: block;
+            font-size: 15px;
+            margin-bottom: 4px;
+        }
+
+        .member-copy p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .source-badge {
+            margin-top: 8px;
+            display: inline-flex;
+            padding: 7px 10px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 800;
+        }
+
+        .source-badge.market { background: var(--green-soft); color: var(--green-strong); }
+        .source-badge.external { background: var(--gold-soft); color: #9d6b13; }
+
+        .note-card {
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            background: white;
+            padding: 16px;
+        }
+
+        .note-card strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .note-card p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .team-actions {
+            padding: 0 22px 22px;
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .action {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 12px 14px;
+            background: white;
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .action.primary {
+            background: var(--green);
+            color: white;
+            border-color: transparent;
+        }
+
+        .side-panel .inner {
+            padding: 22px;
+            display: grid;
+            gap: 16px;
+        }
+
+        .side-panel h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 24px;
+            letter-spacing: -0.03em;
+        }
+
+        .side-panel p {
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .decision {
+            padding: 16px;
+            border-radius: 20px;
+            background: white;
+            border: 1px solid var(--border);
+        }
+
+        .decision strong {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+
+        .expert-list {
+            display: none;
+        }
+
+        body.single-view .team-list { display: none; }
+        body.single-view .expert-list { display: grid; }
+
+        .expert-card { padding: 22px; }
+
+        .expert-top {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 16px;
+        }
+
+        .expert-top h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 28px;
+            letter-spacing: -0.04em;
+        }
+
+        .expert-top p {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 760px;
+        }
+
+        @media (max-width: 1260px) {
+            .hero, .content { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 920px) {
+            .team-body { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 760px) {
+            .shell { padding: 16px; }
+            .topbar { flex-direction: column; align-items: stretch; }
+            .team-head, .expert-top { flex-direction: column; }
+            .score { text-align: left; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="brand-mark">fi</div>
+                <div class="brand-copy">
+                    <h1>Fiverr Elite</h1>
+                    <p>AI-matched team options assembled inside the marketplace</p>
+                </div>
+                <div class="chip">Shortlist ready</div>
+            </div>
+            <div class="topbar-right">
+                <a class="ghost-btn" href="searching.html">Back to match flow</a>
+                <button class="ghost-btn">Share shortlist</button>
+                <button class="primary-btn">Book intro on Fiverr</button>
+            </div>
+        </header>
+
+        <section class="hero">
+            <div class="hero-main">
+                <div class="hero-kicker">Curated AI team options</div>
+                <h2>Three premium ways to build your AI support automation team on Fiverr.</h2>
+                <p>Each option starts with Fiverr talent. Elite then validates strong profiles with GitHub, LinkedIn, case studies and public portfolio proof, and adds invited experts only when the missing capability is worth it.</p>
+                <div class="hero-stats">
+                    <div class="stat">
+                        <strong>3</strong>
+                        <span>team options</span>
+                    </div>
+                    <div class="stat">
+                        <strong>7</strong>
+                        <span>Fiverr-based team members</span>
+                    </div>
+                    <div class="stat">
+                        <strong>3</strong>
+                        <span>invited specialists</span>
+                    </div>
+                    <div class="stat">
+                        <strong>8 weeks</strong>
+                        <span>target launch window</span>
+                    </div>
+                </div>
+            </div>
+
+            <aside class="hero-side">
+                <div class="inner">
+                    <div class="side-title">Why this is different</div>
+                    <p class="side-copy">Standard marketplace search gives you breadth. Fiverr Elite adds public-web validation and team assembly, so the buyer sees ready-to-book options instead of doing the recruiting work alone.</p>
+                    <div class="mix-summary">
+                        <div class="mix-row">
+                            <span>Marketplace-first sourcing</span>
+                            <strong>Yes</strong>
+                        </div>
+                        <div class="mix-row">
+                            <span>External specialists added only when needed</span>
+                            <strong>Yes</strong>
+                        </div>
+                        <div class="mix-row">
+                            <span>Single-expert fallback still available</span>
+                            <strong>Yes</strong>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </section>
+
+        <div class="tabs">
+            <button id="teams-tab" class="active" type="button" onclick="setView('teams')">Team options</button>
+            <button id="single-tab" type="button" onclick="setView('single')">Single expert option</button>
+        </div>
+
+        <section class="content">
+            <div class="list team-list">
+                <article class="team-card selected">
+                    <div class="team-head">
+                        <div>
+                            <h3>Team A</h3>
+                            <p>Fastest all-Fiverr path. Best when the buyer wants speed, platform familiarity and a cleaner procurement flow, while accepting slightly less deep support-operations specialization.</p>
+                        </div>
+                        <div class="score">
+                            <strong>91%</strong>
+                            <span>match score</span>
+                        </div>
+                    </div>
+                    <div class="team-meta">
+                        <span class="meta-chip market">3 Fiverr sellers</span>
+                        <span class="meta-chip neutral">$28k-$36k projected</span>
+                        <span class="meta-chip neutral">Launch path: 8 weeks</span>
+                    </div>
+                    <div class="team-body">
+                        <div class="member-list">
+                            <div class="member">
+                                <div class="member-avatar gold">AK</div>
+                                <div class="member-copy">
+                                    <strong>Amanda Kim, AI Product Lead</strong>
+                                    <p>Fiverr Pro seller with strong workflow design and buyer-facing communication. Also validated via LinkedIn operating history and public case studies.</p>
+                                    <span class="source-badge market">Fiverr Pro seller</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar">DT</div>
+                                <div class="member-copy">
+                                    <strong>Devon Tate, LLM Engineer</strong>
+                                    <p>Strong marketplace builder for retrieval, prompt logic and production integration, backed by GitHub and portfolio proof.</p>
+                                    <span class="source-badge market">Fiverr seller</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar green">LM</div>
+                                <div class="member-copy">
+                                    <strong>Lina Mendez, Automation Engineer</strong>
+                                    <p>Best fit for Zendesk, HubSpot and workflow automations, supported by public portfolio and implementation examples.</p>
+                                    <span class="source-badge market">Fiverr seller</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="team-notes">
+                            <div class="note-card">
+                                <strong>Why this team works</strong>
+                                <p>Fastest route from shortlist to kickoff. Every member is already marketplace-native and easy to activate through Fiverr.</p>
+                            </div>
+                            <div class="note-card">
+                                <strong>Tradeoff</strong>
+                                <p>Lower depth in scaled support-operations design. Strong for shipping, not the highest-confidence option for operational change management.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="team-actions">
+                        <button class="action primary">Book intro with Team A</button>
+                        <button class="action">Compare details</button>
+                    </div>
+                </article>
+
+                <article class="team-card">
+                    <div class="team-head">
+                        <div>
+                            <h3>Team B</h3>
+                            <p>Hybrid premium build. Best overall fit for this buyer because it keeps the core of the team on Fiverr but adds one invited support-operations specialist where it materially improves delivery confidence.</p>
+                        </div>
+                        <div class="score">
+                            <strong>96%</strong>
+                            <span>match score</span>
+                        </div>
+                    </div>
+                    <div class="team-meta">
+                        <span class="meta-chip market">2 Fiverr sellers</span>
+                        <span class="meta-chip market">1 Fiverr Pro seller</span>
+                        <span class="meta-chip external">1 invited expert</span>
+                        <span class="meta-chip neutral">$36k-$52k projected</span>
+                    </div>
+                    <div class="team-body">
+                        <div class="member-list">
+                            <div class="member">
+                                <div class="member-avatar gold">AK</div>
+                                <div class="member-copy">
+                                    <strong>Amanda Kim, AI Product Lead</strong>
+                                    <p>Marketplace-native lead who can keep the buyer experience polished and execution aligned with business goals, with public operator credibility checked outside Fiverr.</p>
+                                    <span class="source-badge market">Fiverr Pro seller</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar">DT</div>
+                                <div class="member-copy">
+                                    <strong>Devon Tate, LLM Engineer</strong>
+                                    <p>Strong LLM implementation profile from Fiverr with high relevance to agent and workflow builds, validated with GitHub and public project proof.</p>
+                                    <span class="source-badge market">Fiverr seller</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar green">LM</div>
+                                <div class="member-copy">
+                                    <strong>Lina Mendez, Automation Engineer</strong>
+                                    <p>Brings the strongest marketplace fit for CRM and helpdesk wiring, with public implementation examples supporting the recommendation.</p>
+                                    <span class="source-badge market">Fiverr seller</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar gold">RJ</div>
+                                <div class="member-copy">
+                                    <strong>Rhea Johnson, Support Systems Specialist</strong>
+                                    <p>Invited expert found outside Fiverr through public-web sourcing and operator networks. Improves rollout quality, service design and handoff safety.</p>
+                                    <span class="source-badge external">Invited expert</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="team-notes">
+                            <div class="note-card">
+                                <strong>Why this team works</strong>
+                                <p>Strongest blend of marketplace speed and premium quality. Fiverr handles the core execution; the invited specialist closes the highest-risk gap.</p>
+                            </div>
+                            <div class="note-card">
+                                <strong>Tradeoff</strong>
+                                <p>Slightly higher budget and coordination overhead than Team A, but the delivery confidence is clearly better for this use case.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="team-actions">
+                        <button class="action primary">Book intro with Team B</button>
+                        <button class="action">Compare details</button>
+                    </div>
+                </article>
+
+                <article class="team-card">
+                    <div class="team-head">
+                        <div>
+                            <h3>Team C</h3>
+                            <p>Lean execution team. Best when the buyer wants a smaller team with one stronger technical specialist and is willing to keep scope narrower for phase one.</p>
+                        </div>
+                        <div class="score">
+                            <strong>88%</strong>
+                            <span>match score</span>
+                        </div>
+                    </div>
+                    <div class="team-meta">
+                        <span class="meta-chip market">2 Fiverr sellers</span>
+                        <span class="meta-chip external">1 invited expert</span>
+                        <span class="meta-chip neutral">$24k-$34k projected</span>
+                        <span class="meta-chip neutral">Launch path: 6-7 weeks</span>
+                    </div>
+                    <div class="team-body">
+                        <div class="member-list">
+                            <div class="member">
+                                <div class="member-avatar">DT</div>
+                                <div class="member-copy">
+                                    <strong>Devon Tate, LLM Engineer</strong>
+                                    <p>Owns agent logic and system implementation.</p>
+                                    <span class="source-badge market">Fiverr seller</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar green">LM</div>
+                                <div class="member-copy">
+                                    <strong>Lina Mendez, Automation Engineer</strong>
+                                    <p>Handles system wiring and operations automations inside the buyer stack.</p>
+                                    <span class="source-badge market">Fiverr seller</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar gold">NP</div>
+                                <div class="member-copy">
+                                    <strong>Noah Patel, Fractional AI Advisor</strong>
+                                    <p>Invited expert used as a fractional design and governance layer rather than a full team member.</p>
+                                    <span class="source-badge external">Invited expert</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="team-notes">
+                            <div class="note-card">
+                                <strong>Why this team works</strong>
+                                <p>Lower-cost option that still protects the buyer from going fully solo with one freelancer.</p>
+                            </div>
+                            <div class="note-card">
+                                <strong>Tradeoff</strong>
+                                <p>Best for a narrower first release. Less coverage for stakeholder change management and support process redesign.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="team-actions">
+                        <button class="action primary">Book intro with Team C</button>
+                        <button class="action">Compare details</button>
+                    </div>
+                </article>
+            </div>
+
+            <div class="list expert-list">
+                <article class="expert-card">
+                    <div class="expert-top">
+                        <div>
+                            <h3>Single expert fallback</h3>
+                            <p>If the buyer wants to start smaller, Fiverr Elite can recommend one strong AI workflow builder first, then expand into a team later using the same marketplace-native flow.</p>
+                        </div>
+                        <div class="score">
+                            <strong>93%</strong>
+                            <span>single-expert fit</span>
+                        </div>
+                    </div>
+                    <div class="team-meta" style="padding-left:0;padding-right:0;margin-top:18px;">
+                        <span class="meta-chip market">Fiverr seller</span>
+                        <span class="meta-chip neutral">$8k-$14k initial engagement</span>
+                        <span class="meta-chip neutral">Best for pilot phase</span>
+                    </div>
+                    <div class="team-body" style="padding-left:0;padding-right:0;">
+                        <div class="member-list">
+                            <div class="member">
+                                <div class="member-avatar">DT</div>
+                                <div class="member-copy">
+                                    <strong>Devon Tate, Senior AI Workflow Engineer</strong>
+                                    <p>Best single-builder option in the marketplace for a first production pilot. Strong blend of LLM system delivery and operator-friendly implementation.</p>
+                                    <span class="source-badge market">Fiverr seller</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="team-notes">
+                            <div class="note-card">
+                                <strong>Why start here</strong>
+                                <p>Useful if the buyer wants one accountable owner to ship a first automation layer before committing to a broader team.</p>
+                            </div>
+                            <div class="note-card">
+                                <strong>Limitation</strong>
+                                <p>The buyer takes on more delivery concentration risk and gets less strategic support than the full-team options above.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="team-actions" style="padding-left:0;padding-right:0;">
+                        <button class="action primary">Book intro with this expert</button>
+                        <button class="action">Return to team options</button>
+                    </div>
+                </article>
+            </div>
+
+            <aside class="side-panel">
+                <div class="inner">
+                    <h3>Recommended next move</h3>
+                    <p>Team B is the strongest default. It preserves the Fiverr marketplace advantage while adding one outside specialist exactly where the buyer brief needs more depth.</p>
+
+                    <div class="decision">
+                        <strong>Decision framing</strong>
+                        <p>Choose Team A for speed, Team B for highest confidence, Team C for a tighter first-phase budget.</p>
+                    </div>
+
+                    <div class="decision">
+                        <strong>Client-facing proof</strong>
+                        <p>The shortlist makes the sourcing mix visible: part of the team comes from Fiverr, all strong profiles are validated through public proof, and outside experts are added only where they clearly improve the team.</p>
+                    </div>
+
+                    <div class="decision">
+                        <strong>Primary CTA</strong>
+                        <p>Book one intro meeting. Fiverr Elite can then finalize the team composition without making the client act like a recruiter.</p>
+                    </div>
+
+                    <button class="primary-btn" style="width:100%;">Book intro on Fiverr</button>
+                    <button class="ghost-btn" style="width:100%;">Download shortlist PDF</button>
+                </div>
+            </aside>
+        </section>
+    </div>
+
+    <script>
+        function setView(mode) {
+            const single = mode === 'single';
+            document.body.classList.toggle('single-view', single);
+            document.getElementById('teams-tab').classList.toggle('active', !single);
+            document.getElementById('single-tab').classList.toggle('active', single);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,1372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fiverr Elite | JD Analysis and Talent Funnel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f3f7f2;
+            --panel: rgba(255, 255, 255, 0.88);
+            --panel-solid: #ffffff;
+            --text: #0f172a;
+            --muted: #64748b;
+            --border: rgba(15, 23, 42, 0.08);
+            --green: #1dbf73;
+            --green-deep: #15945b;
+            --green-soft: rgba(29, 191, 115, 0.12);
+            --blue: #15357a;
+            --blue-soft: rgba(21, 53, 122, 0.08);
+            --shadow: 0 24px 80px rgba(15, 23, 42, 0.08);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, rgba(29, 191, 115, 0.14), transparent 30%),
+                radial-gradient(circle at top right, rgba(21, 53, 122, 0.10), transparent 28%),
+                var(--bg);
+        }
+
+        .shell {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 24px 20px 40px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-mark {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, var(--green), #42d891);
+            display: grid;
+            place-items: center;
+            color: white;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .brand-copy h1 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 26px;
+            letter-spacing: -0.03em;
+        }
+
+        .brand-copy p {
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .back-btn, .timer, .results-btn {
+            border-radius: 14px;
+            padding: 12px 14px;
+            font-size: 13px;
+            font-weight: 800;
+            text-decoration: none;
+        }
+
+        .back-btn, .timer {
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.84);
+            color: var(--text);
+        }
+
+        .timer {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .results-btn {
+            border: none;
+            background: linear-gradient(135deg, var(--green), #39d58e);
+            color: white;
+            opacity: 0.4;
+            pointer-events: none;
+            box-shadow: 0 18px 40px rgba(29, 191, 115, 0.22);
+        }
+
+        .results-btn.ready {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .hero {
+            text-align: center;
+            max-width: 980px;
+            margin: 0 auto 22px;
+        }
+
+        .phase-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: var(--green-soft);
+            color: var(--green-deep);
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .hero h2 {
+            margin-top: 16px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: clamp(36px, 6vw, 58px);
+            line-height: 0.96;
+            letter-spacing: -0.05em;
+        }
+
+        .hero h2 span { color: var(--green); }
+
+        .hero p {
+            margin-top: 14px;
+            color: var(--muted);
+            font-size: 17px;
+            line-height: 1.7;
+        }
+
+        .metrics {
+            margin-top: 18px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .metric {
+            min-width: 170px;
+            padding: 14px 16px;
+            border-radius: 18px;
+            background: rgba(255, 255, 255, 0.84);
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .metric strong {
+            display: block;
+            margin-bottom: 4px;
+            color: var(--blue);
+            font-size: 24px;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .metric span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 340px minmax(0, 1fr) 340px;
+            gap: 16px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid rgba(255, 255, 255, 0.92);
+            border-radius: 28px;
+            box-shadow: var(--shadow);
+            backdrop-filter: blur(14px);
+            overflow: hidden;
+        }
+
+        .panel-head {
+            padding: 20px 22px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .panel-head h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 24px;
+            letter-spacing: -0.03em;
+        }
+
+        .panel-head p {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .panel-body {
+            padding: 20px 22px 22px;
+        }
+
+        .jd-box {
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            background: var(--panel-solid);
+            padding: 16px;
+            font-size: 13px;
+            line-height: 1.65;
+            color: var(--muted);
+            white-space: pre-line;
+        }
+
+        .summary-list {
+            margin-top: 14px;
+            display: grid;
+            gap: 10px;
+        }
+
+        .summary-item {
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            background: var(--panel-solid);
+            padding: 14px 16px;
+        }
+
+        .summary-item strong {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 14px;
+        }
+
+        .summary-item p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .view {
+            display: none;
+        }
+
+        .view.active {
+            display: block;
+        }
+
+        .view-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .view-head h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 28px;
+            letter-spacing: -0.04em;
+        }
+
+        .view-head p {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .view-badge {
+            padding: 8px 10px;
+            border-radius: 999px;
+            background: var(--blue-soft);
+            color: var(--blue);
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .stage-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .stage {
+            display: grid;
+            grid-template-columns: auto 1fr auto;
+            gap: 14px;
+            align-items: center;
+            padding: 16px;
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            background: var(--panel-solid);
+            opacity: 0.55;
+            transition: 0.25s ease;
+        }
+
+        .stage.active {
+            opacity: 1;
+            border-color: rgba(29, 191, 115, 0.28);
+            background: linear-gradient(180deg, rgba(29,191,115,0.05), white 58%);
+        }
+
+        .stage.complete {
+            opacity: 1;
+            background: #f7faf7;
+        }
+
+        .stage-mark {
+            width: 42px;
+            height: 42px;
+            border-radius: 16px;
+            background: #edf2f7;
+            display: grid;
+            place-items: center;
+            color: var(--muted);
+            font-weight: 800;
+        }
+
+        .stage.active .stage-mark,
+        .stage.complete .stage-mark {
+            background: var(--green);
+            color: white;
+        }
+
+        .stage-copy strong {
+            display: block;
+            margin-bottom: 4px;
+            font-size: 14px;
+        }
+
+        .stage-copy p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .stage-stat {
+            color: var(--blue);
+            font-size: 22px;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .analysis-grid {
+            margin-top: 16px;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .analysis-card {
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            background: var(--panel-solid);
+            padding: 16px;
+            opacity: 0.42;
+            transform: translateY(8px);
+            transition: 0.25s ease;
+        }
+
+        .analysis-card.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        .analysis-card h4 {
+            margin-bottom: 10px;
+            font-size: 15px;
+        }
+
+        .token-list {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .token {
+            padding: 8px 10px;
+            border-radius: 999px;
+            background: #f7faf7;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .analysis-copy {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        .start-row {
+            margin-top: 16px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            text-align: center;
+        }
+
+        .start-btn {
+            border: none;
+            border-radius: 18px;
+            padding: 15px 18px;
+            background: linear-gradient(135deg, var(--green), #39d58e);
+            color: white;
+            font: inherit;
+            font-size: 15px;
+            font-weight: 800;
+            opacity: 0.4;
+            pointer-events: none;
+            box-shadow: 0 18px 40px rgba(29, 191, 115, 0.20);
+        }
+
+        .start-btn.ready {
+            opacity: 1;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+
+        .start-copy {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .status-header {
+            text-align: center;
+            padding: 4px 0 18px;
+        }
+
+        .status-text {
+            font-size: 24px;
+            font-weight: 700;
+            line-height: 1.25;
+        }
+
+        .status-text .highlight { color: var(--green); }
+
+        .status-sub {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .operation-card {
+            max-width: 760px;
+            margin: 0 auto 18px;
+            padding: 16px 18px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: var(--panel-solid);
+        }
+
+        .operation-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 12px;
+            margin-bottom: 10px;
+        }
+
+        .operation-label {
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            margin-bottom: 6px;
+        }
+
+        .operation-title {
+            font-size: 16px;
+            font-weight: 800;
+            margin-bottom: 4px;
+        }
+
+        .operation-copy {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .operation-status {
+            padding: 8px 10px;
+            border-radius: 999px;
+            background: var(--green-soft);
+            color: var(--green-deep);
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .operation-sources {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .operation-source {
+            padding: 8px 10px;
+            border-radius: 999px;
+            background: #f7faf7;
+            border: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .funnel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        .funnel-stage {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            padding: 8px 0;
+        }
+
+        .funnel-bar {
+            min-height: 74px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 14px 18px;
+            border-radius: 14px;
+            background: #f1f5f9;
+            border: 1px solid var(--border);
+            transition: 0.3s ease;
+            min-width: 0;
+        }
+
+        .funnel-stage[data-stage="market"] .funnel-bar { width: 100%; }
+        .funnel-stage[data-stage="validated"] .funnel-bar { width: 84%; }
+        .funnel-stage[data-stage="qualified"] .funnel-bar { width: 68%; }
+        .funnel-stage[data-stage="shortlist"] .funnel-bar { width: 54%; }
+
+        .funnel-stage.pending { opacity: 0.5; }
+
+        .funnel-stage.active .funnel-bar {
+            background: rgba(29, 191, 115, 0.10);
+            border-color: rgba(29, 191, 115, 0.26);
+        }
+
+        .funnel-stage.complete .funnel-bar {
+            background: #ffffff;
+        }
+
+        .funnel-label {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+            flex: 1;
+        }
+
+        .funnel-icon {
+            width: 38px;
+            height: 38px;
+            border-radius: 10px;
+            display: grid;
+            place-items: center;
+            background: white;
+            border: 1px solid var(--border);
+            font-size: 16px;
+            flex-shrink: 0;
+            transition: 0.3s ease;
+        }
+
+        .funnel-stage.active .funnel-icon {
+            background: var(--green);
+            border-color: var(--green);
+            color: white;
+        }
+
+        .funnel-stage.complete .funnel-icon {
+            background: var(--blue);
+            border-color: var(--blue);
+            color: white;
+        }
+
+        .funnel-name {
+            display: block;
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .funnel-desc {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.5;
+            max-width: 100%;
+        }
+
+        .funnel-count {
+            min-width: 88px;
+            text-align: right;
+            font-size: 28px;
+            font-weight: 800;
+            color: var(--blue);
+            font-family: 'JetBrains Mono', monospace;
+            flex-shrink: 0;
+        }
+
+        .funnel-connector {
+            width: 2px;
+            height: 18px;
+            background: var(--border);
+            transition: 0.3s ease;
+        }
+
+        .funnel-connector.complete {
+            background: var(--green);
+        }
+
+        .preview {
+            margin-top: 18px;
+            opacity: 0;
+            transition: 0.35s ease;
+        }
+
+        .preview.visible {
+            opacity: 1;
+        }
+
+        .preview-label {
+            text-align: center;
+            font-size: 12px;
+            font-weight: 800;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 10px;
+        }
+
+        .preview-row {
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .preview-card {
+            min-width: 200px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 14px;
+            border-radius: 14px;
+            background: var(--panel-solid);
+            border: 1px solid var(--border);
+        }
+
+        .preview-avatar {
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            display: grid;
+            place-items: center;
+            color: white;
+            font-size: 12px;
+            font-weight: 800;
+            flex-shrink: 0;
+        }
+
+        .preview-meta strong {
+            display: block;
+            font-size: 13px;
+        }
+
+        .preview-meta span {
+            color: var(--muted);
+            font-size: 11px;
+        }
+
+        .preview-score {
+            margin-left: auto;
+            color: var(--green-deep);
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .feed-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .processing-badge {
+            padding: 8px 10px;
+            border-radius: 999px;
+            background: var(--green-soft);
+            color: var(--green-deep);
+            font-size: 11px;
+            font-weight: 800;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--green);
+            box-shadow: 0 0 0 0 rgba(29, 191, 115, 0.5);
+            animation: pulse 1.2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { box-shadow: 0 0 0 0 rgba(29, 191, 115, 0.5); }
+            70% { box-shadow: 0 0 0 8px rgba(29, 191, 115, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(29, 191, 115, 0); }
+        }
+
+        .feed-list {
+            display: grid;
+            gap: 10px;
+            max-height: 760px;
+            overflow: auto;
+            padding-right: 4px;
+        }
+
+        .feed-item {
+            padding: 14px 16px;
+            border-radius: 20px;
+            border: 1px solid var(--border);
+            background: var(--panel-solid);
+            animation: logIn 0.25s ease;
+        }
+
+        @keyframes logIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .feed-time {
+            color: var(--blue);
+            font-size: 12px;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+            margin-bottom: 4px;
+        }
+
+        .feed-item p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        @media (max-width: 1160px) {
+            .layout { grid-template-columns: 1fr; }
+        }
+
+        @media (max-width: 760px) {
+            .analysis-grid { grid-template-columns: 1fr; }
+            .topbar { flex-direction: column; align-items: stretch; }
+            .view-head { flex-direction: column; align-items: stretch; }
+            .stage { grid-template-columns: 1fr; }
+            .funnel-bar { padding: 14px; }
+            .funnel-label { align-items: flex-start; }
+            .funnel-stage[data-stage="validated"] .funnel-bar,
+            .funnel-stage[data-stage="qualified"] .funnel-bar,
+            .funnel-stage[data-stage="shortlist"] .funnel-bar { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">fi</div>
+                <div class="brand-copy">
+                    <h1>Fiverr Elite</h1>
+                    <p id="topbar-subtitle">Step 2 of 3: analyze the JD and plan the search</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <a class="back-btn" href="index.html">Back to brief</a>
+                <div class="timer" id="timer">0:00</div>
+                <a class="results-btn" id="results-btn" href="results.html">View team options</a>
+            </div>
+        </header>
+
+        <section class="hero">
+            <div class="phase-badge" id="phase-badge">Step 1: Job planning</div>
+            <h2 id="hero-title">Elite is turning the brief into <span>roles, constraints and sourcing logic</span>.</h2>
+            <p id="hero-copy">
+                First the system understands the job. Then the user explicitly starts the talent search and Fiverr Elite turns that plan into a live funnel from thousands of profiles down to the top shortlist.
+            </p>
+            <div class="metrics">
+                <div class="metric">
+                    <strong id="metric-1">0</strong>
+                    <span id="metric-1-label">roles mapped</span>
+                </div>
+                <div class="metric">
+                    <strong id="metric-2">0</strong>
+                    <span id="metric-2-label">constraints extracted</span>
+                </div>
+                <div class="metric">
+                    <strong id="metric-3">0</strong>
+                    <span id="metric-3-label">source lanes planned</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="layout">
+            <aside class="panel">
+                <div class="panel-head">
+                    <h3>Submitted JD</h3>
+                    <p>The original client brief stays visible while Elite plans and then executes the search.</p>
+                </div>
+                <div class="panel-body">
+                    <div class="jd-box">We need an AI customer support and operations automation system for our SaaS company.
+
+Goals:
+- answer tier-1 support requests
+- summarize conversations for human agents
+- trigger HubSpot and Slack workflows
+- escalate edge cases safely
+
+Need a team that can handle LLM workflows, support operations design, and production integrations.</div>
+
+                    <div class="summary-list">
+                        <div class="summary-item">
+                            <strong>Buying mode</strong>
+                            <p>Build a team first. Single-expert fallback remains available later.</p>
+                        </div>
+                        <div class="summary-item">
+                            <strong>Constraints</strong>
+                            <p>$25k-$60k, 8-week launch target, US Eastern overlap, Zendesk + HubSpot + Slack.</p>
+                        </div>
+                        <div class="summary-item">
+                            <strong>Validation rule</strong>
+                            <p>Even strong Fiverr profiles must be checked against public proof before entering the shortlist.</p>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="panel">
+                <div class="panel-body">
+                    <div class="view active" id="analysis-view">
+                        <div class="view-head">
+                            <div>
+                                <h3>Step 1. Analyze and plan the job</h3>
+                                <p>Before any candidate search begins, Elite breaks the JD into the building blocks of the actual hiring plan.</p>
+                            </div>
+                            <div class="view-badge">4 planning stages</div>
+                        </div>
+
+                        <div class="stage-list">
+                            <div class="stage pending" id="stage-parse">
+                                <div class="stage-mark">01</div>
+                                <div class="stage-copy">
+                                    <strong>Parse the brief</strong>
+                                    <p>Read the request, detect the outcome and separate project goals from supporting details.</p>
+                                </div>
+                                <div class="stage-stat" id="stat-parse">0%</div>
+                            </div>
+                            <div class="stage pending" id="stage-constraints">
+                                <div class="stage-mark">02</div>
+                                <div class="stage-copy">
+                                    <strong>Extract constraints</strong>
+                                    <p>Pull out budget, timeline, integrations, timezone overlap and delivery expectations.</p>
+                                </div>
+                                <div class="stage-stat" id="stat-constraints">0</div>
+                            </div>
+                            <div class="stage pending" id="stage-roles">
+                                <div class="stage-mark">03</div>
+                                <div class="stage-copy">
+                                    <strong>Map the role stack</strong>
+                                    <p>Translate the brief into the exact roles the buyer needs instead of generic AI freelancer search terms.</p>
+                                </div>
+                                <div class="stage-stat" id="stat-roles">0</div>
+                            </div>
+                            <div class="stage pending" id="stage-sources">
+                                <div class="stage-mark">04</div>
+                                <div class="stage-copy">
+                                    <strong>Plan sourcing lanes</strong>
+                                    <p>Decide what should be searched on Fiverr first, what must be validated on the public web, and what may require outside specialists.</p>
+                                </div>
+                                <div class="stage-stat" id="stat-sources">0</div>
+                            </div>
+                        </div>
+
+                        <div class="analysis-grid">
+                            <article class="analysis-card" id="card-outcome">
+                                <h4>Detected outcome</h4>
+                                <div class="token-list">
+                                    <span class="token">AI support automation</span>
+                                    <span class="token">Ops workflows</span>
+                                    <span class="token">Production rollout</span>
+                                </div>
+                            </article>
+                            <article class="analysis-card" id="card-constraints">
+                                <h4>Constraints</h4>
+                                <div class="token-list">
+                                    <span class="token">$25k-$60k</span>
+                                    <span class="token">8 weeks</span>
+                                    <span class="token">US Eastern overlap</span>
+                                    <span class="token">Zendesk, HubSpot, Slack</span>
+                                </div>
+                            </article>
+                            <article class="analysis-card" id="card-roles">
+                                <h4>Role breakdown</h4>
+                                <div class="token-list">
+                                    <span class="token">AI Product Lead</span>
+                                    <span class="token">LLM Engineer</span>
+                                    <span class="token">Automation Engineer</span>
+                                    <span class="token">Support Systems Specialist</span>
+                                </div>
+                            </article>
+                            <article class="analysis-card" id="card-sources">
+                                <h4>Sourcing plan</h4>
+                                <div class="analysis-copy">
+                                    Search Fiverr first for the core team. Validate strong profiles via GitHub, LinkedIn, case studies and portfolio proof. Use outside public talent surfaces only for missing premium roles.
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="start-row">
+                            <button class="start-btn" id="start-btn" type="button">Start talent search</button>
+                            <div class="start-copy">After the plan is complete, the user starts the live funnel and watches the shortlist build in real time.</div>
+                        </div>
+                    </div>
+
+                    <div class="view" id="funnel-view">
+                        <div class="view-head">
+                            <div>
+                                <h3>Step 2. Run the live talent funnel</h3>
+                                <p>The planned job now becomes a live narrowing process from a wide market scan to a shortlist of top candidates.</p>
+                            </div>
+                            <div class="view-badge">Processing</div>
+                        </div>
+
+                        <div class="status-header">
+                            <div class="status-text" id="status-text">Scanning the <span class="highlight">full market</span>...</div>
+                            <div class="status-sub" id="status-sub">Starting with Fiverr marketplace supply and adjacent public talent surfaces</div>
+                        </div>
+
+                        <div class="operation-card">
+                            <div class="operation-top">
+                                <div>
+                                    <div class="operation-label">Current operation</div>
+                                    <div class="operation-title" id="operation-title">Waiting to start market scan</div>
+                                    <div class="operation-copy" id="operation-copy">The funnel is ready. Once sourcing starts, this block will show what Elite is processing and where the current signals come from.</div>
+                                </div>
+                                <div class="operation-status" id="operation-status"><span class="dot"></span> Ready</div>
+                            </div>
+                            <div class="operation-sources" id="operation-sources">
+                                <span class="operation-source">Fiverr marketplace</span>
+                                <span class="operation-source">GitHub</span>
+                                <span class="operation-source">LinkedIn</span>
+                            </div>
+                        </div>
+
+                        <div class="funnel">
+                            <div class="funnel-stage pending" id="funnel-market" data-stage="market">
+                                <div class="funnel-bar">
+                                    <div class="funnel-label">
+                                        <div class="funnel-icon">🔍</div>
+                                        <div>
+                                            <span class="funnel-name">Market Scan</span>
+                                            <div class="funnel-desc">Fiverr marketplace plus adjacent public talent surfaces</div>
+                                        </div>
+                                    </div>
+                                    <div class="funnel-count" id="funnel-count-market">0</div>
+                                </div>
+                            </div>
+                            <div class="funnel-connector" id="conn-1"></div>
+
+                            <div class="funnel-stage pending" id="funnel-validated" data-stage="validated">
+                                <div class="funnel-bar">
+                                    <div class="funnel-label">
+                                        <div class="funnel-icon">🧾</div>
+                                        <div>
+                                            <span class="funnel-name">Validated Profiles</span>
+                                            <div class="funnel-desc">Matching signals plus public proof</div>
+                                        </div>
+                                    </div>
+                                    <div class="funnel-count" id="funnel-count-validated">0</div>
+                                </div>
+                            </div>
+                            <div class="funnel-connector" id="conn-2"></div>
+
+                            <div class="funnel-stage pending" id="funnel-qualified" data-stage="qualified">
+                                <div class="funnel-bar">
+                                    <div class="funnel-label">
+                                        <div class="funnel-icon">⚡</div>
+                                        <div>
+                                            <span class="funnel-name">Qualified for This JD</span>
+                                            <div class="funnel-desc">Fits role map, budget and setup</div>
+                                        </div>
+                                    </div>
+                                    <div class="funnel-count" id="funnel-count-qualified">0</div>
+                                </div>
+                            </div>
+                            <div class="funnel-connector" id="conn-3"></div>
+
+                            <div class="funnel-stage pending" id="funnel-shortlist" data-stage="shortlist">
+                                <div class="funnel-bar">
+                                    <div class="funnel-label">
+                                        <div class="funnel-icon">⭐</div>
+                                        <div>
+                                            <span class="funnel-name">Shortlist Ready</span>
+                                            <div class="funnel-desc">Top profiles for final team options</div>
+                                        </div>
+                                    </div>
+                                    <div class="funnel-count" id="funnel-count-shortlist">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="preview" id="preview">
+                            <div class="preview-label">First shortlist signals</div>
+                            <div class="preview-row">
+                                <div class="preview-card">
+                                    <div class="preview-avatar" style="background:#15357a;">AK</div>
+                                    <div class="preview-meta">
+                                        <strong>Amanda Kim</strong>
+                                        <span>AI Product Lead</span>
+                                    </div>
+                                    <div class="preview-score">95</div>
+                                </div>
+                                <div class="preview-card">
+                                    <div class="preview-avatar" style="background:#1dbf73;">LM</div>
+                                    <div class="preview-meta">
+                                        <strong>Lina Mendez</strong>
+                                        <span>Automation Engineer</span>
+                                    </div>
+                                    <div class="preview-score">93</div>
+                                </div>
+                                <div class="preview-card">
+                                    <div class="preview-avatar" style="background:#1b4eb8;">DT</div>
+                                    <div class="preview-meta">
+                                        <strong>Devon Tate</strong>
+                                        <span>LLM Engineer</span>
+                                    </div>
+                                    <div class="preview-score">92</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <aside class="panel">
+                <div class="panel-head">
+                    <h3>Live feed</h3>
+                    <p>The client sees the process while Fiverr Elite is planning and then processing the search.</p>
+                </div>
+                <div class="panel-body">
+                    <div class="feed-top">
+                        <div class="processing-badge" id="processing-badge"><span class="dot"></span> Processing job analysis</div>
+                    </div>
+                    <div class="feed-list" id="feed-list">
+                        <div class="feed-item">
+                            <div class="feed-time">0:00</div>
+                            <p>Queued Fiverr Elite job analysis.</p>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </section>
+    </div>
+
+    <script>
+        let seconds = 0;
+        let currentPhase = 'analysis';
+        let sourcingStarted = false;
+
+        const timer = document.getElementById('timer');
+        const feed = document.getElementById('feed-list');
+        const startButton = document.getElementById('start-btn');
+        const resultsButton = document.getElementById('results-btn');
+
+        function tick() {
+            seconds += 1;
+            const m = Math.floor(seconds / 60);
+            const s = String(seconds % 60).padStart(2, '0');
+            timer.textContent = `${m}:${s}`;
+        }
+
+        function stamp() {
+            const m = Math.floor(seconds / 60);
+            const s = String(seconds % 60).padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function addFeed(message) {
+            const row = document.createElement('div');
+            row.className = 'feed-item';
+            row.innerHTML = `<div class="feed-time">${stamp()}</div><p>${message}</p>`;
+            feed.prepend(row);
+        }
+
+        function setStage(name, state) {
+            const node = document.getElementById(`stage-${name}`);
+            node.classList.remove('pending', 'active', 'complete');
+            node.classList.add(state);
+        }
+
+        function showCard(id) {
+            document.getElementById(id).classList.add('visible');
+        }
+
+        function updateMetric(index, value, label) {
+            document.getElementById(`metric-${index}`).textContent = value;
+            document.getElementById(`metric-${index}-label`).textContent = label;
+        }
+
+        function setOperation(title, copy, sources, statusLabel = 'Processing') {
+            document.getElementById('operation-title').textContent = title;
+            document.getElementById('operation-copy').textContent = copy;
+            document.getElementById('operation-status').innerHTML = `<span class="dot"></span> ${statusLabel}`;
+            document.getElementById('operation-sources').innerHTML = sources
+                .map((source) => `<span class="operation-source">${source}</span>`)
+                .join('');
+        }
+
+        function setFunnelStage(name, state) {
+            const node = document.getElementById(`funnel-${name}`);
+            node.classList.remove('pending', 'active', 'complete');
+            node.classList.add(state);
+        }
+
+        function setConnector(id, complete) {
+            document.getElementById(`conn-${id}`).classList.toggle('complete', complete);
+        }
+
+        function setFunnelCount(name, value) {
+            document.getElementById(`funnel-count-${name}`).textContent = Number(value).toLocaleString();
+        }
+
+        function sleep(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+
+        function animateCount({ key, target, duration = 1800, label, metricIndex }) {
+            return new Promise((resolve) => {
+                const element = document.getElementById(`funnel-count-${key}`);
+                const start = Number(element.dataset.value || '0');
+                const startTime = performance.now();
+
+                function frame(now) {
+                    const progress = Math.min(1, (now - startTime) / duration);
+                    const eased = 1 - Math.pow(1 - progress, 3);
+                    const value = Math.round(start + (target - start) * eased);
+                    element.dataset.value = String(value);
+                    element.textContent = value.toLocaleString();
+
+                    if (metricIndex) {
+                        updateMetric(metricIndex, value.toLocaleString(), label);
+                    }
+
+                    if (progress < 1) {
+                        requestAnimationFrame(frame);
+                    } else {
+                        resolve();
+                    }
+                }
+
+                requestAnimationFrame(frame);
+            });
+        }
+
+        function switchToFunnelView() {
+            if (sourcingStarted) return;
+            sourcingStarted = true;
+            currentPhase = 'funnel';
+
+            document.getElementById('analysis-view').classList.remove('active');
+            document.getElementById('funnel-view').classList.add('active');
+
+            document.getElementById('phase-badge').textContent = 'Step 2: Live talent funnel';
+            document.getElementById('hero-title').innerHTML = 'Elite is narrowing the market to the <span>top shortlist</span>.';
+            document.getElementById('hero-copy').textContent = 'The job plan is locked. Now Fiverr Elite runs the live funnel, updates the metrics in real time and shows how the search moves from thousands of profiles to a small top tier.';
+            document.getElementById('topbar-subtitle').textContent = 'Step 2 of 3: processing the live talent funnel';
+            document.getElementById('processing-badge').innerHTML = '<span class="dot"></span> Processing live talent search';
+
+            updateMetric(1, '0', 'profiles scanned');
+            updateMetric(2, '0', 'validated profiles');
+            updateMetric(3, '0', 'shortlist-ready');
+
+            addFeed('User clicked Start talent search. Switching from job planning to live funnel processing.');
+            runFunnel();
+        }
+
+        async function runFunnel() {
+            setFunnelStage('market', 'active');
+            document.getElementById('status-text').innerHTML = 'Sourcing <span class="highlight">across the market</span>...';
+            document.getElementById('status-sub').textContent = 'Starting with Fiverr marketplace supply and adjacent public talent surfaces';
+            setOperation(
+                'Opening sourcing lanes and collecting initial market profiles',
+                'Elite is searching the Fiverr marketplace first, then expanding into adjacent public surfaces to build the widest credible starting pool.',
+                ['Fiverr marketplace', 'Fiverr Pro', 'GitHub', 'LinkedIn', 'Case-study pages']
+            );
+            addFeed('Connected sourcing lanes: Fiverr marketplace, Fiverr Pro, adjacent categories, GitHub, LinkedIn and public case-study sources.');
+            await sleep(400);
+            addFeed('Found 5 initial profiles mentioning AI support automation and Zendesk workflow builds.');
+            await sleep(500);
+            addFeed('Found 12 profiles with public evidence of LLM workflow delivery.');
+            await animateCount({ key: 'market', target: 120, duration: 900, label: 'profiles scanned', metricIndex: 1 });
+            addFeed('Expanded the market scan to 120 profiles across Fiverr AI and operations categories.');
+            await animateCount({ key: 'market', target: 671, duration: 1000, label: 'profiles scanned', metricIndex: 1 });
+            addFeed('Cross-matched GitHub repos and LinkedIn histories mentioning HubSpot, Slack automation and support-agent orchestration.');
+            await animateCount({ key: 'market', target: 1830, duration: 1100, label: 'profiles scanned', metricIndex: 1 });
+            addFeed('Pulled broader adjacent talent: agent builders, ops automation engineers and CX systems leads.');
+            await animateCount({ key: 'market', target: 4200, duration: 1200, label: 'profiles scanned', metricIndex: 1 });
+            addFeed('Market scan complete at 4,200 profiles.');
+
+            setFunnelStage('market', 'complete');
+            setConnector(1, true);
+            setFunnelStage('validated', 'active');
+            document.getElementById('status-text').innerHTML = 'Checking <span class="highlight">public proof</span>...';
+            document.getElementById('status-sub').textContent = 'Filtering to profiles with matching signals, proof of work and strong external validation';
+            setOperation(
+                'Verifying public proof and filtering out weak evidence',
+                'Elite is checking which profiles have real delivery depth, matching public signals and enough external proof to continue.',
+                ['GitHub repos', 'LinkedIn history', 'Portfolio sites', 'Case studies', 'Public operator signals']
+            );
+            await sleep(300);
+            addFeed('Signal: active maintainer of a customer-support agent workflow on GitHub.');
+            await animateCount({ key: 'validated', target: 26, duration: 700, label: 'validated profiles', metricIndex: 2 });
+            addFeed('Signal: public case study showing 38% ticket deflection after automation rollout.');
+            await animateCount({ key: 'validated', target: 110, duration: 900, label: 'validated profiles', metricIndex: 2 });
+            addFeed('Rejected 74 profiles with shallow proof, unclear delivery history or no production examples.');
+            await animateCount({ key: 'validated', target: 320, duration: 900, label: 'validated profiles', metricIndex: 2 });
+            addFeed('Signal: built Zendesk triage automation for 2M+ support tickets per year.');
+            await animateCount({ key: 'validated', target: 780, duration: 1100, label: 'validated profiles', metricIndex: 2 });
+            addFeed('Validation complete at 780 profiles with real public proof.');
+
+            setFunnelStage('validated', 'complete');
+            setConnector(2, true);
+            setFunnelStage('qualified', 'active');
+            document.getElementById('status-text').innerHTML = 'Applying <span class="highlight">job fit constraints</span>...';
+            document.getElementById('status-sub').textContent = 'Checking role map, budget, timeline, timezone overlap and delivery setup';
+            setOperation(
+                'Applying the exact job plan to the validated pool',
+                'Elite is matching the shortlisted evidence against budget, timezone, integrations, role coverage and delivery setup from the JD.',
+                ['JD role map', 'Budget filters', 'Timezone overlap', 'Zendesk + HubSpot + Slack fit']
+            );
+            await sleep(300);
+            addFeed('Removed profiles outside the budget band or without US Eastern overlap.');
+            await animateCount({ key: 'qualified', target: 14, duration: 700 });
+            addFeed('Matched exact role-stack coverage: AI Product Lead, LLM Engineer, Automation Engineer and Support Systems Specialist.');
+            await animateCount({ key: 'qualified', target: 41, duration: 850 });
+            addFeed('Downranked candidates without clear Zendesk, HubSpot or Slack integration depth.');
+            await animateCount({ key: 'qualified', target: 96, duration: 1000 });
+            addFeed('Qualification complete at 96 profiles that truly fit this JD.');
+
+            setFunnelStage('qualified', 'complete');
+            setConnector(3, true);
+            setFunnelStage('shortlist', 'active');
+            document.getElementById('status-text').innerHTML = 'Building the <span class="highlight">top shortlist</span>...';
+            document.getElementById('status-sub').textContent = 'Promoting only the strongest profiles into final team-ready recommendations';
+            setOperation(
+                'Scoring shortlist signals and assembling the top layer',
+                'Elite is weighting communication quality, proof depth, role complementarity and delivery risk to find the strongest final candidates.',
+                ['Shortlist scoring', 'Communication signals', 'Role complementarity', 'Delivery risk']
+            );
+            await sleep(350);
+            addFeed('Scoring shortlist signals: communication quality, public proof depth, delivery risk and role complementarity.');
+            await animateCount({ key: 'shortlist', target: 3, duration: 650, label: 'shortlist-ready', metricIndex: 3 });
+            addFeed('First shortlist signals surfaced: Amanda Kim, Lina Mendez and Devon Tate.');
+            await animateCount({ key: 'shortlist', target: 7, duration: 800, label: 'shortlist-ready', metricIndex: 3 });
+            addFeed('Added two externally sourced specialists only where the marketplace lacked deeper support-systems coverage.');
+            await animateCount({ key: 'shortlist', target: 12, duration: 900, label: 'shortlist-ready', metricIndex: 3 });
+            addFeed('Shortlist complete. Top 12 profiles are ready to be assembled into final team options.');
+
+            setFunnelStage('shortlist', 'complete');
+            document.getElementById('preview').classList.add('visible');
+            document.getElementById('status-text').innerHTML = 'Found the <span class="highlight">top candidates</span>.';
+            document.getElementById('status-sub').textContent = 'The shortlist is ready to be assembled into final team options';
+            setOperation(
+                'Top candidate layer is ready',
+                'The live funnel is complete. Elite has enough signal to turn the top candidate layer into final team options.',
+                ['Fiverr shortlist', 'Invited specialists', 'Final team assembly'],
+                'Complete'
+            );
+            resultsButton.classList.add('ready');
+            document.getElementById('processing-badge').innerHTML = '<span class="dot"></span> Processing complete';
+        }
+
+        const interval = setInterval(tick, 1000);
+
+        setTimeout(() => {
+            setStage('parse', 'active');
+            document.getElementById('stat-parse').textContent = '48%';
+            addFeed('Processing step 1/4: reading the brief and separating the core outcome from supporting details.');
+        }, 400);
+
+        setTimeout(() => {
+            document.getElementById('stat-parse').textContent = '100%';
+            setStage('parse', 'complete');
+            showCard('card-outcome');
+            addFeed('Detected the primary job outcome: AI support automation with production rollout requirements.');
+        }, 2200);
+
+        setTimeout(() => {
+            setStage('constraints', 'active');
+            document.getElementById('stat-constraints').textContent = '4';
+            updateMetric(2, '4', 'constraints extracted');
+            showCard('card-constraints');
+            addFeed('Processing step 2/4: extracted budget, timeline, timezone overlap and integration constraints.');
+        }, 4100);
+
+        setTimeout(() => {
+            setStage('constraints', 'complete');
+            setStage('roles', 'active');
+            document.getElementById('stat-roles').textContent = '4';
+            updateMetric(1, '4', 'roles mapped');
+            showCard('card-roles');
+            addFeed('Processing step 3/4: mapped the JD into four roles instead of one generic AI freelancer search.');
+        }, 6500);
+
+        setTimeout(() => {
+            setStage('roles', 'complete');
+            setStage('sources', 'active');
+            document.getElementById('stat-sources').textContent = '3';
+            updateMetric(3, '3', 'source lanes planned');
+            showCard('card-sources');
+            addFeed('Processing step 4/4: planned sourcing lanes across Fiverr-first search, public-web validation and selective external specialists.');
+        }, 9000);
+
+        setTimeout(() => {
+            setStage('sources', 'complete');
+            addFeed('Job planning complete. Waiting for user to start the live talent funnel.');
+            startButton.classList.add('ready');
+            startButton.addEventListener('click', switchToFunnelView, { once: true });
+        }, 11200);
+    </script>
+</body>
+</html>
