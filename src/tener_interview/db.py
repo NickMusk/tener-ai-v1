@@ -1091,6 +1091,23 @@ class InterviewPostgresDatabase:
     @staticmethod
     def _row_to_dict(row: Dict[str, Any]) -> Dict[str, Any]:
         item = dict(row)
+        for field in (
+            "payload",
+            "entry_context_json",
+            "normalized_json",
+            "raw_payload",
+            "response_json",
+            "output_json",
+            "generated_questions_json",
+            "meta_json",
+        ):
+            value = item.get(field)
+            if not isinstance(value, str) or not value:
+                continue
+            try:
+                item[field] = json.loads(value)
+            except json.JSONDecodeError:
+                pass
         for key, value in list(item.items()):
             if isinstance(value, datetime):
                 item[key] = value.isoformat()

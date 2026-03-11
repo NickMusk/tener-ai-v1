@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import threading
 import unittest
+from datetime import datetime, timezone
 from http.server import ThreadingHTTPServer
 from pathlib import Path
 from tempfile import TemporaryDirectory, gettempdir
@@ -13,7 +14,7 @@ from urllib.parse import urlparse
 os.environ.setdefault("TENER_DB_PATH", str(Path(gettempdir()) / "tener_interview_entry_bootstrap.sqlite3"))
 
 from tener_interview import http_api
-from tener_interview.db import InterviewDatabase
+from tener_interview.db import InterviewDatabase, InterviewPostgresDatabase
 from tener_interview.providers.hireflix_mock import HireflixMockAdapter
 from tener_interview.scoring import InterviewScoringEngine
 from tener_interview.service import InterviewService
@@ -142,6 +143,20 @@ class InterviewEntryLandingTests(unittest.TestCase):
             server.server_close()
             server_thread.join(timeout=3)
             http_api.SERVICES = previous_services
+
+    def test_postgres_row_to_dict_decodes_landing_json(self) -> None:
+        parsed = InterviewPostgresDatabase._row_to_dict(
+            {
+                "entry_context_json": '{"job":{"title":"Manual QA","company":"Tener"}}',
+                "meta_json": '{"categories":{"hard_skills":3}}',
+                "created_at": datetime(2026, 3, 11, 0, 0, tzinfo=timezone.utc),
+            }
+        )
+
+        self.assertEqual(parsed["entry_context_json"]["job"]["title"], "Manual QA")
+        self.assertEqual(parsed["entry_context_json"]["job"]["company"], "Tener")
+        self.assertEqual(parsed["meta_json"]["categories"]["hard_skills"], 3)
+        self.assertEqual(parsed["created_at"], "2026-03-11T00:00:00+00:00")
 
     @staticmethod
     def _request(method: str, url: str):
