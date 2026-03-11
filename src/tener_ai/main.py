@@ -513,6 +513,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if self._serve_static_directory(prefix="/fiverr/", directory=project_root() / "Fiverr-prototype", path=parsed.path):
                 return
 
+        if parsed.path == "/toptal":
+            self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/toptal/")
+            return
+
+        if parsed.path.startswith("/toptal/"):
+            if self._serve_static_directory(prefix="/toptal/", directory=project_root() / "Toptal-prototype", path=parsed.path):
+                return
+
         if parsed.path == "/dashboard/emulator":
             dashboard = project_root() / "src" / "tener_ai" / "static" / "emulator_dashboard.html"
             if not dashboard.exists():

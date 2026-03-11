@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toptal AI | Mission Analysis and Expert Funnel</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #edf3f9;
+            --navy: #0c1e3d;
+            --navy-soft: #173361;
+            --panel: rgba(255, 255, 255, 0.90);
+            --panel-solid: #ffffff;
+            --text: #11233d;
+            --muted: #61728a;
+            --line: rgba(17, 35, 61, 0.10);
+            --blue: #1458d3;
+            --blue-soft: rgba(20, 88, 211, 0.10);
+            --sky: #5da8ff;
+            --shadow: 0 28px 80px rgba(7, 20, 42, 0.12);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Manrope', sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, rgba(93,168,255,0.18), transparent 22%),
+                linear-gradient(180deg, #0b1d39 0%, #10284d 34%, #edf3f9 34%, #edf3f9 100%);
+        }
+
+        .shell { max-width: 1400px; margin: 0 auto; padding: 24px 20px 40px; }
+        .topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; margin-bottom:22px; color:white; }
+        .brand { display:flex; align-items:center; gap:14px; }
+        .brand-mark { width:42px; height:42px; border-radius:14px; display:grid; place-items:center; background:rgba(255,255,255,0.10); border:1px solid rgba(255,255,255,0.14); font-family:'Fraunces',serif; font-size:20px; font-weight:700; }
+        .brand-copy h1 { font-size:28px; letter-spacing:-0.04em; }
+        .brand-copy p { color:rgba(255,255,255,0.72); font-size:13px; }
+        .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .back-btn,.timer,.results-btn { border-radius:14px; padding:12px 14px; font-size:13px; font-weight:800; text-decoration:none; }
+        .back-btn,.timer { border:1px solid rgba(255,255,255,0.14); background:rgba(255,255,255,0.08); color:white; }
+        .timer { font-family:'JetBrains Mono',monospace; }
+        .results-btn { border:none; background:linear-gradient(135deg, #1458d3, #3479ef); color:white; opacity:.4; pointer-events:none; box-shadow:0 18px 40px rgba(20,88,211,.24); }
+        .results-btn.ready { opacity:1; pointer-events:auto; }
+
+        .hero { text-align:center; max-width:980px; margin:0 auto 22px; color:white; }
+        .phase-badge { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.12); font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
+        .hero h2 { margin-top:16px; font-family:'Fraunces',serif; font-size:clamp(38px,6vw,60px); line-height:.96; letter-spacing:-.05em; }
+        .hero h2 span { color:#92c1ff; }
+        .hero p { margin-top:14px; color:rgba(255,255,255,.74); font-size:17px; line-height:1.7; }
+
+        .metrics { margin-top:18px; display:flex; justify-content:center; gap:12px; flex-wrap:wrap; }
+        .metric { min-width:180px; padding:14px 16px; border-radius:18px; background:rgba(255,255,255,.92); border:1px solid rgba(255,255,255,.9); color:var(--text); }
+        .metric strong { display:block; margin-bottom:4px; color:var(--blue); font-size:24px; font-weight:800; font-family:'JetBrains Mono',monospace; text-align:center; }
+        .metric span { color:var(--muted); font-size:12px; font-weight:700; display:block; text-align:center; }
+
+        .layout { display:grid; grid-template-columns:340px minmax(0,1fr) 340px; gap:16px; }
+        .panel { background:var(--panel); border:1px solid rgba(255,255,255,.92); border-radius:28px; box-shadow:var(--shadow); backdrop-filter:blur(14px); overflow:hidden; }
+        .panel-head { padding:20px 22px; border-bottom:1px solid var(--line); }
+        .panel-head h3 { font-family:'Fraunces',serif; font-size:30px; letter-spacing:-.04em; }
+        .panel-head p { margin-top:8px; color:var(--muted); font-size:13px; line-height:1.6; }
+        .panel-body { padding:20px 22px 22px; }
+        .jd-box,.summary-item,.analysis-card,.feed-item,.preview-card,.operation-card,.stage,.source-chip { background:var(--panel-solid); }
+        .jd-box { border-radius:22px; border:1px solid var(--line); padding:16px; font-size:13px; line-height:1.65; color:var(--muted); white-space:pre-line; }
+        .summary-list { margin-top:14px; display:grid; gap:10px; }
+        .summary-item { border-radius:18px; border:1px solid var(--line); padding:14px 16px; }
+        .summary-item strong { display:block; margin-bottom:6px; font-size:14px; }
+        .summary-item p { color:var(--muted); font-size:13px; line-height:1.55; }
+
+        .view { display:none; }
+        .view.active { display:block; }
+        .view-head { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; margin-bottom:16px; }
+        .view-head h3 { font-family:'Fraunces',serif; font-size:34px; letter-spacing:-.04em; }
+        .view-head p { margin-top:8px; color:var(--muted); font-size:14px; line-height:1.6; }
+        .view-badge { padding:8px 10px; border-radius:999px; background:var(--blue-soft); color:var(--blue); font-size:11px; font-weight:800; white-space:nowrap; }
+
+        .stage-list { display:grid; gap:12px; }
+        .stage { display:grid; grid-template-columns:auto 1fr auto; gap:14px; align-items:center; padding:16px; border-radius:22px; border:1px solid var(--line); opacity:.55; transition:.25s ease; }
+        .stage.active { opacity:1; border-color:rgba(20,88,211,.22); background:linear-gradient(180deg, rgba(20,88,211,.05), white 64%); }
+        .stage.complete { opacity:1; background:#f7fafd; }
+        .stage-mark { width:42px; height:42px; border-radius:16px; background:#e9eef5; display:grid; place-items:center; color:var(--muted); font-weight:800; }
+        .stage.active .stage-mark,.stage.complete .stage-mark { background:var(--blue); color:white; }
+        .stage-copy strong { display:block; margin-bottom:4px; font-size:14px; }
+        .stage-copy p { color:var(--muted); font-size:13px; line-height:1.55; }
+        .stage-stat { color:var(--blue); font-size:22px; font-weight:800; font-family:'JetBrains Mono',monospace; }
+
+        .analysis-grid { margin-top:16px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+        .analysis-card { border-radius:22px; border:1px solid var(--line); padding:16px; opacity:.42; transform:translateY(8px); transition:.25s ease; }
+        .analysis-card.visible { opacity:1; transform:translateY(0); }
+        .analysis-card h4 { margin-bottom:10px; font-size:15px; }
+        .token-list { display:flex; gap:8px; flex-wrap:wrap; }
+        .token { padding:8px 10px; border-radius:999px; background:#f6f9fd; border:1px solid var(--line); color:var(--muted); font-size:12px; font-weight:700; }
+        .analysis-copy { color:var(--muted); font-size:13px; line-height:1.6; }
+
+        .start-row { margin-top:16px; display:flex; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap; text-align:center; }
+        .start-btn { border:none; border-radius:18px; padding:15px 18px; background:linear-gradient(135deg, var(--blue), #3479ef); color:white; font:inherit; font-size:15px; font-weight:800; opacity:.4; pointer-events:none; box-shadow:0 18px 40px rgba(20,88,211,.20); }
+        .start-btn.ready { opacity:1; pointer-events:auto; cursor:pointer; }
+        .start-copy { color:var(--muted); font-size:13px; line-height:1.55; }
+
+        .status-header { text-align:center; padding:4px 0 18px; }
+        .status-text { font-size:28px; font-family:'Fraunces',serif; line-height:1.1; letter-spacing:-.03em; }
+        .status-text .highlight { color:var(--blue); }
+        .status-sub { margin-top:8px; color:var(--muted); font-size:14px; }
+
+        .operation-card { max-width:780px; margin:0 auto 18px; padding:16px 18px; border-radius:20px; border:1px solid var(--line); }
+        .operation-top { display:flex; justify-content:space-between; gap:12px; align-items:flex-start; margin-bottom:10px; }
+        .operation-label { font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); margin-bottom:6px; }
+        .operation-title { font-size:17px; font-weight:800; margin-bottom:4px; }
+        .operation-copy { color:var(--muted); font-size:13px; line-height:1.55; }
+        .operation-status { padding:8px 10px; border-radius:999px; background:var(--blue-soft); color:var(--blue); font-size:11px; font-weight:800; white-space:nowrap; display:inline-flex; align-items:center; gap:8px; }
+        .operation-sources { display:flex; gap:8px; flex-wrap:wrap; }
+        .operation-source { padding:8px 10px; border-radius:999px; background:#f6f9fd; border:1px solid var(--line); color:var(--muted); font-size:12px; font-weight:700; }
+
+        .funnel { display:flex; flex-direction:column; align-items:center; width:100%; max-width:720px; margin:0 auto; }
+        .funnel-stage { display:flex; justify-content:center; width:100%; padding:8px 0; }
+        .funnel-bar { min-height:74px; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 18px; border-radius:14px; background:#f2f6fb; border:1px solid var(--line); transition:.3s ease; min-width:0; }
+        .funnel-stage[data-stage="market"] .funnel-bar { width:100%; }
+        .funnel-stage[data-stage="validated"] .funnel-bar { width:84%; }
+        .funnel-stage[data-stage="qualified"] .funnel-bar { width:68%; }
+        .funnel-stage[data-stage="shortlist"] .funnel-bar { width:54%; }
+        .funnel-stage.pending { opacity:.5; }
+        .funnel-stage.active .funnel-bar { background:rgba(20,88,211,.08); border-color:rgba(20,88,211,.22); }
+        .funnel-stage.complete .funnel-bar { background:#fff; }
+        .funnel-label { display:flex; align-items:center; gap:12px; min-width:0; flex:1; }
+        .funnel-icon { width:38px; height:38px; border-radius:10px; display:grid; place-items:center; background:white; border:1px solid var(--line); font-size:16px; flex-shrink:0; transition:.3s ease; }
+        .funnel-stage.active .funnel-icon,.funnel-stage.complete .funnel-icon { background:var(--blue); border-color:var(--blue); color:white; }
+        .funnel-name { display:block; font-size:16px; font-weight:700; margin-bottom:4px; }
+        .funnel-desc { color:var(--muted); font-size:12px; line-height:1.5; max-width:100%; }
+        .funnel-count { min-width:88px; text-align:right; font-size:28px; font-weight:800; color:var(--blue); font-family:'JetBrains Mono',monospace; flex-shrink:0; }
+        .funnel-connector { width:2px; height:18px; background:var(--line); transition:.3s ease; }
+        .funnel-connector.complete { background:var(--blue); }
+
+        .preview { margin-top:18px; opacity:0; transition:.35s ease; }
+        .preview.visible { opacity:1; }
+        .preview-label { text-align:center; font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px; }
+        .preview-row { display:flex; justify-content:center; gap:12px; flex-wrap:wrap; }
+        .preview-card { min-width:200px; display:flex; align-items:center; gap:10px; padding:10px 14px; border-radius:14px; border:1px solid var(--line); }
+        .preview-avatar { width:34px; height:34px; border-radius:50%; display:grid; place-items:center; color:white; font-size:12px; font-weight:800; flex-shrink:0; }
+        .preview-meta strong { display:block; font-size:13px; }
+        .preview-meta span { color:var(--muted); font-size:11px; }
+        .preview-score { margin-left:auto; color:var(--blue); font-family:'JetBrains Mono',monospace; font-weight:700; font-size:16px; }
+
+        .feed-top { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:12px; }
+        .processing-badge { padding:8px 10px; border-radius:999px; background:var(--blue-soft); color:var(--blue); font-size:11px; font-weight:800; display:inline-flex; align-items:center; gap:8px; }
+        .dot { width:8px; height:8px; border-radius:50%; background:var(--blue); box-shadow:0 0 0 0 rgba(20,88,211,.45); animation:pulse 1.2s infinite; }
+        @keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(20,88,211,.45); } 70% { box-shadow:0 0 0 8px rgba(20,88,211,0); } 100% { box-shadow:0 0 0 0 rgba(20,88,211,0); } }
+        .feed-list { display:grid; gap:10px; max-height:760px; overflow:auto; padding-right:4px; }
+        .feed-item { padding:14px 16px; border-radius:20px; border:1px solid var(--line); animation:logIn .25s ease; }
+        @keyframes logIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:translateY(0); } }
+        .feed-time { color:var(--blue); font-size:12px; font-weight:800; font-family:'JetBrains Mono',monospace; margin-bottom:4px; }
+        .feed-item p { color:var(--muted); font-size:13px; line-height:1.55; }
+
+        @media (max-width:1160px) { .layout { grid-template-columns:1fr; } }
+        @media (max-width:760px) {
+            .analysis-grid { grid-template-columns:1fr; }
+            .topbar { flex-direction:column; align-items:stretch; }
+            .view-head { flex-direction:column; align-items:stretch; }
+            .stage { grid-template-columns:1fr; }
+            .funnel-bar { padding:14px; }
+            .funnel-label { align-items:flex-start; }
+            .funnel-stage[data-stage="validated"] .funnel-bar,
+            .funnel-stage[data-stage="qualified"] .funnel-bar,
+            .funnel-stage[data-stage="shortlist"] .funnel-bar { width:100%; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">T</div>
+                <div class="brand-copy">
+                    <h1>Toptal</h1>
+                    <p id="topbar-subtitle">Step 2 of 3: analyze the mission and plan the search</p>
+                </div>
+            </div>
+            <div class="header-actions">
+                <a class="back-btn" href="index.html">Back to mission</a>
+                <div class="timer" id="timer">0:00</div>
+                <a class="results-btn" id="results-btn" href="results.html">View expert options</a>
+            </div>
+        </header>
+
+        <section class="hero">
+            <div class="phase-badge" id="phase-badge">Step 1: Mission planning</div>
+            <h2 id="hero-title">AI is turning the mission into a <span>top-tier hiring plan</span>.</h2>
+            <p id="hero-copy">
+                First the system understands the mission. Then the user starts the live expert funnel and watches the market narrow into a shortlist of the strongest experts.
+            </p>
+            <div class="metrics">
+                <div class="metric">
+                    <strong id="metric-1">0</strong>
+                    <span id="metric-1-label">roles mapped</span>
+                </div>
+                <div class="metric">
+                    <strong id="metric-2">0</strong>
+                    <span id="metric-2-label">constraints extracted</span>
+                </div>
+                <div class="metric">
+                    <strong id="metric-3">0</strong>
+                    <span id="metric-3-label">search lanes planned</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="layout">
+            <aside class="panel">
+                <div class="panel-head">
+                    <h3>Submitted mission</h3>
+                    <p>The original client brief stays visible while Toptal AI plans and then executes the search.</p>
+                </div>
+                <div class="panel-body">
+                    <div class="jd-box">We need a senior AI product and engineering team to design and launch an AI operations layer for our internal support and workflow stack.
+
+Goals:
+- automate tier-1 support handling
+- summarize and route complex cases
+- trigger CRM and ops workflows
+- create a safe escalation layer for human review
+
+We need strategic product leadership, strong LLM systems experience and production-grade workflow engineering.</div>
+                    <div class="summary-list">
+                        <div class="summary-item">
+                            <strong>Engagement model</strong>
+                            <p>Build a team first. Single-expert fallback remains available after shortlist review.</p>
+                        </div>
+                        <div class="summary-item">
+                            <strong>Constraints</strong>
+                            <p>$40k-$120k, 6-week first milestone, New York overlap, Zendesk + HubSpot + Slack + internal APIs.</p>
+                        </div>
+                        <div class="summary-item">
+                            <strong>Validation rule</strong>
+                            <p>Only profiles with strong public proof and mission relevance can enter the final expert layer.</p>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="panel">
+                <div class="panel-body">
+                    <div class="view active" id="analysis-view">
+                        <div class="view-head">
+                            <div>
+                                <h3>Step 1. Analyze and plan the mission</h3>
+                                <p>Before any expert search begins, Toptal AI breaks the mission into the role stack, constraints and sourcing logic.</p>
+                            </div>
+                            <div class="view-badge">4 planning stages</div>
+                        </div>
+
+                        <div class="stage-list">
+                            <div class="stage pending" id="stage-parse">
+                                <div class="stage-mark">01</div>
+                                <div class="stage-copy">
+                                    <strong>Parse the mission</strong>
+                                    <p>Detect the business outcome and separate the core objective from supporting details.</p>
+                                </div>
+                                <div class="stage-stat" id="stat-parse">0%</div>
+                            </div>
+                            <div class="stage pending" id="stage-constraints">
+                                <div class="stage-mark">02</div>
+                                <div class="stage-copy">
+                                    <strong>Extract constraints</strong>
+                                    <p>Pull out budget, timeline, systems, overlap requirements and delivery expectations.</p>
+                                </div>
+                                <div class="stage-stat" id="stat-constraints">0</div>
+                            </div>
+                            <div class="stage pending" id="stage-roles">
+                                <div class="stage-mark">03</div>
+                                <div class="stage-copy">
+                                    <strong>Map the expert stack</strong>
+                                    <p>Translate the mission into the exact expert roles needed rather than generic talent tags.</p>
+                                </div>
+                                <div class="stage-stat" id="stat-roles">0</div>
+                            </div>
+                            <div class="stage pending" id="stage-sources">
+                                <div class="stage-mark">04</div>
+                                <div class="stage-copy">
+                                    <strong>Plan the search lanes</strong>
+                                    <p>Decide which searches stay inside the premium network and which should be validated by public proof.</p>
+                                </div>
+                                <div class="stage-stat" id="stat-sources">0</div>
+                            </div>
+                        </div>
+
+                        <div class="analysis-grid">
+                            <article class="analysis-card" id="card-outcome">
+                                <h4>Detected outcome</h4>
+                                <div class="token-list">
+                                    <span class="token">AI ops layer</span>
+                                    <span class="token">Support automation</span>
+                                    <span class="token">Safe escalation flow</span>
+                                </div>
+                            </article>
+                            <article class="analysis-card" id="card-constraints">
+                                <h4>Constraints</h4>
+                                <div class="token-list">
+                                    <span class="token">$40k-$120k</span>
+                                    <span class="token">6 weeks</span>
+                                    <span class="token">New York overlap</span>
+                                    <span class="token">Zendesk + HubSpot + Slack</span>
+                                </div>
+                            </article>
+                            <article class="analysis-card" id="card-roles">
+                                <h4>Expert breakdown</h4>
+                                <div class="token-list">
+                                    <span class="token">AI Product Lead</span>
+                                    <span class="token">LLM Systems Engineer</span>
+                                    <span class="token">Workflow Automation Engineer</span>
+                                    <span class="token">Support Operations Specialist</span>
+                                </div>
+                            </article>
+                            <article class="analysis-card" id="card-sources">
+                                <h4>Search plan</h4>
+                                <div class="analysis-copy">Search the premium network first, then validate strong profiles through public proof, case studies and domain-specific external signals where needed.</div>
+                            </article>
+                        </div>
+
+                        <div class="start-row">
+                            <button class="start-btn" id="start-btn" type="button">Start expert search</button>
+                            <div class="start-copy">After the plan is complete, the user starts the live expert funnel and watches the shortlist build in real time.</div>
+                        </div>
+                    </div>
+
+                    <div class="view" id="funnel-view">
+                        <div class="view-head">
+                            <div>
+                                <h3>Step 2. Run the live expert funnel</h3>
+                                <p>The mission plan now becomes a live narrowing process from a broad expert market to a shortlist of the strongest candidates.</p>
+                            </div>
+                            <div class="view-badge">Processing</div>
+                        </div>
+
+                        <div class="status-header">
+                            <div class="status-text" id="status-text">Scanning the <span class="highlight">expert market</span>...</div>
+                            <div class="status-sub" id="status-sub">Starting with the premium network and adjacent public proof sources</div>
+                        </div>
+
+                        <div class="operation-card">
+                            <div class="operation-top">
+                                <div>
+                                    <div class="operation-label">Current operation</div>
+                                    <div class="operation-title" id="operation-title">Waiting to start expert scan</div>
+                                    <div class="operation-copy" id="operation-copy">Once the search starts, this block will show what Toptal AI is processing and where the current signal is coming from.</div>
+                                </div>
+                                <div class="operation-status" id="operation-status"><span class="dot"></span> Ready</div>
+                            </div>
+                            <div class="operation-sources" id="operation-sources">
+                                <span class="operation-source">Premium network</span>
+                                <span class="operation-source">GitHub</span>
+                                <span class="operation-source">Case studies</span>
+                            </div>
+                        </div>
+
+                        <div class="funnel">
+                            <div class="funnel-stage pending" id="funnel-market" data-stage="market">
+                                <div class="funnel-bar">
+                                    <div class="funnel-label">
+                                        <div class="funnel-icon">◆</div>
+                                        <div>
+                                            <span class="funnel-name">Expert Scan</span>
+                                            <div class="funnel-desc">Premium network plus adjacent public expert signals</div>
+                                        </div>
+                                    </div>
+                                    <div class="funnel-count" id="funnel-count-market">0</div>
+                                </div>
+                            </div>
+                            <div class="funnel-connector" id="conn-1"></div>
+                            <div class="funnel-stage pending" id="funnel-validated" data-stage="validated">
+                                <div class="funnel-bar">
+                                    <div class="funnel-label">
+                                        <div class="funnel-icon">◈</div>
+                                        <div>
+                                            <span class="funnel-name">Validated Experts</span>
+                                            <div class="funnel-desc">Profiles with strong public proof and relevance</div>
+                                        </div>
+                                    </div>
+                                    <div class="funnel-count" id="funnel-count-validated">0</div>
+                                </div>
+                            </div>
+                            <div class="funnel-connector" id="conn-2"></div>
+                            <div class="funnel-stage pending" id="funnel-qualified" data-stage="qualified">
+                                <div class="funnel-bar">
+                                    <div class="funnel-label">
+                                        <div class="funnel-icon">✦</div>
+                                        <div>
+                                            <span class="funnel-name">Mission Fit</span>
+                                            <div class="funnel-desc">Fits the role map, constraints and delivery design</div>
+                                        </div>
+                                    </div>
+                                    <div class="funnel-count" id="funnel-count-qualified">0</div>
+                                </div>
+                            </div>
+                            <div class="funnel-connector" id="conn-3"></div>
+                            <div class="funnel-stage pending" id="funnel-shortlist" data-stage="shortlist">
+                                <div class="funnel-bar">
+                                    <div class="funnel-label">
+                                        <div class="funnel-icon">★</div>
+                                        <div>
+                                            <span class="funnel-name">Shortlist Ready</span>
+                                            <div class="funnel-desc">Top expert layer ready for final team options</div>
+                                        </div>
+                                    </div>
+                                    <div class="funnel-count" id="funnel-count-shortlist">0</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="preview" id="preview">
+                            <div class="preview-label">First expert shortlist signals</div>
+                            <div class="preview-row">
+                                <div class="preview-card">
+                                    <div class="preview-avatar" style="background:#1458d3;">AL</div>
+                                    <div class="preview-meta"><strong>Amanda Lewis</strong><span>AI Product Lead</span></div>
+                                    <div class="preview-score">96</div>
+                                </div>
+                                <div class="preview-card">
+                                    <div class="preview-avatar" style="background:#0c1e3d;">NS</div>
+                                    <div class="preview-meta"><strong>Noah Shah</strong><span>LLM Systems Engineer</span></div>
+                                    <div class="preview-score">94</div>
+                                </div>
+                                <div class="preview-card">
+                                    <div class="preview-avatar" style="background:#3479ef;">JR</div>
+                                    <div class="preview-meta"><strong>Julia Reed</strong><span>Workflow Automation Engineer</span></div>
+                                    <div class="preview-score">93</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+
+            <aside class="panel">
+                <div class="panel-head">
+                    <h3>Live feed</h3>
+                    <p>The client sees the process while Toptal AI is planning and then processing the expert search.</p>
+                </div>
+                <div class="panel-body">
+                    <div class="feed-top">
+                        <div class="processing-badge" id="processing-badge"><span class="dot"></span> Processing mission analysis</div>
+                    </div>
+                    <div class="feed-list" id="feed-list">
+                        <div class="feed-item">
+                            <div class="feed-time">0:00</div>
+                            <p>Queued Toptal AI mission analysis.</p>
+                        </div>
+                    </div>
+                </div>
+            </aside>
+        </section>
+    </div>
+
+    <script>
+        let seconds = 0;
+        let sourcingStarted = false;
+
+        const timer = document.getElementById('timer');
+        const feed = document.getElementById('feed-list');
+        const startButton = document.getElementById('start-btn');
+        const resultsButton = document.getElementById('results-btn');
+
+        function tick() {
+            seconds += 1;
+            const m = Math.floor(seconds / 60);
+            const s = String(seconds % 60).padStart(2, '0');
+            timer.textContent = `${m}:${s}`;
+        }
+
+        function stamp() {
+            const m = Math.floor(seconds / 60);
+            const s = String(seconds % 60).padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function addFeed(message) {
+            const row = document.createElement('div');
+            row.className = 'feed-item';
+            row.innerHTML = `<div class="feed-time">${stamp()}</div><p>${message}</p>`;
+            feed.prepend(row);
+        }
+
+        function setStage(name, state) {
+            const node = document.getElementById(`stage-${name}`);
+            node.classList.remove('pending', 'active', 'complete');
+            node.classList.add(state);
+        }
+
+        function showCard(id) {
+            document.getElementById(id).classList.add('visible');
+        }
+
+        function updateMetric(index, value, label) {
+            document.getElementById(`metric-${index}`).textContent = value;
+            document.getElementById(`metric-${index}-label`).textContent = label;
+        }
+
+        function setOperation(title, copy, sources, statusLabel = 'Processing') {
+            document.getElementById('operation-title').textContent = title;
+            document.getElementById('operation-copy').textContent = copy;
+            document.getElementById('operation-status').innerHTML = `<span class="dot"></span> ${statusLabel}`;
+            document.getElementById('operation-sources').innerHTML = sources.map((source) => `<span class="operation-source">${source}</span>`).join('');
+        }
+
+        function setFunnelStage(name, state) {
+            const node = document.getElementById(`funnel-${name}`);
+            node.classList.remove('pending', 'active', 'complete');
+            node.classList.add(state);
+        }
+
+        function setConnector(id, complete) {
+            document.getElementById(`conn-${id}`).classList.toggle('complete', complete);
+        }
+
+        function sleep(ms) {
+            return new Promise((resolve) => setTimeout(resolve, ms));
+        }
+
+        function animateCount({ key, target, duration = 1600, label, metricIndex }) {
+            return new Promise((resolve) => {
+                const element = document.getElementById(`funnel-count-${key}`);
+                const start = Number(element.dataset.value || '0');
+                const startTime = performance.now();
+                function frame(now) {
+                    const progress = Math.min(1, (now - startTime) / duration);
+                    const eased = 1 - Math.pow(1 - progress, 3);
+                    const value = Math.round(start + (target - start) * eased);
+                    element.dataset.value = String(value);
+                    element.textContent = value.toLocaleString();
+                    if (metricIndex) updateMetric(metricIndex, value.toLocaleString(), label);
+                    if (progress < 1) requestAnimationFrame(frame); else resolve();
+                }
+                requestAnimationFrame(frame);
+            });
+        }
+
+        function switchToFunnelView() {
+            if (sourcingStarted) return;
+            sourcingStarted = true;
+            document.getElementById('analysis-view').classList.remove('active');
+            document.getElementById('funnel-view').classList.add('active');
+            document.getElementById('phase-badge').textContent = 'Step 2: Live expert funnel';
+            document.getElementById('hero-title').innerHTML = 'AI is narrowing the expert market to the <span>top layer</span>.';
+            document.getElementById('hero-copy').textContent = 'The mission plan is locked. Toptal AI now runs the live expert funnel and shows how the search moves from a broad market to a short list of top-tier candidates.';
+            document.getElementById('topbar-subtitle').textContent = 'Step 2 of 3: processing the live expert funnel';
+            document.getElementById('processing-badge').innerHTML = '<span class="dot"></span> Processing live expert search';
+            updateMetric(1, '0', 'experts scanned');
+            updateMetric(2, '0', 'validated experts');
+            updateMetric(3, '0', 'shortlist-ready');
+            addFeed('User clicked Start expert search. Switching from mission planning to live expert funnel processing.');
+            runFunnel();
+        }
+
+        async function runFunnel() {
+            setFunnelStage('market', 'active');
+            document.getElementById('status-text').innerHTML = 'Scanning the <span class="highlight">expert market</span>...';
+            document.getElementById('status-sub').textContent = 'Starting with the premium network and adjacent public proof sources';
+            setOperation('Opening the expert search lanes', 'Toptal AI is starting inside the premium network, then expanding into adjacent public proof sources only where more evidence is needed.', ['Premium network', 'GitHub', 'LinkedIn', 'Case studies', 'Portfolio signals']);
+            addFeed('Opened premium-network search lane and started scanning adjacent public proof sources.');
+            await sleep(400);
+            addFeed('Found 8 initial experts with visible AI workflow and support-operations experience.');
+            await animateCount({ key: 'market', target: 140, duration: 900, label: 'experts scanned', metricIndex: 1 });
+            addFeed('Expanded the scan to 140 experts across AI product, systems engineering and workflow automation.');
+            await animateCount({ key: 'market', target: 980, duration: 950, label: 'experts scanned', metricIndex: 1 });
+            addFeed('Cross-matched GitHub repos, public case studies and operator references tied to support automation.');
+            await animateCount({ key: 'market', target: 2600, duration: 1100, label: 'experts scanned', metricIndex: 1 });
+            addFeed('Pulled the wider expert market and completed the broad scan at 2,600 profiles.');
+
+            setFunnelStage('market', 'complete');
+            setConnector(1, true);
+            setFunnelStage('validated', 'active');
+            document.getElementById('status-text').innerHTML = 'Verifying <span class="highlight">proof of work</span>...';
+            document.getElementById('status-sub').textContent = 'Checking which experts have mission-relevant public proof, depth and seniority';
+            setOperation('Filtering for public proof and delivery depth', 'The system is removing weakly evidenced profiles and keeping experts with the strongest public signals, proof of work and mission relevance.', ['GitHub repos', 'Case studies', 'Public portfolio proof', 'Career history']);
+            addFeed('Signal: shipped workflow automation for a 500-seat support organization.');
+            await animateCount({ key: 'validated', target: 32, duration: 700, label: 'validated experts', metricIndex: 2 });
+            addFeed('Signal: active maintainer of a production-grade LLM workflow repository.');
+            await animateCount({ key: 'validated', target: 125, duration: 850, label: 'validated experts', metricIndex: 2 });
+            addFeed('Removed profiles without enough mission-specific proof or clear senior ownership.');
+            await animateCount({ key: 'validated', target: 410, duration: 1000, label: 'validated experts', metricIndex: 2 });
+            addFeed('Validation complete at 410 experts with strong public proof.');
+
+            setFunnelStage('validated', 'complete');
+            setConnector(2, true);
+            setFunnelStage('qualified', 'active');
+            document.getElementById('status-text').innerHTML = 'Applying <span class="highlight">mission fit</span>...';
+            document.getElementById('status-sub').textContent = 'Checking role stack, budget, systems and delivery setup';
+            setOperation('Applying the mission fit model', 'The validated pool is now being checked against the exact mission plan, required roles, timeline, budget and systems environment.', ['Role stack', 'Budget band', 'Systems fit', 'Timezone overlap']);
+            addFeed('Downranked experts without Zendesk, HubSpot or cross-functional delivery depth.');
+            await animateCount({ key: 'qualified', target: 18, duration: 700 });
+            addFeed('Matched the mission into product, systems, workflow automation and support-operations coverage.');
+            await animateCount({ key: 'qualified', target: 54, duration: 900 });
+            addFeed('Qualification complete at 54 mission-fit experts.');
+
+            setFunnelStage('qualified', 'complete');
+            setConnector(3, true);
+            setFunnelStage('shortlist', 'active');
+            document.getElementById('status-text').innerHTML = 'Building the <span class="highlight">top shortlist</span>...';
+            document.getElementById('status-sub').textContent = 'Promoting only the strongest experts into final team-ready options';
+            setOperation('Scoring the top expert layer', 'Communication quality, public proof depth, seniority and role complementarity are being weighted to produce the final shortlist.', ['Shortlist scoring', 'Communication signals', 'Proof depth', 'Role complementarity']);
+            addFeed('First shortlist signals surfaced for AI product, systems and workflow engineering.');
+            await animateCount({ key: 'shortlist', target: 4, duration: 700, label: 'shortlist-ready', metricIndex: 3 });
+            addFeed('Added two specialists with the strongest support-operations and internal workflow evidence.');
+            await animateCount({ key: 'shortlist', target: 9, duration: 850, label: 'shortlist-ready', metricIndex: 3 });
+            addFeed('Shortlist complete. Top 9 experts are ready to be assembled into final expert options.');
+
+            setFunnelStage('shortlist', 'complete');
+            document.getElementById('preview').classList.add('visible');
+            document.getElementById('status-text').innerHTML = 'Found the <span class="highlight">top experts</span>.';
+            document.getElementById('status-sub').textContent = 'The shortlist is ready to be assembled into final team options';
+            setOperation('Top expert layer is ready', 'The live funnel is complete. Toptal AI has enough signal to turn the top expert layer into final team recommendations.', ['Top shortlist', 'Final scoring', 'Team assembly'], 'Complete');
+            resultsButton.classList.add('ready');
+            document.getElementById('processing-badge').innerHTML = '<span class="dot"></span> Processing complete';
+        }
+
+        const interval = setInterval(tick, 1000);
+
+        setTimeout(() => {
+            setStage('parse', 'active');
+            document.getElementById('stat-parse').textContent = '52%';
+            addFeed('Processing step 1/4: reading the mission and detecting the core objective.');
+        }, 400);
+
+        setTimeout(() => {
+            document.getElementById('stat-parse').textContent = '100%';
+            setStage('parse', 'complete');
+            showCard('card-outcome');
+            addFeed('Detected the primary outcome: AI operations layer for internal support and workflow orchestration.');
+        }, 2200);
+
+        setTimeout(() => {
+            setStage('constraints', 'active');
+            document.getElementById('stat-constraints').textContent = '4';
+            updateMetric(2, '4', 'constraints extracted');
+            showCard('card-constraints');
+            addFeed('Processing step 2/4: extracted budget, timeline, systems environment and overlap requirements.');
+        }, 4200);
+
+        setTimeout(() => {
+            setStage('constraints', 'complete');
+            setStage('roles', 'active');
+            document.getElementById('stat-roles').textContent = '4';
+            updateMetric(1, '4', 'roles mapped');
+            showCard('card-roles');
+            addFeed('Processing step 3/4: mapped the mission into four expert roles instead of one broad talent search.');
+        }, 6600);
+
+        setTimeout(() => {
+            setStage('roles', 'complete');
+            setStage('sources', 'active');
+            document.getElementById('stat-sources').textContent = '3';
+            updateMetric(3, '3', 'search lanes planned');
+            showCard('card-sources');
+            addFeed('Processing step 4/4: planned premium-network search, public-proof validation and selective external signal checks.');
+        }, 9100);
+
+        setTimeout(() => {
+            setStage('sources', 'complete');
+            addFeed('Mission planning complete. Waiting for user to start the live expert funnel.');
+            startButton.classList.add('ready');
+            startButton.addEventListener('click', switchToFunnelView, { once: true });
+        }, 11200);
+    </script>
+</body>
+</html>

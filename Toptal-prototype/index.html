@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toptal AI | Mission Intake</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #08172f;
+            --bg-soft: #102548;
+            --panel: #ffffff;
+            --panel-soft: #f5f8fc;
+            --text: #0d1b2a;
+            --muted: #5f6f86;
+            --line: rgba(13, 27, 42, 0.10);
+            --blue: #1458d3;
+            --blue-soft: rgba(20, 88, 211, 0.10);
+            --sky: #5da8ff;
+            --shadow: 0 30px 100px rgba(3, 13, 34, 0.34);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, rgba(93,168,255,0.16), transparent 24%),
+                radial-gradient(circle at 80% 0%, rgba(20,88,211,0.24), transparent 26%),
+                linear-gradient(180deg, #08172f 0%, #0d2242 38%, #eef3f8 38%, #eef3f8 100%);
+        }
+
+        .shell {
+            max-width: 1240px;
+            margin: 0 auto;
+            padding: 24px 20px 56px;
+        }
+
+        .topbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            color: white;
+            margin-bottom: 54px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .brand-mark {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            display: grid;
+            place-items: center;
+            background: rgba(255, 255, 255, 0.10);
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            font-family: 'Fraunces', serif;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .brand-copy {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .brand-copy h1 {
+            font-size: 30px;
+            font-weight: 800;
+            letter-spacing: -0.04em;
+        }
+
+        .brand-pill {
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.10);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            font-size: 12px;
+            font-weight: 800;
+        }
+
+        .top-btn {
+            padding: 12px 16px;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.16);
+            background: rgba(255, 255, 255, 0.06);
+            color: white;
+            font: inherit;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .hero {
+            max-width: 980px;
+            margin: 0 auto;
+            text-align: center;
+            color: white;
+        }
+
+        .hero-kicker {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.10);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .hero h2 {
+            margin-top: 20px;
+            font-family: 'Fraunces', serif;
+            font-size: clamp(40px, 7vw, 72px);
+            line-height: 0.94;
+            letter-spacing: -0.05em;
+        }
+
+        .hero h2 span { color: #8ec0ff; }
+
+        .hero p {
+            margin: 18px auto 0;
+            max-width: 820px;
+            color: rgba(255, 255, 255, 0.74);
+            font-size: 18px;
+            line-height: 1.75;
+        }
+
+        .trust-row {
+            margin-top: 18px;
+            display: flex;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .trust {
+            padding: 10px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.10);
+            color: rgba(255, 255, 255, 0.84);
+            font-size: 13px;
+            font-weight: 700;
+        }
+
+        .form-card {
+            max-width: 960px;
+            margin: 36px auto 0;
+            background: rgba(255, 255, 255, 0.96);
+            border-radius: 30px;
+            border: 1px solid rgba(255,255,255,0.9);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+        }
+
+        .form-head {
+            padding: 24px 26px 18px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: flex-start;
+        }
+
+        .form-head h3 {
+            font-family: 'Fraunces', serif;
+            font-size: 34px;
+            letter-spacing: -0.04em;
+        }
+
+        .form-head p {
+            margin-top: 8px;
+            color: var(--muted);
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 620px;
+        }
+
+        .step-pill {
+            padding: 8px 10px;
+            border-radius: 999px;
+            background: var(--blue-soft);
+            color: var(--blue);
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .form-body {
+            padding: 26px;
+        }
+
+        .field-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .field {
+            display: grid;
+            gap: 8px;
+        }
+
+        .field.full { grid-column: 1 / -1; }
+
+        .field label {
+            font-size: 12px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .input, .select, .textarea {
+            width: 100%;
+            padding: 14px 16px;
+            border-radius: 16px;
+            border: 1px solid var(--line);
+            background: var(--panel-soft);
+            font: inherit;
+            font-size: 14px;
+            color: var(--text);
+            outline: none;
+        }
+
+        .textarea {
+            min-height: 220px;
+            resize: vertical;
+            line-height: 1.65;
+        }
+
+        .mode-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+        }
+
+        .mode-card {
+            border-radius: 20px;
+            border: 1px solid var(--line);
+            background: white;
+            padding: 16px;
+        }
+
+        .mode-card.active {
+            border-color: rgba(20, 88, 211, 0.22);
+            background: linear-gradient(180deg, rgba(20,88,211,0.05), white 65%);
+        }
+
+        .mode-card strong {
+            display: block;
+            margin-bottom: 6px;
+            font-size: 15px;
+        }
+
+        .mode-card p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .action-row {
+            margin-top: 20px;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            text-align: center;
+        }
+
+        .primary-btn, .secondary-btn {
+            border-radius: 18px;
+            padding: 15px 18px;
+            font: inherit;
+            font-size: 15px;
+            font-weight: 800;
+            cursor: pointer;
+        }
+
+        .primary-btn {
+            border: none;
+            background: linear-gradient(135deg, var(--blue), #2f73ea);
+            color: white;
+            box-shadow: 0 18px 40px rgba(20, 88, 211, 0.18);
+        }
+
+        .secondary-btn {
+            border: 1px solid var(--line);
+            background: white;
+            color: var(--text);
+        }
+
+        .action-copy {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.55;
+        }
+
+        .info-grid {
+            max-width: 960px;
+            margin: 18px auto 0;
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .info-card {
+            padding: 18px;
+            border-radius: 22px;
+            background: rgba(255, 255, 255, 0.88);
+            border: 1px solid rgba(255, 255, 255, 0.9);
+            box-shadow: 0 14px 40px rgba(3, 13, 34, 0.10);
+        }
+
+        .info-card strong {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 15px;
+        }
+
+        .info-card p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        @media (max-width: 900px) {
+            .field-grid, .mode-grid, .info-grid { grid-template-columns: 1fr; }
+            .form-head, .topbar { flex-direction: column; align-items: stretch; }
+        }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">T</div>
+                <div class="brand-copy">
+                    <h1>Toptal</h1>
+                    <div class="brand-pill">AI mission preview</div>
+                </div>
+            </div>
+            <button class="top-btn">Hire top talent</button>
+        </header>
+
+        <section class="hero">
+            <div class="hero-kicker">Toptal, but AI</div>
+            <h2>Describe the mission. <span>AI assembles the top tier team.</span></h2>
+            <p>
+                Instead of manually screening elite talent, the platform turns one mission brief into an AI-planned
+                hiring flow that identifies the strongest experts, validates public proof and assembles the best team.
+            </p>
+            <div class="trust-row">
+                <div class="trust">Top-tier expert network</div>
+                <div class="trust">AI mission analysis</div>
+                <div class="trust">Verified public proof</div>
+            </div>
+        </section>
+
+        <section class="form-card">
+            <div class="form-head">
+                <div>
+                    <h3>Mission intake</h3>
+                    <p>
+                        Start with the mission, not the resume pile. Toptal AI analyzes the brief,
+                        plans the talent search and narrows the market into a short list of elite experts.
+                    </p>
+                </div>
+                <div class="step-pill">Step 1 of 3</div>
+            </div>
+
+            <div class="form-body">
+                <div class="field-grid">
+                    <div class="field full">
+                        <label for="mission">What do you need built?</label>
+                        <textarea id="mission" class="textarea">We need a senior AI product and engineering team to design and launch an AI operations layer for our internal support and workflow stack.
+
+Goals:
+- automate tier-1 support handling
+- summarize and route complex cases
+- trigger CRM and ops workflows
+- create a safe escalation layer for human review
+
+We need strategic product leadership, strong LLM systems experience and production-grade workflow engineering.</textarea>
+                    </div>
+
+                    <div class="field">
+                        <label for="budget">Budget</label>
+                        <select id="budget" class="select">
+                            <option>$40k-$120k</option>
+                            <option>$20k-$40k</option>
+                            <option>$120k+</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label for="timeline">Timeline</label>
+                        <select id="timeline" class="select">
+                            <option>First milestone in 6 weeks</option>
+                            <option>First milestone in 3 weeks</option>
+                            <option>Flexible</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label for="overlap">Timezone overlap</label>
+                        <input id="overlap" class="input" value="At least 4 hours with New York" />
+                    </div>
+
+                    <div class="field">
+                        <label for="stack">Core systems</label>
+                        <input id="stack" class="input" value="Zendesk, HubSpot, Slack, internal APIs" />
+                    </div>
+
+                    <div class="field full">
+                        <label>Engagement model</label>
+                        <div class="mode-grid">
+                            <div class="mode-card active">
+                                <strong>Build a team</strong>
+                                <p>Default path. Toptal AI assembles the strongest expert combination around the mission.</p>
+                            </div>
+                            <div class="mode-card">
+                                <strong>Start with one expert</strong>
+                                <p>Keep the single-expert option visible, then expand into a broader team later.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="action-row">
+                    <button class="primary-btn" onclick="window.location.href='searching.html'">Analyze this mission</button>
+                    <button class="secondary-btn">Upload full brief</button>
+                    <div class="action-copy">Next: Toptal AI decomposes the mission and runs the live expert funnel.</div>
+                </div>
+            </div>
+        </section>
+
+        <section class="info-grid">
+            <article class="info-card">
+                <strong>Mission-first planning</strong>
+                <p>The AI system translates the brief into role coverage, delivery constraints and the exact expert shape required.</p>
+            </article>
+            <article class="info-card">
+                <strong>Top-tier validation</strong>
+                <p>Public proof, career signals, portfolio depth and domain relevance are checked before anyone reaches the final layer.</p>
+            </article>
+            <article class="info-card">
+                <strong>AI-built shortlist</strong>
+                <p>The result is not a broad browse list but a small set of elite experts and team options matched to the mission.</p>
+            </article>
+        </section>
+    </div>
+</body>
+</html>

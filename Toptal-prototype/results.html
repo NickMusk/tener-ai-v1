@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Toptal AI | Verified Expert Options</title>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #edf3f9;
+            --navy: #0c1e3d;
+            --text: #11233d;
+            --muted: #61728a;
+            --line: rgba(17, 35, 61, 0.10);
+            --blue: #1458d3;
+            --blue-soft: rgba(20, 88, 211, 0.10);
+            --panel: rgba(255, 255, 255, 0.92);
+            --panel-solid: #ffffff;
+            --shadow: 0 28px 80px rgba(7, 20, 42, 0.12);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Manrope', sans-serif;
+            color: var(--text);
+            min-height: 100vh;
+            background:
+                radial-gradient(circle at top left, rgba(93,168,255,0.16), transparent 22%),
+                linear-gradient(180deg, #0b1d39 0%, #10284d 30%, #edf3f9 30%, #edf3f9 100%);
+        }
+
+        .shell { max-width: 1460px; margin: 0 auto; padding: 24px 20px 40px; }
+        .topbar { display:flex; justify-content:space-between; align-items:center; gap:16px; color:white; }
+        .brand { display:flex; align-items:center; gap:14px; }
+        .brand-mark { width:42px; height:42px; border-radius:14px; display:grid; place-items:center; background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.14); font-family:'Fraunces',serif; font-size:20px; font-weight:700; }
+        .brand-copy h1 { font-size:28px; letter-spacing:-.04em; }
+        .brand-copy p { color:rgba(255,255,255,.72); font-size:13px; }
+        .top-actions { display:flex; gap:10px; flex-wrap:wrap; }
+        .ghost-btn,.primary-btn { border-radius:14px; padding:12px 14px; font-size:13px; font-weight:800; text-decoration:none; }
+        .ghost-btn { border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.08); color:white; }
+        .primary-btn { border:none; background:linear-gradient(135deg, #1458d3, #3479ef); color:white; box-shadow:0 18px 40px rgba(20,88,211,.24); }
+
+        .hero { margin-top:22px; display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:16px; }
+        .hero-main,.hero-side { border-radius:30px; overflow:hidden; box-shadow:var(--shadow); }
+        .hero-main { background:linear-gradient(145deg, rgba(12,30,61,.98), rgba(16,40,77,.98)); color:white; padding:28px; }
+        .hero-side { background:var(--panel); border:1px solid rgba(255,255,255,.92); }
+        .hero-kicker { display:inline-flex; align-items:center; gap:8px; padding:8px 12px; border-radius:999px; background:rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.10); font-size:12px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }
+        .hero-main h2 { margin-top:18px; font-family:'Fraunces',serif; font-size:clamp(38px,6vw,62px); line-height:.94; letter-spacing:-.05em; }
+        .hero-main p { margin-top:14px; color:rgba(255,255,255,.74); font-size:17px; line-height:1.7; max-width:840px; }
+        .hero-stats { margin-top:24px; display:flex; gap:12px; flex-wrap:wrap; }
+        .stat { min-width:150px; padding:16px; border-radius:20px; background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.08); }
+        .stat strong { display:block; font-size:24px; margin-bottom:4px; font-family:'JetBrains Mono',monospace; }
+        .stat span { color:rgba(255,255,255,.68); font-size:12px; font-weight:700; }
+        .hero-side .inner { padding:22px; }
+        .hero-side h3 { font-family:'Fraunces',serif; font-size:30px; letter-spacing:-.04em; }
+        .hero-side p { margin-top:10px; color:var(--muted); font-size:14px; line-height:1.6; }
+        .mix-list { margin-top:18px; display:grid; gap:10px; }
+        .mix-item { display:flex; justify-content:space-between; gap:12px; align-items:center; padding:14px 16px; border-radius:18px; background:var(--panel-solid); border:1px solid var(--line); font-size:13px; }
+        .mix-item strong { color:var(--blue); font-size:18px; font-family:'JetBrains Mono',monospace; }
+
+        .tabs { margin-top:22px; display:inline-grid; grid-template-columns:1fr 1fr; gap:8px; padding:6px; border-radius:18px; background:rgba(255,255,255,.86); border:1px solid rgba(255,255,255,.92); box-shadow:var(--shadow); }
+        .tabs button { border:none; border-radius:14px; background:transparent; color:var(--muted); font:inherit; font-size:14px; font-weight:800; padding:12px 16px; cursor:pointer; }
+        .tabs button.active { background:white; color:var(--blue); }
+
+        .content { margin-top:18px; display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:16px; }
+        .list { display:grid; gap:16px; }
+        .team-card,.expert-card,.side-panel { border-radius:28px; background:var(--panel); border:1px solid rgba(255,255,255,.92); box-shadow:var(--shadow); overflow:hidden; }
+        .team-head { padding:22px; display:flex; justify-content:space-between; gap:18px; align-items:flex-start; border-bottom:1px solid var(--line); }
+        .team-head h3 { font-family:'Fraunces',serif; font-size:34px; letter-spacing:-.04em; }
+        .team-head p { margin-top:8px; color:var(--muted); font-size:14px; line-height:1.6; max-width:760px; }
+        .score { min-width:110px; text-align:right; }
+        .score strong { display:block; color:var(--blue); font-size:34px; line-height:1; font-family:'JetBrains Mono',monospace; }
+        .score span { color:var(--muted); font-size:12px; font-weight:700; }
+        .team-meta { padding:0 22px 22px; display:flex; gap:10px; flex-wrap:wrap; }
+        .meta-chip { padding:10px 12px; border-radius:999px; font-size:12px; font-weight:800; }
+        .meta-chip.network { background:rgba(12,30,61,.08); color:var(--navy); }
+        .meta-chip.proof { background:var(--blue-soft); color:var(--blue); }
+        .meta-chip.neutral { background:#f5f8fc; color:var(--muted); }
+        .team-body { padding:0 22px 22px; display:grid; grid-template-columns:minmax(0,1.08fr) minmax(280px,.92fr); gap:16px; }
+        .member-list,.team-notes { display:grid; gap:12px; }
+        .member { border-radius:22px; border:1px solid var(--line); background:var(--panel-solid); padding:16px; display:flex; gap:14px; align-items:flex-start; }
+        .member-avatar { width:48px; height:48px; border-radius:16px; display:grid; place-items:center; color:white; font-weight:800; flex-shrink:0; background:linear-gradient(135deg, #1458d3, #3479ef); }
+        .member-avatar.navy { background:linear-gradient(135deg, #0c1e3d, #183867); }
+        .member-copy strong { display:block; font-size:15px; margin-bottom:4px; }
+        .member-copy p { color:var(--muted); font-size:13px; line-height:1.55; }
+        .source-badge { display:inline-flex; margin-top:8px; padding:7px 10px; border-radius:999px; background:#f6f9fd; border:1px solid var(--line); color:var(--muted); font-size:11px; font-weight:800; }
+        .note-card { border-radius:22px; border:1px solid var(--line); background:var(--panel-solid); padding:16px; }
+        .note-card strong { display:block; margin-bottom:8px; font-size:14px; }
+        .note-card p { color:var(--muted); font-size:13px; line-height:1.6; }
+        .team-actions { padding:0 22px 22px; display:flex; gap:12px; flex-wrap:wrap; }
+        .action { border:1px solid var(--line); border-radius:16px; padding:12px 14px; background:var(--panel-solid); color:var(--text); font-size:13px; font-weight:800; cursor:pointer; }
+        .action.primary { background:linear-gradient(135deg, #1458d3, #3479ef); color:white; border-color:transparent; }
+        .expert-list { display:none; }
+        body.single-view .team-list { display:none; }
+        body.single-view .expert-list { display:grid; }
+        .expert-card { padding:22px; }
+        .expert-top { display:flex; justify-content:space-between; gap:16px; align-items:flex-start; }
+        .expert-top h3 { font-family:'Fraunces',serif; font-size:34px; letter-spacing:-.04em; }
+        .expert-top p { margin-top:8px; color:var(--muted); font-size:14px; line-height:1.6; max-width:760px; }
+        .side-panel .inner { padding:22px; display:grid; gap:16px; }
+        .side-panel h3 { font-family:'Fraunces',serif; font-size:30px; letter-spacing:-.04em; }
+        .side-panel p { color:var(--muted); font-size:14px; line-height:1.6; }
+        .decision { padding:16px; border-radius:20px; background:var(--panel-solid); border:1px solid var(--line); }
+        .decision strong { display:block; margin-bottom:6px; font-size:14px; }
+        @media (max-width:1260px) { .hero,.content { grid-template-columns:1fr; } }
+        @media (max-width:920px) { .team-body { grid-template-columns:1fr; } }
+        @media (max-width:760px) { .topbar { flex-direction:column; align-items:stretch; } .team-head,.expert-top { flex-direction:column; } .score { text-align:left; } }
+    </style>
+</head>
+<body>
+    <div class="shell">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark">T</div>
+                <div class="brand-copy">
+                    <h1>Toptal</h1>
+                    <p>Toptal AI preview: verified expert options for the mission</p>
+                </div>
+            </div>
+            <div class="top-actions">
+                <a class="ghost-btn" href="searching.html">Back to expert funnel</a>
+                <a class="primary-btn" href="#">Schedule intro</a>
+            </div>
+        </header>
+
+        <section class="hero">
+            <div class="hero-main">
+                <div class="hero-kicker">Verified expert options</div>
+                <h2>Toptal AI found the strongest <span>expert layer</span> for this mission.</h2>
+                <p>The mission has moved from broad analysis to a small, high-confidence group of experts and team options. The shortlist is designed to feel decisive, not noisy.</p>
+                <div class="hero-stats">
+                    <div class="stat"><strong>3</strong><span>expert team options</span></div>
+                    <div class="stat"><strong>9</strong><span>top-tier experts</span></div>
+                    <div class="stat"><strong>Top 3%</strong><span>positioning layer</span></div>
+                    <div class="stat"><strong>6 weeks</strong><span>first milestone target</span></div>
+                </div>
+            </div>
+            <aside class="hero-side">
+                <div class="inner">
+                    <h3>AI-built, Toptal-style</h3>
+                    <p>Instead of manually pairing premium talent, the system turns one mission brief into a small set of expert recommendations with public-proof validation and team logic built in.</p>
+                    <div class="mix-list">
+                        <div class="mix-item"><span>Mission-first planning</span><strong>Yes</strong></div>
+                        <div class="mix-item"><span>Public-proof validation</span><strong>Yes</strong></div>
+                        <div class="mix-item"><span>Single-expert fallback</span><strong>Yes</strong></div>
+                    </div>
+                </div>
+            </aside>
+        </section>
+
+        <div class="tabs">
+            <button id="teams-tab" class="active" type="button" onclick="setView('teams')">Team options</button>
+            <button id="single-tab" type="button" onclick="setView('single')">Single expert option</button>
+        </div>
+
+        <section class="content">
+            <div class="list team-list">
+                <article class="team-card">
+                    <div class="team-head">
+                        <div>
+                            <h3>Option A</h3>
+                            <p>Balanced AI mission team with strong product, systems and workflow depth. Best overall fit when the client wants high confidence without overstaffing the engagement.</p>
+                        </div>
+                        <div class="score"><strong>96</strong><span>match score</span></div>
+                    </div>
+                    <div class="team-meta">
+                        <span class="meta-chip network">Top-tier network</span>
+                        <span class="meta-chip proof">Public-proof validated</span>
+                        <span class="meta-chip neutral">$58k-$82k projected</span>
+                    </div>
+                    <div class="team-body">
+                        <div class="member-list">
+                            <div class="member">
+                                <div class="member-avatar navy">AL</div>
+                                <div class="member-copy">
+                                    <strong>Amanda Lewis, AI Product Lead</strong>
+                                    <p>Strong mission lead for roadmap, cross-functional delivery and stakeholder alignment in AI operations builds.</p>
+                                    <span class="source-badge">Verified by public operator track record</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar">NS</div>
+                                <div class="member-copy">
+                                    <strong>Noah Shah, LLM Systems Engineer</strong>
+                                    <p>Strongest systems profile for agent orchestration, retrieval and production-grade AI workflows.</p>
+                                    <span class="source-badge">Verified by GitHub + systems case studies</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar">JR</div>
+                                <div class="member-copy">
+                                    <strong>Julia Reed, Workflow Automation Engineer</strong>
+                                    <p>Best fit for Slack, HubSpot and support workflow integrations with reliable operational handoff.</p>
+                                    <span class="source-badge">Verified by implementation portfolio</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="team-notes">
+                            <div class="note-card">
+                                <strong>Why this option works</strong>
+                                <p>Strongest combination of delivery breadth, public-proof depth and mission-fit balance across strategy and execution.</p>
+                            </div>
+                            <div class="note-card">
+                                <strong>Tradeoff</strong>
+                                <p>Higher spend than the lean option, but more resilient for a complex AI operations rollout.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="team-actions">
+                        <button class="action primary">Schedule intro</button>
+                        <button class="action">Compare experts</button>
+                    </div>
+                </article>
+
+                <article class="team-card">
+                    <div class="team-head">
+                        <div>
+                            <h3>Option B</h3>
+                            <p>Lean execution team with a stronger systems center. Best when the client already has internal product leadership and wants to move faster into technical delivery.</p>
+                        </div>
+                        <div class="score"><strong>91</strong><span>match score</span></div>
+                    </div>
+                    <div class="team-meta">
+                        <span class="meta-chip network">Top-tier network</span>
+                        <span class="meta-chip proof">Proof-checked shortlist</span>
+                        <span class="meta-chip neutral">$42k-$58k projected</span>
+                    </div>
+                    <div class="team-body">
+                        <div class="member-list">
+                            <div class="member">
+                                <div class="member-avatar">NS</div>
+                                <div class="member-copy">
+                                    <strong>Noah Shah, LLM Systems Engineer</strong>
+                                    <p>Technical anchor for architecture, retrieval, evaluation and orchestration.</p>
+                                    <span class="source-badge">GitHub + public systems proof</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar">JR</div>
+                                <div class="member-copy">
+                                    <strong>Julia Reed, Workflow Automation Engineer</strong>
+                                    <p>Owns integration and ops wiring across the workflow stack.</p>
+                                    <span class="source-badge">Implementation portfolio verified</span>
+                                </div>
+                            </div>
+                            <div class="member">
+                                <div class="member-avatar navy">MR</div>
+                                <div class="member-copy">
+                                    <strong>Marcus Reed, Fractional AI Advisor</strong>
+                                    <p>Provides strategic oversight without turning the engagement into a larger team than the mission needs.</p>
+                                    <span class="source-badge">Leadership track record validated</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="team-notes">
+                            <div class="note-card">
+                                <strong>Why this option works</strong>
+                                <p>More concentrated team shape for faster execution when the client already knows the mission well.</p>
+                            </div>
+                            <div class="note-card">
+                                <strong>Tradeoff</strong>
+                                <p>Less product-layer support if the client still needs help translating stakeholders into delivery priorities.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="team-actions">
+                        <button class="action primary">Schedule intro</button>
+                        <button class="action">Compare experts</button>
+                    </div>
+                </article>
+            </div>
+
+            <div class="list expert-list">
+                <article class="expert-card">
+                    <div class="expert-top">
+                        <div>
+                            <h3>Single expert fallback</h3>
+                            <p>If the client wants a narrower first step, Toptal AI can recommend one high-confidence expert first, then expand into a broader mission team later.</p>
+                        </div>
+                        <div class="score"><strong>94</strong><span>single-expert fit</span></div>
+                    </div>
+                    <div class="team-meta" style="padding-left:0;padding-right:0;margin-top:18px;">
+                        <span class="meta-chip network">Top-tier network</span>
+                        <span class="meta-chip proof">Public-proof validated</span>
+                        <span class="meta-chip neutral">$18k-$28k initial engagement</span>
+                    </div>
+                    <div class="team-body" style="padding-left:0;padding-right:0;">
+                        <div class="member-list">
+                            <div class="member">
+                                <div class="member-avatar">NS</div>
+                                <div class="member-copy">
+                                    <strong>Noah Shah, LLM Systems Engineer</strong>
+                                    <p>Best individual expert option for architecture, systems design and an initial production pilot.</p>
+                                    <span class="source-badge">GitHub + portfolio proof</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="team-notes">
+                            <div class="note-card">
+                                <strong>Why start here</strong>
+                                <p>Useful if the client wants one accountable builder to prove the direction before widening the team.</p>
+                            </div>
+                            <div class="note-card">
+                                <strong>Limitation</strong>
+                                <p>Less cross-functional coverage and higher delivery concentration risk than the team options above.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="team-actions" style="padding-left:0;padding-right:0;">
+                        <button class="action primary">Schedule intro</button>
+                        <button class="action">Return to team options</button>
+                    </div>
+                </article>
+            </div>
+
+            <aside class="side-panel">
+                <div class="inner">
+                    <h3>Recommended next move</h3>
+                    <p>Option A is the strongest default: enough strategic depth, enough systems strength and the cleanest mission fit across the entire brief.</p>
+                    <div class="decision">
+                        <strong>Decision framing</strong>
+                        <p>Choose Option A for balance, Option B for leaner technical execution, or the single-expert path for a narrower first milestone.</p>
+                    </div>
+                    <div class="decision">
+                        <strong>What makes this AI-native</strong>
+                        <p>The shortlist is built from mission analysis, proof validation and role complementarity rather than manual recruiter pairing alone.</p>
+                    </div>
+                    <div class="decision">
+                        <strong>Primary CTA</strong>
+                        <p>Schedule one intro with the leading option, then let the platform finalize the engagement shape.</p>
+                    </div>
+                    <a class="primary-btn" href="#" style="text-align:center;">Schedule intro</a>
+                    <a class="ghost-btn" href="#" style="text-align:center; color:var(--text); border-color:var(--line); background:var(--panel-solid);">Download shortlist</a>
+                </div>
+            </aside>
+        </section>
+    </div>
+
+    <script>
+        function setView(mode) {
+            const single = mode === 'single';
+            document.body.classList.toggle('single-view', single);
+            document.getElementById('teams-tab').classList.toggle('active', !single);
+            document.getElementById('single-tab').classList.toggle('active', single);
+        }
+    </script>
+</body>
+</html>
