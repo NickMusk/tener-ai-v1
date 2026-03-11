@@ -83,6 +83,14 @@ class PreResumeServiceTests(unittest.TestCase):
         self.assertEqual(es_resume["state"]["prescreen_status"], "cv_received_pending_answers")
         self.assertTrue(bool(es_resume["state"]["cv_received"]))
 
+    def test_inbound_message_switches_active_session_language(self) -> None:
+        service = PreResumeCommunicationService()
+        self._start_default_session(service)
+
+        out = service.handle_inbound("s1", "Aqui esta mi CV")
+        self.assertEqual(out["state"]["language"], "es")
+        self.assertIn("Gracias", out["outbound"])
+
     def test_prescreen_stays_incomplete_until_required_answers_exist(self) -> None:
         service = PreResumeCommunicationService()
         self._start_default_session(service)

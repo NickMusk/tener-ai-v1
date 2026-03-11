@@ -80,6 +80,58 @@ class _NoCtaLLMResponder(_FakeLLMResponder):
 
 
 class LLMReplyIntegrationTests(unittest.TestCase):
+    def test_faq_reply_switches_llm_language_to_latest_candidate_message(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "llm_faq_language.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            llm = _FakeLLMResponder()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(_LLMStubProvider()),
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                llm_responder=llm,
+                contact_all_mode=False,
+                require_resume_before_final_verify=False,
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile = {
+                "linkedin_id": "ln-llm-faq-language-1",
+                "full_name": "LLM FAQ Language Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": [],
+                "years_experience": 5,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.8, "status": "verified", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+            outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            conversation_id = int(outreach["items"][0]["conversation_id"])
+
+            reply = workflow.process_inbound_message(conversation_id=conversation_id, text="Hola, cual es el salario?")
+            self.assertEqual(reply["language"], "es")
+            self.assertEqual(llm.calls[-1]["language"], "es")
+            messages = db.list_messages(conversation_id)
+            inbound_messages = [m for m in messages if m.get("direction") == "inbound"]
+            self.assertTrue(inbound_messages)
+            self.assertEqual(inbound_messages[-1]["candidate_language"], "es")
+
     def test_faq_reply_uses_llm_output(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as td:
@@ -184,6 +236,60 @@ class LLMReplyIntegrationTests(unittest.TestCase):
             self.assertGreaterEqual(len(llm.calls), 1)
             self.assertEqual(llm.calls[-1]["mode"], "pre_resume")
             self.assertEqual(llm.calls[-1]["state_status"], "engaged_no_resume")
+
+    def test_pre_resume_reply_switches_llm_language_to_latest_candidate_message(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "llm_pre_language.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            llm = _FakeLLMResponder()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(_LLMStubProvider()),
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=PreResumeCommunicationService(templates_path=str(root / "config" / "outreach_templates.json")),
+                llm_responder=llm,
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile = {
+                "linkedin_id": "ln-llm-pre-language-1",
+                "full_name": "LLM Pre Language Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": [],
+                "years_experience": 3,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.3, "status": "needs_resume", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+            outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            conversation_id = int(outreach["items"][0]["conversation_id"])
+
+            reply = workflow.process_inbound_message(conversation_id=conversation_id, text="Aqui esta mi CV")
+            self.assertEqual(reply["language"], "es")
+            self.assertEqual(reply["state"]["language"], "es")
+            self.assertEqual(llm.calls[-1]["language"], "es")
+            messages = db.list_messages(conversation_id)
+            inbound_messages = [m for m in messages if m.get("direction") == "inbound"]
+            self.assertTrue(inbound_messages)
+            self.assertEqual(inbound_messages[-1]["candidate_language"], "es")
 
     def test_pre_resume_llm_enforces_resume_cta_when_missing(self) -> None:
         root = Path(__file__).resolve().parents[1]

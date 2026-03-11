@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .language import detect_language_from_text
+from .language import normalize_language, resolve_conversation_language
 
 
 UTC = timezone.utc
@@ -338,7 +338,7 @@ class PreResumeSession:
             job_title=str(payload.get("job_title") or "this role"),
             scope_summary=str(payload.get("scope_summary") or "role scope"),
             core_profile_summary=str(payload.get("core_profile_summary") or payload.get("scope_summary") or "role scope"),
-            language=str(payload.get("language") or "en"),
+            language=normalize_language(str(payload.get("language") or "en"), fallback="en"),
             job_location=str(payload.get("job_location") or "").strip() or None,
             salary_min=float(payload.get("salary_min")) if payload.get("salary_min") is not None else None,
             salary_max=float(payload.get("salary_max")) if payload.get("salary_max") is not None else None,
@@ -395,7 +395,7 @@ class PreResumeCommunicationService:
         if session_id in self.sessions:
             raise ValueError(f"Session {session_id} already exists")
         current = now or utc_now()
-        selected_language = (language or "").strip().lower() or self.templates.get("default_language", "en")
+        selected_language = normalize_language(language, fallback=self.templates.get("default_language", "en"))
         session = PreResumeSession(
             session_id=session_id,
             candidate_name=candidate_name or "there",
@@ -440,8 +440,11 @@ class PreResumeCommunicationService:
                 "state": session.to_dict(),
             }
 
-        if not session.language or session.language == "auto":
-            session.language = detect_language_from_text(message, fallback=self.templates.get("default_language", "en"))
+        session.language = resolve_conversation_language(
+            latest_message_text=message,
+            previous_language=session.language,
+            fallback=self.templates.get("default_language", "en"),
+        )
 
         intent, links = self._classify_intent(message)
         for link in links:

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .language import detect_language_from_text, pick_candidate_language
+from .language import pick_candidate_language, resolve_conversation_language
 from .matching import MatchingEngine
 
 
@@ -847,7 +847,11 @@ class FAQAgent:
         self.instruction = instruction
 
     def auto_reply(self, inbound_text: str, job: Dict[str, Any], candidate_lang: str | None = None) -> Tuple[str, str, str]:
-        lang = candidate_lang or detect_language_from_text(inbound_text, fallback=self.templates.get("default_language", "en"))
+        lang = resolve_conversation_language(
+            latest_message_text=inbound_text,
+            previous_language=candidate_lang,
+            fallback=self.templates.get("default_language", "en"),
+        )
         intent = self._classify_intent(inbound_text)
         template = self._pick_template(self.templates.get("faq", {}), intent=intent, language=lang)
         scope_summary = self.matching_engine.summarize_scope(job)

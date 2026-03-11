@@ -31,6 +31,7 @@ from .linkedin_limits import (
     policy_weekly_connect_cap,
 )
 from .linkedin_provider import UnipileLinkedInProvider
+from .language import pick_candidate_language, resolve_conversation_language
 from .pre_resume_service import PreResumeCommunicationService, parse_resume_links
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
@@ -733,7 +734,7 @@ class WorkflowService:
             screening_status = str((match or {}).get("status") or "")
             request_resume = self.require_resume_before_final_verify or screening_status == "needs_resume"
             conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
-            language = str((candidate.get("languages") or ["en"])[0]).lower()
+            language = pick_candidate_language(candidate.get("languages"), fallback="en")
             message = ""
             session_state: Dict[str, Any] | None = None
             started_pre_resume_session = False
@@ -756,7 +757,7 @@ class WorkflowService:
                             self.outreach_agent.matching_engine.build_core_profile(job).get("core_skills") or []
                         )
                         or self.outreach_agent.matching_engine.summarize_scope(job),
-                        language=str((candidate.get("languages") or ["en"])[0]).lower(),
+                        language=pick_candidate_language(candidate.get("languages"), fallback="en"),
                         job_location=str(job.get("location") or "").strip() or None,
                         salary_min=self._safe_float(job.get("salary_min"), None),
                         salary_max=self._safe_float(job.get("salary_max"), None),
@@ -977,7 +978,7 @@ class WorkflowService:
             screening_status = str((match or {}).get("status") or "")
             request_resume = self.require_resume_before_final_verify or screening_status == "needs_resume"
             conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
-            language = str((candidate.get("languages") or ["en"])[0]).lower()
+            language = pick_candidate_language(candidate.get("languages"), fallback="en")
             message = ""
             session_state: Dict[str, Any] | None = None
             started_pre_resume_session = False
@@ -1000,7 +1001,7 @@ class WorkflowService:
                             self.outreach_agent.matching_engine.build_core_profile(job).get("core_skills") or []
                         )
                         or self.outreach_agent.matching_engine.summarize_scope(job),
-                        language=str((candidate.get("languages") or ["en"])[0]).lower(),
+                        language=pick_candidate_language(candidate.get("languages"), fallback="en"),
                         job_location=str(job.get("location") or "").strip() or None,
                         salary_min=self._safe_float(job.get("salary_min"), None),
                         salary_max=self._safe_float(job.get("salary_max"), None),
@@ -1640,6 +1641,12 @@ class WorkflowService:
             if item.get("candidate_language"):
                 previous_lang = item["candidate_language"]
                 break
+        inbound_language = resolve_conversation_language(
+            latest_message_text=text,
+            previous_language=previous_lang,
+            profile_languages=candidate.get("languages"),
+            fallback="en",
+        )
         llm_history = self._build_llm_history(messages=messages, latest_inbound=text)
 
         normalized_meta = self._normalize_inbound_meta(inbound_meta)
@@ -1648,7 +1655,7 @@ class WorkflowService:
             conversation_id=conversation_id,
             direction="inbound",
             content=text,
-            candidate_language=previous_lang,
+            candidate_language=inbound_language,
             meta=normalized_meta,
         )
         self._capture_resume_assets_from_inbound(
@@ -1698,7 +1705,14 @@ class WorkflowService:
                 state_out = result.get("state") if isinstance(result.get("state"), dict) else state
                 outbound = str(result.get("outbound") or "").strip()
                 intent = str(result.get("intent") or "default")
-                language = str((state_out or {}).get("language") or previous_lang or "en")
+                language = resolve_conversation_language(
+                    latest_message_text=text,
+                    previous_language=str((state_out or {}).get("language") or inbound_language or ""),
+                    profile_languages=candidate.get("languages"),
+                    fallback="en",
+                )
+                if isinstance(state_out, dict):
+                    state_out["language"] = language
                 outbound = self._maybe_llm_reply(
                     mode="pre_resume",
                     instruction=self.stage_instructions.get("pre_resume", ""),
@@ -1847,7 +1861,7 @@ class WorkflowService:
                     response["interview"] = interview_result
                 return response
 
-        lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=previous_lang)
+        lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=inbound_language)
         reply = self._maybe_llm_reply(
             mode="faq",
             instruction=self.stage_instructions.get("faq", ""),
@@ -2847,7 +2861,12 @@ class WorkflowService:
             conversation = self.db.get_conversation(conversation_id)
             if result.get("sent") and outbound and candidate and conversation:
                 job_ctx = self.db.get_job(job_ref) or {"id": job_ref}
-                language = str((state or {}).get("language") or (candidate.get("languages") or ["en"])[0]).lower()
+                language = resolve_conversation_language(
+                    latest_message_text="",
+                    previous_language=str((state or {}).get("language") or ""),
+                    profile_languages=candidate.get("languages"),
+                    fallback="en",
+                )
                 history = self._build_llm_history(self.db.list_messages(conversation_id=conversation_id), latest_inbound="")
                 outbound = self._compose_linkedin_followup_message(
                     job=job_ctx,
@@ -2907,7 +2926,12 @@ class WorkflowService:
                 )
                 continue
 
-            language = str((state or {}).get("language") or (candidate.get("languages") or ["en"])[0]).lower()
+            language = resolve_conversation_language(
+                latest_message_text="",
+                previous_language=str((state or {}).get("language") or ""),
+                profile_languages=candidate.get("languages"),
+                fallback="en",
+            )
             delivery = self._send_auto_reply(candidate=candidate, message=outbound, conversation=conversation)
             external_chat_id = str(delivery.get("chat_id") or "").strip()
             chat_binding = None
@@ -5533,11 +5557,11 @@ class WorkflowService:
         conversation: Dict[str, Any] | None = None,
     ) -> str:
         recruiter_name = self._linkedin_recruiter_name(conversation=conversation)
-        fallback = self._linkedin_initial_fallback_message(
+        fallback = str(fallback_message or "").strip() or self._linkedin_initial_fallback_message(
             job=job,
             recruiter_name=recruiter_name,
             request_resume=request_resume,
-        ) or str(fallback_message or "").strip()
+        )
         if not fallback:
             return ""
         instruction = self._linkedin_generation_instruction(kind="initial", recruiter_name=recruiter_name, language=language)
@@ -5566,10 +5590,10 @@ class WorkflowService:
         conversation: Dict[str, Any] | None = None,
     ) -> str:
         recruiter_name = self._linkedin_recruiter_name(conversation=conversation)
-        fallback = self._linkedin_followup_fallback_message(
+        fallback = str(fallback_message or "").strip() or self._linkedin_followup_fallback_message(
             job=job,
             recruiter_name=recruiter_name,
-        ) or str(fallback_message or "").strip()
+        )
         if not fallback:
             return ""
         instruction = self._linkedin_generation_instruction(kind="followup", recruiter_name=recruiter_name, language=language)
@@ -5943,7 +5967,11 @@ class WorkflowService:
             return False
         status = str(state.get("status") or "").strip().lower()
         prescreen_status = str(state.get("prescreen_status") or "").strip().lower()
-        return status == "ready_for_cv" or prescreen_status == "ready_for_cv"
+        if bool(state.get("cv_received")):
+            return False
+        if status in TERMINAL_PRE_RESUME_STATUSES:
+            return False
+        return prescreen_status != "ready_for_screening_call"
 
     @staticmethod
     def _has_resume_cta(text: str) -> bool:
@@ -6279,7 +6307,12 @@ class WorkflowService:
                 conversation_id=conversation_id,
                 direction="outbound",
                 content=message,
-                candidate_language=str((candidate.get("languages") or ["en"])[0]).lower(),
+                candidate_language=resolve_conversation_language(
+                    latest_message_text="",
+                    previous_language=str(pending.get("candidate_language") or ""),
+                    profile_languages=candidate.get("languages"),
+                    fallback="en",
+                ),
                 meta={
                     "type": "outreach_after_connection",
                     "auto": True,
