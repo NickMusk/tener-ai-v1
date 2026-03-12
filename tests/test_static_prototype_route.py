@@ -115,6 +115,35 @@ class StaticPrototypeRouteTests(unittest.TestCase):
         status, _, _ = self._request_raw("/fiverr/../README.md")
         self.assertEqual(status, 404)
 
+    def test_skilled_trades_root_redirects_to_trailing_slash(self) -> None:
+        opener = request.build_opener(_NoRedirectHandler)
+        req = request.Request(url=f"{self.base_url}/skilled-trades", method="GET")
+        with self.assertRaises(error.HTTPError) as ctx:
+            opener.open(req, timeout=20)
+        self.assertEqual(ctx.exception.code, 301)
+        self.assertEqual(str(ctx.exception.headers.get("Location") or ""), "/skilled-trades/")
+
+    def test_skilled_trades_index_is_served(self) -> None:
+        status, raw, headers = self._request_raw("/skilled-trades/")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", str(headers.get("Content-Type") or ""))
+        self.assertIn("Skilled Trades Staffing", raw.decode("utf-8"))
+
+    def test_skilled_trades_landing_and_linked_pages_are_served(self) -> None:
+        status, raw, headers = self._request_raw("/skilled-trades/landing.html")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", str(headers.get("Content-Type") or ""))
+        self.assertIn("48 Hours Guaranteed", raw.decode("utf-8"))
+
+        status, raw, headers = self._request_raw("/skilled-trades/search.html")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", str(headers.get("Content-Type") or ""))
+        self.assertIn("View Shortlist", raw.decode("utf-8"))
+
+    def test_skilled_trades_path_traversal_is_blocked(self) -> None:
+        status, _, _ = self._request_raw("/skilled-trades/../README.md")
+        self.assertEqual(status, 404)
+
     def test_toptal_root_redirects_to_trailing_slash(self) -> None:
         opener = request.build_opener(_NoRedirectHandler)
         req = request.Request(url=f"{self.base_url}/toptal", method="GET")

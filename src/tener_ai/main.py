@@ -532,6 +532,18 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if self._serve_static_directory(prefix="/fiverr/", directory=project_root() / "Fiverr-prototype", path=parsed.path):
                 return
 
+        if parsed.path == "/skilled-trades":
+            self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/skilled-trades/")
+            return
+
+        if parsed.path.startswith("/skilled-trades/"):
+            if self._serve_static_directory(
+                prefix="/skilled-trades/",
+                directory=project_root() / "SkilledTrades-prototype",
+                path=parsed.path,
+            ):
+                return
+
         if parsed.path == "/toptal":
             self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/toptal/")
             return
@@ -4535,6 +4547,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         if normalized == "/zalando" or normalized.startswith("/zalando/"):
             return True
         if normalized == "/liveramp" or normalized.startswith("/liveramp/"):
+            return True
+        if normalized == "/skilled-trades" or normalized.startswith("/skilled-trades/"):
             return True
         if normalized.startswith("/candidate/"):
             return True

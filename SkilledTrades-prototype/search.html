@@ -1,0 +1,1941 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener AI | Searching...</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8fafc;
+            --bg-tertiary: #f1f5f9;
+            --bg-card: #ffffff;
+            --accent: #0d9488;
+            --accent-light: #14b8a6;
+            --accent-dim: rgba(13, 148, 136, 0.08);
+            --text-primary: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --border: #e2e8f0;
+            --border-strong: #cbd5e1;
+            --indeed-blue: #2164f3;
+            --indeed-bg: #f3f2ef;
+            --linkedin-blue: #0a66c2;
+            --linkedin-bg: #f3f6f8;
+            --rigzone-red: #dc2626;
+            --rigzone-bg: #1e293b;
+            --reject-red: #ef4444;
+            --pass-green: #22c55e;
+            --sms-green: #22c55e;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            min-height: 100vh;
+        }
+
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 24px;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .logo-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+        }
+
+        .job-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .job-title { font-weight: 600; color: var(--text-primary); }
+
+        .timer {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--accent-dim);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .main {
+            display: grid;
+            grid-template-columns: 1fr 320px;
+            height: calc(100vh - 53px);
+        }
+
+        .workspace {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg-secondary);
+        }
+
+        .workspace-header {
+            padding: 16px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--bg-primary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .workspace-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .workspace-status {
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-primary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .sources-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .source-chip {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 12px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            transition: all 0.3s;
+        }
+
+        .source-chip.active {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        .source-chip.done { color: var(--text-secondary); }
+
+        .source-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .source-dot.indeed { background: var(--indeed-blue); }
+        .source-dot.linkedin { background: var(--linkedin-blue); }
+        .source-dot.rigzone { background: var(--rigzone-red); }
+        .source-dot.ibew { background: #eab308; }
+        .source-dot.tradesmen { background: #8b5cf6; }
+
+        .source-count { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+
+        .content-area {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 200px;
+            gap: 16px;
+            padding: 16px 24px;
+            min-height: 0;
+        }
+
+        /* Windows Stack */
+        .windows-stack {
+            position: relative;
+            min-height: 400px;
+        }
+
+        .service-window {
+            position: absolute;
+            inset: 0;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+            opacity: 0;
+            transform: scale(0.98);
+            pointer-events: none;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .service-window.active {
+            opacity: 1;
+            transform: scale(1);
+            pointer-events: auto;
+            z-index: 10;
+        }
+
+        .window-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .window-controls { display: flex; gap: 6px; }
+        .window-control { width: 12px; height: 12px; border-radius: 50%; }
+        .window-control.close { background: #ff5f57; }
+        .window-control.minimize { background: #ffbd2e; }
+        .window-control.maximize { background: #28c840; }
+
+        .window-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        .window-icon {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: white;
+        }
+
+        .window-icon.indeed { background: var(--indeed-blue); }
+        .window-icon.linkedin { background: var(--linkedin-blue); }
+        .window-icon.rigzone { background: var(--rigzone-red); }
+        .window-icon.cv { background: var(--accent); }
+        .window-icon.sms { background: var(--sms-green); }
+
+        .window-content { flex: 1; overflow-y: auto; }
+
+        /* Indeed Style */
+        .indeed-content {
+            background: var(--indeed-bg);
+            padding: 16px;
+            height: 100%;
+        }
+
+        .indeed-search {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .indeed-search input {
+            flex: 1;
+            background: white;
+            border: 1px solid #d4d2d0;
+            border-radius: 8px;
+            padding: 12px 16px;
+            font-size: 0.9rem;
+            color: #2d2d2d;
+        }
+
+        .indeed-search button {
+            background: var(--indeed-blue);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .indeed-results {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .indeed-card {
+            background: white;
+            border: 1px solid #d4d2d0;
+            border-radius: 8px;
+            padding: 16px;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+        }
+
+        .indeed-card.visible { opacity: 1; transform: translateY(0); }
+
+        .indeed-card-row { display: flex; gap: 12px; align-items: center; }
+
+        .indeed-avatar {
+            width: 48px;
+            height: 48px;
+            background: #e8e8e8;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #595959;
+        }
+
+        .indeed-card h4 { color: var(--indeed-blue); font-size: 1rem; margin-bottom: 2px; }
+        .indeed-card p { color: #2d2d2d; font-size: 0.85rem; }
+
+        .indeed-badge {
+            background: #e8f4ea;
+            color: #137333;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+            font-weight: 500;
+            margin-left: 8px;
+        }
+
+        .indeed-meta {
+            display: flex;
+            gap: 16px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #e8e8e8;
+            font-size: 0.8rem;
+            color: #595959;
+        }
+
+        /* LinkedIn Style */
+        .linkedin-content {
+            background: var(--linkedin-bg);
+            padding: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .linkedin-search-bar {
+            display: flex;
+            gap: 8px;
+            padding: 16px;
+            background: white;
+            border-bottom: 1px solid #e8e8e8;
+        }
+
+        .linkedin-search-input {
+            flex: 1;
+            background: #eef3f8;
+            border: none;
+            border-radius: 4px;
+            padding: 10px 16px;
+            font-size: 0.9rem;
+        }
+
+        .linkedin-search-btn {
+            background: var(--linkedin-blue);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .linkedin-filters {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px;
+            background: white;
+            border-bottom: 1px solid #e8e8e8;
+            flex-wrap: wrap;
+        }
+
+        .linkedin-filter {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            padding: 8px 12px;
+            background: #f3f6f8;
+            border-radius: 4px;
+            border: 1px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .linkedin-filter.active {
+            border-color: var(--linkedin-blue);
+            background: #e8f4fc;
+        }
+
+        .filter-label { font-size: 0.6rem; color: #666; text-transform: uppercase; }
+        .filter-value { font-size: 0.8rem; font-weight: 600; color: #191919; }
+
+        .linkedin-results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            background: #f3f6f8;
+            font-size: 0.85rem;
+            color: #666;
+        }
+
+        .linkedin-sort { color: var(--linkedin-blue); cursor: pointer; }
+
+        .linkedin-results {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .linkedin-result-card {
+            background: white;
+            border-radius: 8px;
+            padding: 14px;
+            display: flex;
+            gap: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+        }
+
+        .linkedin-result-card.visible { opacity: 1; transform: translateY(0); }
+
+        .linkedin-result-avatar {
+            width: 52px;
+            height: 52px;
+            background: #e8e8e8;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: #666;
+        }
+
+        .linkedin-result-info { flex: 1; }
+        .linkedin-result-name { font-size: 0.95rem; font-weight: 600; color: var(--linkedin-blue); }
+        .linkedin-result-title { font-size: 0.85rem; color: #191919; margin: 2px 0; }
+        .linkedin-result-meta { font-size: 0.8rem; color: #666; }
+
+        .linkedin-result-actions { display: flex; gap: 8px; margin-top: 10px; }
+
+        .linkedin-action-btn {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .linkedin-action-btn.primary {
+            background: var(--linkedin-blue);
+            color: white;
+            border: none;
+        }
+
+        .linkedin-action-btn.secondary {
+            background: transparent;
+            color: var(--linkedin-blue);
+            border: 1px solid var(--linkedin-blue);
+        }
+
+        /* Rigzone Style */
+        .rigzone-content {
+            background: var(--rigzone-bg);
+            padding: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .rigzone-header {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            padding: 12px 16px;
+            background: #0f172a;
+            border-bottom: 1px solid #334155;
+        }
+
+        .rigzone-logo { color: var(--rigzone-red); font-weight: 700; font-size: 1rem; }
+
+        .rigzone-nav {
+            font-size: 0.8rem;
+            color: #64748b;
+            cursor: pointer;
+            padding: 6px 0;
+        }
+
+        .rigzone-nav.active {
+            color: white;
+            border-bottom: 2px solid var(--rigzone-red);
+        }
+
+        .rigzone-search-row {
+            display: flex;
+            gap: 8px;
+            padding: 14px 16px;
+        }
+
+        .rigzone-search-input {
+            flex: 1;
+            background: #334155;
+            border: 1px solid #475569;
+            border-radius: 6px;
+            padding: 12px 16px;
+            color: white;
+            font-size: 0.9rem;
+        }
+
+        .rigzone-search-input::placeholder { color: #94a3b8; }
+
+        .rigzone-search-btn {
+            background: var(--rigzone-red);
+            color: white;
+            border: none;
+            padding: 12px 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .rigzone-filters {
+            display: flex;
+            gap: 8px;
+            padding: 0 16px 14px;
+            flex-wrap: wrap;
+        }
+
+        .rigzone-filter-chip {
+            background: #334155;
+            border: 1px solid #475569;
+            color: #94a3b8;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            transition: all 0.3s;
+        }
+
+        .rigzone-filter-chip.active {
+            border-color: var(--rigzone-red);
+            color: white;
+            background: rgba(220, 38, 38, 0.15);
+        }
+
+        .rigzone-results-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: #0f172a;
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+
+        .rigzone-results {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .rigzone-result-card {
+            background: #334155;
+            border-radius: 8px;
+            padding: 16px;
+            border-left: 3px solid transparent;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+        }
+
+        .rigzone-result-card.visible { opacity: 1; transform: translateY(0); }
+        .rigzone-result-card.highlight { border-left-color: var(--rigzone-red); }
+
+        .rigzone-result-header { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .rigzone-result-name { color: white; font-weight: 600; font-size: 0.95rem; }
+        .rigzone-result-exp { color: var(--rigzone-red); font-size: 0.75rem; font-weight: 600; }
+        .rigzone-result-title { color: #94a3b8; font-size: 0.85rem; margin-bottom: 10px; }
+
+        .rigzone-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+
+        .rigzone-tag {
+            background: #475569;
+            color: #cbd5e1;
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 0.65rem;
+        }
+
+        .rigzone-tag.highlight { background: rgba(220, 38, 38, 0.2); color: #fca5a5; }
+
+        /* CV Scanner */
+        .cv-content {
+            background: #fafafa;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .cv-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 16px;
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .cv-filename { font-size: 0.85rem; color: #374151; font-weight: 500; }
+
+        .cv-status {
+            font-size: 0.7rem;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        .cv-status.scanning { background: var(--accent-dim); color: var(--accent); }
+        .cv-status.passed { background: rgba(34, 197, 94, 0.1); color: var(--pass-green); }
+        .cv-status.rejected { background: rgba(239, 68, 68, 0.1); color: var(--reject-red); }
+
+        .cv-document {
+            flex: 1;
+            background: white;
+            margin: 16px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            padding: 28px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cv-scan-line {
+            position: absolute;
+            left: 0; right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, transparent, var(--accent), transparent);
+            animation: scanDown 2s ease-in-out infinite;
+            opacity: 0;
+        }
+
+        .cv-scan-line.active { opacity: 1; }
+
+        @keyframes scanDown {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+
+        .cv-header-section {
+            margin-bottom: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid #e5e7eb;
+        }
+
+        .cv-name { font-size: 1.5rem; font-weight: 700; color: #111827; margin-bottom: 4px; }
+        .cv-title-line { font-size: 1rem; color: #4b5563; margin-bottom: 8px; }
+        .cv-contact { font-size: 0.8rem; color: #6b7280; }
+
+        .cv-section { margin-bottom: 18px; }
+
+        .cv-section-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #374151;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 10px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .cv-item { margin-bottom: 14px; }
+        .cv-item-header { display: flex; justify-content: space-between; margin-bottom: 2px; }
+        .cv-item-title { font-size: 0.9rem; font-weight: 600; color: #1f2937; }
+        .cv-item-date { font-size: 0.8rem; color: #6b7280; }
+        .cv-item-company { font-size: 0.85rem; color: #4b5563; margin-bottom: 6px; }
+        .cv-item-desc { font-size: 0.8rem; color: #6b7280; line-height: 1.5; }
+
+        .cv-skills-list { display: flex; flex-wrap: wrap; gap: 8px; }
+
+        .cv-skill-tag {
+            background: #f3f4f6;
+            color: #374151;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.75rem;
+        }
+
+        .cv-highlight {
+            background: rgba(13, 148, 136, 0.12);
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        /* SMS Window */
+        .sms-content {
+            background: #f8fafc;
+            padding: 0;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sms-status-bar {
+            background: linear-gradient(135deg, var(--accent) 0%, var(--accent-light) 100%);
+            padding: 18px;
+            text-align: center;
+        }
+
+        .sms-status-text {
+            font-size: 1rem;
+            font-weight: 600;
+            color: white;
+            margin-bottom: 4px;
+        }
+
+        .sms-status-sub { font-size: 0.8rem; color: rgba(255,255,255,0.85); }
+
+        .sms-chat-header {
+            background: white;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border);
+            display: none;
+        }
+
+        .sms-chat-header.visible {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .sms-chat-avatar {
+            width: 40px;
+            height: 40px;
+            background: var(--bg-tertiary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .sms-chat-info h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 2px; }
+        .sms-chat-info p { font-size: 0.75rem; color: var(--text-muted); }
+
+        .sms-conversation {
+            flex: 1;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            overflow-y: auto;
+            background: #f1f5f9;
+        }
+
+        .sms-bubble {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 18px;
+            font-size: 0.9rem;
+            line-height: 1.4;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+        }
+
+        .sms-bubble.visible { opacity: 1; transform: translateY(0); }
+
+        .sms-bubble.outgoing {
+            align-self: flex-end;
+            background: var(--accent);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .sms-bubble.incoming {
+            align-self: flex-start;
+            background: white;
+            color: var(--text-primary);
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+
+        /* Map Sidebar */
+        .map-sidebar {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .map-header {
+            padding: 12px 14px;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .map-container {
+            flex: 1;
+            position: relative;
+            background: linear-gradient(135deg, #e0f2f1 0%, #f1f5f9 100%);
+            min-height: 160px;
+        }
+
+        .map-grid {
+            position: absolute;
+            inset: 0;
+            background-image: 
+                linear-gradient(rgba(0,0,0,0.04) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0,0,0,0.04) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+
+        .map-center {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 12px; height: 12px;
+            background: var(--reject-red);
+            border: 2px solid white;
+            border-radius: 50%;
+            z-index: 5;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+        }
+
+        .map-radius {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100px; height: 100px;
+            border: 2px dashed var(--accent);
+            border-radius: 50%;
+            opacity: 0.5;
+        }
+
+        .map-label {
+            position: absolute;
+            font-size: 0.55rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .map-pin {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            opacity: 0;
+            transition: all 0.3s;
+            z-index: 2;
+        }
+
+        .map-pin.visible { opacity: 1; }
+        .map-pin.rejected { opacity: 0.3; }
+
+        .map-pin-dot {
+            width: 10px; height: 10px;
+            background: var(--accent);
+            border-radius: 50%;
+            border: 2px solid white;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .map-pin.rejected .map-pin-dot { background: var(--reject-red); }
+
+        .map-legend {
+            padding: 10px 14px;
+            background: var(--bg-tertiary);
+            border-top: 1px solid var(--border);
+            font-size: 0.65rem;
+            display: flex;
+            gap: 14px;
+        }
+
+        .map-legend-item { display: flex; align-items: center; gap: 5px; }
+        .map-legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+        .map-legend-dot.job { background: var(--reject-red); }
+        .map-legend-dot.qualified { background: var(--accent); }
+        .map-legend-dot.rejected { background: var(--reject-red); opacity: 0.3; }
+
+        /* Activity Panel */
+        .activity-panel {
+            background: var(--bg-primary);
+            border-left: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .activity-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .activity-title {
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .activity-stats {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 8px;
+        }
+
+        .stat-box {
+            text-align: center;
+            background: var(--bg-tertiary);
+            padding: 12px 8px;
+            border-radius: 8px;
+        }
+
+        .stat-box.full { grid-column: span 2; }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat-value.rejected { color: var(--reject-red); }
+
+        .stat-label { font-size: 0.65rem; color: var(--text-muted); margin-top: 4px; }
+
+        .activity-log {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+        }
+
+        .log-entry {
+            display: flex;
+            gap: 10px;
+            padding: 10px 0;
+            border-bottom: 1px solid var(--border);
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.3s;
+        }
+
+        .log-entry.visible { opacity: 1; transform: translateY(0); }
+
+        .log-time {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-muted);
+            min-width: 40px;
+        }
+
+        .log-icon {
+            width: 22px;
+            height: 22px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            flex-shrink: 0;
+        }
+
+        .log-icon.search { background: var(--indeed-blue); color: white; }
+        .log-icon.screen { background: var(--accent); color: white; }
+        .log-icon.reject { background: var(--reject-red); color: white; }
+        .log-icon.sms { background: var(--sms-green); color: white; }
+        .log-icon.success { background: var(--pass-green); color: white; }
+        .log-icon.verify { background: #f97316; color: white; }
+
+        .log-content { flex: 1; min-width: 0; }
+        .log-action { font-size: 0.8rem; margin-bottom: 2px; font-weight: 500; }
+        .log-detail { font-size: 0.7rem; color: var(--text-muted); }
+
+        .progress-section {
+            padding: 14px;
+            border-top: 1px solid var(--border);
+        }
+
+        .progress-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        .progress-bar {
+            height: 6px;
+            background: var(--bg-tertiary);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            width: 0%;
+            transition: width 0.5s;
+            border-radius: 3px;
+        }
+
+        .qualified-section {
+            padding: 14px;
+            border-top: 1px solid var(--border);
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        .qualified-title {
+            font-size: 0.7rem;
+            color: var(--text-muted);
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .qualified-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            opacity: 0;
+            transform: translateX(20px);
+            transition: all 0.4s;
+        }
+
+        .qualified-item.visible { opacity: 1; transform: translateX(0); }
+
+        .qualified-avatar {
+            width: 32px;
+            height: 32px;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        .qualified-info { flex: 1; min-width: 0; }
+        .qualified-name { font-size: 0.8rem; font-weight: 600; }
+        .qualified-meta { font-size: 0.65rem; color: var(--text-muted); }
+
+        .qualified-score {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--accent);
+        }
+
+        .complete-btn {
+            margin: 16px;
+            padding: 14px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .complete-btn.visible { display: flex; }
+        .complete-btn:hover { background: var(--accent-light); }
+
+        @media (max-width: 1100px) {
+            .content-area { grid-template-columns: 1fr; }
+            .map-sidebar { display: none; }
+        }
+
+        @media (max-width: 900px) {
+            .main { grid-template-columns: 1fr; }
+            .activity-panel { max-height: 35vh; border-left: none; border-top: 1px solid var(--border); }
+            .sources-row { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">
+            <span class="logo-dot"></span>
+            tener.ai
+        </div>
+        <div class="job-info">
+            <span class="job-title">Industrial Electrician</span>
+            <span>•</span>
+            <span>Midland, TX</span>
+            <span>•</span>
+            <span>3 positions</span>
+            <div class="timer" id="timer">00:00</div>
+        </div>
+    </header>
+
+    <main class="main">
+        <div class="workspace">
+            <div class="workspace-header">
+                <div>
+                    <div class="workspace-title">Agent Workspace</div>
+                    <div class="workspace-status">
+                        <span class="status-dot"></span>
+                        <span id="agent-status">Initializing...</span>
+                    </div>
+                </div>
+                <div class="sources-row">
+                    <div class="source-chip" data-source="indeed"><span class="source-dot indeed"></span>Indeed <span class="source-count" id="count-indeed">0</span></div>
+                    <div class="source-chip" data-source="linkedin"><span class="source-dot linkedin"></span>LinkedIn <span class="source-count" id="count-linkedin">0</span></div>
+                    <div class="source-chip" data-source="rigzone"><span class="source-dot rigzone"></span>Rigzone <span class="source-count" id="count-rigzone">0</span></div>
+                    <div class="source-chip" data-source="ibew"><span class="source-dot ibew"></span>IBEW <span class="source-count" id="count-ibew">0</span></div>
+                    <div class="source-chip" data-source="tradesmen"><span class="source-dot tradesmen"></span>Tradesmen <span class="source-count" id="count-tradesmen">0</span></div>
+                </div>
+            </div>
+
+            <div class="content-area">
+                <div class="windows-stack">
+                    <!-- Indeed Window -->
+                    <div class="service-window" id="window-indeed">
+                        <div class="window-header">
+                            <div class="window-controls"><div class="window-control close"></div><div class="window-control minimize"></div><div class="window-control maximize"></div></div>
+                            <div class="window-title"><div class="window-icon indeed">in</div>Indeed Candidate Search</div>
+                        </div>
+                        <div class="window-content indeed-content">
+                            <div class="indeed-search">
+                                <input type="text" id="indeed-input" placeholder="Search candidates...">
+                                <button>Find</button>
+                            </div>
+                            <div class="indeed-results" id="indeed-results"></div>
+                        </div>
+                    </div>
+
+                    <!-- LinkedIn Window -->
+                    <div class="service-window" id="window-linkedin">
+                        <div class="window-header">
+                            <div class="window-controls"><div class="window-control close"></div><div class="window-control minimize"></div><div class="window-control maximize"></div></div>
+                            <div class="window-title"><div class="window-icon linkedin">in</div>LinkedIn Recruiter</div>
+                        </div>
+                        <div class="window-content linkedin-content">
+                            <div class="linkedin-search-bar">
+                                <input type="text" class="linkedin-search-input" id="linkedin-search" placeholder="Search by title, skill, or company">
+                                <button class="linkedin-search-btn">Search</button>
+                            </div>
+                            <div class="linkedin-filters" id="linkedin-filters">
+                                <div class="linkedin-filter" id="filter-location"><span class="filter-label">Location</span><span class="filter-value" id="filter-loc-val">—</span></div>
+                                <div class="linkedin-filter" id="filter-exp"><span class="filter-label">Experience</span><span class="filter-value" id="filter-exp-val">—</span></div>
+                                <div class="linkedin-filter" id="filter-industry"><span class="filter-label">Industry</span><span class="filter-value" id="filter-ind-val">—</span></div>
+                            </div>
+                            <div class="linkedin-results-header" id="linkedin-results-header" style="display:none;">
+                                <span id="linkedin-results-count">0 results</span>
+                                <span class="linkedin-sort">Sort by: Relevance ▼</span>
+                            </div>
+                            <div class="linkedin-results" id="linkedin-results"></div>
+                        </div>
+                    </div>
+
+                    <!-- Rigzone Window -->
+                    <div class="service-window" id="window-rigzone">
+                        <div class="window-header">
+                            <div class="window-controls"><div class="window-control close"></div><div class="window-control minimize"></div><div class="window-control maximize"></div></div>
+                            <div class="window-title"><div class="window-icon rigzone">RZ</div>Rigzone</div>
+                        </div>
+                        <div class="window-content rigzone-content">
+                            <div class="rigzone-header">
+                                <span class="rigzone-logo">RIGZONE</span>
+                                <div class="rigzone-nav">Jobs</div>
+                                <div class="rigzone-nav active">Candidates</div>
+                                <div class="rigzone-nav">Companies</div>
+                            </div>
+                            <div class="rigzone-search-row">
+                                <input type="text" class="rigzone-search-input" id="rigzone-search" placeholder="Search candidates...">
+                                <button class="rigzone-search-btn">🔍</button>
+                            </div>
+                            <div class="rigzone-filters" id="rigzone-filters">
+                                <div class="rigzone-filter-chip" id="rz-filter-role">Role: —</div>
+                                <div class="rigzone-filter-chip" id="rz-filter-loc">Location: —</div>
+                                <div class="rigzone-filter-chip" id="rz-filter-exp">Experience: —</div>
+                                <div class="rigzone-filter-chip" id="rz-filter-cert">Certs: —</div>
+                            </div>
+                            <div class="rigzone-results-bar" id="rigzone-results-bar" style="display:none;">
+                                <span id="rigzone-results-count">0 candidates</span>
+                                <span>☰ List</span>
+                            </div>
+                            <div class="rigzone-results" id="rigzone-results"></div>
+                        </div>
+                    </div>
+
+                    <!-- CV Scanner Window -->
+                    <div class="service-window" id="window-cv">
+                        <div class="window-header">
+                            <div class="window-controls"><div class="window-control close"></div><div class="window-control minimize"></div><div class="window-control maximize"></div></div>
+                            <div class="window-title"><div class="window-icon cv">📄</div>CV Scanner</div>
+                        </div>
+                        <div class="window-content cv-content">
+                            <div class="cv-toolbar">
+                                <span class="cv-filename" id="cv-filename">resume.pdf</span>
+                                <span class="cv-status scanning" id="cv-status">SCANNING</span>
+                            </div>
+                            <div class="cv-document" id="cv-document">
+                                <div class="cv-scan-line" id="cv-scan-line"></div>
+                                <div id="cv-content"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- SMS Window -->
+                    <div class="service-window" id="window-sms">
+                        <div class="window-header">
+                            <div class="window-controls"><div class="window-control close"></div><div class="window-control minimize"></div><div class="window-control maximize"></div></div>
+                            <div class="window-title"><div class="window-icon sms">💬</div>SMS Outreach</div>
+                        </div>
+                        <div class="window-content sms-content">
+                            <div class="sms-status-bar">
+                                <div class="sms-status-text">Contacting qualified candidates...</div>
+                                <div class="sms-status-sub" id="sms-status-sub">Verifying availability</div>
+                            </div>
+                            <div class="sms-chat-header" id="sms-chat-header"></div>
+                            <div class="sms-conversation" id="sms-conversation"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="map-sidebar">
+                    <div class="map-header">📍 50mi Radius</div>
+                    <div class="map-container" id="map-container">
+                        <div class="map-grid"></div>
+                        <div class="map-radius"></div>
+                        <div class="map-center"></div>
+                        <div class="map-label" style="top:48%;left:52%;">Midland</div>
+                        <div class="map-label" style="top:18%;left:10%;">Lubbock</div>
+                        <div class="map-label" style="top:52%;left:88%;">Odessa</div>
+                        <div class="map-label" style="top:82%;left:20%;">Pecos</div>
+                    </div>
+                    <div class="map-legend">
+                        <div class="map-legend-item"><div class="map-legend-dot job"></div>Job</div>
+                        <div class="map-legend-item"><div class="map-legend-dot qualified"></div>Pass</div>
+                        <div class="map-legend-item"><div class="map-legend-dot rejected"></div>Reject</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="activity-panel">
+            <div class="activity-header">
+                <div class="activity-title">Live Stats</div>
+                <div class="activity-stats">
+                    <div class="stat-box full">
+                        <div class="stat-value" id="stat-sourced">0</div>
+                        <div class="stat-label">Sourced</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value" id="stat-screened">0</div>
+                        <div class="stat-label">Screened</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-value rejected" id="stat-rejected">0</div>
+                        <div class="stat-label">Rejected</div>
+                    </div>
+                    <div class="stat-box full">
+                        <div class="stat-value" id="stat-qualified">0</div>
+                        <div class="stat-label">Qualified</div>
+                    </div>
+                </div>
+            </div>
+            <div class="activity-log" id="activity-log"></div>
+            <div class="progress-section">
+                <div class="progress-label"><span>Progress</span><span id="progress-percent">0%</span></div>
+                <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+            </div>
+            <div class="qualified-section">
+                <div class="qualified-title">Top Candidates</div>
+                <div id="qualified-list"></div>
+            </div>
+            <button class="complete-btn" id="complete-btn" onclick="viewShortlist()">
+                View Shortlist
+                <span>→</span>
+            </button>
+        </div>
+    </main>
+
+    <script>
+        // Copy the entire JavaScript from agent-live-v5.html here
+        // I'll include the key parts and candidates data
+        
+        let seconds = 0;
+        setInterval(() => {
+            seconds++;
+            document.getElementById('timer').textContent = 
+                `${Math.floor(seconds/60).toString().padStart(2,'0')}:${(seconds%60).toString().padStart(2,'0')}`;
+        }, 1000);
+
+        let sourced = 0, screened = 0, rejected = 0, qualified = 0;
+
+        function updateStats() {
+            document.getElementById('stat-sourced').textContent = sourced;
+            document.getElementById('stat-screened').textContent = screened;
+            document.getElementById('stat-rejected').textContent = rejected;
+            document.getElementById('stat-qualified').textContent = qualified;
+        }
+
+        function updateProgress(p) {
+            document.getElementById('progress-fill').style.width = p + '%';
+            document.getElementById('progress-percent').textContent = p + '%';
+        }
+
+        function activateSource(s) {
+            document.querySelectorAll('.source-chip').forEach(c => c.classList.remove('active'));
+            const chip = document.querySelector(`[data-source="${s}"]`);
+            if (chip) chip.classList.add('active');
+        }
+
+        function completeSource(s) {
+            const chip = document.querySelector(`[data-source="${s}"]`);
+            if (chip) { chip.classList.remove('active'); chip.classList.add('done'); }
+        }
+
+        function updateSourceCount(s, n) {
+            document.getElementById(`count-${s}`).textContent = n;
+        }
+
+        function showWindow(id) {
+            document.querySelectorAll('.service-window').forEach(w => w.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function addLog(icon, action, detail) {
+            const log = document.getElementById('activity-log');
+            const time = document.getElementById('timer').textContent;
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const icons = { search: '🔍', screen: '⚡', reject: '✗', sms: '💬', success: '★', verify: '✓' };
+            entry.innerHTML = `
+                <div class="log-time">${time}</div>
+                <div class="log-icon ${icon}">${icons[icon] || '•'}</div>
+                <div class="log-content"><div class="log-action">${action}</div><div class="log-detail">${detail}</div></div>
+            `;
+            log.insertBefore(entry, log.firstChild);
+            setTimeout(() => entry.classList.add('visible'), 50);
+        }
+
+        function addMapPin(x, y, isRejected = false) {
+            const map = document.getElementById('map-container');
+            const pin = document.createElement('div');
+            pin.className = 'map-pin' + (isRejected ? ' rejected' : '');
+            pin.style.left = x + '%';
+            pin.style.top = y + '%';
+            pin.innerHTML = `<div class="map-pin-dot"></div>`;
+            map.appendChild(pin);
+            setTimeout(() => pin.classList.add('visible'), 50);
+        }
+
+        function addQualified(initials, name, meta, score) {
+            const list = document.getElementById('qualified-list');
+            const item = document.createElement('div');
+            item.className = 'qualified-item';
+            item.innerHTML = `
+                <div class="qualified-avatar">${initials}</div>
+                <div class="qualified-info"><div class="qualified-name">${name}</div><div class="qualified-meta">${meta}</div></div>
+                <div class="qualified-score">${score}%</div>
+            `;
+            list.appendChild(item);
+            setTimeout(() => item.classList.add('visible'), 50);
+        }
+
+        function addIndeedCard(name, initials, title, company, loc, years) {
+            const results = document.getElementById('indeed-results');
+            const card = document.createElement('div');
+            card.className = 'indeed-card';
+            card.innerHTML = `
+                <div class="indeed-card-row">
+                    <div class="indeed-avatar">${initials}</div>
+                    <div>
+                        <h4>${name}<span class="indeed-badge">Open to Work</span></h4>
+                        <p>${title} at ${company}</p>
+                    </div>
+                </div>
+                <div class="indeed-meta">
+                    <span>📍 ${loc}</span>
+                    <span>💼 ${years} yrs</span>
+                </div>
+            `;
+            results.appendChild(card);
+            setTimeout(() => card.classList.add('visible'), 50);
+        }
+
+        function setLinkedInFilter(filterId, value) {
+            const filter = document.getElementById(filterId);
+            if (filter) filter.classList.add('active');
+        }
+
+        function addLinkedInResult(name, initials, title, company, loc, connections) {
+            const results = document.getElementById('linkedin-results');
+            const card = document.createElement('div');
+            card.className = 'linkedin-result-card';
+            card.innerHTML = `
+                <div class="linkedin-result-avatar">${initials}</div>
+                <div class="linkedin-result-info">
+                    <div class="linkedin-result-name">${name}</div>
+                    <div class="linkedin-result-title">${title} at ${company}</div>
+                    <div class="linkedin-result-meta">📍 ${loc} • ${connections} connections</div>
+                    <div class="linkedin-result-actions">
+                        <button class="linkedin-action-btn primary">Connect</button>
+                        <button class="linkedin-action-btn secondary">Message</button>
+                    </div>
+                </div>
+            `;
+            results.appendChild(card);
+            setTimeout(() => card.classList.add('visible'), 50);
+        }
+
+        function setRigzoneFilter(filterId, value) {
+            const chip = document.getElementById(filterId);
+            if (chip) {
+                chip.classList.add('active');
+                const label = chip.textContent.split(':')[0];
+                chip.textContent = `${label}: ${value}`;
+            }
+        }
+
+        function addRigzoneResult(name, title, years, company, tags, isHighlight = false) {
+            const results = document.getElementById('rigzone-results');
+            const card = document.createElement('div');
+            card.className = 'rigzone-result-card' + (isHighlight ? ' highlight' : '');
+            card.innerHTML = `
+                <div class="rigzone-result-header">
+                    <span class="rigzone-result-name">${name}</span>
+                    <span class="rigzone-result-exp">${years} YRS</span>
+                </div>
+                <div class="rigzone-result-title">${title} • ${company}</div>
+                <div class="rigzone-tags">
+                    ${tags.map(t => `<span class="rigzone-tag${t.highlight ? ' highlight' : ''}">${t.text}</span>`).join('')}
+                </div>
+            `;
+            results.appendChild(card);
+            setTimeout(() => card.classList.add('visible'), 50);
+        }
+
+        function updateCV(candidate) {
+            document.getElementById('cv-filename').textContent = `resume_${candidate.name.toLowerCase().replace(' ', '_')}.pdf`;
+            document.getElementById('cv-content').innerHTML = candidate.cvHTML;
+            document.getElementById('cv-status').className = 'cv-status scanning';
+            document.getElementById('cv-status').textContent = 'SCANNING';
+            document.getElementById('cv-scan-line').classList.add('active');
+        }
+
+        function setCVStatus(status) {
+            const el = document.getElementById('cv-status');
+            el.className = `cv-status ${status}`;
+            el.textContent = status.toUpperCase();
+            if (status !== 'scanning') {
+                document.getElementById('cv-scan-line').classList.remove('active');
+            }
+        }
+
+        function showSMSChat(name, initials, phone) {
+            const header = document.getElementById('sms-chat-header');
+            header.innerHTML = `
+                <div class="sms-chat-avatar">${initials}</div>
+                <div class="sms-chat-info">
+                    <h4>${name}</h4>
+                    <p>${phone}</p>
+                </div>
+            `;
+            header.classList.add('visible');
+            document.getElementById('sms-conversation').innerHTML = '';
+        }
+
+        function addSMS(text, isOutgoing) {
+            const conv = document.getElementById('sms-conversation');
+            const bubble = document.createElement('div');
+            bubble.className = `sms-bubble ${isOutgoing ? 'outgoing' : 'incoming'}`;
+            bubble.textContent = text;
+            conv.appendChild(bubble);
+            setTimeout(() => bubble.classList.add('visible'), 50);
+            conv.scrollTop = conv.scrollHeight;
+        }
+
+        async function typeText(el, text, speed = 25) {
+            el.value = '';
+            for (let i = 0; i < text.length; i++) {
+                el.value = text.substring(0, i + 1);
+                await sleep(speed);
+            }
+        }
+
+        function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+        function viewShortlist() {
+            window.location.href = 'shortlist.html';
+        }
+
+        const candidates = [
+            { 
+                name: 'James Mitchell', initials: 'JM', title: 'Master Electrician', years: 14, 
+                loc: 'Odessa, TX', phone: '(432) 555-1234',
+                source: 'indeed', x: 85, y: 50, pass: true, score: 97,
+                cvHTML: `
+                    <div class="cv-header-section">
+                        <div class="cv-name">James Mitchell</div>
+                        <div class="cv-title-line">Master Electrician • Industrial & Oil/Gas</div>
+                        <div class="cv-contact">Odessa, TX • (432) 555-1234 • james.mitchell@email.com</div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Summary</div>
+                        <div class="cv-item-desc"><span class="cv-highlight">14 years</span> industrial electrical experience. Master license, HV systems, team leadership. <span class="cv-highlight">Zero safety incidents</span>.</div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Experience</div>
+                        <div class="cv-item">
+                            <div class="cv-item-header"><span class="cv-item-title">Lead Industrial Electrician</span><span class="cv-item-date">2018 - Present</span></div>
+                            <div class="cv-item-company">Permian Basin Energy Services</div>
+                            <div class="cv-item-desc">HV systems (480V-15kV), team of 8, <span class="cv-highlight">zero OSHA recordables</span></div>
+                        </div>
+                        <div class="cv-item">
+                            <div class="cv-item-header"><span class="cv-item-title">Journeyman Electrician</span><span class="cv-item-date">2012 - 2017</span></div>
+                            <div class="cv-item-company">Texas Grid Solutions</div>
+                        </div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Certifications</div>
+                        <div class="cv-skills-list">
+                            <span class="cv-skill-tag cv-highlight">Master Electrician</span>
+                            <span class="cv-skill-tag cv-highlight">OSHA 30</span>
+                            <span class="cv-skill-tag cv-highlight">ISN Verified</span>
+                            <span class="cv-skill-tag">TWIC</span>
+                        </div>
+                    </div>
+                `
+            },
+            { 
+                name: 'Mike Thompson', initials: 'MT', title: 'Electrician', years: 3, 
+                loc: 'Lubbock, TX', phone: '(806) 555-2345',
+                source: 'indeed', x: 18, y: 25, pass: false, reject: 'Less than 5 years experience',
+                cvHTML: `
+                    <div class="cv-header-section">
+                        <div class="cv-name">Mike Thompson</div>
+                        <div class="cv-title-line">Electrician</div>
+                        <div class="cv-contact">Lubbock, TX • (806) 555-2345</div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Experience</div>
+                        <div class="cv-item">
+                            <div class="cv-item-header"><span class="cv-item-title">Electrician</span><span class="cv-item-date">2021 - Present</span></div>
+                            <div class="cv-item-company">Lubbock Electric Co</div>
+                            <div class="cv-item-desc">Residential and light commercial. <span style="color:var(--reject-red)">Total: 3 years (below 5yr minimum)</span></div>
+                        </div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Certifications</div>
+                        <div class="cv-skills-list">
+                            <span class="cv-skill-tag">Journeyman License</span>
+                            <span class="cv-skill-tag">OSHA 10</span>
+                        </div>
+                    </div>
+                `
+            },
+            { 
+                name: 'Roberto Garcia', initials: 'RG', title: 'Senior Electrician', years: 11, 
+                loc: 'Midland, TX', phone: '(432) 555-3456',
+                source: 'linkedin', x: 55, y: 52, pass: true, score: 94,
+                cvHTML: `
+                    <div class="cv-header-section">
+                        <div class="cv-name">Roberto Garcia</div>
+                        <div class="cv-title-line">Senior Industrial Electrician • Data Center & Energy</div>
+                        <div class="cv-contact">Midland, TX • (432) 555-3456 • linkedin.com/in/rgarcia</div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Summary</div>
+                        <div class="cv-item-desc"><span class="cv-highlight">11 years</span> industrial experience. Data centers, oil & gas. Bilingual.</div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Experience</div>
+                        <div class="cv-item">
+                            <div class="cv-item-header"><span class="cv-item-title">Senior Industrial Electrician</span><span class="cv-item-date">2016 - Present</span></div>
+                            <div class="cv-item-company">Texas Grid Solutions</div>
+                            <div class="cv-item-desc"><span class="cv-highlight">Data center electrical</span>, UPS, generators. 99.99% uptime.</div>
+                        </div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Certifications</div>
+                        <div class="cv-skills-list">
+                            <span class="cv-skill-tag cv-highlight">Journeyman License</span>
+                            <span class="cv-skill-tag cv-highlight">OSHA 30</span>
+                            <span class="cv-skill-tag cv-highlight">ISN Verified</span>
+                        </div>
+                    </div>
+                `
+            },
+            { 
+                name: 'David Brown', initials: 'DB', title: 'Commercial Electrician', years: 6, 
+                loc: 'Andrews, TX', phone: '(432) 555-4567',
+                source: 'linkedin', x: 38, y: 35, pass: false, reject: 'No HV certification',
+                cvHTML: `
+                    <div class="cv-header-section">
+                        <div class="cv-name">David Brown</div>
+                        <div class="cv-title-line">Commercial Electrician</div>
+                        <div class="cv-contact">Andrews, TX • (432) 555-4567</div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Experience</div>
+                        <div class="cv-item">
+                            <div class="cv-item-header"><span class="cv-item-title">Commercial Electrician</span><span class="cv-item-date">2018 - Present</span></div>
+                            <div class="cv-item-company">Andrews Electrical</div>
+                            <div class="cv-item-desc">Commercial work, <span style="color:var(--reject-red)">limited to 480V (no HV)</span></div>
+                        </div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Certifications</div>
+                        <div class="cv-skills-list">
+                            <span class="cv-skill-tag">Journeyman License</span>
+                            <span class="cv-skill-tag" style="color:var(--reject-red)">⚠ No HV Cert</span>
+                        </div>
+                    </div>
+                `
+            },
+            { 
+                name: 'David Williams', initials: 'DW', title: 'Industrial Electrician', years: 8, 
+                loc: 'Andrews, TX', phone: '(432) 555-5678',
+                source: 'rigzone', x: 35, y: 42, pass: true, score: 89,
+                cvHTML: `
+                    <div class="cv-header-section">
+                        <div class="cv-name">David Williams</div>
+                        <div class="cv-title-line">Industrial Electrician • Oil & Gas</div>
+                        <div class="cv-contact">Andrews, TX • (432) 555-5678</div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Summary</div>
+                        <div class="cv-item-desc"><span class="cv-highlight">8 years</span> oil & gas. PLC programming, motor controls. <span class="cv-highlight">ISN verified</span>.</div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Experience</div>
+                        <div class="cv-item">
+                            <div class="cv-item-header"><span class="cv-item-title">Industrial Electrician</span><span class="cv-item-date">2019 - Present</span></div>
+                            <div class="cv-item-company">Apex Energy Services</div>
+                            <div class="cv-item-desc"><span class="cv-highlight">PLC programming</span>, VFDs, instrumentation</div>
+                        </div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Certifications</div>
+                        <div class="cv-skills-list">
+                            <span class="cv-skill-tag cv-highlight">Journeyman License</span>
+                            <span class="cv-skill-tag cv-highlight">OSHA 30</span>
+                            <span class="cv-skill-tag cv-highlight">ISN Verified</span>
+                            <span class="cv-skill-tag">Allen-Bradley PLC</span>
+                        </div>
+                    </div>
+                `
+            },
+            { 
+                name: 'Tommy Lee', initials: 'TL', title: 'Journeyman Wireman', years: 7, 
+                loc: 'Pecos, TX', phone: '(432) 555-6789',
+                source: 'rigzone', x: 25, y: 78, pass: false, reject: 'ISN expired (Jan 2024)',
+                cvHTML: `
+                    <div class="cv-header-section">
+                        <div class="cv-name">Tommy Lee</div>
+                        <div class="cv-title-line">Journeyman Wireman</div>
+                        <div class="cv-contact">Pecos, TX • (432) 555-6789</div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Experience</div>
+                        <div class="cv-item">
+                            <div class="cv-item-header"><span class="cv-item-title">Journeyman Wireman</span><span class="cv-item-date">2017 - Present</span></div>
+                            <div class="cv-item-company">Pecos Electric</div>
+                        </div>
+                    </div>
+                    <div class="cv-section">
+                        <div class="cv-section-title">Certifications</div>
+                        <div class="cv-skills-list">
+                            <span class="cv-skill-tag">Journeyman License</span>
+                            <span class="cv-skill-tag" style="background:rgba(239,68,68,0.15);color:var(--reject-red)">⚠ ISN EXPIRED</span>
+                        </div>
+                    </div>
+                `
+            },
+        ];
+
+        async function runDemo() {
+            const status = document.getElementById('agent-status');
+
+            // Phase 1: Indeed
+            await sleep(1500);
+            status.textContent = 'Connecting to Indeed...';
+            showWindow('window-indeed');
+            activateSource('indeed');
+            addLog('search', 'Connecting to Indeed', 'Searching candidates');
+            
+            await sleep(1000);
+            await typeText(document.getElementById('indeed-input'), 'Industrial Electrician Midland TX 50mi', 30);
+            
+            await sleep(800);
+            status.textContent = 'Sourcing from Indeed...';
+            
+            addIndeedCard('James Mitchell', 'JM', 'Master Electrician', 'Permian Basin Energy', 'Odessa, TX', 14);
+            await sleep(600);
+            sourced += 15; updateSourceCount('indeed', sourced); updateStats();
+            
+            addIndeedCard('Mike Thompson', 'MT', 'Electrician', 'Lubbock Electric Co', 'Lubbock, TX', 3);
+            await sleep(600);
+            sourced += 18; updateSourceCount('indeed', sourced); updateStats();
+            
+            addIndeedCard('Carlos Mendez', 'CM', 'Apprentice Electrician', 'Midland Contractors', 'Midland, TX', 1);
+            await sleep(600);
+            sourced += 12; updateSourceCount('indeed', sourced); updateStats();
+            
+            addLog('search', 'Indeed complete', `${sourced} candidates`);
+            updateProgress(15);
+            await sleep(1000);
+            completeSource('indeed');
+
+            // Phase 2: LinkedIn
+            await sleep(800);
+            status.textContent = 'Opening LinkedIn Recruiter...';
+            showWindow('window-linkedin');
+            activateSource('linkedin');
+            addLog('search', 'LinkedIn Recruiter', 'Opening search');
+            
+            await sleep(1000);
+            await typeText(document.getElementById('linkedin-search'), 'Industrial Electrician', 35);
+            
+            await sleep(600);
+            status.textContent = 'Applying filters...';
+            setLinkedInFilter('filter-location', 'Midland, TX (50mi)');
+            document.getElementById('filter-loc-val').textContent = 'Midland, TX (50mi)';
+            await sleep(500);
+            
+            setLinkedInFilter('filter-exp', '5+ years');
+            document.getElementById('filter-exp-val').textContent = '5+ years';
+            await sleep(500);
+            
+            setLinkedInFilter('filter-industry', 'Oil & Gas');
+            document.getElementById('filter-ind-val').textContent = 'Oil & Gas';
+            addLog('search', 'Filters applied', 'Location, Experience, Industry');
+            
+            await sleep(800);
+            status.textContent = 'Searching profiles...';
+            document.getElementById('linkedin-results-header').style.display = 'flex';
+            
+            await sleep(600);
+            addLinkedInResult('Roberto Garcia', 'RG', 'Senior Industrial Electrician', 'Texas Grid Solutions', 'Midland, TX', '500+');
+            document.getElementById('linkedin-results-count').textContent = '1 of 32';
+            
+            await sleep(500);
+            addLinkedInResult('David Brown', 'DB', 'Commercial Electrician', 'Andrews Electrical', 'Andrews, TX', '287');
+            document.getElementById('linkedin-results-count').textContent = '2 of 32';
+            
+            await sleep(500);
+            addLinkedInResult('Kevin Wilson', 'KW', 'Industrial Electrician', 'Big Spring Electric', 'Big Spring, TX', '412');
+            document.getElementById('linkedin-results-count').textContent = '32 results';
+            
+            sourced += 32; updateSourceCount('linkedin', 32); updateStats();
+            addLog('search', 'LinkedIn complete', '32 profiles');
+            updateProgress(28);
+            await sleep(1000);
+            completeSource('linkedin');
+
+            // Phase 3: Rigzone
+            await sleep(800);
+            status.textContent = 'Opening Rigzone...';
+            showWindow('window-rigzone');
+            activateSource('rigzone');
+            addLog('search', 'Rigzone', 'Oil & gas board');
+            
+            await sleep(800);
+            await typeText(document.getElementById('rigzone-search'), 'Electrician Permian Basin', 30);
+            
+            await sleep(600);
+            status.textContent = 'Setting filters...';
+            
+            setRigzoneFilter('rz-filter-role', 'Electrician');
+            await sleep(400);
+            setRigzoneFilter('rz-filter-loc', 'Permian Basin');
+            await sleep(400);
+            setRigzoneFilter('rz-filter-exp', '5+ years');
+            await sleep(400);
+            setRigzoneFilter('rz-filter-cert', 'ISN Verified');
+            addLog('search', 'Filters set', 'Role, Location, Experience, Certs');
+            
+            await sleep(800);
+            status.textContent = 'Loading results...';
+            document.getElementById('rigzone-results-bar').style.display = 'flex';
+            
+            await sleep(500);
+            addRigzoneResult('David Williams', 'Industrial Electrician', 8, 'Apex Energy', [
+                {text: 'Oil & Gas', highlight: true}, {text: 'ISN Verified', highlight: false}, {text: 'PLC', highlight: false}
+            ], true);
+            document.getElementById('rigzone-results-count').textContent = '1 of 28';
+            
+            await sleep(500);
+            addRigzoneResult('Tommy Lee', 'Journeyman Wireman', 7, 'Pecos Electric', [
+                {text: 'Oil & Gas', highlight: true}, {text: 'Industrial', highlight: false}
+            ], false);
+            document.getElementById('rigzone-results-count').textContent = '2 of 28';
+            
+            await sleep(400);
+            addRigzoneResult('Steve Martinez', 'Industrial Electrician', 5, 'Monahans Energy', [
+                {text: 'Oil & Gas', highlight: true}, {text: 'HV Systems', highlight: false}
+            ], false);
+            document.getElementById('rigzone-results-count').textContent = '28 candidates';
+            
+            sourced += 28; updateSourceCount('rigzone', 28); updateStats();
+            addLog('search', 'Rigzone complete', '28 candidates');
+            updateProgress(38);
+            await sleep(800);
+            completeSource('rigzone');
+
+            // Quick sources
+            await sleep(500);
+            activateSource('ibew');
+            await sleep(800);
+            sourced += 22; updateSourceCount('ibew', 22); updateStats();
+            addLog('search', 'IBEW Local 520', '22 members');
+            updateProgress(42);
+            completeSource('ibew');
+
+            await sleep(400);
+            activateSource('tradesmen');
+            await sleep(600);
+            sourced += 15; updateSourceCount('tradesmen', 15); updateStats();
+            addLog('search', 'Tradesmen Int\'l', '15 contractors');
+            updateProgress(46);
+            completeSource('tradesmen');
+
+            addLog('success', 'Sourcing complete', `${sourced} total`);
+
+            // Phase 4: CV Screening
+            await sleep(1500);
+            status.textContent = 'Scanning resumes...';
+            showWindow('window-cv');
+            addLog('screen', 'CV scanning', 'Analyzing resumes');
+            
+            for (let i = 0; i < candidates.length; i++) {
+                const c = candidates[i];
+                status.textContent = `Scanning: ${c.name}`;
+                updateCV(c);
+                addMapPin(c.x, c.y, !c.pass);
+                
+                await sleep(1800);
+                screened++;
+                updateStats();
+                
+                if (c.pass) {
+                    setCVStatus('passed');
+                    addLog('success', `Passed: ${c.name}`, `Score: ${c.score}%`);
+                    qualified++;
+                    updateStats();
+                    addQualified(c.initials, c.name, `${c.title} • ${c.years} yrs`, c.score);
+                } else {
+                    setCVStatus('rejected');
+                    addLog('reject', `Rejected: ${c.name}`, c.reject);
+                    rejected++;
+                    updateStats();
+                }
+                
+                updateProgress(46 + Math.floor((i / candidates.length) * 35));
+                await sleep(800);
+            }
+
+            addLog('screen', 'Screening complete', `${qualified} qualified`);
+
+            // Phase 5: SMS
+            await sleep(1500);
+            status.textContent = 'Contacting candidates...';
+            showWindow('window-sms');
+            document.getElementById('sms-status-sub').textContent = `Reaching out to ${qualified} candidates`;
+            addLog('sms', 'SMS outreach', `Contacting ${qualified} candidates`);
+            
+            await sleep(1200);
+            showSMSChat('James Mitchell', 'JM', '(432) 555-1234');
+            
+            await sleep(800);
+            addSMS('Hi James, this is Tener AI. Industrial Electrician in Midland, $52/hr, starts Monday. Interested?', true);
+            
+            await sleep(2000);
+            addSMS('Hey! Yes, interested. What company?', false);
+            
+            await sleep(1500);
+            addSMS('Apex Data Center. 3 month contract. They need HV experience and OSHA 30.', true);
+            
+            await sleep(1800);
+            addSMS('Perfect, I have both. I can start Monday. What time?', false);
+            addLog('sms', 'James Mitchell', 'Confirmed Monday');
+            
+            await sleep(1500);
+            addSMS('Great! 6:30 AM at 2847 Industrial Blvd. I\'ll email full details.', true);
+            
+            await sleep(1500);
+            addSMS('Got it. Thanks! 👍', false);
+            
+            document.getElementById('sms-status-sub').textContent = '1 of 3 confirmed';
+            updateProgress(95);
+
+            await sleep(1500);
+            addLog('verify', 'Verification', 'ISN, OSHA, background: CLEAR');
+            updateProgress(100);
+            
+            await sleep(800);
+            status.textContent = `Complete — ${qualified} qualified, ready to hire`;
+            addLog('success', 'Done', `${sourced} → ${screened} → ${qualified} qualified`);
+            
+            document.getElementById('complete-btn').classList.add('visible');
+        }
+
+        setTimeout(runDemo, 1000);
+    </script>
+</body>
+</html>

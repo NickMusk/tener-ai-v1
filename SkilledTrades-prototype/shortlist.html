@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Shortlist</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: #f8fafc;
+            color: #0f172a;
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        nav {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            padding: 12px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fff;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+
+        .logo-icon {
+            width: 24px;
+            height: 24px;
+            background: #0d9488;
+            border-radius: 6px;
+        }
+
+        .nav-right {
+            display: flex;
+            gap: 12px;
+        }
+
+        .nav-btn {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .nav-btn.outline {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            color: #475569;
+        }
+
+        .nav-btn.primary {
+            background: #0d9488;
+            border: none;
+            color: #fff;
+        }
+
+        .main {
+            padding: 100px 40px 60px;
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .header {
+            margin-bottom: 32px;
+        }
+
+        .breadcrumb {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #94a3b8;
+            margin-bottom: 16px;
+        }
+
+        .breadcrumb a { color: #0d9488; text-decoration: none; }
+
+        .page-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            gap: 24px;
+        }
+
+        .page-header h1 {
+            font-size: 1.75rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .page-header p { color: #64748b; font-size: 0.95rem; }
+
+        .summary {
+            display: flex;
+            gap: 24px;
+            padding: 16px 20px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+        }
+
+        .summary-item { text-align: center; }
+
+        .summary-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #0d9488;
+        }
+
+        .summary-label {
+            font-size: 0.7rem;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+            gap: 20px;
+        }
+
+        .card {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+
+        .card:hover {
+            box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+            transform: translateY(-2px);
+        }
+
+        .card.top {
+            border-color: #0d9488;
+            box-shadow: 0 0 0 3px rgba(13,148,136,0.1);
+        }
+
+        .card-header {
+            padding: 20px;
+            display: flex;
+            gap: 14px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .avatar {
+            width: 52px;
+            height: 52px;
+            background: #f1f5f9;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            color: #64748b;
+            flex-shrink: 0;
+        }
+
+        .card.top .avatar {
+            background: rgba(13,148,136,0.1);
+            color: #0d9488;
+        }
+
+        .card-info { flex: 1; }
+
+        .card-name {
+            font-size: 1.05rem;
+            font-weight: 600;
+            margin-bottom: 2px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .top-badge {
+            background: #0d9488;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.6rem;
+            font-weight: 700;
+        }
+
+        .card-title {
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 6px;
+        }
+
+        .card-meta {
+            display: flex;
+            gap: 12px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+
+        .availability {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 8px;
+            padding: 4px 10px;
+            background: rgba(34,197,94,0.1);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            color: #16a34a;
+        }
+
+        .availability::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            background: #16a34a;
+            border-radius: 50%;
+        }
+
+        .availability.notice {
+            background: rgba(245,158,11,0.1);
+            color: #d97706;
+        }
+
+        .availability.notice::before { background: #d97706; }
+
+        .card-score {
+            text-align: right;
+        }
+
+        .score-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: #0d9488;
+        }
+
+        .score-label {
+            font-size: 0.65rem;
+            color: #94a3b8;
+        }
+
+        .card-body { padding: 20px; }
+
+        .section-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #94a3b8;
+            margin-bottom: 10px;
+        }
+
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 18px;
+        }
+
+        .tag {
+            padding: 5px 10px;
+            background: rgba(13,148,136,0.08);
+            border-radius: 6px;
+            font-size: 0.75rem;
+            color: #0d9488;
+        }
+
+        .tag.verified {
+            background: rgba(34,197,94,0.1);
+            color: #16a34a;
+        }
+
+        .exp-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 0.85rem;
+        }
+
+        .exp-item:last-child { border-bottom: none; }
+        .exp-role { font-weight: 500; }
+        .exp-company { color: #94a3b8; font-size: 0.8rem; }
+        .exp-date { color: #94a3b8; font-size: 0.8rem; }
+
+        .contact {
+            margin-top: 16px;
+            padding-top: 16px;
+            border-top: 1px solid #f1f5f9;
+        }
+
+        .contact-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+            color: #64748b;
+            margin-bottom: 6px;
+        }
+
+        .contact-icon {
+            width: 26px;
+            height: 26px;
+            background: #f1f5f9;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .card-footer {
+            display: flex;
+            gap: 10px;
+            padding: 16px 20px;
+            background: #f8fafc;
+        }
+
+        .card-btn {
+            flex: 1;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .card-btn.outline {
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            color: #64748b;
+        }
+
+        .card-btn.primary {
+            background: #0d9488;
+            border: none;
+            color: #fff;
+        }
+
+        @media (max-width: 768px) {
+            nav { padding: 12px 20px; }
+            .main { padding: 100px 20px 40px; }
+            .page-header { flex-direction: column; align-items: flex-start; }
+            .grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">
+            <div class="logo-icon"></div>
+            Tener
+        </div>
+        <div class="nav-right">
+            <button class="nav-btn outline" onclick="location.href='landing.html'">New Search</button>
+            <button class="nav-btn primary">Export</button>
+        </div>
+    </nav>
+
+    <main class="main">
+        <div class="header">
+            <div class="breadcrumb">
+                <a href="landing.html">Home</a>
+                <span>→</span>
+                <a href="search.html">Search</a>
+                <span>→</span>
+                <span>Shortlist</span>
+            </div>
+            <div class="page-header">
+                <div>
+                    <h1>Your Shortlist</h1>
+                    <p>Industrial Electrician • Midland, TX • 3 positions</p>
+                </div>
+                <div class="summary">
+                    <div class="summary-item">
+                        <div class="summary-value">142</div>
+                        <div class="summary-label">Sourced</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-value">6</div>
+                        <div class="summary-label">Screened</div>
+                    </div>
+                    <div class="summary-item">
+                        <div class="summary-value">3</div>
+                        <div class="summary-label">Qualified</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid">
+            <!-- James Mitchell -->
+            <div class="card top">
+                <div class="card-header">
+                    <div class="avatar">JM</div>
+                    <div class="card-info">
+                        <div class="card-name">James Mitchell <span class="top-badge">TOP MATCH</span></div>
+                        <div class="card-title">Master Electrician • 14 years</div>
+                        <div class="card-meta">
+                            <span>📍 Odessa, TX</span>
+                            <span>💰 $52/hr</span>
+                        </div>
+                        <div class="availability">Available Monday</div>
+                    </div>
+                    <div class="card-score">
+                        <div class="score-value">97%</div>
+                        <div class="score-label">Match</div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="section-label">Highlights</div>
+                    <div class="tags">
+                        <span class="tag">Master License</span>
+                        <span class="tag">HV Systems (15kV)</span>
+                        <span class="tag">Zero Incidents</span>
+                        <span class="tag verified">✓ ISN Verified</span>
+                        <span class="tag verified">✓ OSHA 30</span>
+                    </div>
+                    <div class="section-label">Experience</div>
+                    <div class="exp-item">
+                        <div>
+                            <div class="exp-role">Lead Industrial Electrician</div>
+                            <div class="exp-company">Permian Basin Energy</div>
+                        </div>
+                        <div class="exp-date">2018 — Now</div>
+                    </div>
+                    <div class="exp-item">
+                        <div>
+                            <div class="exp-role">Journeyman Electrician</div>
+                            <div class="exp-company">Texas Grid Solutions</div>
+                        </div>
+                        <div class="exp-date">2012 — 2017</div>
+                    </div>
+                    <div class="contact">
+                        <div class="contact-row"><div class="contact-icon">📱</div>(432) 555-1234</div>
+                        <div class="contact-row"><div class="contact-icon">✉️</div>james.mitchell@email.com</div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button class="card-btn outline">View Profile</button>
+                    <button class="card-btn primary">Schedule Interview</button>
+                </div>
+            </div>
+
+            <!-- Roberto Garcia -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="avatar">RG</div>
+                    <div class="card-info">
+                        <div class="card-name">Roberto Garcia</div>
+                        <div class="card-title">Senior Electrician • 11 years</div>
+                        <div class="card-meta">
+                            <span>📍 Midland, TX</span>
+                            <span>💰 $48/hr</span>
+                        </div>
+                        <div class="availability">Available immediately</div>
+                    </div>
+                    <div class="card-score">
+                        <div class="score-value">94%</div>
+                        <div class="score-label">Match</div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="section-label">Highlights</div>
+                    <div class="tags">
+                        <span class="tag">Data Center Exp</span>
+                        <span class="tag">Bilingual EN/ES</span>
+                        <span class="tag">99.99% Uptime</span>
+                        <span class="tag verified">✓ ISN Verified</span>
+                        <span class="tag verified">✓ OSHA 30</span>
+                    </div>
+                    <div class="section-label">Experience</div>
+                    <div class="exp-item">
+                        <div>
+                            <div class="exp-role">Senior Industrial Electrician</div>
+                            <div class="exp-company">Texas Grid Solutions</div>
+                        </div>
+                        <div class="exp-date">2016 — Now</div>
+                    </div>
+                    <div class="exp-item">
+                        <div>
+                            <div class="exp-role">Industrial Electrician</div>
+                            <div class="exp-company">Midland Energy Services</div>
+                        </div>
+                        <div class="exp-date">2013 — 2016</div>
+                    </div>
+                    <div class="contact">
+                        <div class="contact-row"><div class="contact-icon">📱</div>(432) 555-3456</div>
+                        <div class="contact-row"><div class="contact-icon">✉️</div>roberto.garcia@email.com</div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button class="card-btn outline">View Profile</button>
+                    <button class="card-btn primary">Schedule Interview</button>
+                </div>
+            </div>
+
+            <!-- David Williams -->
+            <div class="card">
+                <div class="card-header">
+                    <div class="avatar">DW</div>
+                    <div class="card-info">
+                        <div class="card-name">David Williams</div>
+                        <div class="card-title">Industrial Electrician • 8 years</div>
+                        <div class="card-meta">
+                            <span>📍 Andrews, TX</span>
+                            <span>💰 $45/hr</span>
+                        </div>
+                        <div class="availability notice">2 weeks notice</div>
+                    </div>
+                    <div class="card-score">
+                        <div class="score-value">89%</div>
+                        <div class="score-label">Match</div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="section-label">Highlights</div>
+                    <div class="tags">
+                        <span class="tag">PLC Programming</span>
+                        <span class="tag">Oil & Gas</span>
+                        <span class="tag">VFD Systems</span>
+                        <span class="tag verified">✓ ISN Verified</span>
+                        <span class="tag verified">✓ OSHA 30</span>
+                    </div>
+                    <div class="section-label">Experience</div>
+                    <div class="exp-item">
+                        <div>
+                            <div class="exp-role">Industrial Electrician</div>
+                            <div class="exp-company">Apex Energy Services</div>
+                        </div>
+                        <div class="exp-date">2019 — Now</div>
+                    </div>
+                    <div class="exp-item">
+                        <div>
+                            <div class="exp-role">Electrician</div>
+                            <div class="exp-company">Pioneer Natural Resources</div>
+                        </div>
+                        <div class="exp-date">2016 — 2018</div>
+                    </div>
+                    <div class="contact">
+                        <div class="contact-row"><div class="contact-icon">📱</div>(432) 555-5678</div>
+                        <div class="contact-row"><div class="contact-icon">✉️</div>david.williams@email.com</div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button class="card-btn outline">View Profile</button>
+                    <button class="card-btn primary">Schedule Interview</button>
+                </div>
+            </div>
+        </div>
+    </main>
+</body>
+</html>

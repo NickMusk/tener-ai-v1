@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tener | Skilled Trades Staffing — 48 Hours Guaranteed</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fb;
+            --bg-card: #ffffff;
+            --bg-card-hover: #f3f4f6;
+            --accent: #0d9488;
+            --accent-light: #14b8a6;
+            --accent-dim: rgba(13, 148, 136, 0.08);
+            --accent-glow: rgba(13, 148, 136, 0.15);
+            --text-primary: #111827;
+            --text-secondary: #6b7280;
+            --text-dim: #9ca3af;
+            --border: #e5e7eb;
+            --border-strong: #d1d5db;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --success: #10b981;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Nav */
+        nav {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            z-index: 100;
+            padding: 1rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            font-size: 1.4rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-primary);
+        }
+
+        .logo-icon {
+            width: 32px; height: 32px;
+            background: var(--accent);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .theme-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .theme-btn {
+            padding: 0.4rem 0.6rem;
+            background: transparent;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .theme-btn.active {
+            background: var(--accent);
+            color: white;
+        }
+
+        .nav-phone {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .nav-phone a {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .nav-btn {
+            padding: 0.6rem 1.2rem;
+            background: var(--accent);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .nav-btn:hover {
+            background: var(--accent-light);
+        }
+
+        /* Hero */
+        .hero {
+            position: relative;
+            z-index: 1;
+            padding: 7rem 2rem 3rem;
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+        }
+
+        /* Trust Bar */
+        .trust-bar {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .trust-item {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .trust-item .check {
+            color: var(--accent);
+            font-weight: bold;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .hero-title {
+            font-size: clamp(2.5rem, 6vw, 4rem);
+            font-weight: 800;
+            line-height: 1.1;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            animation: fadeIn 0.5s ease-out 0.1s both;
+        }
+
+        .hero-title .highlight {
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero-subtitle {
+            font-size: 1.15rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            max-width: 600px;
+            margin-bottom: 2rem;
+            animation: fadeIn 0.5s ease-out 0.2s both;
+        }
+
+        /* Main Card */
+        .main-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2rem;
+            width: 100%;
+            max-width: 600px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
+            animation: fadeIn 0.5s ease-out 0.3s both;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        /* Simple Form */
+        .simple-form {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .form-select, .form-input {
+            padding: 0.9rem 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-select:focus, .form-input:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+
+        .submit-btn {
+            padding: 1rem;
+            background: linear-gradient(135deg, var(--accent), var(--accent-light));
+            border: none;
+            border-radius: 12px;
+            color: white;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 30px var(--accent-glow);
+        }
+
+        /* Pricing Preview */
+        .pricing-preview {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border);
+        }
+
+        .pricing-item {
+            text-align: center;
+        }
+
+        .pricing-label {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            display: block;
+        }
+
+        .pricing-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1rem;
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        /* Guarantee Badge */
+        .guarantee-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: var(--accent-dim);
+            border: 1px solid rgba(13, 148, 136, 0.2);
+            border-radius: 10px;
+            font-size: 0.9rem;
+            color: var(--accent);
+        }
+
+        /* Job description section */
+        .jd-section {
+            margin-top: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .job-textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            resize: vertical;
+        }
+
+        .job-textarea:focus {
+            outline: none;
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-dim);
+        }
+
+        .upload-row {
+            display: flex;
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+
+        .upload-btn {
+            flex: 1;
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+            border: 1px dashed var(--border-strong);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.2s;
+        }
+
+        .upload-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+            background: var(--accent-dim);
+        }
+
+        /* Human Support Banner */
+        .support-banner {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-top: 2rem;
+            padding: 1.25rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            width: 100%;
+            max-width: 600px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+            animation: fadeIn 0.5s ease-out 0.4s both;
+        }
+
+        .support-avatar {
+            width: 48px; height: 48px;
+            background: var(--accent);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: white;
+            flex-shrink: 0;
+        }
+
+        .support-info {
+            flex: 1;
+        }
+
+        .support-name {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--text-primary);
+        }
+
+        .support-title {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+
+        .support-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .support-btn {
+            padding: 0.5rem 0.9rem;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.85rem;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            transition: all 0.2s;
+        }
+
+        .support-btn:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .support-btn.call {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: white;
+        }
+
+        .support-btn.call:hover {
+            background: var(--accent-light);
+        }
+
+        /* Two Column Layout */
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin-top: 3rem;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        /* Compliance Section */
+        .compliance-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        }
+
+        .compliance-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+        }
+
+        .compliance-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.75rem;
+        }
+
+        .compliance-item {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.6rem 0.8rem;
+            background: var(--bg-secondary);
+            border-radius: 8px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .compliance-item .icon {
+            font-size: 1rem;
+        }
+
+        /* Stats Card */
+        .stats-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        }
+
+        .stats-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 10px;
+        }
+
+        .stat-value {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-top: 0.25rem;
+        }
+
+        /* Testimonials */
+        .testimonials {
+            margin-top: 3rem;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        .testimonials-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+            margin-bottom: 1rem;
+        }
+
+        .testimonial-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1rem;
+        }
+
+        .testimonial-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            padding: 1.25rem;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+        }
+
+        .testimonial-text {
+            font-size: 0.95rem;
+            line-height: 1.6;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            font-style: italic;
+        }
+
+        .testimonial-author {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .testimonial-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-primary);
+        }
+
+        .testimonial-role {
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+
+        /* Agency Banner */
+        .agency-banner {
+            margin-top: 3rem;
+            padding: 1.5rem;
+            background: linear-gradient(135deg, var(--accent-dim), rgba(13, 148, 136, 0.04));
+            border: 1px solid rgba(13, 148, 136, 0.2);
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            width: 100%;
+            max-width: 800px;
+            text-align: left;
+        }
+
+        .agency-icon {
+            font-size: 2rem;
+        }
+
+        .agency-content {
+            flex: 1;
+        }
+
+        .agency-content h4 {
+            font-size: 1rem;
+            margin-bottom: 0.25rem;
+            color: var(--text-primary);
+        }
+
+        .agency-content p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+        }
+
+        .agency-link {
+            color: var(--accent);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            white-space: nowrap;
+        }
+
+        .agency-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Live Feed */
+        .live-feed {
+            margin-top: 3rem;
+            width: 100%;
+            max-width: 800px;
+            text-align: left;
+        }
+
+        .feed-header {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+
+        .pulse-dot {
+            width: 8px; height: 8px;
+            background: var(--success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .feed-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--text-dim);
+        }
+
+        .feed-items {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .feed-item {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem 1rem;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.02);
+        }
+
+        .feed-item strong {
+            color: var(--text-primary);
+        }
+
+        .feed-time {
+            margin-left: auto;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+
+        /* Footer */
+        footer {
+            margin-top: 4rem;
+            padding: 2rem;
+            border-top: 1px solid var(--border);
+            text-align: center;
+            color: var(--text-dim);
+            font-size: 0.85rem;
+            background: var(--bg-primary);
+        }
+
+        footer a {
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+
+        footer a:hover {
+            color: var(--accent);
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .two-col, .testimonial-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .hero { padding: 6rem 1rem 2rem; }
+            .form-row { grid-template-columns: 1fr; }
+            .pricing-preview { flex-direction: column; gap: 1rem; }
+            .support-banner { flex-direction: column; text-align: center; }
+            .support-actions { width: 100%; justify-content: center; }
+            .agency-banner { flex-direction: column; text-align: center; }
+            .compliance-grid { grid-template-columns: 1fr; }
+            .nav-phone { display: none; }
+        }
+    </style>
+</head>
+<body>
+    <nav>
+        <div class="logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="white" stroke-width="2.5">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+                </svg>
+            </div>
+            <span>Tener</span>
+        </div>
+        <div class="nav-right">
+            <div class="theme-toggle">
+                <button class="theme-btn" onclick="window.location.href='index.html'">🌙</button>
+                <button class="theme-btn active">☀️</button>
+            </div>
+            <div class="nav-phone">
+                <span>📞</span>
+                <a href="tel:+18005551234">(800) 555-1234</a>
+                <span>— 24/7 Support</span>
+            </div>
+            <button class="nav-btn">Log In</button>
+        </div>
+    </nav>
+
+    <main class="hero">
+        <!-- Trust Bar -->
+        <div class="trust-bar">
+            <div class="trust-item"><span class="check">✓</span> ISNetworld Verified</div>
+            <div class="trust-item"><span class="check">✓</span> 90-Day Replacement Guarantee</div>
+            <div class="trust-item"><span class="check">✓</span> Background & Drug Tested</div>
+            <div class="trust-item"><span class="check">✓</span> Dedicated Account Manager</div>
+        </div>
+
+        <h1 class="hero-title">
+            Qualified crews.<br>
+            <span class="highlight">48 hours. Guaranteed.</span>
+        </h1>
+
+        <p class="hero-subtitle">
+            First shortlist in 48 hours or your search is free. Every candidate background checked, drug tested, certifications verified through ISNetworld. Real humans on call 24/7.
+        </p>
+
+        <!-- Main Card - Simple Form -->
+        <div class="main-card">
+            <h3 class="card-title">What do you need?</h3>
+            
+            <div class="simple-form">
+                <div class="form-row">
+                    <select class="form-select">
+                        <option value="">Trade type...</option>
+                        <option>⚡ Electrician</option>
+                        <option>🔧 Welder</option>
+                        <option>❄️ HVAC Technician</option>
+                        <option>🔩 Pipefitter</option>
+                        <option>🛢️ Drilling Specialist</option>
+                        <option>🏗️ Heavy Equipment</option>
+                        <option>🔌 Instrumentation</option>
+                    </select>
+                    <select class="form-select">
+                        <option value="">How many?</option>
+                        <option>1 worker</option>
+                        <option>2-3 workers</option>
+                        <option>4-5 workers</option>
+                        <option>6-10 workers</option>
+                        <option>10+ workers</option>
+                    </select>
+                </div>
+                <div class="form-row">
+                    <input type="text" class="form-input" placeholder="City or ZIP code">
+                    <select class="form-select">
+                        <option value="">When needed?</option>
+                        <option>ASAP</option>
+                        <option>Within 1 week</option>
+                        <option>Within 2 weeks</option>
+                        <option>Within 1 month</option>
+                    </select>
+                </div>
+
+                <div class="jd-section">
+                    <label style="display: block; font-size: 0.9rem; font-weight: 500; margin-bottom: 0.5rem; color: var(--text-secondary);">Job Description (optional)</label>
+                    <textarea class="job-textarea" placeholder="Paste full job description or detailed requirements here..."></textarea>
+                    <div class="upload-row">
+                        <button class="upload-btn">📎 Upload JD (PDF/Word)</button>
+                        <button class="upload-btn">🔗 Import from ATS</button>
+                    </div>
+                </div>
+
+                <button class="submit-btn" onclick="window.location.href='search.html'">
+                    Find Workers Now
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="5" y1="12" x2="19" y2="12"/>
+                        <polyline points="12 5 19 12 12 19"/>
+                    </svg>
+                </button>
+
+                <!-- Pricing Preview -->
+                <div class="pricing-preview">
+                    <div class="pricing-item">
+                        <span class="pricing-label">Direct Hire</span>
+                        <span class="pricing-value">15% of salary</span>
+                    </div>
+                    <div class="pricing-item">
+                        <span class="pricing-label">Contract/Temp</span>
+                        <span class="pricing-value">18% markup</span>
+                    </div>
+                    <div class="pricing-item">
+                        <span class="pricing-label">No placement?</span>
+                        <span class="pricing-value">No fee</span>
+                    </div>
+                </div>
+
+                <!-- Guarantee -->
+                <div class="guarantee-badge">
+                    🛡️ 90-day replacement guarantee — if they don't work out, we find replacement free
+                </div>
+            </div>
+        </div>
+
+        <!-- Human Support -->
+        <div class="support-banner">
+            <div class="support-avatar">MR</div>
+            <div class="support-info">
+                <span class="support-name">Maria Rodriguez</span>
+                <span class="support-title">Your Account Manager — Permian Basin</span>
+            </div>
+            <div class="support-actions">
+                <a href="tel:+18005551234" class="support-btn call">📞 Call Now</a>
+                <button class="support-btn">💬 Live Chat</button>
+            </div>
+        </div>
+
+        <!-- Two Column: Compliance + Stats -->
+        <div class="two-col">
+            <div class="compliance-card">
+                <h4 class="compliance-title">Enterprise Compliance</h4>
+                <div class="compliance-grid">
+                    <div class="compliance-item"><span class="icon">🛡️</span> ISNetworld</div>
+                    <div class="compliance-item"><span class="icon">✓</span> Veriforce</div>
+                    <div class="compliance-item"><span class="icon">🔒</span> PEC SafeLand</div>
+                    <div class="compliance-item"><span class="icon">💊</span> DISA Drug Test</div>
+                    <div class="compliance-item"><span class="icon">🔍</span> Background Check</div>
+                    <div class="compliance-item"><span class="icon">📊</span> EEO/OFCCP</div>
+                </div>
+            </div>
+
+            <div class="stats-card">
+                <h4 class="stats-title">This Month</h4>
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <div class="stat-value">847</div>
+                        <div class="stat-label">Workers Placed</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">36hr</div>
+                        <div class="stat-label">Avg. to Shortlist</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">94%</div>
+                        <div class="stat-label">Show-up Rate</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-value">4.8★</div>
+                        <div class="stat-label">Client Rating</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Testimonials -->
+        <div class="testimonials">
+            <h4 class="testimonials-title">What Clients Say</h4>
+            <div class="testimonial-grid">
+                <div class="testimonial-card">
+                    <p class="testimonial-text">"Needed 12 electricians for emergency shutdown. Tener had verified candidates on site in 36 hours. Our usual agency takes 3 weeks."</p>
+                    <div class="testimonial-author">
+                        <span class="testimonial-name">Mike Rodriguez</span>
+                        <span class="testimonial-role">Operations Manager, Cimarex Energy</span>
+                    </div>
+                </div>
+                <div class="testimonial-card">
+                    <p class="testimonial-text">"Finally integrates with ISNetworld. Cut our compliance verification time by 80%. The AI screening actually works."</p>
+                    <div class="testimonial-author">
+                        <span class="testimonial-name">Sarah Chen</span>
+                        <span class="testimonial-role">VP Talent, EdgeCore Digital</span>
+                    </div>
+                </div>
+                <div class="testimonial-card">
+                    <p class="testimonial-text">"Simple. I said I need 2 electricians in San Antonio, they called me with 3 options same day. No forms, no BS."</p>
+                    <div class="testimonial-author">
+                        <span class="testimonial-name">Jorge Mendez</span>
+                        <span class="testimonial-role">Owner, Mendez Electric</span>
+                    </div>
+                </div>
+                <div class="testimonial-card">
+                    <p class="testimonial-text">"We white-labeled their sourcing for our agency. Integrates with Bullhorn perfectly. Our recruiters love it."</p>
+                    <div class="testimonial-author">
+                        <span class="testimonial-name">Amanda Foster</span>
+                        <span class="testimonial-role">HR Coordinator, Allied Staffing</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Agency Banner -->
+        <div class="agency-banner">
+            <div class="agency-icon">🏢</div>
+            <div class="agency-content">
+                <h4>Are you a staffing agency?</h4>
+                <p>White-label our AI sourcing. Integrate with Bullhorn, JobDiva, Avionte. Your branding, your candidates.</p>
+            </div>
+            <a href="agency-light.html" class="agency-link">Tener for Agencies →</a>
+        </div>
+
+        <!-- Live Feed -->
+        <div class="live-feed">
+            <div class="feed-header">
+                <div class="pulse-dot"></div>
+                <span class="feed-title">Live Placements — Last 24 Hours</span>
+            </div>
+            <div class="feed-items">
+                <div class="feed-item">
+                    <span>⚡</span>
+                    <span>3 electricians started at <strong>Cimarex Energy</strong>, Midland TX</span>
+                    <span class="feed-time">2h ago</span>
+                </div>
+                <div class="feed-item">
+                    <span>🔧</span>
+                    <span>5 welders started at <strong>Kinder Morgan</strong>, Odessa TX</span>
+                    <span class="feed-time">4h ago</span>
+                </div>
+                <div class="feed-item">
+                    <span>🛢️</span>
+                    <span>2 drilling specialists started at <strong>Patterson-UTI</strong>, Pecos TX</span>
+                    <span class="feed-time">6h ago</span>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        © 2026 Tener AI. All rights reserved. | <a href="#">Privacy</a> | <a href="#">Terms</a>
+    </footer>
+
+    <script>
+        function toggleDetailed() {
+            const section = document.getElementById('detailed-section');
+            section.classList.toggle('show');
+        }
+    </script>
+</body>
+</html>
