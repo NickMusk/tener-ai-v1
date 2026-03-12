@@ -33,7 +33,10 @@ from .company_culture_profile import (
     UrllibPageFetcher,
     canonicalize_url,
 )
-from .demo_jobs import MainDashboardDemoJobSeeder
+try:
+    from .demo_jobs import MainDashboardDemoJobSeeder
+except ModuleNotFoundError:  # Optional demo tooling is not part of every deploy branch.
+    MainDashboardDemoJobSeeder = None  # type: ignore[assignment]
 from .db import Database
 from .db_backfill import backfill_sqlite_to_postgres
 from .db_parity import DEFAULT_PARITY_TABLES, build_parity_report
@@ -468,10 +471,12 @@ def build_services() -> Dict[str, Any]:
         scoring_policy=scoring_formula,
         llm_responder=llm_responder,
     )
-    demo_job_seeder = MainDashboardDemoJobSeeder(
-        db=db,
-        pre_resume_service=pre_resume_service,
-    )
+    demo_job_seeder = None
+    if MainDashboardDemoJobSeeder is not None:
+        demo_job_seeder = MainDashboardDemoJobSeeder(
+            db=db,
+            pre_resume_service=pre_resume_service,
+        )
     emulator_store = EmulatorProjectStore(
         projects_dir=emulator_projects_dir,
         company_profiles_path=emulator_company_profiles_path,
