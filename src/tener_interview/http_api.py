@@ -60,6 +60,8 @@ def build_services() -> Dict[str, Any]:
                 )
             )
         except Exception as exc:
+            if config.strict_provider_mode:
+                raise RuntimeError(f"Hireflix provider initialization failed in strict mode: {exc}") from exc
             provider = HireflixMockAdapter()
             provider_name = "hireflix_mock"
             provider_error = str(exc)
@@ -89,6 +91,7 @@ def build_services() -> Dict[str, Any]:
         question_generator=question_generator,
         default_ttl_hours=config.token_ttl_hours,
         public_base_url=config.public_base_url,
+        system_name=config.interview_system_name,
     )
 
     return {
@@ -109,13 +112,15 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         parsed = urlparse(self.path)
+        if not self._require_access(method="GET", path=parsed.path):
+            return
 
         if parsed.path in {"/", "/dashboard"}:
             dashboard = project_root() / "src" / "tener_interview" / "static" / "dashboard.html"
             if not dashboard.exists():
                 self._json_response(HTTPStatus.NOT_FOUND, self._error("DASHBOARD_NOT_FOUND", "dashboard file not found"))
                 return
-            self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
+            self._html_response(HTTPStatus.OK, self._brand_dashboard_html(dashboard.read_text(encoding="utf-8")))
             return
 
         if parsed.path == "/health":
@@ -126,7 +131,7 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
             self._json_response(
                 HTTPStatus.OK,
                 {
-                    "service": "Tener Interview Module",
+                    "service": str(getattr(SERVICES["config"], "dashboard_title", "Interview Module") or "Interview Module"),
                     "status": "ok",
                     "endpoints": {
                         "health": "GET /health",
@@ -259,7 +264,7 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
             if not landing.exists():
                 self._json_response(HTTPStatus.NOT_FOUND, self._error("DASHBOARD_NOT_FOUND", "candidate landing file not found"))
                 return
-            self._html_response(HTTPStatus.OK, landing.read_text(encoding="utf-8"))
+            self._html_response(HTTPStatus.OK, self._brand_candidate_landing_html(landing.read_text(encoding="utf-8")))
             return
 
         if parsed.path == "/api/interviews/sessions":
@@ -310,6 +315,8 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
+        if not self._require_access(method="POST", path=parsed.path):
+            return
         payload = self._read_json_body()
         if isinstance(payload, dict) and payload.get("_error"):
             self._json_response(HTTPStatus.BAD_REQUEST, payload)
@@ -377,6 +384,103 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
             return
 
         self._json_response(HTTPStatus.NOT_FOUND, self._error("ROUTE_NOT_FOUND", "route not found"))
+
+    def _authorization_bearer_token(self) -> str:
+        auth = str(self.headers.get("Authorization") or "").strip()
+        if not auth.lower().startswith("bearer "):
+            return ""
+        return auth[7:].strip()
+
+    def _is_public_path(self, *, method: str, path: str) -> bool:
+        normalized = str(path or "").strip()
+        cfg = SERVICES["config"]
+        if normalized == "/health":
+            return True
+        if normalized == "/api":
+            return bool(getattr(cfg, "public_interview_api_index", True))
+        if normalized in {"/", "/dashboard"}:
+            return bool(getattr(cfg, "public_interview_dashboard", True))
+        if normalized.startswith("/api/interviews/entry/"):
+            return True
+        if normalized.startswith("/i/"):
+            return True
+        return False
+
+    def _require_access(self, *, method: str, path: str) -> bool:
+        if self._is_public_path(method=method, path=path):
+            return True
+        cfg = SERVICES["config"]
+        if not bool(getattr(cfg, "require_private_bearer_token", False)):
+            return True
+        if not str(getattr(cfg, "admin_token", "") or "").strip():
+            self._json_response(
+                HTTPStatus.SERVICE_UNAVAILABLE,
+                self._error("ADMIN_TOKEN_MISSING", "admin bearer token is not configured"),
+            )
+            return False
+        if self._authorization_bearer_token() == str(getattr(cfg, "admin_token", "") or "").strip():
+            return True
+        self._json_response(
+            HTTPStatus.UNAUTHORIZED,
+            self._error("ADMIN_AUTH_REQUIRED", "admin bearer token required"),
+        )
+        return False
+
+    def _brand_dashboard_html(self, body: str) -> str:
+        cfg = SERVICES["config"]
+        title = str(getattr(cfg, "dashboard_title", "Interview Admin") or "Interview Admin")
+        heading = str(getattr(cfg, "dashboard_heading", "Interview Admin Dashboard") or "Interview Admin Dashboard")
+        subcopy = str(
+            getattr(
+                cfg,
+                "dashboard_subcopy",
+                "Pick JD from DB, create candidate interview links, then track scored results.",
+            )
+            or "Pick JD from DB, create candidate interview links, then track scored results."
+        )
+        out = str(body or "")
+        out = out.replace(
+            "<title>Tener Interview Admin</title>",
+            f"<title>{self._escape_html(title)}</title>",
+        )
+        out = out.replace("<h1>Interview Admin Dashboard</h1>", f"<h1>{self._escape_html(heading)}</h1>")
+        out = out.replace(
+            "Pick JD from DB, create candidate interview links, then track scored results.",
+            self._escape_html(subcopy),
+        )
+        return out
+
+    def _brand_candidate_landing_html(self, body: str) -> str:
+        cfg = SERVICES["config"]
+        candidate_title = str(getattr(cfg, "candidate_title", "Tener Interview") or "Tener Interview")
+        company_name = str(getattr(cfg, "company_name", "Tener") or "Tener")
+        header_note = str(getattr(cfg, "interview_header_note", "AI Interview Entry") or "AI Interview Entry")
+        out = str(body or "")
+        out = out.replace(
+            "<title>Tener Interview</title>",
+            f"<title>{self._escape_html(candidate_title)}</title>",
+        )
+        out = out.replace(
+            '<div class="logo">tener<span>.ai</span></div>',
+            f'<div class="logo">{self._escape_html(company_name)}</div>',
+        )
+        out = out.replace(
+            '<div class="header-note">AI Interview Entry</div>',
+            f'<div class="header-note">{self._escape_html(header_note)}</div>',
+        )
+        out = out.replace(
+            '<div class="company-name" id="company-name">Tener</div>',
+            f'<div class="company-name" id="company-name">{self._escape_html(company_name)}</div>',
+        )
+        out = out.replace(
+            'document.title = (job.title || "Interview") + " | Tener";',
+            f'document.title = (job.title || "Interview") + " | " + {json.dumps(company_name)};',
+        )
+        out = out.replace(
+            'setText("company-name", job.company || "Tener");',
+            f'setText("company-name", job.company || {json.dumps(company_name)});',
+        )
+        return out
 
     def _post_start_session(self, body: Dict[str, Any]) -> Tuple[int, Dict[str, Any]]:
         job_id = self._safe_int(body.get("job_id"), None)
@@ -599,6 +703,17 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
             return int(value)
         except (TypeError, ValueError):
             return default
+
+    @staticmethod
+    def _escape_html(text: str) -> str:
+        return (
+            str(text or "")
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace('"', "&quot;")
+            .replace("'", "&#x27;")
+        )
 
     @staticmethod
     def _extract_id(path: str, pattern: str) -> Optional[int]:

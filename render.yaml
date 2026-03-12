@@ -1,5 +1,77 @@
 services:
   - type: web
+    name: tener-easysoftgroup
+    runtime: python
+    plan: starter
+    autoDeploy: true
+    buildCommand: pip install .
+    startCommand: PYTHONPATH=src python -m tener_ai
+    healthCheckPath: /health
+    envVars:
+      - key: TENER_INSTANCE_CONFIG_PATH
+        value: config/instances/easysofthire/instance.json
+      - key: TENER_REQUIRE_INSTANCE_CONFIG
+        value: "true"
+      - key: TENER_DB_BACKEND
+        value: postgres
+      - key: TENER_DB_DSN
+        sync: false
+      - key: TENER_DB_READ_SOURCE
+        value: postgres
+      - key: TENER_PUBLIC_BASE_URL
+        value: https://tener-easysoftgroup.onrender.com
+      - key: TENER_INTERVIEW_API_BASE
+        value: https://tener-easysoftgroup-interview.onrender.com
+      - key: TENER_RESUME_STORAGE_DIR
+        value: /var/data/resumes
+      - key: TENER_ADMIN_API_TOKEN
+        sync: false
+      - key: UNIPILE_API_KEY
+        sync: false
+      - key: UNIPILE_ACCOUNT_ID
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+    disk:
+      name: tener-easysoftgroup-data
+      mountPath: /var/data
+      sizeGB: 1
+
+  - type: web
+    name: tener-easysoftgroup-interview
+    runtime: python
+    plan: starter
+    autoDeploy: true
+    buildCommand: pip install .
+    startCommand: TENER_INTERVIEW_HOST=0.0.0.0 TENER_INTERVIEW_PORT=$PORT PYTHONPATH=src python -m tener_interview
+    healthCheckPath: /health
+    envVars:
+      - key: TENER_INSTANCE_CONFIG_PATH
+        value: config/instances/easysofthire/instance.json
+      - key: TENER_REQUIRE_INSTANCE_CONFIG
+        value: "true"
+      - key: TENER_INTERVIEW_PROVIDER
+        value: hireflix
+      - key: TENER_INTERVIEW_DB_BACKEND
+        value: postgres
+      - key: TENER_INTERVIEW_DB_DSN
+        sync: false
+      - key: TENER_INTERVIEW_SOURCE_API_BASE
+        value: https://tener-easysoftgroup.onrender.com
+      - key: TENER_INTERVIEW_PUBLIC_BASE_URL
+        value: https://tener-easysoftgroup-interview.onrender.com
+      - key: TENER_INTERVIEW_COMPANY_PROFILE_PATH
+        value: config/instances/easysofthire/company_profile.json
+      - key: TENER_INTERVIEW_ADMIN_TOKEN
+        sync: false
+      - key: TENER_INTERVIEW_TOKEN_SECRET
+        sync: false
+      - key: TENER_HIREFLIX_API_KEY
+        sync: false
+      - key: TENER_HIREFLIX_POSITION_ID
+        sync: false
+
+  - type: web
     name: tener-ai-v1
     runtime: python
     plan: starter

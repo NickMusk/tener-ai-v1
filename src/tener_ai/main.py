@@ -15,6 +15,8 @@ from typing import Any, Dict, List, Optional
 from urllib import error as urlerror, request as urlrequest
 from urllib.parse import parse_qs, unquote, urlparse
 
+from tener_shared import InstanceConfig, load_instance_config
+
 from .agents import FAQAgent, OutreachAgent, SourcingAgent, VerificationAgent
 from .attachments import descriptors_to_text, extract_attachment_descriptors_from_values
 from .auth import AuthService
@@ -31,6 +33,7 @@ from .company_culture_profile import (
     UrllibPageFetcher,
     canonicalize_url,
 )
+from .demo_jobs import MainDashboardDemoJobSeeder
 from .db import Database
 from .db_backfill import backfill_sqlite_to_postgres
 from .db_parity import DEFAULT_PARITY_TABLES, build_parity_report
@@ -64,10 +67,14 @@ def env_bool(name: str, default: bool) -> bool:
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
-def default_interview_api_base() -> str:
+def default_interview_api_base(instance_config: InstanceConfig | None = None) -> str:
     configured = str(os.environ.get("TENER_INTERVIEW_API_BASE", "")).strip()
     if configured:
         return configured.rstrip("/")
+    if instance_config is not None:
+        configured_instance_url = str(instance_config.urls.public_interview_base_url or "").strip()
+        if configured_instance_url:
+            return configured_instance_url.rstrip("/")
     if os.environ.get("RENDER"):
         return "https://tener-interview-dashboard.onrender.com"
     return ""
@@ -115,6 +122,7 @@ def _run_outreach_connection_poll_scheduler_tick(*, poll_limit: int) -> Dict[str
 
 def build_services() -> Dict[str, Any]:
     root = project_root()
+    instance_config = load_instance_config(root=root)
     db_backend = str(os.environ.get("TENER_DB_BACKEND", "sqlite") or "sqlite").strip().lower()
     local_db_path = str(root / "runtime" / "tener_v1.sqlite3")
     default_db_path = "/var/data/tener_v1.sqlite3" if os.environ.get("RENDER") else local_db_path
@@ -382,7 +390,16 @@ def build_services() -> Dict[str, Any]:
             timeout_seconds=culture_search_timeout,
         )
     elif culture_search_mode == "seed":
-        culture_search_provider = SeedSearchProvider(company_name="Tener", website_url="https://tener.ai")
+        seed_company_name = (
+            str(os.environ.get("TENER_COMPANY_CULTURE_SEED_COMPANY", "")).strip()
+            or instance_config.branding.company_name
+        )
+        seed_website_url = (
+            str(os.environ.get("TENER_COMPANY_CULTURE_SEED_WEBSITE", "")).strip()
+            or instance_config.urls.public_app_base_url
+            or "https://tener.ai"
+        )
+        culture_search_provider = SeedSearchProvider(company_name=seed_company_name, website_url=seed_website_url)
     else:
         culture_search_provider = BraveHtmlSearchProvider(timeout_seconds=culture_search_timeout)
 
@@ -432,6 +449,8 @@ def build_services() -> Dict[str, Any]:
         managed_unipile_api_key=os.environ.get("UNIPILE_API_KEY", ""),
         managed_unipile_base_url=os.environ.get("UNIPILE_BASE_URL", "https://api.unipile.com"),
         managed_unipile_timeout_seconds=unipile_timeout,
+        recruiter_company_name=instance_config.branding.recruiter_company_name,
+        recruiter_signature_title=instance_config.branding.recruiter_signature_title,
         stage_instructions={
             "sourcing": instructions.get("sourcing"),
             "enrich": instructions.get("enrich"),
@@ -448,6 +467,10 @@ def build_services() -> Dict[str, Any]:
         matching_engine=matching_engine,
         scoring_policy=scoring_formula,
         llm_responder=llm_responder,
+    )
+    demo_job_seeder = MainDashboardDemoJobSeeder(
+        db=db,
+        pre_resume_service=pre_resume_service,
     )
     emulator_store = EmulatorProjectStore(
         projects_dir=emulator_projects_dir,
@@ -484,6 +507,7 @@ def build_services() -> Dict[str, Any]:
         "matching_engine": matching_engine,
         "pre_resume": pre_resume_service,
         "candidate_profile": candidate_profile,
+        "demo_job_seeder": demo_job_seeder,
         "signals_ingestion": signals_ingestion,
         "signals_live": signals_live,
         "monitoring": monitoring,
@@ -491,7 +515,8 @@ def build_services() -> Dict[str, Any]:
         "emulator_store": emulator_store,
         "company_culture": company_culture_service,
         "workflow": workflow,
-        "interview_api_base": default_interview_api_base(),
+        "interview_api_base": default_interview_api_base(instance_config),
+        "instance_config": instance_config,
     }
     apply_agent_instructions(services)
     return services
@@ -507,40 +532,44 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         if not self._require_request_auth(method="GET", path=parsed.path):
             return
+        allow_demo_routes = self._allow_demo_routes()
 
-        if parsed.path == "/zalando":
+        if allow_demo_routes and parsed.path == "/zalando":
             self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/zalando/")
             return
 
-        if parsed.path.startswith("/zalando/"):
+        if allow_demo_routes and parsed.path.startswith("/zalando/"):
             if self._serve_static_directory(prefix="/zalando/", directory=project_root() / "Zalando-prototype", path=parsed.path):
                 return
 
-        if parsed.path == "/liveramp":
+        if allow_demo_routes and parsed.path == "/liveramp":
             self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/liveramp/")
             return
 
-        if parsed.path.startswith("/liveramp/"):
+        if allow_demo_routes and parsed.path.startswith("/liveramp/"):
             if self._serve_static_directory(prefix="/liveramp/", directory=project_root() / "LiveRamp-prototype", path=parsed.path):
                 return
 
-        if parsed.path == "/fiverr":
+        if allow_demo_routes and parsed.path == "/fiverr":
             self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/fiverr/")
             return
 
-        if parsed.path.startswith("/fiverr/"):
+        if allow_demo_routes and parsed.path.startswith("/fiverr/"):
             if self._serve_static_directory(prefix="/fiverr/", directory=project_root() / "Fiverr-prototype", path=parsed.path):
                 return
 
-        if parsed.path == "/toptal":
+        if allow_demo_routes and parsed.path == "/toptal":
             self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/toptal/")
             return
 
-        if parsed.path.startswith("/toptal/"):
+        if allow_demo_routes and parsed.path.startswith("/toptal/"):
             if self._serve_static_directory(prefix="/toptal/", directory=project_root() / "Toptal-prototype", path=parsed.path):
                 return
 
         if parsed.path == "/dashboard/emulator":
+            if not allow_demo_routes:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "route not found"})
+                return
             dashboard = project_root() / "src" / "tener_ai" / "static" / "emulator_dashboard.html"
             if not dashboard.exists():
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "emulator dashboard file not found"})
@@ -557,11 +586,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path in {"/", "/landing", "/landing/"}:
-            landing_page = project_root() / "src" / "tener_ai" / "static" / "landing.html"
-            if not landing_page.exists():
-                self._json_response(HTTPStatus.NOT_FOUND, {"error": "landing file not found"})
-                return
-            self._html_response(HTTPStatus.OK, landing_page.read_text(encoding="utf-8"))
+            self._html_response(HTTPStatus.OK, self._render_public_landing())
             return
 
         if parsed.path in {"/favicon.ico", "/favicon.png"}:
@@ -582,7 +607,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if not dashboard.exists():
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": "dashboard file not found"})
                 return
-            self._html_response(HTTPStatus.OK, dashboard.read_text(encoding="utf-8"))
+            self._html_response(HTTPStatus.OK, self._brand_main_dashboard_html(dashboard.read_text(encoding="utf-8")))
             return
 
         candidate_page_match = re.match(r"^/candidate/(\d+)$", parsed.path)
@@ -598,12 +623,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(
                 HTTPStatus.OK,
                 {
-                    "service": "Tener AI V1 API",
+                    "service": f'{self._instance_config().branding.brand_name} Hiring API',
                     "status": "ok",
                     "endpoints": {
                         "health": "GET /health",
                         "landing": "GET /landing",
                         "create_job": "POST /api/jobs",
+                        "seed_demo_job": "POST /api/jobs/seed-demo",
                         "list_jobs": "GET /api/jobs",
                         "get_job": "GET /api/jobs/{job_id}",
                         "archive_jobs_bulk": "POST /api/jobs/archive-bulk",
@@ -1817,6 +1843,22 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
             self._json_response(HTTPStatus.CREATED, out)
+            return
+
+        if parsed.path == "/api/jobs/seed-demo":
+            seeder = SERVICES.get("demo_job_seeder")
+            if seeder is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "demo job seeder unavailable"})
+                return
+            try:
+                out = seeder.ensure_seeded()
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "demo job seed failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.CREATED if bool(out.get("created")) else HTTPStatus.OK, out)
             return
 
         match_sync = re.match(r"^/api/linkedin/accounts/(\d+)/sync$", parsed.path)
@@ -3469,6 +3511,133 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         except json.JSONDecodeError:
             return {"_error": "invalid json"}
 
+    def _render_public_landing(self) -> str:
+        config = self._instance_config()
+        if not config.features.use_generic_public_landing:
+            landing_page = project_root() / "src" / "tener_ai" / "static" / "landing.html"
+            if not landing_page.exists():
+                return "<html><body><h1>landing file not found</h1></body></html>"
+            return landing_page.read_text(encoding="utf-8")
+
+        brand = config.branding
+        dashboard_url = "/dashboard"
+        return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{self._escape_html(brand.landing_title)}</title>
+  <style>
+    :root {{
+      --bg: #08111f;
+      --panel: rgba(12, 20, 36, 0.88);
+      --text: #f4f7fb;
+      --muted: #9eb0c8;
+      --accent: #3ddc97;
+      --border: rgba(158, 176, 200, 0.18);
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      min-height: 100vh;
+      font-family: "DM Sans", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 15% 18%, rgba(61,220,151,0.18), transparent 28%),
+        radial-gradient(circle at 82% 12%, rgba(67,97,238,0.18), transparent 28%),
+        linear-gradient(180deg, #07101c 0%, #091629 100%);
+      display: grid;
+      place-items: center;
+      padding: 28px;
+    }}
+    .panel {{
+      width: min(760px, 100%);
+      padding: 36px;
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      background: var(--panel);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.32);
+      backdrop-filter: blur(12px);
+    }}
+    .eyebrow {{
+      display: inline-block;
+      margin-bottom: 14px;
+      padding: 6px 12px;
+      border-radius: 999px;
+      background: rgba(61,220,151,0.12);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }}
+    h1 {{
+      margin: 0 0 14px;
+      font-size: clamp(2.1rem, 5vw, 3.6rem);
+      line-height: 1.02;
+      letter-spacing: -0.04em;
+    }}
+    p {{
+      margin: 0;
+      max-width: 62ch;
+      color: var(--muted);
+      font-size: 1rem;
+      line-height: 1.7;
+    }}
+    .links {{
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 28px;
+    }}
+    a {{
+      color: inherit;
+      text-decoration: none;
+      border-radius: 999px;
+      padding: 12px 18px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+    }}
+    .primary {{
+      background: var(--accent);
+      color: #05130c;
+      border-color: transparent;
+      font-weight: 700;
+    }}
+  </style>
+</head>
+<body>
+  <section class="panel">
+    <div class="eyebrow">{self._escape_html(brand.brand_name)}</div>
+    <h1>{self._escape_html(brand.landing_headline)}</h1>
+    <p>{self._escape_html(brand.landing_body)}</p>
+    <div class="links">
+      <a class="primary" href="{dashboard_url}">Open Dashboard</a>
+      <a href="/health">Health Check</a>
+    </div>
+  </section>
+</body>
+</html>"""
+
+    def _brand_main_dashboard_html(self, content: str) -> str:
+        brand = self._instance_config().branding
+        output = str(content or "")
+        output = output.replace(
+            "<title>Tener.ai Pipeline Control Center</title>",
+            f"<title>{self._escape_html(brand.main_dashboard_title)}</title>",
+        )
+        output = output.replace(
+            '<div class="logo">Tener<span>.ai</span></div>',
+            f'<div class="logo">{self._escape_html(brand.main_dashboard_logo_text)}</div>',
+        )
+        output = output.replace(
+            "Pipeline Control Center<br>Manual orchestration + live diagnostics",
+            brand.main_dashboard_subnote_html,
+        )
+        output = output.replace('placeholder="Tener"', f'placeholder="{self._escape_html(brand.main_default_job_company)}"')
+        output = output.replace('company: "Tener",', f'company: {json.dumps(brand.main_default_job_company)},')
+        return output
+
     def _html_response(self, status: HTTPStatus, content: str) -> None:
         encoded = content.encode("utf-8")
         self.send_response(status.value)
@@ -3730,9 +3899,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             filtered_items: List[Dict[str, Any]] = []
             for item in items:
                 include_item = True
+                row_job_id = int(item.get("job_id") or 0)
                 verification_notes = item.get("verification_notes")
                 if workflow is not None and forced_ids:
-                    row_job_id = int(item.get("job_id") or 0)
                     if row_job_id > 0:
                         if row_job_id not in job_cache:
                             job_cache[row_job_id] = db.get_job(row_job_id)
@@ -4040,6 +4209,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 )
 
         for row in conversations or []:
+            row_job_id = int(row.get("job_id") or 0)
             conversation_id = int(row.get("conversation_id") or 0)
             account_id = int(row.get("linkedin_account_id") or 0)
             if account_id <= 0 and conversation_id > 0:
@@ -4085,7 +4255,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     stuck_key = _stuck_person_key(
                         account_id=account_id,
                         candidate_id=int(row.get("candidate_id") or 0),
-                        job_id=int(row.get("job_id") or 0),
+                        job_id=row_job_id,
                         candidate_name=candidate_name,
                     )
                     stuck_item = {
@@ -4492,52 +4662,91 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             "checks": checks,
         }
 
+    @staticmethod
+    def _instance_config() -> InstanceConfig:
+        configured = SERVICES.get("instance_config")
+        return configured if isinstance(configured, InstanceConfig) else InstanceConfig()
+
+    def _allow_demo_routes(self) -> bool:
+        return bool(self._instance_config().access.allow_demo_routes)
+
+    def _authorization_bearer_token(self) -> str:
+        auth = str(self.headers.get("Authorization", "") or "").strip()
+        if not auth.lower().startswith("bearer "):
+            return ""
+        return auth[7:].strip()
+
+    def _private_bearer_token(self) -> str:
+        return (
+            str(os.environ.get("TENER_ADMIN_API_TOKEN", "") or "").strip()
+            or str(os.environ.get("TENER_INSTANCE_ADMIN_TOKEN", "") or "").strip()
+        )
+
     def _require_request_auth(self, *, method: str, path: str) -> bool:
-        auth_service = SERVICES.get("auth")
-        if auth_service is None or not bool(getattr(auth_service, "enabled", False)):
-            return True
         if self._is_public_path(method=method, path=path):
             return True
-        required_scopes = self._required_scopes_for_path(method=method, path=path)
-        decision = auth_service.authorize_request(
-            authorization_header=str(self.headers.get("Authorization", "") or ""),
-            required_scopes=required_scopes,
-            require_admin=False,
-        )
-        if decision.allowed:
+        auth_service = SERVICES.get("auth")
+        if auth_service is not None and bool(getattr(auth_service, "enabled", False)):
+            required_scopes = self._required_scopes_for_path(method=method, path=path)
+            decision = auth_service.authorize_request(
+                authorization_header=str(self.headers.get("Authorization", "") or ""),
+                required_scopes=required_scopes,
+                require_admin=False,
+            )
+            if decision.allowed:
+                return True
+            status = HTTPStatus.UNAUTHORIZED if int(decision.status_code) == 401 else HTTPStatus.FORBIDDEN
+            self._json_response(
+                status,
+                {
+                    "error": str(decision.error or "auth_forbidden"),
+                    "required_scopes": required_scopes,
+                },
+            )
+            return False
+
+        access = self._instance_config().access
+        if not access.require_private_bearer_token:
             return True
-        status = HTTPStatus.UNAUTHORIZED if int(decision.status_code) == 401 else HTTPStatus.FORBIDDEN
-        self._json_response(
-            status,
-            {
-                "error": str(decision.error or "auth_forbidden"),
-                "required_scopes": required_scopes,
-            },
-        )
+        expected = self._private_bearer_token()
+        if not expected:
+            self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "private bearer token is not configured"})
+            return False
+        if self._authorization_bearer_token() == expected:
+            return True
+        self._json_response(HTTPStatus.UNAUTHORIZED, {"error": "private bearer token required"})
         return False
 
-    @staticmethod
-    def _is_public_path(*, method: str, path: str) -> bool:
+    def _is_public_path(self, *, method: str, path: str) -> bool:
         normalized = str(path or "").strip()
+        access = self._instance_config().access
         if normalized in {
             "/",
-            "/dashboard",
-            "/dashboard/emulator",
-            "/dashboard/signals-live",
             "/health",
-            "/api",
             "/landing",
             "/landing/",
             "/favicon.ico",
             "/favicon.png",
         }:
             return True
-        if normalized == "/zalando" or normalized.startswith("/zalando/"):
+        if normalized == "/api":
+            return bool(access.public_api_index)
+        if normalized == "/dashboard":
+            return bool(access.public_dashboard)
+        if normalized == "/dashboard/signals-live":
+            return bool(access.public_dashboard)
+        if normalized == "/dashboard/emulator":
+            return bool(access.public_dashboard and access.allow_demo_routes)
+        if self._allow_demo_routes() and (normalized == "/zalando" or normalized.startswith("/zalando/")):
             return True
-        if normalized == "/liveramp" or normalized.startswith("/liveramp/"):
+        if self._allow_demo_routes() and (normalized == "/liveramp" or normalized.startswith("/liveramp/")):
+            return True
+        if self._allow_demo_routes() and (normalized == "/fiverr" or normalized.startswith("/fiverr/")):
+            return True
+        if self._allow_demo_routes() and (normalized == "/toptal" or normalized.startswith("/toptal/")):
             return True
         if normalized.startswith("/candidate/"):
-            return True
+            return bool(access.public_candidate_profiles)
         if method.upper() == "POST" and normalized == "/api/webhooks/unipile":
             return True
         if method.upper() == "POST" and normalized in {"/api/landing/newsletter", "/api/landing/contact"}:
@@ -4567,13 +4776,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             status = HTTPStatus.UNAUTHORIZED if int(decision.status_code) == 401 else HTTPStatus.FORBIDDEN
             self._json_response(status, {"error": str(decision.error or "admin_auth_required")})
             return False
-        expected = str(os.environ.get("TENER_ADMIN_API_TOKEN", "") or "").strip()
+        expected = self._private_bearer_token()
         if not expected:
-            return True
-        auth = str(self.headers.get("Authorization", "") or "").strip()
-        incoming = ""
-        if auth.lower().startswith("bearer "):
-            incoming = auth[7:].strip()
+            access = self._instance_config().access
+            if not access.require_private_bearer_token:
+                return True
+            self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "admin bearer token is not configured"})
+            return False
+        incoming = self._authorization_bearer_token()
         if incoming and incoming == expected:
             return True
         self._json_response(HTTPStatus.UNAUTHORIZED, {"error": "admin auth required"})
@@ -4583,6 +4793,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         configured = str(os.environ.get("TENER_PUBLIC_BASE_URL", "") or "").strip().rstrip("/")
         if configured:
             return configured
+        configured_instance_url = str(self._instance_config().urls.public_app_base_url or "").strip().rstrip("/")
+        if configured_instance_url:
+            return configured_instance_url
         host = str(self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "").strip()
         proto = str(self.headers.get("X-Forwarded-Proto") or "").strip().lower()
         if not proto:

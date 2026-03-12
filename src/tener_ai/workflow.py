@@ -93,6 +93,8 @@ class WorkflowService:
         managed_unipile_api_key: str = "",
         managed_unipile_base_url: str = "https://api.unipile.com",
         managed_unipile_timeout_seconds: int = 30,
+        recruiter_company_name: str = "Tener",
+        recruiter_signature_title: str = "Senior Talent Acquisition Manager",
     ) -> None:
         self.db = db
         self.sourcing_agent = sourcing_agent
@@ -149,6 +151,11 @@ class WorkflowService:
             self.managed_unipile_timeout_seconds = max(5, int(managed_unipile_timeout_seconds))
         except (TypeError, ValueError):
             self.managed_unipile_timeout_seconds = 30
+        self.recruiter_company_name = str(recruiter_company_name or "Tener").strip() or "Tener"
+        self.recruiter_signature_title = (
+            str(recruiter_signature_title or "Senior Talent Acquisition Manager").strip()
+            or "Senior Talent Acquisition Manager"
+        )
 
     def _persist_step_progress(self, *, job_id: int, step: str, status: str, output: Dict[str, Any] | None = None) -> None:
         self.db.upsert_job_step_progress(
@@ -5612,6 +5619,8 @@ class WorkflowService:
     def _linkedin_initial_fallback_message(self, *, job: Dict[str, Any], recruiter_name: str, request_resume: bool) -> str:
         position = str(job.get("title") or "AI Engineer").strip() or "AI Engineer"
         company = str(job.get("company") or "").strip()
+        recruiter_company_name = self.recruiter_company_name
+        recruiter_signature_title = self.recruiter_signature_title
         role_owner = (
             f"for a long term project with {company}, a fast moving US AI startup"
             if company
@@ -5630,13 +5639,13 @@ class WorkflowService:
         sign_block = (
             "Best,\n"
             f"{recruiter_name}\n"
-            "Senior Talent Acquisition Manager at Tener"
+            f"{recruiter_signature_title} at {recruiter_company_name}"
             if recruiter_name
-            else "Best,\nSenior Talent Acquisition Manager at Tener"
+            else f"Best,\n{recruiter_signature_title} at {recruiter_company_name}"
         )
         return (
             "Greetings,\n"
-            f"We're Tener, and we're now looking for a {position} {role_owner}\n"
+            f"We're {recruiter_company_name}, and we're now looking for a {position} {role_owner}\n"
             "You'll work directly with the Founder and CTO on an autonomous coding agent, designing real agentic workflows, "
             f"RAG pipelines, LLM orchestration, and scalable ML infrastructure{skills_line}\n\n"
             f"{ask_line}\n\n"
@@ -5727,7 +5736,7 @@ class WorkflowService:
             "5) Signature block exactly as:\n"
             "Best,\n"
             f"{normalized_recruiter}\n"
-            "Senior Talent Acquisition Manager at Tener\n"
+            f"{self.recruiter_signature_title} at {self.recruiter_company_name}\n"
             if normalized_recruiter
             else "5) Signature is optional and should not include a recruiter name when none is provided\n"
         )
@@ -5737,7 +5746,7 @@ class WorkflowService:
             f"Recruiter name context: {recruiter_context}\n"
             "Required structure:\n"
             "1) Start with Greetings,\n"
-            "2) Mention Tener and that we are hiring for the specific position for a long term project with a fast moving US AI startup\n"
+            f"2) Mention {self.recruiter_company_name} and that we are hiring for the specific position for a long term project with a fast moving US AI startup\n"
             "3) Mention direct collaboration with Founder and CTO on autonomous coding agent, agentic workflows, RAG pipelines, LLM orchestration, and scalable ML infrastructure\n"
             "4) Explain the process exactly as: first a few written qualifying questions, then CV, then a short 10-15 minute screening call\n"
             f"{signature_rule}"

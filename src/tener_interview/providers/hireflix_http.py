@@ -29,7 +29,7 @@ class HireflixHTTPAdapter:
         self.config = config
 
     def create_assessment(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        assessment_name = str(payload.get("assessment_name") or "").strip() or "Tener Interview"
+        assessment_name = str(payload.get("assessment_name") or "").strip() or "Interview"
         language = str(payload.get("language") or "").strip() or None
         questions_raw = payload.get("questions") if isinstance(payload.get("questions"), list) else []
         questions = [self._question_input(item, language=language) for item in questions_raw if isinstance(item, dict)]

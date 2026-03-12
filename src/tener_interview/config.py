@@ -4,6 +4,8 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
+from tener_shared import load_instance_config
+
 
 @dataclass(frozen=True)
 class InterviewModuleConfig:
@@ -24,6 +26,17 @@ class InterviewModuleConfig:
     token_ttl_hours: int
     provider_name: str
     public_base_url: str
+    admin_token: str
+    require_private_bearer_token: bool
+    public_interview_dashboard: bool
+    public_interview_api_index: bool
+    strict_provider_mode: bool
+    dashboard_title: str
+    dashboard_heading: str
+    dashboard_subcopy: str
+    candidate_title: str
+    interview_system_name: str
+    interview_header_note: str
     hireflix_api_key: str
     hireflix_base_url: str
     hireflix_position_id: str
@@ -36,6 +49,7 @@ class InterviewModuleConfig:
     @classmethod
     def from_env(cls) -> "InterviewModuleConfig":
         root = Path(__file__).resolve().parents[2]
+        instance_config = load_instance_config(root=root)
         raw_backend = str(os.environ.get("TENER_INTERVIEW_DB_BACKEND", "sqlite") or "sqlite").strip().lower()
         db_backend = raw_backend if raw_backend in {"sqlite", "postgres"} else "sqlite"
         db_path = os.environ.get(
@@ -57,9 +71,9 @@ class InterviewModuleConfig:
         )
         company_profile_path = os.environ.get(
             "TENER_INTERVIEW_COMPANY_PROFILE_PATH",
-            str(root / "config" / "company_profile.json"),
+            instance_config.resolve_file("company_profile.json") or str(root / "config" / "company_profile.json"),
         )
-        company_name = os.environ.get("TENER_INTERVIEW_COMPANY_NAME", "Tener").strip()
+        company_name = os.environ.get("TENER_INTERVIEW_COMPANY_NAME", instance_config.branding.interview_company_name).strip()
         transcription_scoring_criteria_path = os.environ.get(
             "TENER_INTERVIEW_TRANSCRIPTION_SCORING_CRITERIA_PATH",
             str(root / "config" / "interview_transcription_scoring_criteria.json"),
@@ -96,7 +110,14 @@ class InterviewModuleConfig:
 
         token_secret = os.environ.get("TENER_INTERVIEW_TOKEN_SECRET", "dev-interview-secret")
         provider_name = os.environ.get("TENER_INTERVIEW_PROVIDER", "hireflix_mock")
-        public_base_url = os.environ.get("TENER_INTERVIEW_PUBLIC_BASE_URL", "")
+        public_base_url = os.environ.get(
+            "TENER_INTERVIEW_PUBLIC_BASE_URL",
+            instance_config.urls.public_interview_base_url,
+        )
+        admin_token = (
+            str(os.environ.get("TENER_INTERVIEW_ADMIN_TOKEN") or "").strip()
+            or str(os.environ.get("TENER_ADMIN_API_TOKEN") or "").strip()
+        )
         source_api_base = os.environ.get("TENER_INTERVIEW_SOURCE_API_BASE", "").strip()
         hireflix_api_key = os.environ.get("TENER_HIREFLIX_API_KEY", "").strip()
         hireflix_base_url = os.environ.get("TENER_HIREFLIX_BASE_URL", "https://api.hireflix.com/me").strip()
@@ -121,7 +142,7 @@ class InterviewModuleConfig:
             source_api_timeout_seconds=max(3, source_timeout_seconds),
             question_guidelines_path=question_guidelines_path,
             company_profile_path=company_profile_path,
-            company_name=company_name or "Tener",
+            company_name=company_name or instance_config.branding.interview_company_name,
             transcription_scoring_criteria_path=transcription_scoring_criteria_path,
             total_score_formula_path=total_score_formula_path,
             host=host,
@@ -130,6 +151,17 @@ class InterviewModuleConfig:
             token_ttl_hours=max(1, token_ttl_hours),
             provider_name=provider_name.strip().lower() or "hireflix_mock",
             public_base_url=public_base_url.strip(),
+            admin_token=admin_token,
+            require_private_bearer_token=instance_config.access.require_private_bearer_token,
+            public_interview_dashboard=instance_config.access.public_interview_dashboard,
+            public_interview_api_index=instance_config.access.public_interview_api_index,
+            strict_provider_mode=instance_config.features.strict_interview_provider,
+            dashboard_title=instance_config.branding.interview_dashboard_title,
+            dashboard_heading=instance_config.branding.interview_dashboard_heading,
+            dashboard_subcopy=instance_config.branding.interview_dashboard_subcopy,
+            candidate_title=instance_config.branding.interview_candidate_title,
+            interview_system_name=instance_config.branding.system_name,
+            interview_header_note=instance_config.branding.interview_header_note,
             hireflix_api_key=hireflix_api_key,
             hireflix_base_url=hireflix_base_url or "https://api.hireflix.com/me",
             hireflix_position_id=hireflix_position_id,

@@ -27,6 +27,7 @@ class InterviewService:
         question_generator: Optional[InterviewQuestionGenerator] = None,
         default_ttl_hours: int = 72,
         public_base_url: str = "",
+        system_name: str = "Tener",
     ) -> None:
         self.db = db
         self.provider = provider
@@ -37,6 +38,7 @@ class InterviewService:
         self.question_generator = question_generator
         self.default_ttl_hours = max(1, int(default_ttl_hours))
         self.public_base_url = public_base_url.rstrip("/")
+        self.system_name = str(system_name or "Tener").strip() or "Tener"
 
     def start_session(
         self,
@@ -793,7 +795,7 @@ class InterviewService:
                 "estimated_minutes": process.get("estimated_minutes"),
                 "steps": process.get("steps") or [],
                 "cta_label": "Start Interview",
-                "support_text": self._support_text(language_code),
+                "support_text": self._support_text(language_code, self.system_name),
                 "privacy_note": self._privacy_note(language_code),
             },
         }
@@ -948,12 +950,16 @@ class InterviewService:
         return " • ".join(parts) if parts else None
 
     @staticmethod
-    def _support_text(language_code: str) -> str:
+    def _support_text(language_code: str, system_name: str = "Tener") -> str:
+        safe_system_name = str(system_name or "Tener").strip() or "Tener"
         copy = {
-            "ru": "Интервью можно пройти в удобное время. После завершения ответ просто появится в системе Tener.",
-            "es": "Puedes completarlo cuando te convenga. Cuando termines, tu respuesta quedara registrada en Tener.",
+            "ru": f"Интервью можно пройти в удобное время. После завершения ответ просто появится в системе {safe_system_name}.",
+            "es": f"Puedes completarlo cuando te convenga. Cuando termines, tu respuesta quedara registrada en {safe_system_name}.",
         }
-        return copy.get(language_code, "You can complete it when convenient. Once finished, your interview will be recorded in Tener.")
+        return copy.get(
+            language_code,
+            f"You can complete it when convenient. Once finished, your interview will be recorded in {safe_system_name}.",
+        )
 
     @staticmethod
     def _privacy_note(language_code: str) -> str:

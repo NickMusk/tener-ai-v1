@@ -1,0 +1,41 @@
+{
+  "instance_id": "easysofthire",
+  "service_slug": "tener-easysoftgroup",
+  "branding": {
+    "brand_name": "EasySoftHire",
+    "company_name": "EasySoftHire",
+    "system_name": "EasySoftHire",
+    "main_dashboard_title": "EasySoftHire Pipeline Control Center",
+    "main_dashboard_logo_text": "EasySoftHire",
+    "main_dashboard_subnote_html": "Pipeline Control Center<br>EasySoftHire operations + live diagnostics",
+    "main_default_job_company": "EasySoftHire",
+    "landing_title": "EasySoftHire Hiring Operations",
+    "landing_headline": "EasySoftHire dedicated hiring operations",
+    "landing_body": "This production instance is reserved for EasySoftHire workflows, candidate tracking, and interview coordination.",
+    "interview_dashboard_title": "EasySoftHire Interview Admin",
+    "interview_dashboard_heading": "EasySoftHire Interview Admin",
+    "interview_dashboard_subcopy": "Select a role, generate interview links, and track scored results for EasySoftHire.",
+    "interview_candidate_title": "EasySoftHire Interview",
+    "interview_company_name": "EasySoftHire",
+    "interview_header_note": "Candidate Interview Entry",
+    "recruiter_company_name": "EasySoftHire",
+    "recruiter_signature_title": "Talent Acquisition Team"
+  },
+  "access": {
+    "require_private_bearer_token": true,
+    "public_api_index": true,
+    "public_dashboard": false,
+    "public_candidate_profiles": false,
+    "public_interview_dashboard": false,
+    "public_interview_api_index": true,
+    "allow_demo_routes": false
+  },
+  "features": {
+    "use_generic_public_landing": true,
+    "strict_interview_provider": true
+  },
+  "urls": {
+    "public_app_base_url": "https://tener-easysoftgroup.onrender.com",
+    "public_interview_base_url": "https://tener-easysoftgroup-interview.onrender.com"
+  }
+}
