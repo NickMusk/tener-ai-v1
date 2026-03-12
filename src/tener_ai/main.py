@@ -31,6 +31,10 @@ from .company_culture_profile import (
     UrllibPageFetcher,
     canonicalize_url,
 )
+try:
+    from .demo_jobs import seed_full_demo_job
+except ModuleNotFoundError:  # Optional demo tooling is not part of every deploy branch.
+    seed_full_demo_job = None  # type: ignore[assignment]
 from .db import Database
 from .db_backfill import backfill_sqlite_to_postgres
 from .db_parity import DEFAULT_PARITY_TABLES, build_parity_report
@@ -616,6 +620,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "health": "GET /health",
                         "landing": "GET /landing",
                         "create_job": "POST /api/jobs",
+                        "admin_seed_full_demo_job": "POST /api/admin/seeds/full-demo-job",
                         "list_jobs": "GET /api/jobs",
                         "get_job": "GET /api/jobs/{job_id}",
                         "archive_jobs_bulk": "POST /api/jobs/archive-bulk",
@@ -1829,6 +1834,41 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 )
                 return
             self._json_response(HTTPStatus.CREATED, out)
+            return
+
+        if parsed.path == "/api/admin/seeds/full-demo-job":
+            if not self._require_admin_access():
+                return
+            if seed_full_demo_job is None:
+                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "demo job seed unavailable"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            force_reseed = bool(body.get("force_reseed") is True)
+            try:
+                out = seed_full_demo_job(
+                    db=SERVICES["db"],
+                    pre_resume_service=SERVICES.get("pre_resume"),
+                    interview_assessment_preparer=self._prepare_job_interview_assessment,
+                    force_reseed=force_reseed,
+                    postgres_dsn=str(SERVICES.get("postgres_dsn") or os.environ.get("TENER_DB_DSN", "") or "").strip(),
+                )
+            except Exception as exc:
+                SERVICES["db"].log_operation(
+                    operation="admin.seed.full_demo_job",
+                    status="error",
+                    entity_type="job",
+                    entity_id="seed_full_demo_job",
+                    details={"error": str(exc), "force_reseed": force_reseed},
+                )
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "full demo job seed failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, out)
             return
 
         match_sync = re.match(r"^/api/linkedin/accounts/(\d+)/sync$", parsed.path)
