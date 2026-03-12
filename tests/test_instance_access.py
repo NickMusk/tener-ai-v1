@@ -93,6 +93,28 @@ class MainInstanceAccessTests(unittest.TestCase):
             self.assertIn("EasySoftHire Pipeline Control Center", ok_body)
             self.assertIn("EasySoftHire operations + live diagnostics", ok_body)
 
+    def test_public_mode_bypasses_admin_token_for_dashboard(self) -> None:
+        api_main.SERVICES["instance_config"] = InstanceConfig.from_payload(
+            {
+                "instance_id": "easysofthire-test",
+                "branding": {
+                    "brand_name": "EasySoftHire",
+                    "main_dashboard_title": "EasySoftHire Pipeline Control Center",
+                    "main_dashboard_logo_text": "EasySoftHire",
+                },
+                "access": {
+                    "require_private_bearer_token": False,
+                    "public_dashboard": True,
+                    "public_candidate_profiles": True,
+                    "allow_demo_routes": False,
+                },
+            }
+        )
+        with patch.dict(os.environ, {"TENER_ADMIN_API_TOKEN": "main-secret"}, clear=False):
+            status, body = self._request("/dashboard")
+        self.assertEqual(status, 200)
+        self.assertIn("EasySoftHire Pipeline Control Center", body)
+
 
 class InterviewInstanceAccessTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -158,6 +180,17 @@ class InterviewInstanceAccessTests(unittest.TestCase):
         self.assertEqual(ok_status, 200)
         self.assertIn("EasySoftHire Interview Admin", ok_body)
         self.assertIn("track scored results for EasySoftHire", ok_body)
+
+    def test_public_mode_bypasses_token_for_interview_dashboard(self) -> None:
+        interview_api.SERVICES["config"] = replace(
+            interview_api.SERVICES["config"],
+            admin_token="interview-secret",
+            require_private_bearer_token=False,
+            public_interview_dashboard=True,
+        )
+        status, body = self._request("/dashboard")
+        self.assertEqual(status, 200)
+        self.assertIn("EasySoftHire Interview Admin", body)
 
 
 if __name__ == "__main__":

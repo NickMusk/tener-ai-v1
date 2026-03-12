@@ -22,11 +22,11 @@
     "recruiter_signature_title": "Talent Acquisition Team"
   },
   "access": {
-    "require_private_bearer_token": true,
+    "require_private_bearer_token": false,
     "public_api_index": true,
-    "public_dashboard": false,
-    "public_candidate_profiles": false,
-    "public_interview_dashboard": false,
+    "public_dashboard": true,
+    "public_candidate_profiles": true,
+    "public_interview_dashboard": true,
     "public_interview_api_index": true,
     "allow_demo_routes": false
   },
