@@ -3778,7 +3778,7 @@
       state.outreachAtsLoading = true;
       renderOutreachAtsBoard();
 
-      api(atsPath, { timeoutMs: 10000 })
+      api(atsPath)
         .then((payload) => {
           if (Number(state.outreachAtsRequestSeq || 0) !== atsRequestSeq) return;
           state.outreachAtsBoard = payload || {};

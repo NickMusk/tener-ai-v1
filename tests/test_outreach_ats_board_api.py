@@ -298,6 +298,16 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
 
     def test_outreach_ats_board_hides_forced_test_candidates_for_normal_jobs(self) -> None:
         job_id = self._create_job("Manual QA Engineer")
+        api_main.SERVICES["workflow"] = type(
+            "_WorkflowStub",
+            (),
+            {
+                "_load_forced_test_identifiers": staticmethod(lambda: (_ for _ in ()).throw(AssertionError("ATS board should not load forced test ids"))),
+                "_build_forced_identifier_lookup": staticmethod(lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("ATS board should not build forced lookup"))),
+                "_effective_test_mode": staticmethod(lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("ATS board should not resolve test mode"))),
+                "_is_non_test_forced_candidate": staticmethod(lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("ATS board should not run forced candidate checks"))),
+            },
+        )()
 
         forced_candidate = self._create_candidate("forced", "Forced Test Candidate (olena-bachek-b8523121a)")
         self._attach_match(
