@@ -1508,6 +1508,52 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 rows = cur.fetchall()
         return [self._row_to_dict(dict(r)) for r in rows]
 
+    def list_waiting_connection_status_drifts(
+        self,
+        *,
+        limit: int = 200,
+        job_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        if job_id is not None and (self._job_is_archived(job_id) or self._job_is_paused(job_id)):
+            return []
+        safe_limit = max(1, min(int(limit or 200), 2000))
+        where_parts = [
+            "conv.status = 'waiting_connection'",
+            "jc.status IN ('verified', 'needs_resume')",
+            "j.archived_at IS NULL",
+            "COALESCE(NULLIF(BTRIM(j.job_state), ''), 'active') = 'active'",
+        ]
+        args: List[Any] = []
+        if job_id is not None:
+            where_parts.append("conv.job_id = %s")
+            args.append(int(job_id))
+        query = f"""
+            SELECT
+                conv.job_id,
+                conv.candidate_id,
+                MAX(conv.id) AS conversation_id,
+                MAX(COALESCE(conv.last_message_at, conv.created_at, '')) AS last_message_at,
+                jc.status AS match_status,
+                j.title AS job_title,
+                c.full_name AS candidate_name
+            FROM conversations conv
+            JOIN job_candidates jc
+              ON jc.job_id = conv.job_id
+             AND jc.candidate_id = conv.candidate_id
+            JOIN jobs j ON j.id = conv.job_id
+            JOIN candidates c ON c.id = conv.candidate_id
+            WHERE {' AND '.join(where_parts)}
+            GROUP BY conv.job_id, conv.candidate_id, jc.status, j.title, c.full_name
+            ORDER BY last_message_at DESC, conversation_id DESC
+            LIMIT %s
+        """
+        args.append(safe_limit)
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(query, tuple(args))
+                rows = cur.fetchall()
+        return [self._row_to_dict(dict(r)) for r in rows]
+
     def claim_outbound_action(self, action_id: int) -> bool:
         with self.transaction() as conn:
             with conn.cursor() as cur:

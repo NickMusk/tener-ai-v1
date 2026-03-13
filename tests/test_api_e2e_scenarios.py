@@ -669,7 +669,7 @@ class ApiE2EScenariosTests(unittest.TestCase):
         self.assertEqual(status, 200)
         items = candidates.get("items") if isinstance(candidates.get("items"), list) else []
         self.assertTrue(items)
-        self.assertEqual(str(items[0].get("status")), "resume_received")
+        self.assertEqual(str(items[0].get("status")), "resume_received_pending_must_have")
 
     def test_pre_resume_followups_run_endpoint_sends_due_followup(self) -> None:
         status, created = self._request(

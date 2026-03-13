@@ -709,6 +709,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "outreach_step": "POST /api/steps/outreach",
                         "outreach_dispatch_run": "POST /api/outreach/dispatch/run",
                         "outreach_backfill_unassigned": "POST /api/outreach/backfill-unassigned",
+                        "outreach_reconcile_waiting_connection": "POST /api/outreach/reconcile-waiting-connection",
                         "outreach_poll_connections": "POST /api/outreach/poll-connections",
                         "inbound_poll": "POST /api/inbound/poll",
                         "instructions": "GET /api/instructions",
@@ -2980,6 +2981,32 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, result)
             return
 
+        if parsed.path == "/api/outreach/reconcile-waiting-connection":
+            if not self._require_admin_access():
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            limit = self._safe_int(body.get("limit"), 300) or 300
+            job_id_raw = body.get("job_id")
+            job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
+            dry_run = bool(body.get("dry_run", True))
+            try:
+                result = SERVICES["workflow"].reconcile_waiting_connection_match_statuses(
+                    limit=max(1, min(int(limit), 500)),
+                    job_id=job_id,
+                    dry_run=dry_run,
+                )
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "outreach_reconcile_waiting_connection_failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
         if parsed.path == "/api/outreach/poll-connections":
             body = payload or {}
             if not isinstance(body, dict):
@@ -3936,25 +3963,23 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         total_items = len(items)
         display_items = items[:safe_limit]
         column_defs = [
-            ("queued", "Queued"),
+            ("sourced", "Sourced"),
             ("connect_sent", "Connect Sent"),
-            ("queued_delivery", "Queued for Delivery"),
-            ("dialogue", "Dialogue"),
+            ("responded", "Responded"),
+            ("must_have_approved", "Must-Have Approved"),
             ("cv_received", "CV Received"),
             ("interview_pending", "Interview Pending"),
-            ("delivery_blocked", "Delivery Blocked"),
             ("completed", "Completed"),
         ]
         columns: List[Dict[str, Any]] = []
         summary = {
             "total_candidates": total_items,
-            "queued": 0,
+            "sourced": 0,
             "connect_sent": 0,
-            "queued_delivery": 0,
-            "dialogue": 0,
+            "responded": 0,
+            "must_have_approved": 0,
             "cv_received": 0,
             "interview_pending": 0,
-            "delivery_blocked": 0,
             "completed": 0,
         }
         items_by_stage: Dict[str, List[Dict[str, Any]]] = {key: [] for key, _ in column_defs}

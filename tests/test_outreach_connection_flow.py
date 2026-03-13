@@ -175,6 +175,148 @@ class OutreachConnectionFlowTests(unittest.TestCase):
             match = db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
             self.assertEqual(str((match or {}).get("status") or ""), "outreach_pending_connection")
 
+    def test_reconcile_waiting_connection_match_statuses_dry_run_does_not_mutate_match(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outreach_reconcile.sqlite3"))
+            db.init_schema()
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = _ConnectionAwareProvider()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            candidate_id = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-reconcile-dry",
+                    "full_name": "Dry Run Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": [],
+                    "years_experience": 4,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+            db.create_candidate_match(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                score=0.51,
+                status="needs_resume",
+                verification_notes={},
+            )
+            conversation_id = db.create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+            db.update_conversation_status(conversation_id=conversation_id, status="waiting_connection")
+
+            result = workflow.reconcile_waiting_connection_match_statuses(job_id=job_id, limit=10, dry_run=True)
+            self.assertTrue(bool(result.get("dry_run")))
+            self.assertEqual(int(result.get("candidates_total") or 0), 1)
+            self.assertEqual(int(result.get("updated") or 0), 0)
+            self.assertEqual(str(result["items"][0].get("status") or ""), "pending")
+            self.assertEqual(str(result["items"][0].get("previous_status") or ""), "needs_resume")
+
+            match = db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
+            self.assertEqual(str((match or {}).get("status") or ""), "needs_resume")
+
+    def test_reconcile_waiting_connection_match_statuses_updates_stale_match_status(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outreach_reconcile.sqlite3"))
+            db.init_schema()
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = _ConnectionAwareProvider()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            stale_candidate_id = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-reconcile-exec-stale",
+                    "full_name": "Stale Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": [],
+                    "years_experience": 4,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+            healthy_candidate_id = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-reconcile-exec-healthy",
+                    "full_name": "Healthy Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": [],
+                    "years_experience": 4,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+            db.create_candidate_match(
+                job_id=job_id,
+                candidate_id=stale_candidate_id,
+                score=0.51,
+                status="verified",
+                verification_notes={},
+            )
+            db.create_candidate_match(
+                job_id=job_id,
+                candidate_id=healthy_candidate_id,
+                score=0.51,
+                status="outreach_pending_connection",
+                verification_notes={},
+            )
+            stale_conversation_id = db.create_conversation(job_id=job_id, candidate_id=stale_candidate_id, channel="linkedin")
+            db.update_conversation_status(conversation_id=stale_conversation_id, status="waiting_connection")
+            healthy_conversation_id = db.create_conversation(job_id=job_id, candidate_id=healthy_candidate_id, channel="linkedin")
+            db.update_conversation_status(conversation_id=healthy_conversation_id, status="waiting_connection")
+
+            result = workflow.reconcile_waiting_connection_match_statuses(job_id=job_id, limit=10, dry_run=False)
+            self.assertFalse(bool(result.get("dry_run")))
+            self.assertEqual(int(result.get("candidates_total") or 0), 1)
+            self.assertEqual(int(result.get("updated") or 0), 1)
+            self.assertEqual(str(result["items"][0].get("previous_status") or ""), "verified")
+            self.assertEqual(str(result["items"][0].get("target_status") or ""), "outreach_pending_connection")
+
+            stale_match = db.get_candidate_match(job_id=job_id, candidate_id=stale_candidate_id)
+            self.assertEqual(str((stale_match or {}).get("status") or ""), "outreach_pending_connection")
+            notes = (stale_match or {}).get("verification_notes") or {}
+            self.assertEqual(str(notes.get("reconciliation_reason") or ""), "waiting_connection_status_drift")
+            self.assertEqual(str(notes.get("reconciliation_previous_status") or ""), "verified")
+
+            healthy_match = db.get_candidate_match(job_id=job_id, candidate_id=healthy_candidate_id)
+            self.assertEqual(str((healthy_match or {}).get("status") or ""), "outreach_pending_connection")
+
 
 if __name__ == "__main__":
     unittest.main()

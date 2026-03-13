@@ -1979,19 +1979,35 @@ class WorkflowService:
                         },
                     )
 
-                if prescreen_status in {"ready_for_interview", "cv_received_pending_answers"} and not (
+                prescreen_match_status = self._match_status_from_prescreen_status(prescreen_status)
+                effective_match_status = str((match or {}).get("status") or current_match_status or "").strip().lower()
+                if prescreen_match_status and not (
                     isinstance(interview_result, dict) and interview_result.get("started")
                 ):
                     self.db.update_candidate_match_status(
                         job_id=int(conversation["job_id"]),
                         candidate_id=int(conversation["candidate_id"]),
-                        status="resume_received",
-                        extra_notes={
-                            "resume_received_at": (state_out or {}).get("updated_at"),
-                            "prescreen_status": prescreen_status or None,
-                        },
+                        status=prescreen_match_status,
+                        extra_notes=(
+                            {"prescreen_status": prescreen_status or None}
+                            if prescreen_match_status == "must_have_approved"
+                            else {
+                                "resume_received_at": (state_out or {}).get("updated_at"),
+                                "prescreen_status": prescreen_status or None,
+                            }
+                        ),
                     )
-                    if prescreen_status == "ready_for_interview":
+                    if isinstance(match, dict):
+                        match["status"] = prescreen_match_status
+                    if prescreen_match_status == "must_have_approved":
+                        self.db.log_operation(
+                            operation="candidate.prescreen.must_have_approved",
+                            status="ok",
+                            entity_type="candidate",
+                            entity_id=str(conversation["candidate_id"]),
+                            details={"conversation_id": conversation_id, "session_id": session_id},
+                        )
+                    elif prescreen_status == "ready_for_interview":
                         self.db.log_operation(
                             operation="candidate.prescreen.completed",
                             status="ok",
@@ -2007,15 +2023,20 @@ class WorkflowService:
                             entity_id=str(conversation["candidate_id"]),
                             details={"conversation_id": conversation_id, "session_id": session_id},
                         )
-                    self._record_outreach_account_event(
-                        event_key=f"message:{inbound_id}:resume_received",
-                        account_id=account_id,
-                        event_type="resume_received",
-                        job_id=int(conversation["job_id"]),
-                        candidate_id=int(conversation["candidate_id"]),
-                        conversation_id=conversation_id,
-                        details={"message_id": inbound_id, "session_id": session_id},
+                    should_record_resume_received = prescreen_match_status == "resume_received_pending_must_have" or (
+                        prescreen_match_status == "resume_received"
+                        and effective_match_status not in {"resume_received_pending_must_have", "resume_received"}
                     )
+                    if should_record_resume_received:
+                        self._record_outreach_account_event(
+                            event_key=f"message:{inbound_id}:resume_received",
+                            account_id=account_id,
+                            event_type="resume_received",
+                            job_id=int(conversation["job_id"]),
+                            candidate_id=int(conversation["candidate_id"]),
+                            conversation_id=conversation_id,
+                            details={"message_id": inbound_id, "session_id": session_id},
+                        )
                 elif state_status == "not_interested":
                     self.db.update_candidate_match_status(
                         job_id=int(conversation["job_id"]),
@@ -4620,6 +4641,56 @@ class WorkflowService:
             "items": items,
         }
 
+    def reconcile_waiting_connection_match_statuses(
+        self,
+        *,
+        job_id: int | None = None,
+        limit: int = 200,
+        dry_run: bool = True,
+    ) -> Dict[str, Any]:
+        safe_limit = max(1, min(int(limit or 200), 500))
+        rows = self.db.list_waiting_connection_status_drifts(limit=safe_limit, job_id=job_id)
+        items: List[Dict[str, Any]] = []
+        updated = 0
+
+        for row in rows:
+            row_job_id = int(row.get("job_id") or 0)
+            candidate_id = int(row.get("candidate_id") or 0)
+            previous_status = str(row.get("match_status") or "").strip().lower()
+            item = {
+                "job_id": row_job_id,
+                "candidate_id": candidate_id,
+                "candidate_name": row.get("candidate_name"),
+                "conversation_id": int(row.get("conversation_id") or 0),
+                "previous_status": previous_status,
+                "target_status": "outreach_pending_connection",
+                "status": "pending" if dry_run else "updated",
+            }
+            if not dry_run and row_job_id > 0 and candidate_id > 0:
+                # job_candidates.status is the source of truth for funnel stage; this only repairs
+                # stale rows where transport state already shows a sent connection request.
+                self.db.update_candidate_match_status(
+                    job_id=row_job_id,
+                    candidate_id=candidate_id,
+                    status="outreach_pending_connection",
+                    extra_notes={
+                        "reconciled_at": utc_now_iso(),
+                        "reconciliation_reason": "waiting_connection_status_drift",
+                        "reconciliation_previous_status": previous_status,
+                    },
+                )
+                updated += 1
+            items.append(item)
+
+        return {
+            "status": "ok",
+            "job_id": int(job_id) if job_id is not None else None,
+            "dry_run": bool(dry_run),
+            "candidates_total": len(rows),
+            "updated": updated,
+            "items": items,
+        }
+
     def queue_job_outreach_candidates(
         self,
         *,
@@ -5799,6 +5870,19 @@ class WorkflowService:
         if normalized in {"cv_received_pending_answers", "ready_for_interview", "ready_for_screening_call"}:
             return "resume_received"
         return normalized
+
+    @staticmethod
+    def _match_status_from_prescreen_status(prescreen_status: Any) -> str | None:
+        normalized = str(prescreen_status or "").strip().lower()
+        if normalized == "ready_for_screening_call":
+            normalized = "ready_for_interview"
+        if normalized == "ready_for_cv":
+            return "must_have_approved"
+        if normalized == "cv_received_pending_answers":
+            return "resume_received_pending_must_have"
+        if normalized == "ready_for_interview":
+            return "resume_received"
+        return None
 
     @classmethod
     def _public_pre_resume_state(cls, state: Dict[str, Any] | None) -> Dict[str, Any] | None:

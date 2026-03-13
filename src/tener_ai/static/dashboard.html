@@ -3467,13 +3467,12 @@
       }
       const summaryParts = [
         `${Number(summary.total_candidates || 0)} candidates`,
-        `${Number(summary.queued || 0)} queued`,
+        `${Number(summary.sourced || 0)} sourced`,
         `${Number(summary.connect_sent || 0)} connect sent`,
-        `${Number(summary.queued_delivery || 0)} queued delivery`,
-        `${Number(summary.dialogue || 0)} active dialogue`,
+        `${Number(summary.responded || 0)} responded`,
+        `${Number(summary.must_have_approved || 0)} must-have approved`,
         `${Number(summary.cv_received || 0)} cv received`,
         `${Number(summary.interview_pending || 0)} interview pending`,
-        `${Number(summary.delivery_blocked || 0)} delivery blocked`,
         `${Number(summary.completed || 0)} completed`,
       ];
       if (board.limited && Number(board.displayed_candidates || 0) > 0) {
@@ -3496,6 +3495,8 @@
         if (normalized === "await_acceptance") return "Next: wait acceptance";
         if (normalized === "await_reply") return "Next: wait reply";
         if (normalized === "review_resume") return "Next: review CV";
+        if (normalized === "await_cv") return "Next: await CV";
+        if (normalized === "await_must_have") return "Next: await must-have";
         if (normalized === "await_interview") return "Next: wait interview";
         if (normalized === "repair_identity") return "Next: repair identity";
         return `Next: ${normalized.replace(/_/g, " ")}`;
@@ -3795,13 +3796,12 @@
               status: "error",
               summary: {
                 total_candidates: 0,
-                queued: 0,
+                sourced: 0,
                 connect_sent: 0,
-                queued_delivery: 0,
-                dialogue: 0,
+                responded: 0,
+                must_have_approved: 0,
                 cv_received: 0,
                 interview_pending: 0,
-                delivery_blocked: 0,
                 completed: 0,
               },
               columns: [],

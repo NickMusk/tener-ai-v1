@@ -182,7 +182,7 @@ class InboundPollingTests(unittest.TestCase):
             self.assertEqual(first["processed"], 1)
 
             row = db.list_candidates_for_job(job_id)[0]
-            self.assertEqual(str(row.get("status")), "resume_received")
+            self.assertEqual(str(row.get("status")), "resume_received_pending_must_have")
             assets = db.list_resume_assets_for_candidate(candidate_id=candidate_id, job_id=job_id, limit=20)
             self.assertGreaterEqual(len(assets), 1)
             self.assertEqual(str(assets[0].get("processing_status")), "stored_unparsed")
@@ -333,7 +333,7 @@ class InboundPollingTests(unittest.TestCase):
             self.assertEqual(result["processed"], 1)
 
             row = db.list_candidates_for_job(job_id)[0]
-            self.assertEqual(str(row.get("status")), "resume_received")
+            self.assertEqual(str(row.get("status")), "resume_received_pending_must_have")
             assets = db.list_resume_assets_for_candidate(candidate_id=candidate_id, job_id=job_id, limit=20)
             self.assertGreaterEqual(len(assets), 1)
             self.assertEqual(str(assets[0].get("processing_status")), "received_no_url")
@@ -422,7 +422,7 @@ class InboundPollingTests(unittest.TestCase):
             self.assertEqual(result["processed"], 1)
 
             row = db.list_candidates_for_job(job_id)[0]
-            self.assertEqual(str(row.get("status")), "resume_received")
+            self.assertEqual(str(row.get("status")), "resume_received_pending_must_have")
             assets = db.list_resume_assets_for_candidate(candidate_id=candidate_id, job_id=job_id, limit=20)
             self.assertGreaterEqual(len(assets), 1)
             self.assertEqual(str(assets[0].get("remote_url") or ""), "att://att-3")

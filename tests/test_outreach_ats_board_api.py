@@ -16,6 +16,33 @@ from tener_ai import main as api_main
 from tener_ai.db import Database, utc_now_iso
 
 
+class _ReconcileWorkflowStub:
+    def __init__(self) -> None:
+        self.calls: list[Dict[str, Any]] = []
+
+    def reconcile_waiting_connection_match_statuses(
+        self,
+        *,
+        job_id: Optional[int] = None,
+        limit: int = 200,
+        dry_run: bool = True,
+    ) -> Dict[str, Any]:
+        payload = {
+            "job_id": job_id,
+            "limit": limit,
+            "dry_run": dry_run,
+        }
+        self.calls.append(payload)
+        return {
+            "status": "ok",
+            "job_id": job_id,
+            "dry_run": dry_run,
+            "candidates_total": 1,
+            "updated": 0 if dry_run else 1,
+            "items": [payload],
+        }
+
+
 class OutreachAtsBoardApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = TemporaryDirectory()
@@ -105,8 +132,8 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         )
         job_id = self._create_job("Manual QA Engineer")
 
-        queued_candidate = self._create_candidate("queued", "Queued Candidate")
-        self._attach_match(job_id=job_id, candidate_id=queued_candidate, status="verified")
+        sourced_candidate = self._create_candidate("sourced", "Sourced Candidate")
+        self._attach_match(job_id=job_id, candidate_id=sourced_candidate, status="verified")
 
         connect_candidate = self._create_candidate("connect", "Connect Candidate")
         self._attach_match(job_id=job_id, candidate_id=connect_candidate, status="outreach_pending_connection")
@@ -114,30 +141,44 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.db.set_conversation_linkedin_account(conversation_id=connect_conversation, account_id=account_id)
         self.db.update_conversation_status(conversation_id=connect_conversation, status="waiting_connection")
 
-        dialogue_candidate = self._create_candidate("dialogue", "Dialogue Candidate")
-        self._attach_match(job_id=job_id, candidate_id=dialogue_candidate, status="in_dialogue")
-        dialogue_conversation = self.db.create_conversation(job_id=job_id, candidate_id=dialogue_candidate, channel="linkedin")
-        self.db.set_conversation_linkedin_account(conversation_id=dialogue_conversation, account_id=account_id)
-        self.db.update_conversation_status(conversation_id=dialogue_conversation, status="active")
+        responded_candidate = self._create_candidate("responded", "Responded Candidate")
+        self._attach_match(job_id=job_id, candidate_id=responded_candidate, status="in_dialogue")
+        responded_conversation = self.db.create_conversation(job_id=job_id, candidate_id=responded_candidate, channel="linkedin")
+        self.db.set_conversation_linkedin_account(conversation_id=responded_conversation, account_id=account_id)
+        self.db.update_conversation_status(conversation_id=responded_conversation, status="active")
         self.db.add_message(
-            conversation_id=dialogue_conversation,
+            conversation_id=responded_conversation,
             direction="inbound",
             content="Happy to chat",
             candidate_language="en",
             meta={},
         )
 
-        queued_delivery_candidate = self._create_candidate("queued-delivery", "Queued Delivery Candidate")
-        self._attach_match(job_id=job_id, candidate_id=queued_delivery_candidate, status="outreach_sent")
-        queued_delivery_conversation = self.db.create_conversation(job_id=job_id, candidate_id=queued_delivery_candidate, channel="linkedin")
+        sent_candidate = self._create_candidate("connect-sent", "Connect Sent Candidate")
+        self._attach_match(job_id=job_id, candidate_id=sent_candidate, status="outreach_sent")
+        self.db.create_conversation(job_id=job_id, candidate_id=sent_candidate, channel="linkedin")
         self.db.update_candidate_match_status(
             job_id=job_id,
-            candidate_id=queued_delivery_candidate,
+            candidate_id=sent_candidate,
             status="outreach_sent",
         )
 
+        must_have_candidate = self._create_candidate("must-have", "Must-Have Candidate")
+        self._attach_match(job_id=job_id, candidate_id=must_have_candidate, status="must_have_approved")
+        must_have_conversation = self.db.create_conversation(job_id=job_id, candidate_id=must_have_candidate, channel="linkedin")
+        self.db.set_conversation_linkedin_account(conversation_id=must_have_conversation, account_id=account_id)
+        self.db.update_conversation_status(conversation_id=must_have_conversation, status="active")
+        self.db.upsert_pre_resume_session(
+            session_id="ats-pre-must-have",
+            conversation_id=must_have_conversation,
+            job_id=job_id,
+            candidate_id=must_have_candidate,
+            state={"status": "ready_for_cv", "prescreen_status": "ready_for_cv", "language": "en"},
+            instruction="",
+        )
+
         cv_candidate = self._create_candidate("cv", "CV Candidate")
-        self._attach_match(job_id=job_id, candidate_id=cv_candidate, status="resume_received")
+        self._attach_match(job_id=job_id, candidate_id=cv_candidate, status="resume_received_pending_must_have")
         cv_conversation = self.db.create_conversation(job_id=job_id, candidate_id=cv_candidate, channel="linkedin")
         self.db.set_conversation_linkedin_account(conversation_id=cv_conversation, account_id=account_id)
         self.db.update_conversation_status(conversation_id=cv_conversation, status="active")
@@ -146,7 +187,21 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
             conversation_id=cv_conversation,
             job_id=job_id,
             candidate_id=cv_candidate,
-            state={"status": "resume_received", "language": "en"},
+            state={"status": "cv_received_pending_answers", "prescreen_status": "cv_received_pending_answers", "cv_received": True, "language": "en"},
+            instruction="",
+        )
+
+        approved_cv_candidate = self._create_candidate("approved-cv", "Approved CV Candidate")
+        self._attach_match(job_id=job_id, candidate_id=approved_cv_candidate, status="resume_received")
+        approved_cv_conversation = self.db.create_conversation(job_id=job_id, candidate_id=approved_cv_candidate, channel="linkedin")
+        self.db.set_conversation_linkedin_account(conversation_id=approved_cv_conversation, account_id=account_id)
+        self.db.update_conversation_status(conversation_id=approved_cv_conversation, status="active")
+        self.db.upsert_pre_resume_session(
+            session_id="ats-pre-approved-cv",
+            conversation_id=approved_cv_conversation,
+            job_id=job_id,
+            candidate_id=approved_cv_candidate,
+            state={"status": "resume_received", "prescreen_status": "ready_for_interview", "cv_received": True, "language": "en"},
             instruction="",
         )
 
@@ -181,35 +236,41 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
 
         summary = payload.get("summary") or {}
-        self.assertEqual(int(summary.get("total_candidates") or 0), 9)
-        self.assertEqual(int(summary.get("queued") or 0), 1)
-        self.assertEqual(int(summary.get("connect_sent") or 0), 1)
-        self.assertEqual(int(summary.get("queued_delivery") or 0), 1)
-        self.assertEqual(int(summary.get("dialogue") or 0), 1)
-        self.assertEqual(int(summary.get("cv_received") or 0), 1)
+        self.assertEqual(int(summary.get("total_candidates") or 0), 11)
+        self.assertEqual(int(summary.get("sourced") or 0), 1)
+        self.assertEqual(int(summary.get("connect_sent") or 0), 2)
+        self.assertEqual(int(summary.get("responded") or 0), 1)
+        self.assertEqual(int(summary.get("must_have_approved") or 0), 1)
+        self.assertEqual(int(summary.get("cv_received") or 0), 2)
         self.assertEqual(int(summary.get("interview_pending") or 0), 1)
         self.assertEqual(int(summary.get("completed") or 0), 3)
 
         columns = {str(item.get("key") or ""): item for item in (payload.get("columns") or [])}
         self.assertEqual(
-            [str(item.get("candidate_name") or "") for item in (columns.get("queued") or {}).get("items", [])],
-            ["Queued Candidate"],
+            [str(item.get("candidate_name") or "") for item in (columns.get("sourced") or {}).get("items", [])],
+            ["Sourced Candidate"],
         )
         self.assertEqual(
-            [str(item.get("candidate_name") or "") for item in (columns.get("connect_sent") or {}).get("items", [])],
-            ["Connect Candidate"],
+            {
+                str(item.get("candidate_name") or "")
+                for item in (columns.get("connect_sent") or {}).get("items", [])
+            },
+            {"Connect Candidate", "Connect Sent Candidate"},
         )
         self.assertEqual(
-            [str(item.get("candidate_name") or "") for item in (columns.get("queued_delivery") or {}).get("items", [])],
-            ["Queued Delivery Candidate"],
+            [str(item.get("candidate_name") or "") for item in (columns.get("responded") or {}).get("items", [])],
+            ["Responded Candidate"],
         )
         self.assertEqual(
-            [str(item.get("candidate_name") or "") for item in (columns.get("dialogue") or {}).get("items", [])],
-            ["Dialogue Candidate"],
+            [str(item.get("candidate_name") or "") for item in (columns.get("must_have_approved") or {}).get("items", [])],
+            ["Must-Have Candidate"],
         )
         self.assertEqual(
-            [str(item.get("candidate_name") or "") for item in (columns.get("cv_received") or {}).get("items", [])],
-            ["CV Candidate"],
+            {
+                str(item.get("candidate_name") or "")
+                for item in (columns.get("cv_received") or {}).get("items", [])
+            },
+            {"CV Candidate", "Approved CV Candidate"},
         )
         self.assertEqual(
             [str(item.get("candidate_name") or "") for item in (columns.get("interview_pending") or {}).get("items", [])],
@@ -271,7 +332,7 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         queued_names = {
             str(item.get("candidate_name") or "")
             for column in (payload.get("columns") or [])
-            if str(column.get("key") or "") == "queued"
+            if str(column.get("key") or "") == "sourced"
             for item in (column.get("items") or [])
         }
         self.assertEqual(queued_names, {"Light Read Candidate"})
@@ -328,11 +389,11 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
 
         summary = payload.get("summary") or {}
         self.assertEqual(int(summary.get("total_candidates") or 0), 1)
-        self.assertEqual(int(summary.get("queued") or 0), 1)
+        self.assertEqual(int(summary.get("sourced") or 0), 1)
 
         all_names = [
             str(item.get("candidate_name") or "")
-            for column in (payload.get("columns") or [])
+        for column in (payload.get("columns") or [])
             for item in (column.get("items") or [])
         ]
         self.assertIn("Normal Candidate", all_names)
@@ -394,12 +455,12 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         summary = payload.get("summary") or {}
         self.assertEqual(int(summary.get("delivery_blocked") or 0), 0)
         self.assertEqual(int(summary.get("completed") or 0), 0)
-        self.assertEqual(int(summary.get("queued") or 0), 1)
+        self.assertEqual(int(summary.get("sourced") or 0), 1)
 
         columns = {str(item.get("key") or ""): item for item in (payload.get("columns") or [])}
         queued_names = {
             str(item.get("candidate_name") or "")
-            for item in (columns.get("queued") or {}).get("items", [])
+            for item in (columns.get("sourced") or {}).get("items", [])
         }
         self.assertEqual(queued_names, {"Delivery Blocked Candidate"})
 
@@ -422,8 +483,26 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         summary = payload.get("summary") or {}
         self.assertEqual(int(summary.get("total_candidates") or 0), 58)
         self.assertEqual(int(summary.get("completed") or 0), 3)
+        self.assertEqual(int(summary.get("sourced") or 0), 55)
         self.assertTrue(bool(payload.get("limited")))
         self.assertEqual(int(payload.get("displayed_candidates") or 0), 50)
+
+    def test_reconcile_waiting_connection_endpoint_passes_through_payload(self) -> None:
+        workflow = _ReconcileWorkflowStub()
+        api_main.SERVICES = {"db": self.db, "workflow": workflow}
+
+        status, payload = self._request(
+            "POST",
+            "/api/outreach/reconcile-waiting-connection",
+            payload={"job_id": 27, "limit": 25, "dry_run": False},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            workflow.calls,
+            [{"job_id": 27, "limit": 25, "dry_run": False}],
+        )
+        self.assertEqual(int(payload.get("updated") or 0), 1)
+        self.assertFalse(bool(payload.get("dry_run")))
 
 
 if __name__ == "__main__":

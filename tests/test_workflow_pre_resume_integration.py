@@ -166,6 +166,7 @@ class WorkflowPreResumeIntegrationTests(unittest.TestCase):
             )
             self.assertEqual(second_reply["mode"], "pre_resume")
             self.assertEqual(second_reply["state"]["prescreen_status"], "cv_received_pending_answers")
+            self.assertEqual((db.get_candidate_match(job_id=job_id, candidate_id=candidate_id) or {}).get("status"), "resume_received_pending_must_have")
 
             third_reply = workflow.process_inbound_message(
                 conversation_id=conversation_id,

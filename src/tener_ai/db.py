@@ -2515,6 +2515,49 @@ class Database:
         rows = self._conn.execute(query, tuple(args)).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
+    def list_waiting_connection_status_drifts(
+        self,
+        *,
+        limit: int = 200,
+        job_id: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        if job_id is not None and (self._job_is_archived(job_id) or self._job_is_paused(job_id)):
+            return []
+        safe_limit = max(1, min(int(limit or 200), 2000))
+        where_parts = [
+            "conv.status = 'waiting_connection'",
+            "jc.status IN ('verified', 'needs_resume')",
+            "j.archived_at IS NULL",
+            "COALESCE(NULLIF(TRIM(j.job_state), ''), 'active') = 'active'",
+        ]
+        args: List[Any] = []
+        if job_id is not None:
+            where_parts.append("conv.job_id = ?")
+            args.append(int(job_id))
+        query = f"""
+        SELECT
+            conv.job_id,
+            conv.candidate_id,
+            MAX(conv.id) AS conversation_id,
+            MAX(COALESCE(conv.last_message_at, conv.created_at, '')) AS last_message_at,
+            jc.status AS match_status,
+            j.title AS job_title,
+            c.full_name AS candidate_name
+        FROM conversations conv
+        JOIN job_candidates jc
+          ON jc.job_id = conv.job_id
+         AND jc.candidate_id = conv.candidate_id
+        JOIN jobs j ON j.id = conv.job_id
+        JOIN candidates c ON c.id = conv.candidate_id
+        WHERE {' AND '.join(where_parts)}
+        GROUP BY conv.job_id, conv.candidate_id, jc.status, j.title, c.full_name
+        ORDER BY last_message_at DESC, conversation_id DESC
+        LIMIT ?
+        """
+        args.append(safe_limit)
+        rows = self._conn.execute(query, tuple(args)).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
     def claim_outbound_action(self, action_id: int) -> bool:
         with self.transaction() as conn:
             cur = conn.execute(
@@ -4708,12 +4751,14 @@ class Database:
         # the match status instead of redefining the stage independently.
         status = cls._canonical_job_candidate_status(item)
         stage_map = {
-            "verified": ("queued", "Queued", "Ready for outreach"),
-            "needs_resume": ("queued", "Queued", "Ready for outreach"),
+            "verified": ("sourced", "Sourced", "Found in top-of-funnel sourcing"),
+            "needs_resume": ("sourced", "Sourced", "Found in top-of-funnel sourcing"),
             "outreach_pending_connection": ("connect_sent", "Connect Sent", "Waiting for acceptance"),
-            "outreach_sent": ("queued_delivery", "Queued for Delivery", "Waiting for candidate reply"),
-            "in_dialogue": ("dialogue", "Dialogue", "Candidate replied"),
-            "resume_received": ("cv_received", "CV Received", "CV received"),
+            "outreach_sent": ("connect_sent", "Connect Sent", "Waiting for candidate reply"),
+            "in_dialogue": ("responded", "Responded", "Candidate replied"),
+            "must_have_approved": ("must_have_approved", "Must-Have Approved", "Written prescreen complete. Waiting for CV"),
+            "resume_received_pending_must_have": ("cv_received", "CV Received", "CV received. Waiting for must-have approval"),
+            "resume_received": ("cv_received", "CV Received", "CV received and must-have approved"),
             "interview_invited": ("interview_pending", "Interview Pending", "Interview link sent"),
             "interview_in_progress": ("interview_pending", "Interview Pending", "Interview in progress"),
             "stalled": ("completed", "Completed", "Stopped after follow-up exhaustion"),
@@ -4721,19 +4766,22 @@ class Database:
             "interview_failed": ("completed", "Completed", "Interview not passed"),
             "interview_passed": ("completed", "Completed", "Interview passed"),
         }
-        stage_key, stage_label, detail = stage_map.get(status, ("queued", "Queued", "Ready for outreach"))
+        stage_key, stage_label, detail = stage_map.get(status, ("sourced", "Sourced", "Found in top-of-funnel sourcing"))
         stage_rank = {
-            "queued": 10,
+            "sourced": 10,
             "connect_sent": 20,
-            "queued_delivery": 30,
-            "dialogue": 40,
+            "responded": 30,
+            "must_have_approved": 40,
             "cv_received": 50,
             "interview_pending": 60,
-            "delivery_blocked": 70,
-            "completed": 80,
+            "completed": 70,
         }.get(stage_key, 999)
-        current_status_key = "cv_received" if status == "resume_received" else status
-        current_status_label = "CV Received" if status == "resume_received" else status.replace("_", " ").title()
+        current_status_key = status
+        current_status_label = {
+            "must_have_approved": "Must-Have Approved",
+            "resume_received_pending_must_have": "Resume Received Pending Must-Have",
+            "resume_received": "CV Received",
+        }.get(status, status.replace("_", " ").title())
         return {
             "current_status_key": current_status_key,
             "current_status_label": current_status_label,
@@ -4782,6 +4830,12 @@ class Database:
             return "interview_failed", "Interview Failed"
         if match_status in {"interview_invited", "interview_in_progress", "interview_passed", "interview_failed"}:
             return match_status, match_status.replace("_", " ").title()
+        if match_status == "must_have_approved":
+            return "must_have_approved", "Must-Have Approved"
+        if match_status == "resume_received_pending_must_have":
+            return "resume_received_pending_must_have", "Resume Received Pending Must-Have"
+        if match_status == "resume_received":
+            return "resume_received", "CV Received"
         if conversation_status == "waiting_connection" or match_status == "outreach_pending_connection":
             return "outreach_pending_connection", "Outreach Pending Connection"
         if pre_resume_status == "resume_received":
@@ -4872,6 +4926,18 @@ class Database:
             lifecycle_key = "dialogue_started"
             lifecycle_label = "Dialogue started"
             lifecycle_detail = "Candidate replied"
+        elif current_status_key == "must_have_approved":
+            lifecycle_key = "must_have_approved"
+            lifecycle_label = "Must-Have Approved"
+            lifecycle_detail = "Written prescreen complete. Waiting for CV"
+        elif current_status_key == "resume_received_pending_must_have":
+            lifecycle_key = "resume_received_pending_must_have"
+            lifecycle_label = "Resume received"
+            lifecycle_detail = "CV received. Waiting for must-have approval"
+        elif current_status_key == "resume_received":
+            lifecycle_key = "resume_received"
+            lifecycle_label = "Resume received"
+            lifecycle_detail = "CV received and must-have approved"
         elif current_status_key == "cv_received":
             lifecycle_key = "resume_received"
             lifecycle_label = "Resume received"
@@ -4936,9 +5002,9 @@ class Database:
         closed_statuses = {"not_interested", "unreachable", "rejected", "stalled"}
         interview_pending_statuses = {"interview_invited", "interview_in_progress"}
 
-        stage_key = "queued"
-        stage_label = "Queued"
-        stage_detail = planned_action_label or lifecycle_detail or lifecycle_label or current_status_label or "Ready for outreach"
+        stage_key = "sourced"
+        stage_label = "Sourced"
+        stage_detail = planned_action_label or lifecycle_detail or lifecycle_label or current_status_label or "Found in top-of-funnel sourcing"
         next_action_kind = planned_action_kind or None
         next_action_at = pending_action_at
         stage_rank = 10
@@ -4981,47 +5047,55 @@ class Database:
             next_action_kind = "await_interview"
             next_action_at = None
             stage_rank = 50
-        elif current_status_key == "cv_received":
+        elif current_status_key == "resume_received":
             stage_key = "cv_received"
             stage_label = "CV Received"
             if prescreen_status == "ready_for_interview":
-                stage_detail = "Written prescreen complete. Ready for interview"
+                stage_detail = "CV received and must-have approved. Ready for interview"
                 next_action_kind = "interview"
             else:
                 stage_detail = lifecycle_detail or current_status_label or "Resume received"
                 next_action_kind = "review_resume"
             next_action_at = None
             stage_rank = 40
-        elif lifecycle_key == "planned_message" or (
-            current_status_key == "outreached"
-            and planned_action_kind == "message"
-            and pending_action_status in {"pending", "running"}
-        ):
-            stage_key = "queued_delivery"
-            stage_label = "Queued for Delivery"
-            stage_detail = lifecycle_detail or planned_action_label or "Queued for delivery"
-            next_action_kind = "message"
-            if not next_action_at:
-                next_action_at = pending_action_at
-            stage_rank = 25
-        elif current_status_key == "in_dialogue" or lifecycle_key in {"dialogue_started", "connected_first_message_sent", "message_sent"}:
-            stage_key = "dialogue"
-            stage_label = "Dialogue"
+        elif current_status_key == "resume_received_pending_must_have":
+            stage_key = "cv_received"
+            stage_label = "CV Received"
+            stage_detail = lifecycle_detail or current_status_label or "CV received. Waiting for must-have approval"
+            next_action_kind = "await_must_have"
+            next_action_at = None
+            stage_rank = 40
+        elif current_status_key == "must_have_approved":
+            stage_key = "must_have_approved"
+            stage_label = "Must-Have Approved"
+            stage_detail = lifecycle_detail or current_status_label or "Written prescreen complete. Waiting for CV"
+            next_action_kind = "await_cv"
+            next_action_at = None
+            stage_rank = 35
+        elif current_status_key == "in_dialogue":
+            stage_key = "responded"
+            stage_label = "Responded"
             stage_detail = lifecycle_detail or lifecycle_label or current_status_label or "In communication"
             if not next_action_kind:
                 next_action_kind = "await_reply"
             stage_rank = 30
-        elif current_status_key == "outreach_pending_connection" or lifecycle_key == "connect_sent_waiting_acceptance":
+        elif current_status_key in {"outreach_pending_connection", "outreached"} or lifecycle_key in {
+            "connect_sent_waiting_acceptance",
+            "connected_first_message_sent",
+            "message_sent",
+        }:
             stage_key = "connect_sent"
             stage_label = "Connect Sent"
-            stage_detail = lifecycle_detail or lifecycle_label or "Waiting for acceptance"
-            next_action_kind = "await_acceptance"
+            stage_detail = lifecycle_detail or lifecycle_label or (
+                "Waiting for acceptance" if current_status_key == "outreach_pending_connection" else "Waiting for candidate reply"
+            )
+            next_action_kind = "await_acceptance" if current_status_key == "outreach_pending_connection" else "await_reply"
             next_action_at = None
             stage_rank = 20
         elif planned_action_kind in {"connect_request", "message"} or pending_action_status in {"pending", "running"} or current_status_key == "added":
-            stage_key = "queued"
-            stage_label = "Queued"
-            stage_detail = planned_action_label or lifecycle_detail or lifecycle_label or "Queued for delivery"
+            stage_key = "sourced"
+            stage_label = "Sourced"
+            stage_detail = planned_action_label or lifecycle_detail or lifecycle_label or "Found in top-of-funnel sourcing"
             if not next_action_kind:
                 next_action_kind = planned_action_kind or "connect_request"
             stage_rank = 10

@@ -851,6 +851,9 @@ class DualWriteDatabase:
                 self._mirror_call("update_candidate_match_status", lambda: self._mirror.upsert_candidate_match(row))
         return updated
 
+    def list_waiting_connection_status_drifts(self, *args: Any, **kwargs: Any) -> Any:
+        return self._primary.list_waiting_connection_status_drifts(*args, **kwargs)
+
     def create_conversation(self, *args: Any, **kwargs: Any) -> int:
         conversation_id = int(self._primary.create_conversation(*args, **kwargs))
         row = self._primary.get_conversation(conversation_id)

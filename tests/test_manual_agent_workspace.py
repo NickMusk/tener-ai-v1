@@ -98,7 +98,7 @@ class ManualAgentWorkspaceTests(unittest.TestCase):
 
             updated_match = db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
             self.assertIsNotNone(updated_match)
-            self.assertEqual(updated_match["status"], "resume_received")
+            self.assertEqual(updated_match["status"], "resume_received_pending_must_have")
 
 
 if __name__ == "__main__":
