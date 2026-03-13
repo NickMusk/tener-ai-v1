@@ -175,9 +175,8 @@ function buildHarness() {
 test("refreshOutreachOps renders ops data without waiting for ATS board", async () => {
   const harness = buildHarness();
   harness.state.opsJobId = 27;
-  harness.element("ops-stale-minutes").value = "45";
   harness.responses.set(
-    "/api/outreach/ops?limit_logs=1000&limit_chats=800&stale_minutes=45&job_id=27",
+    "/api/outreach/ops?limit_logs=1000&limit_chats=800&job_id=27",
     {
       summary: {
         health: "warning",
@@ -205,7 +204,7 @@ test("refreshOutreachOps renders ops data without waiting for ATS board", async 
       },
       accounts: [],
       events: [],
-      thresholds: { stale_minutes: 45 },
+      thresholds: { stale_minutes: 10080 },
     },
   );
   harness.responses.set(
@@ -240,9 +239,8 @@ test("refreshOutreachOps keeps last good ATS board when ATS refresh fails", asyn
     },
     columns: [],
   };
-  harness.element("ops-stale-minutes").value = "45";
   harness.responses.set(
-    "/api/outreach/ops?limit_logs=1000&limit_chats=800&stale_minutes=45&job_id=27",
+    "/api/outreach/ops?limit_logs=1000&limit_chats=800&job_id=27",
     {
       summary: {
         health: "ok",
@@ -261,7 +259,7 @@ test("refreshOutreachOps keeps last good ATS board when ATS refresh fails", asyn
       backlog: { summary: {}, items: [] },
       accounts: [],
       events: [],
-      thresholds: { stale_minutes: 45 },
+      thresholds: { stale_minutes: 10080 },
     },
   );
   harness.responses.set(

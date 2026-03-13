@@ -146,15 +146,17 @@ class OutreachOpsApiTests(unittest.TestCase):
                 ),
             )
 
-        status, payload = self._request("GET", "/api/outreach/ops?stale_minutes=30")
+        status, payload = self._request("GET", "/api/outreach/ops")
         self.assertEqual(status, 200)
         summary = payload.get("summary") or {}
+        thresholds = payload.get("thresholds") or {}
         self.assertEqual(str(summary.get("delivery_health") or ""), "warning")
         self.assertEqual(str(summary.get("backlog_health") or ""), "warning")
         self.assertEqual(str(summary.get("health") or ""), "warning")
         self.assertEqual(int(summary.get("sent_24h") or 0), 1)
         self.assertEqual(int(summary.get("failed_24h") or 0), 1)
         self.assertEqual(int(summary.get("stuck_threads") or 0), 1)
+        self.assertEqual(int(thresholds.get("stale_minutes") or 0), api_main.OUTREACH_STALE_REPLY_MINUTES)
 
         accounts = payload.get("accounts") or []
         self.assertEqual(len(accounts), 2)
@@ -216,7 +218,7 @@ class OutreachOpsApiTests(unittest.TestCase):
             instruction="",
         )
 
-        status, payload = self._request("GET", "/api/outreach/ops?stale_minutes=45")
+        status, payload = self._request("GET", "/api/outreach/ops")
         self.assertEqual(status, 200)
         summary = payload.get("summary") or {}
         self.assertEqual(int(summary.get("active_accounts") or 0), 1)
@@ -291,7 +293,7 @@ class OutreachOpsApiTests(unittest.TestCase):
                     ("2025-01-01T00:00:00+00:00", int(conversation_id)),
                 )
 
-        status, payload = self._request("GET", "/api/outreach/ops?stale_minutes=30")
+        status, payload = self._request("GET", "/api/outreach/ops")
         self.assertEqual(status, 200)
 
         summary = payload.get("summary") or {}
@@ -367,7 +369,7 @@ class OutreachOpsApiTests(unittest.TestCase):
         _add_match(new_job_id, "high", 0.93)
         _add_match(new_job_id, "low", 0.62)
 
-        status, payload = self._request("GET", "/api/outreach/ops?stale_minutes=45")
+        status, payload = self._request("GET", "/api/outreach/ops")
         self.assertEqual(status, 200)
         backlog = payload.get("backlog") or {}
         jobs = backlog.get("jobs") or []
@@ -419,26 +421,32 @@ class OutreachOpsApiTests(unittest.TestCase):
         conversation_id = self.db.create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
         self.db.update_conversation_status(conversation_id=conversation_id, status="waiting_connection")
 
-        backlog_before = self._request("GET", "/api/outreach/ops?stale_minutes=45")[1].get("backlog") or {}
+        backlog_before = self._request("GET", "/api/outreach/ops")[1].get("backlog") or {}
         waiting_before = [item for item in (backlog_before.get("items") or []) if int(item.get("job_id") or 0) == job_id]
         self.assertTrue(waiting_before)
 
         archive_result = self.db.archive_jobs(job_ids=[job_id])
         self.assertEqual(int(archive_result.get("updated") or 0), 1)
 
-        status_global, payload_global = self._request("GET", "/api/outreach/ops?stale_minutes=45")
+        status_global, payload_global = self._request("GET", "/api/outreach/ops")
         self.assertEqual(status_global, 200)
         backlog_global = payload_global.get("backlog") or {}
         self.assertTrue(all(int(item.get("job_id") or 0) != job_id for item in (backlog_global.get("items") or [])))
         self.assertTrue(all(int(item.get("job_id") or 0) != job_id for item in (backlog_global.get("jobs") or [])))
 
-        status_job, payload_job = self._request("GET", f"/api/outreach/ops?job_id={job_id}&stale_minutes=45")
+        status_job, payload_job = self._request("GET", f"/api/outreach/ops?job_id={job_id}")
         self.assertEqual(status_job, 200)
         backlog_job = payload_job.get("backlog") or {}
         self.assertEqual(backlog_job.get("items") or [], [])
         self.assertEqual(backlog_job.get("jobs") or [], [])
         backlog_summary = backlog_job.get("summary") or {}
         self.assertEqual(int(backlog_summary.get("selected_jobs") or 0), 0)
+
+    def test_outreach_ops_ignores_stale_minutes_query_override(self) -> None:
+        status, payload = self._request("GET", "/api/outreach/ops?stale_minutes=30")
+        self.assertEqual(status, 200)
+        thresholds = payload.get("thresholds") or {}
+        self.assertEqual(int(thresholds.get("stale_minutes") or 0), api_main.OUTREACH_STALE_REPLY_MINUTES)
 
     def test_outreach_ops_includes_account_funnel_summary_and_recent_candidates(self) -> None:
         account_id = self.db.upsert_linkedin_account(

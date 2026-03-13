@@ -1442,7 +1442,6 @@
             <select id="ops-job-select">
               <option value="all">All jobs</option>
             </select>
-            <input id="ops-stale-minutes" type="number" min="10" max="1440" value="45" style="width:120px;" title="Stale threshold (minutes)">
             <button id="ops-refresh-btn">Reload</button>
           </div>
         </div>
@@ -3336,6 +3335,18 @@
       await refreshOutreachOps();
     }
 
+    function formatOutreachStaleThreshold(staleMinutes) {
+      const normalized = Number(staleMinutes || 0);
+      if (!Number.isFinite(normalized) || normalized <= 0) {
+        return "the stale threshold";
+      }
+      if (normalized % (24 * 60) === 0) {
+        const days = normalized / (24 * 60);
+        return `${days} day${days === 1 ? "" : "s"}`;
+      }
+      return `${normalized} minute${normalized === 1 ? "" : "s"}`;
+    }
+
     function renderCaseyOutreachHealth() {
       if (!state.outreachOps) {
         applyHealthPill($("casey-health-pill"), "unknown");
@@ -3349,9 +3360,9 @@
       }
       const summary = (state.outreachOps || {}).summary || {};
       const thresholds = (state.outreachOps || {}).thresholds || {};
-      const staleMinutes = Number(thresholds.stale_minutes || 0);
-      const stuckTooltip = staleMinutes > 0
-        ? `Candidate dialogues still awaiting a reply after ${staleMinutes} minutes without a response.`
+      const staleThresholdLabel = formatOutreachStaleThreshold(thresholds.stale_minutes);
+      const stuckTooltip = thresholds.stale_minutes
+        ? `Candidate dialogues still awaiting a reply after ${staleThresholdLabel} without a response.`
         : "Candidate dialogues still awaiting a reply past the stale threshold.";
       applyHealthPill($("casey-health-pill"), summary.delivery_health || summary.health || "unknown");
       $("casey-health-sent-1h").textContent = String(Number(summary.sent_1h || 0));
@@ -3732,12 +3743,9 @@
     }
 
     async function refreshOutreachOps() {
-      const staleInput = $("ops-stale-minutes");
-      const staleMinutes = Math.max(10, Math.min(1440, Number((staleInput && staleInput.value) || 45) || 45));
-      if (staleInput) staleInput.value = String(staleMinutes);
       const jobId = selectedOpsJobId();
       const scopeQuery = jobId ? `&job_id=${encodeURIComponent(jobId)}` : "";
-      const opsPath = `/api/outreach/ops?limit_logs=1000&limit_chats=800&stale_minutes=${staleMinutes}${scopeQuery}`;
+      const opsPath = `/api/outreach/ops?limit_logs=1000&limit_chats=800${scopeQuery}`;
       const atsPath = `/api/outreach/ats-board?limit=200${scopeQuery}`;
       const opsRequestSeq = Number(state.outreachOpsRequestSeq || 0) + 1;
       const atsRequestSeq = Number(state.outreachAtsRequestSeq || 0) + 1;

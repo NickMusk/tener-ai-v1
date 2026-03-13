@@ -98,6 +98,10 @@ def default_interview_api_base() -> str:
     return ""
 
 
+OUTREACH_STALE_REPLY_DAYS = 7
+OUTREACH_STALE_REPLY_MINUTES = OUTREACH_STALE_REPLY_DAYS * 24 * 60
+
+
 def apply_agent_instructions(services: Dict[str, Any]) -> None:
     instructions: AgentInstructions = services["instructions"]
     workflow: WorkflowService = services["workflow"]
@@ -725,7 +729,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
                         "conversation_resume_backfill": "POST /api/conversations/{conversation_id}/resume-backfill",
                         "chats_overview": "GET /api/chats/overview?limit=200",
-                        "outreach_ops": "GET /api/outreach/ops?job_id=...&stale_minutes=45",
+                        "outreach_ops": "GET /api/outreach/ops?job_id=...",
                         "outreach_ats_board": "GET /api/outreach/ats-board?job_id=...&limit=600",
                         "linkedin_accounts_list": "GET /api/linkedin/accounts?limit=200&status=connected",
                         "linkedin_connect_callback": "GET /api/linkedin/accounts/connect/callback?state=...",
@@ -1393,21 +1397,17 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             params = parse_qs(parsed.query or "")
             logs_limit = self._safe_int((params.get("limit_logs") or ["800"])[0], 800)
             chats_limit = self._safe_int((params.get("limit_chats") or ["600"])[0], 600)
-            stale_minutes = self._safe_int((params.get("stale_minutes") or ["45"])[0], 45)
             job_id_raw = (params.get("job_id") or [None])[0]
             job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
             if logs_limit is None:
                 logs_limit = 800
             if chats_limit is None:
                 chats_limit = 600
-            if stale_minutes is None:
-                stale_minutes = 45
             report = self._build_outreach_ops_report(
                 db=SERVICES["db"],
                 job_id=job_id,
                 logs_limit=max(100, min(int(logs_limit), 2000)),
                 chats_limit=max(100, min(int(chats_limit), 2000)),
-                stale_minutes=max(10, min(int(stale_minutes), 24 * 60)),
             )
             self._json_response(HTTPStatus.OK, report)
             return
@@ -4073,13 +4073,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         job_id: Optional[int],
         logs_limit: int,
         chats_limit: int,
-        stale_minutes: int,
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc)
         last_hour = now - timedelta(hours=1)
         last_day = now - timedelta(hours=24)
         flow_window = now - timedelta(minutes=30)
-        stale_cutoff = now - timedelta(minutes=stale_minutes)
+        stale_cutoff = now - timedelta(minutes=OUTREACH_STALE_REPLY_MINUTES)
 
         accounts = db.list_linkedin_accounts(limit=500)
         conversations = db.list_conversations_overview(limit=chats_limit, job_id=job_id)
@@ -4563,7 +4562,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             "generated_at": now.isoformat(),
             "job_id": int(job_id) if job_id else None,
             "thresholds": {
-                "stale_minutes": stale_minutes,
+                "stale_minutes": OUTREACH_STALE_REPLY_MINUTES,
                 "flow_window_minutes": 30,
                 "logs_limit": logs_limit,
                 "chats_limit": chats_limit,
