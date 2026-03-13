@@ -317,6 +317,46 @@ class OutreachConnectionFlowTests(unittest.TestCase):
             healthy_match = db.get_candidate_match(job_id=job_id, candidate_id=healthy_candidate_id)
             self.assertEqual(str((healthy_match or {}).get("status") or ""), "outreach_pending_connection")
 
+    def test_list_waiting_connection_status_drifts_handles_missing_last_message_timestamp(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outreach_reconcile_selector.sqlite3"))
+            db.init_schema()
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            candidate_id = db.upsert_candidate(
+                {
+                    "linkedin_id": "ln-reconcile-selector",
+                    "full_name": "Selector Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": [],
+                    "years_experience": 4,
+                    "raw": {},
+                },
+                source="linkedin",
+            )
+            db.create_candidate_match(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                score=0.51,
+                status="needs_resume",
+                verification_notes={},
+            )
+            conversation_id = db.create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
+            db.update_conversation_status(conversation_id=conversation_id, status="waiting_connection")
+
+            rows = db.list_waiting_connection_status_drifts(job_id=job_id, limit=10)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(int(rows[0].get("conversation_id") or 0), conversation_id)
+            self.assertEqual(str(rows[0].get("match_status") or ""), "needs_resume")
+
 
 if __name__ == "__main__":
     unittest.main()

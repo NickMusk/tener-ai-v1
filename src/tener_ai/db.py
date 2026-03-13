@@ -2539,7 +2539,7 @@ class Database:
             conv.job_id,
             conv.candidate_id,
             MAX(conv.id) AS conversation_id,
-            MAX(COALESCE(conv.last_message_at, conv.created_at, '')) AS last_message_at,
+            MAX(COALESCE(conv.last_message_at, conv.created_at)) AS last_message_at,
             jc.status AS match_status,
             j.title AS job_title,
             c.full_name AS candidate_name
