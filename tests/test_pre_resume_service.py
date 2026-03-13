@@ -24,7 +24,7 @@ class PreResumeServiceTests(unittest.TestCase):
         self.assertEqual(out["state"]["status"], "awaiting_reply")
         self.assertEqual(out["state"]["prescreen_status"], "incomplete")
         self.assertIn("written qualifying questions", out["outbound"])
-        self.assertIn("10 to 15 minute screening call", out["outbound"])
+        self.assertIn("async interview", out["outbound"])
         self.assertTrue(out["state"]["next_followup_at"])
 
     def test_salary_answer_can_arrive_before_other_answers(self) -> None:
@@ -115,9 +115,9 @@ class PreResumeServiceTests(unittest.TestCase):
             "s1",
             "I have 7 years of Python and AWS experience, I am targeting 145k USD, I am based in Berlin, and I have full work authorization.",
         )
-        self.assertEqual(answered["state"]["status"], "ready_for_screening_call")
-        self.assertEqual(answered["state"]["prescreen_status"], "ready_for_screening_call")
-        self.assertIn("10 to 15 minute screening call", answered["outbound"])
+        self.assertEqual(answered["state"]["status"], "ready_for_interview")
+        self.assertEqual(answered["state"]["prescreen_status"], "ready_for_interview")
+        self.assertIn("async interview", answered["outbound"])
 
     def test_followup_sequence_and_stalled_state(self) -> None:
         service = PreResumeCommunicationService(max_followups=3)
@@ -163,7 +163,7 @@ class PreResumeServiceTests(unittest.TestCase):
         text = str(out["outbound"] or "")
         self.assertIn("written qualifying questions", text)
         self.assertIn("CV", text)
-        self.assertIn("10 to 15 minute screening call", text)
+        self.assertIn("async interview", text)
 
     def test_language_template_fallback(self) -> None:
         with TemporaryDirectory() as td:
@@ -171,7 +171,7 @@ class PreResumeServiceTests(unittest.TestCase):
                 "default_language": "en",
                 "intro": {"en": "Hello {name}", "es": "Hola {name}"},
                 "cv_request": {"en": "Send CV"},
-                "screening_call_ready": {"en": "Ready for screening call"},
+                "screening_call_ready": {"en": "Ready for interview"},
                 "not_interested_ack": {"en": "Ok"},
                 "resume_promised_ack": {"en": "Noted"},
                 "followups": {"1": {"en": "F1"}, "2": {"en": "F2"}, "3": {"en": "F3"}},

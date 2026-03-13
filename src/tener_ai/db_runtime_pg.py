@@ -636,7 +636,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO candidate_job_matches (
+                    INSERT INTO job_candidates (
                         job_id, candidate_id, score, status, verification_notes, created_at
                     )
                     VALUES (%s, %s, %s, %s, %s, %s)
@@ -662,7 +662,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 cur.execute(
                     """
                     SELECT *
-                    FROM candidate_job_matches
+                    FROM job_candidates
                     WHERE job_id = %s AND candidate_id = %s
                     ORDER BY id DESC
                     LIMIT 1
@@ -739,7 +739,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 ORDER BY msg.id DESC
                 LIMIT 1
             ) AS last_message_created_at
-        FROM candidate_job_matches m
+        FROM job_candidates m
         JOIN jobs j ON j.id = m.job_id
         LEFT JOIN job_culture_profiles cp ON cp.job_id = m.job_id
         LEFT JOIN conversations conv ON conv.id = (
@@ -929,7 +929,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                             ORDER BY msg.id DESC
                             LIMIT 1
                         ) AS last_message_created_at
-                    FROM candidate_job_matches m
+                    FROM job_candidates m
                     JOIN jobs j ON j.id = m.job_id
                     JOIN candidates c ON c.id = m.candidate_id
                     LEFT JOIN conversations conv ON conv.id = (
@@ -2755,7 +2755,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 cur.execute(
                     """
                     SELECT verification_notes
-                    FROM candidate_job_matches
+                    FROM job_candidates
                     WHERE job_id = %s AND candidate_id = %s
                     ORDER BY id DESC
                     LIMIT 1
@@ -2770,7 +2770,7 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                     merged_notes.update(extra_notes)
                 cur.execute(
                     """
-                    UPDATE candidate_job_matches
+                    UPDATE job_candidates
                     SET status = %s, verification_notes = %s
                     WHERE job_id = %s AND candidate_id = %s
                     """,

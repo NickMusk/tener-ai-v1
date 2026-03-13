@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS candidates (
     created_at TIMESTAMPTZ NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS candidate_job_matches (
+CREATE TABLE IF NOT EXISTS job_candidates (
     id BIGSERIAL PRIMARY KEY,
     job_id BIGINT NOT NULL REFERENCES jobs(id),
     candidate_id BIGINT NOT NULL REFERENCES candidates(id),

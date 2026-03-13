@@ -189,7 +189,7 @@ class PostgresMirrorWriter:
             with conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO candidate_job_matches (
+                    INSERT INTO job_candidates (
                         job_id, candidate_id, score, status, verification_notes, created_at
                     )
                     VALUES (%s, %s, %s, %s, %s, %s)

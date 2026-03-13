@@ -36,6 +36,7 @@ from .pre_resume_service import PreResumeCommunicationService, parse_resume_link
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
 TERMINAL_PRE_RESUME_STATUSES = {
+    "ready_for_interview",
     "ready_for_screening_call",
     "not_interested",
     "unreachable",
@@ -1865,14 +1866,28 @@ class WorkflowService:
                         state=state_out,
                     )
                 state_status = str((state_out or {}).get("status") or "").strip().lower()
+                current_match_status = str((match or {}).get("status") or "").strip().lower()
+                if current_match_status in {
+                    "verified",
+                    "needs_resume",
+                    "outreach_pending_connection",
+                    "outreach_sent",
+                    "outreached",
+                }:
+                    self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+                    self.db.update_candidate_match_status(
+                        job_id=int(conversation["job_id"]),
+                        candidate_id=int(conversation["candidate_id"]),
+                        status="in_dialogue",
+                        extra_notes={"last_candidate_reply_at": utc_now_iso()},
+                    )
+                    if isinstance(match, dict):
+                        match["status"] = "in_dialogue"
                 interview_result: Dict[str, Any] | None = None
-                should_attempt_interview = intent == "resume_shared" or (
-                    intent == "default" and self._is_pre_vetting_opt_in_message(text=text)
-                )
+                prescreen_status = str((state_out or {}).get("prescreen_status") or "").strip().lower()
+                should_attempt_interview = prescreen_status == "ready_for_interview"
                 if should_attempt_interview and not job_paused:
-                    if intent == "default":
-                        intent = "pre_vetting_opt_in"
-                    interview_result = self._send_interview_invite_after_opt_in(
+                    interview_result = self._send_interview_invite(
                         job=job,
                         candidate=candidate,
                         conversation=conversation,
@@ -1881,9 +1896,6 @@ class WorkflowService:
                     )
                     if isinstance(state_out, dict):
                         state_out["awaiting_pre_vetting_opt_in"] = False
-                        if intent == "pre_vetting_opt_in":
-                            state_out["interview_opted_in"] = True
-                            state_out["interview_opted_in_at"] = state_out.get("updated_at")
                     if isinstance(interview_result, dict) and interview_result.get("started"):
                         outbound = str(interview_result.get("message") or "").strip() or outbound
                     if isinstance(state_out, dict):
@@ -1945,8 +1957,7 @@ class WorkflowService:
                         },
                     )
 
-                prescreen_status = str((state_out or {}).get("prescreen_status") or "").strip().lower()
-                if prescreen_status in {"ready_for_screening_call", "cv_received_pending_answers"} and not (
+                if prescreen_status in {"ready_for_interview", "cv_received_pending_answers"} and not (
                     isinstance(interview_result, dict) and interview_result.get("started")
                 ):
                     self.db.update_candidate_match_status(
@@ -1958,7 +1969,7 @@ class WorkflowService:
                             "prescreen_status": prescreen_status or None,
                         },
                     )
-                    if prescreen_status == "ready_for_screening_call":
+                    if prescreen_status == "ready_for_interview":
                         self.db.log_operation(
                             operation="candidate.prescreen.completed",
                             status="ok",
@@ -1982,6 +1993,13 @@ class WorkflowService:
                         candidate_id=int(conversation["candidate_id"]),
                         conversation_id=conversation_id,
                         details={"message_id": inbound_id, "session_id": session_id},
+                    )
+                elif state_status == "not_interested":
+                    self.db.update_candidate_match_status(
+                        job_id=int(conversation["job_id"]),
+                        candidate_id=int(conversation["candidate_id"]),
+                        status="rejected",
+                        extra_notes={"rejected_at": utc_now_iso(), "rejection_reason": "candidate_not_interested"},
                     )
                 self._record_communication_dialogue_assessment(
                     job_id=int(conversation["job_id"]),
@@ -2082,8 +2100,8 @@ class WorkflowService:
             work_authorization_confirmed=self._safe_bool(state_payload.get("work_authorization_confirmed"), None),
             cv_received=bool(state_payload.get("cv_received")) or bool(state_payload.get("resume_links")),
             summary=(
-                "Written prescreen complete. Ready for 10 to 15 minute screening call."
-                if str(state_payload.get("prescreen_status") or "").strip().lower() == "ready_for_screening_call"
+                "Written prescreen complete. Ready for interview."
+                if str(state_payload.get("prescreen_status") or "").strip().lower() == "ready_for_interview"
                 else None
             ),
             notes=None,
@@ -3063,6 +3081,21 @@ class WorkflowService:
             )
 
             if not result.get("sent"):
+                state_status = str((state or {}).get("status") or "").strip().lower()
+                if state_status == "stalled":
+                    self.db.update_candidate_match_status(
+                        job_id=job_ref,
+                        candidate_id=candidate_id,
+                        status="stalled",
+                        extra_notes={"stalled_at": utc_now_iso(), "stalled_reason": str(result.get("reason") or "") or None},
+                    )
+                elif state_status == "not_interested":
+                    self.db.update_candidate_match_status(
+                        job_id=job_ref,
+                        candidate_id=candidate_id,
+                        status="rejected",
+                        extra_notes={"rejected_at": utc_now_iso(), "rejection_reason": "candidate_not_interested"},
+                    )
                 skipped += 1
                 items.append(
                     {
@@ -3470,7 +3503,7 @@ class WorkflowService:
             "items": items,
         }
 
-    def _send_interview_invite_after_opt_in(
+    def _send_interview_invite(
         self,
         job: Dict[str, Any],
         candidate: Dict[str, Any],
@@ -3791,7 +3824,7 @@ class WorkflowService:
         if status in TERMINAL_INTERVIEW_STATUSES:
             update_notes["interview_next_followup_at"] = None
 
-        mapped_status = self._match_status_for_interview(interview_status=status)
+        mapped_status = self._match_status_for_interview(interview_status=status, total_score=total_score)
         self.db.update_candidate_match_status(
             job_id=job_id,
             candidate_id=candidate_id,
@@ -3858,19 +3891,19 @@ class WorkflowService:
         return (now + timedelta(hours=delay)).astimezone(timezone.utc).isoformat()
 
     @staticmethod
-    def _match_status_for_interview(interview_status: str) -> str | None:
+    def _match_status_for_interview(interview_status: str, total_score: float | None = None) -> str | None:
         status = str(interview_status or "").strip().lower()
-        mapping = {
-            "created": "interview_invited",
-            "invited": "interview_invited",
-            "in_progress": "interview_in_progress",
-            "completed": "interview_completed",
-            "scored": "interview_scored",
-            "failed": "interview_failed",
-            "expired": "interview_failed",
-            "canceled": "interview_failed",
-        }
-        return mapping.get(status)
+        if status in {"created", "invited"}:
+            return "interview_invited"
+        if status in {"in_progress", "completed"}:
+            return "interview_in_progress"
+        if status == "scored":
+            if total_score is None:
+                return "interview_in_progress"
+            return "interview_passed" if float(total_score) >= 80.0 else "interview_failed"
+        if status in {"failed", "expired", "canceled"}:
+            return "interview_failed"
+        return None
 
     @staticmethod
     def _candidate_primary_language(candidate: Dict[str, Any]) -> str:
@@ -4111,6 +4144,7 @@ class WorkflowService:
 
         if normalized_mode == "pre_resume":
             mapping = {
+                "ready_for_interview": (94.0, "cv_received", "Written prescreen complete and CV received."),
                 "ready_for_screening_call": (94.0, "cv_received", "Written prescreen complete and CV received."),
                 "ready_for_cv": (84.0, "written_prescreen_complete", "Written prescreen complete. Waiting for CV."),
                 "cv_received_pending_answers": (80.0, "cv_received", "CV received before written prescreen was complete."),
@@ -4128,6 +4162,7 @@ class WorkflowService:
                 (66.0, "in_dialogue", f"Dialogue update captured (status: {state_status or 'unknown'})."),
             )
             if state_status in {
+                "ready_for_interview",
                 "ready_for_screening_call",
                 "ready_for_cv",
                 "cv_received_pending_answers",
@@ -5733,7 +5768,7 @@ class WorkflowService:
     @staticmethod
     def _normalize_pre_resume_public_status(status: Any) -> str:
         normalized = str(status or "").strip().lower()
-        if normalized in {"cv_received_pending_answers", "ready_for_screening_call"}:
+        if normalized in {"cv_received_pending_answers", "ready_for_interview", "ready_for_screening_call"}:
             return "resume_received"
         return normalized
 
@@ -6234,7 +6269,7 @@ class WorkflowService:
             return False
         if status in TERMINAL_PRE_RESUME_STATUSES:
             return False
-        return prescreen_status != "ready_for_screening_call"
+        return prescreen_status not in {"ready_for_interview", "ready_for_screening_call"}
 
     @staticmethod
     def _has_resume_cta(text: str) -> bool:

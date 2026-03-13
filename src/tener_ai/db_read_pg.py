@@ -208,7 +208,7 @@ class PostgresReadDatabase:
                             ORDER BY msg.id DESC
                             LIMIT 1
                         ) AS last_message_created_at
-                    FROM candidate_job_matches m
+                    FROM job_candidates m
                     JOIN candidates c ON c.id = m.candidate_id
                     JOIN jobs j ON j.id = m.job_id
                     LEFT JOIN conversations conv ON conv.id = (
@@ -285,45 +285,67 @@ class PostgresReadDatabase:
             if int(item.get("id") or 0) > 0
         }
 
-        rows: List[Dict[str, Any]] = []
-        job_refs: List[Dict[str, Any]] = []
+        where_parts = ["j.archived_at IS NULL"]
+        args: List[Any] = []
         if job_id is not None:
-            job = self.get_job(int(job_id))
-            if job and not bool(job.get("is_archived")):
-                job_refs = [job]
-        else:
-            job_refs = self.list_jobs(limit=300)
+            where_parts.append("m.job_id = %s")
+            args.append(int(job_id))
+        args.append(int(safe_limit or 10000))
+        query = f"""
+        SELECT
+            m.id AS match_id,
+            m.job_id,
+            m.candidate_id,
+            m.score,
+            m.status,
+            m.verification_notes,
+            m.created_at AS match_created_at,
+            c.full_name,
+            c.headline,
+            c.location,
+            c.languages,
+            c.skills,
+            c.years_experience,
+            j.title AS job_title,
+            conv.id AS conversation_id,
+            conv.status AS conversation_status,
+            conv.external_chat_id,
+            conv.linkedin_account_id,
+            conv.last_message_at
+        FROM job_candidates m
+        JOIN candidates c ON c.id = m.candidate_id
+        JOIN jobs j ON j.id = m.job_id
+        LEFT JOIN conversations conv ON conv.id = (
+            SELECT c2.id
+            FROM conversations c2
+            WHERE c2.job_id = m.job_id
+              AND c2.candidate_id = m.candidate_id
+            ORDER BY c2.id DESC
+            LIMIT 1
+        )
+        WHERE {' AND '.join(where_parts)}
+        ORDER BY m.job_id DESC, m.score DESC, m.id DESC
+        LIMIT %s
+        """
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(query, tuple(args))
+                raw_rows = cur.fetchall()
 
-        for job in job_refs:
-            row_job_id = int(job.get("id") or 0)
-            if row_job_id <= 0:
-                continue
-            for row in self.list_candidates_for_job(row_job_id):
-                if not isinstance(row, dict):
-                    continue
-                current_status_key = str(row.get("current_status_key") or "").strip().lower()
-                if current_status_key in {"unknown"}:
-                    continue
-                enriched = dict(row)
-                enriched["job_id"] = row_job_id
-                enriched["job_title"] = str(job.get("title") or "").strip() or "-"
-                enriched.update(Database._derive_candidate_ats_stage(enriched))
-                assigned_account_id = int(
-                    enriched.get("pending_action_account_id")
-                    or enriched.get("linkedin_account_id")
-                    or 0
-                ) or None
-                enriched["assigned_account_id"] = assigned_account_id
-                enriched["assigned_account_label"] = (
-                    account_labels.get(int(assigned_account_id or 0)) if assigned_account_id else None
-                )
-                enriched["last_activity_at"] = (
-                    enriched.get("pending_action_not_before")
-                    or enriched.get("last_message_created_at")
-                    or enriched.get("last_message_at")
-                    or enriched.get("match_created_at")
-                )
-                rows.append(enriched)
+        rows: List[Dict[str, Any]] = []
+        for raw in raw_rows:
+            enriched = self._row_to_dict(dict(raw))
+            enriched.update(Database._derive_ats_stage_from_job_candidate_status(enriched))  # type: ignore[attr-defined]
+            assigned_account_id = int(enriched.get("linkedin_account_id") or 0) or None
+            enriched["assigned_account_id"] = assigned_account_id
+            enriched["assigned_account_label"] = (
+                account_labels.get(int(assigned_account_id or 0)) if assigned_account_id else None
+            )
+            enriched["last_activity_at"] = (
+                enriched.get("last_message_at")
+                or enriched.get("match_created_at")
+            )
+            rows.append(enriched)
 
         rows.sort(
             key=lambda item: (

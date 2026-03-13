@@ -24,7 +24,7 @@ TABLE_ORDER: List[str] = [
     "jobs",
     "job_culture_profiles",
     "candidates",
-    "candidate_job_matches",
+    "job_candidates",
     "candidate_signals",
     "candidate_prescreens",
     "resume_assets",

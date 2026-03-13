@@ -79,7 +79,7 @@ class SourceReadDatabase:
                     c.skills,
                     c.years_experience,
                     c.linkedin_id
-                FROM candidate_job_matches m
+                FROM job_candidates m
                 JOIN candidates c ON c.id = m.candidate_id
                 WHERE m.job_id = ?
                 ORDER BY m.score DESC, c.id ASC

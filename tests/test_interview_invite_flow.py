@@ -85,7 +85,7 @@ class _InterviewClient:
 
 
 class InterviewInviteFlowTests(unittest.TestCase):
-    def test_opt_in_triggers_interview_link_and_followup(self) -> None:
+    def test_cv_and_answers_trigger_interview_link_and_followup(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "interview_invite.sqlite3"))
@@ -137,10 +137,23 @@ class InterviewInviteFlowTests(unittest.TestCase):
                 text="Sounds interesting, what is next",
             )
             self.assertEqual(first["mode"], "pre_resume")
-            self.assertEqual(first["intent"], "pre_vetting_opt_in")
-            self.assertTrue((first.get("interview") or {}).get("started"))
-            self.assertTrue(str(first.get("reply") or "").startswith("Hey,"))
-            self.assertIn("interview.local", str(first.get("reply") or ""))
+            self.assertEqual(first["intent"], "default")
+            self.assertFalse((first.get("interview") or {}).get("started"))
+
+            second = workflow.process_inbound_message(
+                conversation_id=conversation_id,
+                text="Here is my CV https://example.com/candidate-interview.pdf",
+            )
+            self.assertEqual(second["intent"], "resume_shared")
+            self.assertFalse((second.get("interview") or {}).get("started"))
+
+            third = workflow.process_inbound_message(
+                conversation_id=conversation_id,
+                text="I have 6 years of Python and AWS experience and I am targeting 150k USD.",
+            )
+            self.assertTrue((third.get("interview") or {}).get("started"))
+            self.assertTrue(str(third.get("reply") or "").startswith("Hey,"))
+            self.assertIn("interview.local", str(third.get("reply") or ""))
 
             row = db.list_candidates_for_job(job_id)[0]
             notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}
@@ -153,7 +166,7 @@ class InterviewInviteFlowTests(unittest.TestCase):
                 if (m.get("meta") or {}).get("type") == "pre_resume_auto_reply"
                 and (m.get("meta") or {}).get("intent") == "resume_shared"
             ]
-            self.assertEqual(len(resume_auto_replies), 0)
+            self.assertEqual(len(resume_auto_replies), 1)
             self.assertTrue(str((notes or {}).get("interview_entry_url") or "").startswith("https://interview.local/"))
 
             due_at = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
@@ -186,10 +199,10 @@ class InterviewInviteFlowTests(unittest.TestCase):
 
             row_after = db.list_candidates_for_job(job_id)[0]
             notes_after = row_after.get("verification_notes") if isinstance(row_after.get("verification_notes"), dict) else {}
-            self.assertEqual(row_after["status"], "interview_scored")
+            self.assertEqual(row_after["status"], "interview_passed")
             self.assertAlmostEqual(float(notes_after.get("interview_total_score")), 82.5, places=2)
 
-    def test_resume_shared_triggers_interview_link(self) -> None:
+    def test_resume_plus_answers_trigger_interview_link(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "interview_invite_resume.sqlite3"))
@@ -242,9 +255,15 @@ class InterviewInviteFlowTests(unittest.TestCase):
             )
             self.assertEqual(reply["mode"], "pre_resume")
             self.assertEqual(reply["intent"], "resume_shared")
-            self.assertTrue((reply.get("interview") or {}).get("started"))
-            self.assertTrue(str(reply.get("reply") or "").startswith("Hey,"))
-            self.assertIn("interview.local", str(reply.get("reply") or ""))
+            self.assertFalse((reply.get("interview") or {}).get("started"))
+
+            completed = workflow.process_inbound_message(
+                conversation_id=conversation_id,
+                text="I have 5 years of Python and AWS experience and I am targeting 150k USD.",
+            )
+            self.assertTrue((completed.get("interview") or {}).get("started"))
+            self.assertTrue(str(completed.get("reply") or "").startswith("Hey,"))
+            self.assertIn("interview.local", str(completed.get("reply") or ""))
 
             row = db.list_candidates_for_job(job_id)[0]
             notes = row.get("verification_notes") if isinstance(row.get("verification_notes"), dict) else {}

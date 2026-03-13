@@ -13,7 +13,7 @@ TABLE_NAME_RE = re.compile(r"^[a-z_][a-z0-9_]*$")
 DEFAULT_PARITY_TABLES: List[str] = [
     "jobs",
     "candidates",
-    "candidate_job_matches",
+    "job_candidates",
     "candidate_signals",
     "resume_assets",
     "conversations",
@@ -30,7 +30,7 @@ DEFAULT_PARITY_TABLES: List[str] = [
 DEFAULT_KEYSET_TABLES: Dict[str, Tuple[str, ...]] = {
     "jobs": ("id",),
     "candidates": ("id",),
-    "candidate_job_matches": ("job_id", "candidate_id"),
+    "job_candidates": ("job_id", "candidate_id"),
     "candidate_signals": ("signal_key",),
     "resume_assets": ("asset_key",),
     "conversations": ("id",),

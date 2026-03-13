@@ -225,7 +225,7 @@ class Database:
             created_at TEXT NOT NULL
         );
 
-        CREATE TABLE IF NOT EXISTS candidate_job_matches (
+        CREATE TABLE IF NOT EXISTS job_candidates (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             job_id INTEGER NOT NULL,
             candidate_id INTEGER NOT NULL,
@@ -1217,10 +1217,10 @@ class Database:
         with self.transaction() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO candidate_job_matches
+                INSERT OR REPLACE INTO job_candidates
                 (id, job_id, candidate_id, score, status, verification_notes, created_at)
                 VALUES (
-                    (SELECT id FROM candidate_job_matches WHERE job_id = ? AND candidate_id = ?),
+                    (SELECT id FROM job_candidates WHERE job_id = ? AND candidate_id = ?),
                     ?, ?, ?, ?, ?, ?
                 )
                 """,
@@ -1358,7 +1358,7 @@ class Database:
                 ORDER BY ca.updated_at DESC, ca.id DESC
                 LIMIT 1
             ) AS latest_interview_score
-        FROM candidate_job_matches m
+        FROM job_candidates m
         JOIN jobs j ON j.id = m.job_id
         JOIN candidates c ON c.id = m.candidate_id
         LEFT JOIN conversations conv ON conv.id = (
@@ -1492,7 +1492,7 @@ class Database:
                 ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
                 LIMIT 1
             ) AS pending_action_payload_json
-        FROM candidate_job_matches m
+        FROM job_candidates m
         JOIN jobs j ON j.id = m.job_id
         JOIN candidates c ON c.id = m.candidate_id
         LEFT JOIN conversations conv ON conv.id = (
@@ -1529,7 +1529,7 @@ class Database:
         row = self._conn.execute(
             """
             SELECT *
-            FROM candidate_job_matches
+            FROM job_candidates
             WHERE job_id = ? AND candidate_id = ?
             ORDER BY id DESC
             LIMIT 1
@@ -1658,7 +1658,7 @@ class Database:
                 ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
                 LIMIT 1
             ) AS pending_action_payload_json
-        FROM candidate_job_matches m
+        FROM job_candidates m
         JOIN jobs j ON j.id = m.job_id
         LEFT JOIN job_culture_profiles cp ON cp.job_id = m.job_id
         LEFT JOIN conversations conv ON conv.id = (
@@ -3501,7 +3501,7 @@ class Database:
             row = conn.execute(
                 """
                 SELECT verification_notes
-                FROM candidate_job_matches
+                FROM job_candidates
                 WHERE job_id = ? AND candidate_id = ?
                 ORDER BY id DESC
                 LIMIT 1
@@ -3519,7 +3519,7 @@ class Database:
 
             conn.execute(
                 """
-                UPDATE candidate_job_matches
+                UPDATE job_candidates
                 SET status = ?, verification_notes = ?
                 WHERE job_id = ? AND candidate_id = ?
                 """,
@@ -4673,6 +4673,8 @@ class Database:
 
     @classmethod
     def _candidate_passed_interview(cls, item: Dict[str, Any], threshold: float = 80.0) -> bool:
+        if str(item.get("status") or "").strip().lower() == "interview_passed":
+            return True
         verification_notes = item.get("verification_notes") if isinstance(item.get("verification_notes"), dict) else {}
         interview_status = str((verification_notes or {}).get("interview_status") or "").strip().lower()
         if interview_status != "scored":
@@ -4681,11 +4683,73 @@ class Database:
         return score is not None and float(score) >= float(threshold)
 
     @staticmethod
+    def _normalize_pre_resume_status(value: Any) -> str:
+        status = str(value or "").strip().lower()
+        if status == "ready_for_screening_call":
+            return "ready_for_interview"
+        return status
+
+    @classmethod
+    def _canonical_job_candidate_status(cls, item: Dict[str, Any]) -> str:
+        match_status = str(item.get("status") or "").strip().lower()
+        if match_status == "outreached":
+            return "outreach_sent"
+        if match_status == "interview_completed":
+            return "interview_in_progress"
+        if match_status == "interview_scored":
+            return "interview_passed" if cls._candidate_passed_interview(item) else "interview_failed"
+        return match_status
+
+    @classmethod
+    def _derive_ats_stage_from_job_candidate_status(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        status = cls._canonical_job_candidate_status(item)
+        stage_map = {
+            "verified": ("queued", "Queued", "Ready for outreach"),
+            "needs_resume": ("queued", "Queued", "Ready for outreach"),
+            "outreach_pending_connection": ("connect_sent", "Connect Sent", "Waiting for acceptance"),
+            "outreach_sent": ("queued_delivery", "Queued for Delivery", "Waiting for candidate reply"),
+            "in_dialogue": ("dialogue", "Dialogue", "Candidate replied"),
+            "resume_received": ("cv_received", "CV Received", "CV received"),
+            "interview_invited": ("interview_pending", "Interview Pending", "Interview link sent"),
+            "interview_in_progress": ("interview_pending", "Interview Pending", "Interview in progress"),
+            "stalled": ("completed", "Completed", "Stopped after follow-up exhaustion"),
+            "rejected": ("completed", "Completed", "Candidate not interested"),
+            "interview_failed": ("completed", "Completed", "Interview not passed"),
+            "interview_passed": ("completed", "Completed", "Interview passed"),
+        }
+        stage_key, stage_label, detail = stage_map.get(status, ("queued", "Queued", "Ready for outreach"))
+        stage_rank = {
+            "queued": 10,
+            "connect_sent": 20,
+            "queued_delivery": 30,
+            "dialogue": 40,
+            "cv_received": 50,
+            "interview_pending": 60,
+            "delivery_blocked": 70,
+            "completed": 80,
+        }.get(stage_key, 999)
+        current_status_key = "cv_received" if status == "resume_received" else status
+        current_status_label = "CV Received" if status == "resume_received" else status.replace("_", " ").title()
+        return {
+            "current_status_key": current_status_key,
+            "current_status_label": current_status_label,
+            "candidate_lifecycle_key": stage_key,
+            "candidate_lifecycle_label": stage_label,
+            "candidate_lifecycle_detail": detail,
+            "ats_stage_key": stage_key,
+            "ats_stage_label": stage_label,
+            "ats_stage_detail": detail,
+            "ats_stage_rank": stage_rank,
+            "next_action_kind": None,
+            "next_action_at": None,
+        }
+
+    @staticmethod
     def _derive_candidate_current_status(item: Dict[str, Any]) -> tuple[str, str]:
         match_status = str(item.get("status") or "").strip().lower()
         conversation_status = str(item.get("conversation_status") or "").strip().lower()
-        pre_resume_status = str(item.get("pre_resume_status") or "").strip().lower()
-        prescreen_status = str(item.get("candidate_prescreen_status") or "").strip().lower()
+        pre_resume_status = Database._normalize_pre_resume_status(item.get("pre_resume_status"))
+        prescreen_status = Database._normalize_pre_resume_status(item.get("candidate_prescreen_status"))
         prescreen_cv_received = bool(item.get("candidate_prescreen_cv_received"))
         last_message_direction = str(item.get("last_message_direction") or "").strip().lower()
         verification_notes = item.get("verification_notes") if isinstance(item.get("verification_notes"), dict) else {}
@@ -4695,8 +4759,11 @@ class Database:
             "created": ("interview_invited", "Interview Invited"),
             "invited": ("interview_invited", "Interview Invited"),
             "in_progress": ("interview_in_progress", "Interview In Progress"),
-            "completed": ("interview_completed", "Interview Completed"),
-            "scored": ("interview_scored", "Interview Scored"),
+            "completed": ("interview_in_progress", "Interview In Progress"),
+            "scored": (
+                "interview_passed" if Database._candidate_passed_interview(item) else "interview_failed",
+                "Interview Passed" if Database._candidate_passed_interview(item) else "Interview Failed",
+            ),
             "failed": ("interview_failed", "Interview Failed"),
             "expired": ("interview_failed", "Interview Failed"),
             "canceled": ("interview_failed", "Interview Failed"),
@@ -4705,9 +4772,11 @@ class Database:
             return "interview_passed", "Interview Passed"
         if interview_status in interview_map:
             return interview_map[interview_status]
-        if match_status == "interview_scored" and Database._candidate_passed_interview(item):
-            return "interview_passed", "Interview Passed"
-        if match_status in {"interview_invited", "interview_in_progress", "interview_completed", "interview_scored", "interview_failed"}:
+        if match_status == "interview_scored":
+            if Database._candidate_passed_interview(item):
+                return "interview_passed", "Interview Passed"
+            return "interview_failed", "Interview Failed"
+        if match_status in {"interview_invited", "interview_in_progress", "interview_passed", "interview_failed"}:
             return match_status, match_status.replace("_", " ").title()
         if conversation_status == "waiting_connection" or match_status == "outreach_pending_connection":
             return "outreach_pending_connection", "Outreach Pending Connection"
@@ -4728,7 +4797,7 @@ class Database:
             return prescreen_status, prescreen_status.replace("_", " ").title()
         if prescreen_status == "delivery_blocked_identity":
             return "delivery_blocked_identity", "Delivery Blocked"
-        if prescreen_status == "ready_for_screening_call":
+        if prescreen_status == "ready_for_interview":
             return "cv_received", "CV Received"
         if prescreen_status in {"ready_for_cv", "cv_received_pending_answers", "incomplete"}:
             if prescreen_cv_received:
@@ -4803,8 +4872,8 @@ class Database:
             lifecycle_key = "resume_received"
             lifecycle_label = "Resume received"
             prescreen_status = str(item.get("candidate_prescreen_status") or "").strip().lower()
-            if prescreen_status == "ready_for_screening_call":
-                lifecycle_detail = "Written prescreen complete and ready for 10 to 15 min screening call"
+            if prescreen_status == "ready_for_interview":
+                lifecycle_detail = "Written prescreen complete and ready for interview"
             else:
                 lifecycle_detail = "CV or resume received"
         elif current_status_key == "interview_passed":
@@ -4812,11 +4881,10 @@ class Database:
             lifecycle_label = "Interview passed"
             interview_score = Database._candidate_interview_score(item)
             lifecycle_detail = f"Score {interview_score:.1f}" if interview_score is not None else "Passed screening interview"
-        elif current_status_key == "interview_scored":
-            lifecycle_key = "interview_scored"
-            lifecycle_label = "Interview scored"
-            interview_score = Database._candidate_interview_score(item)
-            lifecycle_detail = f"Score {interview_score:.1f}" if interview_score is not None else "Interview results received"
+        elif current_status_key == "interview_in_progress":
+            lifecycle_key = "interview_in_progress"
+            lifecycle_label = "Interview in progress"
+            lifecycle_detail = "Interview is underway"
         elif current_status_key == "interview_failed":
             lifecycle_key = "interview_failed"
             lifecycle_label = "Interview failed"
@@ -4862,7 +4930,7 @@ class Database:
         prescreen_status = str(item.get("candidate_prescreen_status") or "").strip().lower()
 
         closed_statuses = {"not_interested", "unreachable", "rejected", "stalled"}
-        interview_pending_statuses = {"interview_invited", "interview_in_progress", "interview_completed"}
+        interview_pending_statuses = {"interview_invited", "interview_in_progress"}
 
         stage_key = "queued"
         stage_label = "Queued"
@@ -4892,7 +4960,7 @@ class Database:
             next_action_kind = None
             next_action_at = None
             stage_rank = 60
-        elif current_status_key in {"interview_scored", "interview_failed"}:
+        elif current_status_key == "interview_failed":
             stage_key = "interview_failed"
             stage_label = "Interview Failed"
             if interview_score is not None:
@@ -4912,9 +4980,9 @@ class Database:
         elif current_status_key == "cv_received":
             stage_key = "cv_received"
             stage_label = "CV Received"
-            if prescreen_status == "ready_for_screening_call":
-                stage_detail = "Written prescreen complete. Ready to book a 10 to 15 min screening call"
-                next_action_kind = "screening_call"
+            if prescreen_status == "ready_for_interview":
+                stage_detail = "Written prescreen complete. Ready for interview"
+                next_action_kind = "interview"
             else:
                 stage_detail = lifecycle_detail or current_status_label or "Resume received"
                 next_action_kind = "review_resume"
@@ -4984,72 +5052,6 @@ class Database:
             where_parts.append("m.job_id = ?")
             args.append(int(job_id))
         query = f"""
-        WITH latest_conversations AS (
-            SELECT
-                conv.id,
-                conv.job_id,
-                conv.candidate_id,
-                conv.status,
-                conv.external_chat_id,
-                conv.linkedin_account_id,
-                conv.last_message_at,
-                ROW_NUMBER() OVER (
-                    PARTITION BY conv.job_id, conv.candidate_id
-                    ORDER BY conv.id DESC
-                ) AS rn
-            FROM conversations conv
-        ),
-        latest_messages AS (
-            SELECT
-                msg.conversation_id,
-                msg.direction,
-                msg.created_at,
-                ROW_NUMBER() OVER (
-                    PARTITION BY msg.conversation_id
-                    ORDER BY msg.id DESC
-                ) AS rn
-            FROM messages msg
-        ),
-        latest_outbound_messages AS (
-            SELECT
-                msg.conversation_id,
-                msg.meta,
-                ROW_NUMBER() OVER (
-                    PARTITION BY msg.conversation_id
-                    ORDER BY msg.id DESC
-                ) AS rn
-            FROM messages msg
-            WHERE msg.direction = 'outbound'
-        ),
-        ranked_pending_actions AS (
-            SELECT
-                oa.job_id,
-                oa.candidate_id,
-                oa.account_id,
-                oa.action_type,
-                oa.status,
-                oa.not_before,
-                oa.payload_json,
-                ROW_NUMBER() OVER (
-                    PARTITION BY oa.job_id, oa.candidate_id
-                    ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
-                ) AS rn
-            FROM outbound_actions oa
-            WHERE oa.status IN ('pending', 'running')
-        ),
-        ranked_interview_scores AS (
-            SELECT
-                ca.job_id,
-                ca.candidate_id,
-                ca.score,
-                ROW_NUMBER() OVER (
-                    PARTITION BY ca.job_id, ca.candidate_id
-                    ORDER BY ca.updated_at DESC, ca.id DESC
-                ) AS rn
-            FROM candidate_agent_assessments ca
-            WHERE ca.agent_key = 'interview_evaluation'
-              AND ca.score IS NOT NULL
-        )
         SELECT
             m.job_id,
             m.created_at AS match_created_at,
@@ -5073,74 +5075,33 @@ class Database:
             conv.status AS conversation_status,
             conv.external_chat_id,
             conv.linkedin_account_id,
-            conv.last_message_at,
-            prs.session_id AS pre_resume_session_id,
-            prs.status AS pre_resume_status,
-            prs.last_error AS pre_resume_last_error,
-            prs.next_followup_at AS pre_resume_next_followup_at,
-            cps.status AS candidate_prescreen_status,
-            cps.cv_received AS candidate_prescreen_cv_received,
-            msg.direction AS last_message_direction,
-            msg.created_at AS last_message_created_at,
-            outbound.meta AS last_outbound_meta,
-            pending.account_id AS pending_action_account_id,
-            pending.action_type AS pending_action_type,
-            pending.status AS pending_action_status,
-            pending.not_before AS pending_action_not_before,
-            pending.payload_json AS pending_action_payload_json,
-            interview.score AS latest_interview_score
-        FROM candidate_job_matches m
+            conv.last_message_at
+        FROM job_candidates m
         JOIN jobs j ON j.id = m.job_id
         JOIN candidates c ON c.id = m.candidate_id
-        LEFT JOIN latest_conversations conv
-            ON conv.job_id = m.job_id
-           AND conv.candidate_id = m.candidate_id
-           AND conv.rn = 1
-        LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
-        LEFT JOIN candidate_prescreens cps
-            ON cps.job_id = m.job_id
-           AND cps.candidate_id = m.candidate_id
-        LEFT JOIN latest_messages msg
-            ON msg.conversation_id = conv.id
-           AND msg.rn = 1
-        LEFT JOIN latest_outbound_messages outbound
-            ON outbound.conversation_id = conv.id
-           AND outbound.rn = 1
-        LEFT JOIN ranked_pending_actions pending
-            ON pending.job_id = m.job_id
-           AND pending.candidate_id = m.candidate_id
-           AND pending.rn = 1
-        LEFT JOIN ranked_interview_scores interview
-            ON interview.job_id = m.job_id
-           AND interview.candidate_id = m.candidate_id
-           AND interview.rn = 1
+        LEFT JOIN conversations conv ON conv.id = (
+            SELECT c2.id
+            FROM conversations c2
+            WHERE c2.job_id = m.job_id
+              AND c2.candidate_id = m.candidate_id
+            ORDER BY c2.id DESC
+            LIMIT 1
+        )
         WHERE {' AND '.join(where_parts)}
         ORDER BY m.job_id DESC, m.score DESC, m.id DESC
         """
         rows = [self._row_to_dict(row) for row in self._conn.execute(query, tuple(args)).fetchall()]
         enriched_rows: List[Dict[str, Any]] = []
         for row in rows:
-            current_status_key, current_status_label = self._derive_candidate_current_status(row)
-            if current_status_key in {"unknown"}:
-                continue
             enriched = dict(row)
-            enriched["current_status_key"] = current_status_key
-            enriched["current_status_label"] = current_status_label
-            enriched.update(self._derive_candidate_lifecycle(enriched))
-            enriched.update(self._derive_candidate_ats_stage(enriched))
-            assigned_account_id = int(
-                enriched.get("pending_action_account_id")
-                or enriched.get("linkedin_account_id")
-                or 0
-            ) or None
+            enriched.update(self._derive_ats_stage_from_job_candidate_status(enriched))
+            assigned_account_id = int(enriched.get("linkedin_account_id") or 0) or None
             enriched["assigned_account_id"] = assigned_account_id
             enriched["assigned_account_label"] = (
                 account_labels.get(int(assigned_account_id or 0)) if assigned_account_id else None
             )
             enriched["last_activity_at"] = (
-                enriched.get("pending_action_not_before")
-                or enriched.get("last_message_created_at")
-                or enriched.get("last_message_at")
+                enriched.get("last_message_at")
                 or enriched.get("match_created_at")
             )
             enriched_rows.append(enriched)
