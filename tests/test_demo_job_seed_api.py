@@ -25,9 +25,7 @@ EXPECTED_ATS = {
     "dialogue": 26,
     "cv_received": 18,
     "interview_pending": 9,
-    "interview_passed": 4,
-    "interview_failed": 3,
-    "closed": 8,
+    "completed": 15,
 }
 
 

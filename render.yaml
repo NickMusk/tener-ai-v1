@@ -8,6 +8,10 @@ services:
     startCommand: PYTHONPATH=src python -m tener_ai
     healthCheckPath: /health
     envVars:
+      - key: TENER_DB_BACKEND
+        value: postgres
+      - key: TENER_DB_DSN
+        sync: false
       - key: TENER_DB_PATH
         value: /var/data/tener_v1.sqlite3
     disk:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,21 +23,149 @@ def utc_now_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+class _LockedSqliteCursor:
+    def __init__(self, cursor: sqlite3.Cursor, lock: threading.RLock) -> None:
+        self._cursor = cursor
+        self._lock = lock
+        self._released = False
+
+    def _release(self) -> None:
+        if self._released:
+            return
+        self._released = True
+        self._lock.release()
+
+    def fetchone(self) -> Any:
+        try:
+            return self._cursor.fetchone()
+        finally:
+            self._release()
+
+    def fetchall(self) -> List[Any]:
+        try:
+            return self._cursor.fetchall()
+        finally:
+            self._release()
+
+    def fetchmany(self, size: Optional[int] = None) -> List[Any]:
+        try:
+            if size is None:
+                return self._cursor.fetchmany()
+            return self._cursor.fetchmany(size)
+        finally:
+            self._release()
+
+    def close(self) -> None:
+        try:
+            self._cursor.close()
+        finally:
+            self._release()
+
+    def __iter__(self) -> Iterable[Any]:
+        try:
+            for row in self._cursor:
+                yield row
+        finally:
+            self._release()
+
+    @property
+    def lastrowid(self) -> int:
+        try:
+            return int(self._cursor.lastrowid or 0)
+        finally:
+            self._release()
+
+    @property
+    def rowcount(self) -> int:
+        try:
+            return int(self._cursor.rowcount or 0)
+        finally:
+            self._release()
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._cursor, name)
+
+    def __del__(self) -> None:
+        try:
+            self._release()
+        except Exception:
+            return
+
+
+class _LockedSqliteConnection(sqlite3.Connection):
+    """Serialize access to a shared sqlite connection used by threaded HTTP handlers."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._lock = threading.RLock()
+
+    @contextmanager
+    def locked(self) -> Iterable["_LockedSqliteConnection"]:
+        self._lock.acquire()
+        try:
+            yield self
+        finally:
+            self._lock.release()
+
+    def _wrap_cursor(self, cursor: sqlite3.Cursor) -> _LockedSqliteCursor:
+        return _LockedSqliteCursor(cursor=cursor, lock=self._lock)
+
+    def execute(self, sql: str, parameters: Any = (), /) -> _LockedSqliteCursor:  # type: ignore[override]
+        self._lock.acquire()
+        try:
+            cursor = super().execute(sql, parameters)
+        except Exception:
+            self._lock.release()
+            raise
+        return self._wrap_cursor(cursor)
+
+    def executemany(self, sql: str, seq_of_parameters: Any, /) -> _LockedSqliteCursor:  # type: ignore[override]
+        self._lock.acquire()
+        try:
+            cursor = super().executemany(sql, seq_of_parameters)
+        except Exception:
+            self._lock.release()
+            raise
+        return self._wrap_cursor(cursor)
+
+    def executescript(self, sql_script: str, /) -> _LockedSqliteCursor:  # type: ignore[override]
+        self._lock.acquire()
+        try:
+            cursor = super().executescript(sql_script)
+        except Exception:
+            self._lock.release()
+            raise
+        return self._wrap_cursor(cursor)
+
+    def commit(self) -> None:
+        with self._lock:
+            super().commit()
+
+    def rollback(self) -> None:
+        with self._lock:
+            super().rollback()
+
+
 class Database:
     def __init__(self, db_path: str) -> None:
         self.db_path = db_path
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        self._conn = sqlite3.connect(
+            db_path,
+            check_same_thread=False,
+            factory=_LockedSqliteConnection,
+        )
         self._conn.row_factory = sqlite3.Row
 
     @contextmanager
     def transaction(self) -> Iterable[sqlite3.Connection]:
-        try:
-            yield self._conn
-            self._conn.commit()
-        except Exception:
-            self._conn.rollback()
-            raise
+        with self._conn.locked():
+            try:
+                yield self._conn
+                self._conn.commit()
+            except Exception:
+                self._conn.rollback()
+                raise
 
     def init_schema(self) -> None:
         schema = """
@@ -4563,7 +4692,9 @@ class Database:
             return match_status, match_status.replace("_", " ").title()
         if conversation_status == "waiting_connection" or match_status == "outreach_pending_connection":
             return "outreach_pending_connection", "Outreach Pending Connection"
-        if pre_resume_status == "resume_received" or match_status == "resume_received":
+        if pre_resume_status == "resume_received":
+            return "cv_received", "CV Received"
+        if match_status == "resume_received" and prescreen_status not in {"ready_for_cv", "cv_received_pending_answers", "incomplete"}:
             return "cv_received", "CV Received"
         if pre_resume_status == "not_interested":
             return "not_interested", "Not Interested"
