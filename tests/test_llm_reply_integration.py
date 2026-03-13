@@ -79,6 +79,27 @@ class _NoCtaLLMResponder(_FakeLLMResponder):
         return "{scope_summary}"
 
 
+class _DashyLLMResponder(_FakeLLMResponder):
+    def generate_candidate_reply(
+        self,
+        mode: str,
+        instruction: str,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        inbound_text: str,
+        history: List[Dict[str, Any]],
+        fallback_reply: str,
+        language: str = "en",
+        state: Dict[str, Any] | None = None,
+    ) -> str:
+        self.calls.append({"mode": mode, "language": language, "state_status": (state or {}).get("status")})
+        if mode == "linkedin_outreach":
+            return "Greetings,\nLong-term role -- high impact\nShort 10-15 minute screening call"
+        if mode == "linkedin_followup":
+            return "Hey,\nQuick check-in -- can you reply?"
+        return super().generate_candidate_reply(mode, instruction, job, candidate, inbound_text, history, fallback_reply, language, state)
+
+
 class LLMReplyIntegrationTests(unittest.TestCase):
     def test_faq_reply_switches_llm_language_to_latest_candidate_message(self) -> None:
         root = Path(__file__).resolve().parents[1]
@@ -509,6 +530,88 @@ class LLMReplyIntegrationTests(unittest.TestCase):
             self.assertTrue(followups)
             self.assertTrue(str(followups[-1]["content"]).startswith("LLM FOLLOWUP:"))
             self.assertTrue(any(call.get("mode") == "linkedin_followup" for call in llm.calls))
+
+    def test_linkedin_outreach_and_followup_strip_dash_punctuation(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "llm_dash_guard.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            llm = _DashyLLMResponder()
+            pre_resume = PreResumeCommunicationService(templates_path=str(root / "config" / "outreach_templates.json"))
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(_LLMStubProvider()),
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=pre_resume,
+                llm_responder=llm,
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile = {
+                "linkedin_id": "ln-dash-guard-1",
+                "full_name": "Dash Guard Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": [],
+                "years_experience": 5,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.3, "status": "needs_resume", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+            outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            conversation_id = int(outreach["items"][0]["conversation_id"])
+            session_id = str(outreach["items"][0]["pre_resume_session_id"] or "")
+
+            outbound_messages = [m for m in db.list_messages(conversation_id) if m.get("direction") == "outbound"]
+            self.assertTrue(outbound_messages)
+            outreach_text = str(outbound_messages[-1]["content"])
+            self.assertNotIn("-", outreach_text)
+            self.assertNotIn("--", outreach_text)
+            self.assertIn("Long term role", outreach_text)
+            self.assertIn("10 to 15 minute screening call", outreach_text)
+
+            prs = db.get_pre_resume_session_by_conversation(conversation_id)
+            self.assertIsNotNone(prs)
+            assert prs is not None
+            state = prs.get("state_json") if isinstance(prs.get("state_json"), dict) else {}
+            state = dict(state)
+            state["status"] = "awaiting_reply"
+            state["next_followup_at"] = "2000-01-01T00:00:00+00:00"
+            state["followups_sent"] = 0
+            pre_resume.seed_session(state)
+            db.upsert_pre_resume_session(
+                session_id=session_id,
+                conversation_id=conversation_id,
+                job_id=job_id,
+                candidate_id=candidate_id,
+                state=state,
+                instruction="",
+            )
+
+            result = workflow.run_due_pre_resume_followups(job_id=job_id, limit=10)
+            self.assertEqual(result["sent"], 1)
+            followups = [m for m in db.list_messages(conversation_id) if (m.get("meta") or {}).get("type") == "pre_resume_followup"]
+            self.assertTrue(followups)
+            followup_text = str(followups[-1]["content"])
+            self.assertNotIn("-", followup_text)
+            self.assertNotIn("--", followup_text)
+            self.assertIn("Quick check in", followup_text)
 
 
 if __name__ == "__main__":

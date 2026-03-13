@@ -5717,7 +5717,7 @@ class WorkflowService:
         skills_line = f"\nMain stack in focus is {skills_text}" if skills_text else ""
         ask_line = (
             "If this sounds relevant, first we'll ask up to three written qualifying questions, then request your CV, "
-            "then move to a short 10-15 minute screening call"
+            "then move to a short 10 to 15 minute screening call"
             if request_resume
             else "If this sounds relevant, send a short reply and we can share the next steps"
         )
@@ -5743,9 +5743,9 @@ class WorkflowService:
         sign_block = (
             "Warm regards,\n"
             f"{recruiter_name}\n"
-            "Senior Talent Acquisition Manager at Digis (a Fiverr company)"
+            "Senior Talent Acquisition Manager at Tener"
             if recruiter_name
-            else "Warm regards,\nSenior Talent Acquisition Manager at Digis (a Fiverr company)"
+            else "Warm regards,\nSenior Talent Acquisition Manager at Tener"
         )
         return (
             "Hey,\n"
@@ -5799,7 +5799,7 @@ class WorkflowService:
                 "4) Optional signature block:\n"
                 "Warm regards,\n"
                 f"{normalized_recruiter}\n"
-                "Senior Talent Acquisition Manager at Digis (a Fiverr company)\n"
+                "Senior Talent Acquisition Manager at Tener\n"
                 if normalized_recruiter
                 else "4) Signature is optional and should not include a recruiter name when none is provided\n"
             )
@@ -5833,7 +5833,7 @@ class WorkflowService:
             "1) Start with Greetings,\n"
             "2) Mention Tener and that we are hiring for the specific position for a long term project with a fast moving US AI startup\n"
             "3) Mention direct collaboration with Founder and CTO on autonomous coding agent, agentic workflows, RAG pipelines, LLM orchestration, and scalable ML infrastructure\n"
-            "4) Explain the process exactly as: first a few written qualifying questions, then CV, then a short 10-15 minute screening call\n"
+            "4) Explain the process exactly as: first a few written qualifying questions, then CV, then a short 10 to 15 minute screening call\n"
             f"{signature_rule}"
             "Do not invent recruiter names.\n"
             "Style rules:\n"
@@ -5909,7 +5909,7 @@ class WorkflowService:
             "Do not explain obvious things.\n"
             "Do not summarize every message.\n"
             "Do not try to be useful at 110 percent every time.\n"
-            "Never use hyphens.\n"
+            "Never use hyphen or dash punctuation outside URLs.\n"
             "Never use double dashes."
         )
 
@@ -5972,6 +5972,8 @@ class WorkflowService:
             final_text = self._sanitize_multiline_reply_text(generated_text, limit=1400)
         else:
             final_text = self._sanitize_reply_text(generated_text)
+        if normalized_mode in {"linkedin_outreach", "linkedin_followup"}:
+            final_text = self._sanitize_recruiter_outbound_text(final_text)
         if not final_text:
             final_text = fallback
             source = "fallback"
@@ -5995,6 +5997,7 @@ class WorkflowService:
                 final_text = guarded
                 source = "llm_guarded" if source == "llm" else source
                 reason = "outreach_requirements_enforced"
+            final_text = self._sanitize_recruiter_outbound_text(final_text)
 
         self.db.log_operation(
             operation="agent.llm.reply",
@@ -6051,6 +6054,46 @@ class WorkflowService:
             clipped = clipped.rsplit(" ", 1)[0].rstrip()
         return clipped
 
+    @classmethod
+    def _sanitize_recruiter_outbound_text(cls, text: str) -> str:
+        raw = str(text or "").strip()
+        if not raw:
+            return ""
+        url_pattern = re.compile(r"https?://[^\s)>\"]+", flags=re.IGNORECASE)
+        parts: List[str] = []
+        cursor = 0
+        for match in url_pattern.finditer(raw):
+            parts.append(cls._sanitize_dash_text_segment(raw[cursor : match.start()]))
+            parts.append(match.group(0))
+            cursor = match.end()
+        parts.append(cls._sanitize_dash_text_segment(raw[cursor:]))
+        normalized = "".join(parts).strip()
+        if not normalized:
+            return ""
+        normalized_lines: List[str] = []
+        previous_blank = False
+        for line in normalized.split("\n"):
+            collapsed = " ".join(line.split()).strip()
+            if not collapsed:
+                if previous_blank:
+                    continue
+                normalized_lines.append("")
+                previous_blank = True
+                continue
+            normalized_lines.append(collapsed)
+            previous_blank = False
+        return "\n".join(normalized_lines).strip()
+
+    @staticmethod
+    def _sanitize_dash_text_segment(text: str) -> str:
+        segment = str(text or "")
+        if not segment:
+            return ""
+        sanitized = re.sub(r"(\d)\s*[-\u2010-\u2015\u2212]{1,2}\s*(\d)", r"\1 to \2", segment)
+        sanitized = re.sub(r"\s*[-\u2010-\u2015\u2212]{2,}\s*", " ", sanitized)
+        sanitized = re.sub(r"[-\u2010-\u2015\u2212]", " ", sanitized)
+        return sanitized
+
     @staticmethod
     def _contains_template_placeholders(text: str) -> bool:
         return bool(re.search(r"\{[a-zA-Z_][^{}]{0,40}\}", str(text or "")))
@@ -6098,7 +6141,7 @@ class WorkflowService:
         result = str(text or "").strip()
         if not result:
             result = str(fallback or "").strip()
-        process_line = "First we'll ask a few written qualifying questions, then request your CV, then a short 10-15 minute screening call."
+        process_line = "First we'll ask a few written qualifying questions, then request your CV, then a short 10 to 15 minute screening call."
         if "written qualifying" not in result.lower() and "screening call" not in result.lower():
             result = f"{result}\n\n{process_line}".strip()
         return result

@@ -87,7 +87,9 @@ class LinkedInSenderIdentityTests(unittest.TestCase):
                 )
 
                 self.assertIn("Nick Nagatkin", msg)
+                self.assertIn("Tener", msg)
                 self.assertNotIn("Casey", msg)
+                self.assertNotIn("Digis", msg)
                 self.assertEqual(workflow._linkedin_recruiter_name(conversation=None), "")
             finally:
                 if previous is None:

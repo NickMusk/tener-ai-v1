@@ -33,5 +33,5 @@ Style and tone rules for all LinkedIn messages
 26. Do not explain obvious things
 27. Do not summarize every response
 28. Do not try to be useful at one hundred ten percent all the time
-29. Never use the hyphen character
+29. Never use hyphen or dash punctuation outside URLs
 30. Never use double dash

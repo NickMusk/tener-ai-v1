@@ -24,7 +24,7 @@ class PreResumeServiceTests(unittest.TestCase):
         self.assertEqual(out["state"]["status"], "awaiting_reply")
         self.assertEqual(out["state"]["prescreen_status"], "incomplete")
         self.assertIn("written qualifying questions", out["outbound"])
-        self.assertIn("10-15 minute screening call", out["outbound"])
+        self.assertIn("10 to 15 minute screening call", out["outbound"])
         self.assertTrue(out["state"]["next_followup_at"])
 
     def test_salary_answer_can_arrive_before_other_answers(self) -> None:
@@ -117,7 +117,7 @@ class PreResumeServiceTests(unittest.TestCase):
         )
         self.assertEqual(answered["state"]["status"], "ready_for_screening_call")
         self.assertEqual(answered["state"]["prescreen_status"], "ready_for_screening_call")
-        self.assertIn("10-15 minute screening call", answered["outbound"])
+        self.assertIn("10 to 15 minute screening call", answered["outbound"])
 
     def test_followup_sequence_and_stalled_state(self) -> None:
         service = PreResumeCommunicationService(max_followups=3)
@@ -163,7 +163,7 @@ class PreResumeServiceTests(unittest.TestCase):
         text = str(out["outbound"] or "")
         self.assertIn("written qualifying questions", text)
         self.assertIn("CV", text)
-        self.assertIn("10-15 minute screening call", text)
+        self.assertIn("10 to 15 minute screening call", text)
 
     def test_language_template_fallback(self) -> None:
         with TemporaryDirectory() as td:

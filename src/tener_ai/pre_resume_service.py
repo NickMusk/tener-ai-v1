@@ -20,7 +20,7 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
     "intro": {
         "en": (
             "Hi {name}, thanks for your interest in \"{job_title}\". First we'll ask a few written qualifying questions, "
-            "then request your CV, then a short 10-15 minute screening call. Core role focus: {core_profile_summary}."
+            "then request your CV, then a short 10 to 15 minute screening call. Core role focus: {core_profile_summary}."
         ),
         "es": (
             "Hola {name}, gracias por tu interes en \"{job_title}\". Primero haremos unas preguntas escritas de filtro, "
@@ -33,7 +33,7 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
         "es": "Si puedes, responde en un solo mensaje:",
     },
     "cv_request": {
-        "en": "Thanks, the written qualifying questions are complete. Please share your CV/resume so we can move to the 10-15 minute screening call.",
+        "en": "Thanks, the written qualifying questions are complete. Please share your CV/resume so we can move to the 10 to 15 minute screening call.",
         "es": "Gracias, las preguntas escritas ya estan completas. Comparte tu CV para pasar a la llamada breve de screening de 10 a 15 minutos.",
     },
     "cv_received_pending": {
@@ -41,7 +41,7 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
         "es": "Gracias, CV recibido. Antes de agendar la llamada de screening, aun necesito algunas respuestas escritas:",
     },
     "screening_call_ready": {
-        "en": "Thanks, I have your CV and the written qualifying questions are complete. The next step is a short 10-15 minute screening call.",
+        "en": "Thanks, I have your CV and the written qualifying questions are complete. The next step is a short 10 to 15 minute screening call.",
         "es": "Gracias, ya tengo tu CV y las preguntas escritas estan completas. El siguiente paso es una llamada breve de screening de 10 a 15 minutos.",
     },
     "not_interested_ack": {
@@ -62,7 +62,7 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
             "es": "Segundo seguimiento para \"{job_title}\". Cuando completemos las preguntas escritas, comparte tu CV para avanzar rapido.",
         },
         "3": {
-            "en": "Final reminder for \"{job_title}\". Written qualifying questions first, then CV, then a short 10-15 minute screening call.",
+            "en": "Final reminder for \"{job_title}\". Written qualifying questions first, then CV, then a short 10 to 15 minute screening call.",
             "es": "Ultimo recordatorio para \"{job_title}\". Primero preguntas escritas, luego CV y despues una llamada breve de screening de 10 a 15 minutos.",
         },
     },
@@ -76,7 +76,7 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
             "es": "El stack principal y las responsabilidades estan alineados con el perfil core que compartimos.",
         },
         "timeline": {
-            "en": "The process is written qualifying questions first, then CV, then a short 10-15 minute screening call.",
+            "en": "The process is written qualifying questions first, then CV, then a short 10 to 15 minute screening call.",
             "es": "El proceso es primero preguntas escritas, luego CV y despues una llamada breve de screening de 10 a 15 minutos.",
         },
         "send_jd_first": {
