@@ -14,7 +14,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_conversation_id_id
     ON messages(conversation_id, id DESC);
 
 CREATE INDEX IF NOT EXISTS idx_candidate_matches_job_score
-    ON candidate_job_matches(job_id, score DESC, id DESC);
+    ON job_candidates(job_id, score DESC, id DESC);
 
 CREATE INDEX IF NOT EXISTS idx_candidate_assessments_candidate_job_updated
     ON candidate_agent_assessments(candidate_id, job_id, updated_at DESC, id DESC);
@@ -30,4 +30,3 @@ CREATE INDEX IF NOT EXISTS idx_pre_resume_sessions_job_updated
 
 CREATE INDEX IF NOT EXISTS idx_pre_resume_sessions_candidate_updated
     ON pre_resume_sessions(candidate_id, updated_at DESC);
-

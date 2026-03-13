@@ -416,7 +416,7 @@ class MainDashboardDemoJobSeeder:
             conn.execute("DELETE FROM outbound_actions WHERE job_id = ?", (int(job_id),))
             conn.execute("DELETE FROM outreach_account_events WHERE job_id = ?", (int(job_id),))
             conn.execute("DELETE FROM conversations WHERE job_id = ?", (int(job_id),))
-            conn.execute("DELETE FROM candidate_job_matches WHERE job_id = ?", (int(job_id),))
+            conn.execute("DELETE FROM job_candidates WHERE job_id = ?", (int(job_id),))
             conn.execute("DELETE FROM job_step_progress WHERE job_id = ?", (int(job_id),))
             conn.execute(
                 "DELETE FROM operation_logs WHERE entity_type = 'job' AND entity_id = ?",
@@ -431,7 +431,7 @@ class MainDashboardDemoJobSeeder:
                       AND linkedin_id LIKE ?
                       AND NOT EXISTS (
                           SELECT 1
-                          FROM candidate_job_matches m
+                          FROM job_candidates m
                           WHERE m.candidate_id = candidates.id
                       )
                     """,

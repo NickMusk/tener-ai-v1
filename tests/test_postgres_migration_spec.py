@@ -21,7 +21,7 @@ class PostgresMigrationSpecTests(unittest.TestCase):
             "jobs",
             "job_culture_profiles",
             "candidates",
-            "candidate_job_matches",
+            "job_candidates",
             "candidate_signals",
             "conversations",
             "messages",

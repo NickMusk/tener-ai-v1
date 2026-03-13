@@ -41,7 +41,7 @@ class SourceReadDatabaseTests(unittest.TestCase):
                 source TEXT,
                 created_at TEXT NOT NULL
             );
-            CREATE TABLE candidate_job_matches (
+            CREATE TABLE job_candidates (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 job_id INTEGER NOT NULL,
                 candidate_id INTEGER NOT NULL,
@@ -76,7 +76,7 @@ class SourceReadDatabaseTests(unittest.TestCase):
         )
         conn.execute(
             """
-            INSERT INTO candidate_job_matches
+            INSERT INTO job_candidates
             (job_id, candidate_id, score, status, verification_notes, created_at)
             VALUES (1, 7, 0.91, 'verified', '{}', '2026-02-24T00:00:00+00:00')
             """

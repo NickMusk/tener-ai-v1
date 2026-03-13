@@ -115,7 +115,7 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.db.update_conversation_status(conversation_id=connect_conversation, status="waiting_connection")
 
         dialogue_candidate = self._create_candidate("dialogue", "Dialogue Candidate")
-        self._attach_match(job_id=job_id, candidate_id=dialogue_candidate, status="outreach_sent")
+        self._attach_match(job_id=job_id, candidate_id=dialogue_candidate, status="in_dialogue")
         dialogue_conversation = self.db.create_conversation(job_id=job_id, candidate_id=dialogue_candidate, channel="linkedin")
         self.db.set_conversation_linkedin_account(conversation_id=dialogue_conversation, account_id=account_id)
         self.db.update_conversation_status(conversation_id=dialogue_conversation, status="active")
@@ -128,21 +128,12 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         )
 
         queued_delivery_candidate = self._create_candidate("queued-delivery", "Queued Delivery Candidate")
-        self._attach_match(job_id=job_id, candidate_id=queued_delivery_candidate, status="outreached")
+        self._attach_match(job_id=job_id, candidate_id=queued_delivery_candidate, status="outreach_sent")
         queued_delivery_conversation = self.db.create_conversation(job_id=job_id, candidate_id=queued_delivery_candidate, channel="linkedin")
         self.db.update_candidate_match_status(
             job_id=job_id,
             candidate_id=queued_delivery_candidate,
-            status="outreached",
-        )
-        self.db.create_outbound_action(
-            job_id=job_id,
-            candidate_id=queued_delivery_candidate,
-            conversation_id=queued_delivery_conversation,
-            action_type="send_message",
-            payload={"delivery_mode": "message_first", "planned_action_kind": "message"},
-            priority=50,
-            not_before=utc_now_iso(),
+            status="outreach_sent",
         )
 
         cv_candidate = self._create_candidate("cv", "CV Candidate")
@@ -171,7 +162,7 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self._attach_match(
             job_id=job_id,
             candidate_id=passed_candidate,
-            status="interview_scored",
+            status="interview_passed",
             verification_notes={"interview_status": "scored", "interview_total_score": 84.0},
         )
 
@@ -179,7 +170,7 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self._attach_match(
             job_id=job_id,
             candidate_id=failed_candidate,
-            status="interview_scored",
+            status="interview_failed",
             verification_notes={"interview_status": "scored", "interview_total_score": 44.8},
         )
 
@@ -340,25 +331,15 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
     def test_outreach_ats_board_groups_terminal_states_into_completed(self) -> None:
         job_id = self._create_job("Manual QA Engineer")
         terminal_statuses = [
-            ("not-interest", "Not Interested Candidate", "needs_resume", {"pre_resume_status": "not_interested"}),
-            ("unreachable", "Unreachable Candidate", "needs_resume", {"pre_resume_status": "unreachable"}),
+            ("rejected", "Rejected Candidate", "rejected", {}),
+            ("stalled", "Stalled Candidate", "stalled", {}),
             ("failed", "Interview Failed Candidate", "interview_failed", {"interview_status": "failed"}),
         ]
 
         for suffix, name, status_key, notes in terminal_statuses:
             candidate_id = self._create_candidate(suffix, name)
             self._attach_match(job_id=job_id, candidate_id=candidate_id, status=status_key)
-            if notes.get("pre_resume_status"):
-                conversation_id = self.db.create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
-                self.db.upsert_pre_resume_session(
-                    session_id=f"ats-pre-{suffix}",
-                    conversation_id=conversation_id,
-                    job_id=job_id,
-                    candidate_id=candidate_id,
-                    state={"status": notes["pre_resume_status"], "language": "en"},
-                    instruction="",
-                )
-            elif notes:
+            if notes:
                 self.db.update_candidate_match_status(
                     job_id=job_id,
                     candidate_id=candidate_id,
@@ -377,10 +358,10 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         }
         self.assertEqual(
             completed_names,
-            {"Not Interested Candidate", "Unreachable Candidate", "Interview Failed Candidate"},
+            {"Rejected Candidate", "Stalled Candidate", "Interview Failed Candidate"},
         )
 
-    def test_outreach_ats_board_surfaces_delivery_blocked_identity_separately_from_closed(self) -> None:
+    def test_outreach_ats_board_ignores_delivery_blocked_identity_for_stage_assignment(self) -> None:
         job_id = self._create_job("Manual QA Engineer")
         candidate_id = self._create_candidate("delivery-blocked", "Delivery Blocked Candidate")
         self._attach_match(job_id=job_id, candidate_id=candidate_id, status="needs_resume")
@@ -401,15 +382,16 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         status, payload = self._request("GET", "/api/outreach/ats-board")
         self.assertEqual(status, 200)
         summary = payload.get("summary") or {}
-        self.assertEqual(int(summary.get("delivery_blocked") or 0), 1)
+        self.assertEqual(int(summary.get("delivery_blocked") or 0), 0)
         self.assertEqual(int(summary.get("completed") or 0), 0)
+        self.assertEqual(int(summary.get("queued") or 0), 1)
 
         columns = {str(item.get("key") or ""): item for item in (payload.get("columns") or [])}
-        blocked_names = {
+        queued_names = {
             str(item.get("candidate_name") or "")
-            for item in (columns.get("delivery_blocked") or {}).get("items", [])
+            for item in (columns.get("queued") or {}).get("items", [])
         }
-        self.assertEqual(blocked_names, {"Delivery Blocked Candidate"})
+        self.assertEqual(queued_names, {"Delivery Blocked Candidate"})
 
     def test_outreach_ats_board_summary_counts_all_candidates_even_when_cards_are_limited(self) -> None:
         job_id = self._create_job("Manual QA Engineer")

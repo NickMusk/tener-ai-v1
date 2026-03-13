@@ -96,7 +96,7 @@ class CandidateScoringPolicy:
 
         has_all_scores = all(value is not None for value in (source_score, communication_score, interview_score))
         has_cv = (
-            current_status_key in {"cv_received", "interview_invited", "interview_in_progress", "interview_completed", "interview_scored", "interview_passed"}
+            current_status_key in {"cv_received", "interview_invited", "interview_in_progress", "interview_passed", "interview_failed"}
             or communication_status == "cv_received"
             or has_all_scores
         )

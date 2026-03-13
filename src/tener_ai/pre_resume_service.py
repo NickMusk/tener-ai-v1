@@ -11,7 +11,14 @@ from .language import normalize_language, resolve_conversation_language
 
 
 UTC = timezone.utc
-TERMINAL_STATUSES = {"ready_for_screening_call", "not_interested", "unreachable", "stalled", "delivery_blocked_identity"}
+TERMINAL_STATUSES = {
+    "ready_for_interview",
+    "ready_for_screening_call",
+    "not_interested",
+    "unreachable",
+    "stalled",
+    "delivery_blocked_identity",
+}
 REMOTE_LOCATION_MARKERS = {"remote", "global", "worldwide", "anywhere", "hybrid", "distributed"}
 
 
@@ -20,15 +27,15 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
     "intro": {
         "en": (
             "Hi {name}, thanks for your interest in \"{job_title}\". First we'll ask a few written qualifying questions, "
-            "then request your CV, then a short 10 to 15 minute screening call. Core role focus: {core_profile_summary}."
+            "then request your CV, then send a short async interview. Core role focus: {core_profile_summary}."
         ),
         "uk": (
             "Привіт, {name}! Дякую за інтерес до \"{job_title}\". Спочатку поставимо кілька письмових кваліфікаційних запитань, "
-            "потім попросимо ваше CV, а далі короткий скринінг-дзвінок на 10-15 хвилин. Основний фокус ролі: {core_profile_summary}."
+            "потім попросимо ваше CV, а далі надішлемо коротке async interview. Основний фокус ролі: {core_profile_summary}."
         ),
         "es": (
             "Hola {name}, gracias por tu interes en \"{job_title}\". Primero haremos unas preguntas escritas de filtro, "
-            "luego pediremos tu CV y despues una llamada breve de screening de 10 a 15 minutos. "
+            "luego pediremos tu CV y despues enviaremos una entrevista asincrona corta. "
             "Foco del rol: {core_profile_summary}."
         ),
     },
@@ -38,19 +45,19 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
         "es": "Si puedes, responde en un solo mensaje:",
     },
     "cv_request": {
-        "en": "Thanks, the written qualifying questions are complete. Please share your CV/resume so we can move to the 10 to 15 minute screening call.",
-        "uk": "Дякую, письмові кваліфікаційні запитання завершено. Будь ласка, надішліть ваше CV/резюме, щоб ми могли перейти до скринінг-дзвінка на 10-15 хвилин.",
-        "es": "Gracias, las preguntas escritas ya estan completas. Comparte tu CV para pasar a la llamada breve de screening de 10 a 15 minutos.",
+        "en": "Thanks, the written qualifying questions are complete. Please share your CV/resume so we can send the async interview link.",
+        "uk": "Дякую, письмові кваліфікаційні запитання завершено. Будь ласка, надішліть ваше CV/резюме, щоб ми могли надіслати посилання на async interview.",
+        "es": "Gracias, las preguntas escritas ya estan completas. Comparte tu CV para que podamos enviar el enlace de la entrevista asincrona.",
     },
     "cv_received_pending": {
-        "en": "Thanks, CV received. Before we book the screening call, I still need a few written qualifying answers:",
-        "uk": "Дякую, CV отримано. Перш ніж призначити скринінг-дзвінок, мені ще потрібні кілька письмових кваліфікаційних відповідей:",
-        "es": "Gracias, CV recibido. Antes de agendar la llamada de screening, aun necesito algunas respuestas escritas:",
+        "en": "Thanks, CV received. Before I send the async interview link, I still need a few written qualifying answers:",
+        "uk": "Дякую, CV отримано. Перш ніж надіслати посилання на async interview, мені ще потрібні кілька письмових кваліфікаційних відповідей:",
+        "es": "Gracias, CV recibido. Antes de enviar el enlace de la entrevista asincrona, aun necesito algunas respuestas escritas:",
     },
     "screening_call_ready": {
-        "en": "Thanks, I have your CV and the written qualifying questions are complete. The next step is a short 10 to 15 minute screening call.",
-        "uk": "Дякую, я вже маю ваше CV, і письмові кваліфікаційні запитання завершено. Наступний крок - короткий скринінг-дзвінок на 10-15 хвилин.",
-        "es": "Gracias, ya tengo tu CV y las preguntas escritas estan completas. El siguiente paso es una llamada breve de screening de 10 a 15 minutos.",
+        "en": "Thanks, I have your CV and the written qualifying questions are complete. The next step is a short async interview.",
+        "uk": "Дякую, я вже маю ваше CV, і письмові кваліфікаційні запитання завершено. Наступний крок - коротке async interview.",
+        "es": "Gracias, ya tengo tu CV y las preguntas escritas estan completas. El siguiente paso es una entrevista asincrona corta.",
     },
     "not_interested_ack": {
         "en": "Understood, thanks for the reply. We will not send further messages.",
@@ -64,9 +71,9 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
     },
     "followups": {
         "1": {
-            "en": "Quick follow-up on \"{job_title}\". We still need the written qualifying answers and then your CV before the short screening call.",
-            "uk": "Швидкий follow-up щодо \"{job_title}\". Нам усе ще потрібні письмові кваліфікаційні відповіді, а потім ваше CV перед коротким скринінг-дзвінком.",
-            "es": "Seguimiento rapido sobre \"{job_title}\". Aun necesitamos las respuestas escritas y luego tu CV antes de la llamada breve de screening.",
+            "en": "Quick follow-up on \"{job_title}\". We still need the written qualifying answers and then your CV before the async interview.",
+            "uk": "Швидкий follow-up щодо \"{job_title}\". Нам усе ще потрібні письмові кваліфікаційні відповіді, а потім ваше CV перед async interview.",
+            "es": "Seguimiento rapido sobre \"{job_title}\". Aun necesitamos las respuestas escritas y luego tu CV antes de la entrevista asincrona.",
         },
         "2": {
             "en": "Second follow-up for \"{job_title}\". Once the written qualifying questions are complete, please share your CV so we can move quickly.",
@@ -74,9 +81,9 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
             "es": "Segundo seguimiento para \"{job_title}\". Cuando completemos las preguntas escritas, comparte tu CV para avanzar rapido.",
         },
         "3": {
-            "en": "Final reminder for \"{job_title}\". Written qualifying questions first, then CV, then a short 10 to 15 minute screening call.",
-            "uk": "Останнє нагадування щодо \"{job_title}\". Спочатку письмові кваліфікаційні запитання, потім CV, а далі короткий скринінг-дзвінок на 10-15 хвилин.",
-            "es": "Ultimo recordatorio para \"{job_title}\". Primero preguntas escritas, luego CV y despues una llamada breve de screening de 10 a 15 minutos.",
+            "en": "Final reminder for \"{job_title}\". Written qualifying questions first, then CV, then the async interview.",
+            "uk": "Останнє нагадування щодо \"{job_title}\". Спочатку письмові кваліфікаційні запитання, потім CV, а далі async interview.",
+            "es": "Ultimo recordatorio para \"{job_title}\". Primero preguntas escritas, luego CV y despues la entrevista asincrona.",
         },
     },
     "intent_answers": {
@@ -91,14 +98,14 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
             "es": "El stack principal y las responsabilidades estan alineados con el perfil core que compartimos.",
         },
         "timeline": {
-            "en": "The process is written qualifying questions first, then CV, then a short 10 to 15 minute screening call.",
-            "uk": "Процес такий: спочатку письмові кваліфікаційні запитання, потім CV, а далі короткий скринінг-дзвінок на 10-15 хвилин.",
-            "es": "El proceso es primero preguntas escritas, luego CV y despues una llamada breve de screening de 10 a 15 minutos.",
+            "en": "The process is written qualifying questions first, then CV, then a short async interview.",
+            "uk": "Процес такий: спочатку письмові кваліфікаційні запитання, потім CV, а далі коротке async interview.",
+            "es": "El proceso es primero preguntas escritas, luego CV y despues una entrevista asincrona corta.",
         },
         "send_jd_first": {
-            "en": "Sure, I can share role details first. The process still stays: written qualifying questions, then CV, then a short screening call.",
-            "uk": "Звісно, спочатку можу поділитися деталями ролі. Але процес залишається таким самим: письмові кваліфікаційні запитання, потім CV, а далі короткий скринінг-дзвінок.",
-            "es": "Claro, puedo compartir detalles primero. El proceso sigue siendo: preguntas escritas, luego CV y despues una llamada breve de screening.",
+            "en": "Sure, I can share role details first. The process still stays: written qualifying questions, then CV, then a short async interview.",
+            "uk": "Звісно, спочатку можу поділитися деталями ролі. Але процес залишається таким самим: письмові кваліфікаційні запитання, потім CV, а далі коротке async interview.",
+            "es": "Claro, puedo compartir detalles primero. El proceso sigue siendo: preguntas escritas, luego CV y despues una entrevista asincrona corta.",
         },
         "default": {
             "en": "Thanks for the message. I can clarify details and next steps.",
@@ -186,6 +193,13 @@ def _coerce_boolish(value: Any) -> Optional[bool]:
     if text in {"0", "false", "no", "n"}:
         return False
     return None
+
+
+def _normalize_session_status(value: Any) -> str:
+    status = str(value or "awaiting_reply").strip().lower() or "awaiting_reply"
+    if status == "ready_for_screening_call":
+        return "ready_for_interview"
+    return status
 
 
 def _normalize_currency(text: str) -> Optional[str]:
@@ -283,7 +297,7 @@ class PreResumeSession:
     def prescreen_status(self) -> str:
         written_complete = self.written_answers_complete()
         if self.cv_received and written_complete:
-            return "ready_for_screening_call"
+            return "ready_for_interview"
         if self.cv_received:
             return "cv_received_pending_answers"
         if written_complete:
@@ -362,7 +376,7 @@ class PreResumeSession:
             salary_max=float(payload.get("salary_max")) if payload.get("salary_max") is not None else None,
             salary_currency=str(payload.get("salary_currency") or "").strip().upper() or None,
             work_authorization_required=bool(_coerce_boolish(payload.get("work_authorization_required"))),
-            status=str(payload.get("status") or "awaiting_reply"),
+            status=_normalize_session_status(payload.get("status")),
             followups_sent=int(payload.get("followups_sent") or 0),
             turns=int(payload.get("turns") or 0),
             last_intent=str(payload.get("last_intent") or "started"),
@@ -499,8 +513,8 @@ class PreResumeCommunicationService:
             outbound = self._render("not_interested_ack", session.language, session)
         else:
             prescreen_status = session.prescreen_status()
-            if prescreen_status == "ready_for_screening_call":
-                session.status = "ready_for_screening_call"
+            if prescreen_status == "ready_for_interview":
+                session.status = "ready_for_interview"
                 session.next_followup_at = None
             elif prescreen_status == "ready_for_cv":
                 session.status = "ready_for_cv"
@@ -553,7 +567,9 @@ class PreResumeCommunicationService:
         session.followups_sent = followup_number
         session.updated_at = iso(current)
         if session.followups_sent >= self.max_followups:
-            session.next_followup_at = None
+            idx = min(max(int(self.max_followups) - 1, 0), len(self.followup_delays_hours) - 1)
+            delay = float(self.followup_delays_hours[idx])
+            session.next_followup_at = iso(current + timedelta(hours=delay))
         else:
             session.next_followup_at = self._next_followup_at(session=session, now=current)
 
@@ -670,6 +686,7 @@ class PreResumeCommunicationService:
             "cuando",
             "cuándo",
             "screening call",
+            "async interview",
         )
         details_markers = (
             "send jd",
@@ -761,7 +778,7 @@ class PreResumeCommunicationService:
         return out
 
     def _compose_response(self, *, session: PreResumeSession, intent: str) -> str:
-        if session.status == "ready_for_screening_call":
+        if session.status == "ready_for_interview":
             return self._render("screening_call_ready", session.language, session)
         if intent == "will_send_later":
             ack = self._render("resume_promised_ack", session.language, session)
@@ -775,7 +792,7 @@ class PreResumeCommunicationService:
         parts: List[str] = []
         if intro:
             parts.append(self._render("intro", session.language, session))
-        if session.status == "ready_for_screening_call":
+        if session.status == "ready_for_interview":
             parts.append(self._render("screening_call_ready", session.language, session))
             return " ".join(part for part in parts if part).strip()
         if session.cv_received and missing:

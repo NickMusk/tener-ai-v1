@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
@@ -43,7 +44,58 @@ class _FailingSecondFollowupProvider:
 
 
 class WorkflowPreResumeIntegrationTests(unittest.TestCase):
-    def test_prescreen_first_chat_flow_until_ready_for_screening_call(self) -> None:
+    def test_first_inbound_marks_candidate_in_dialogue(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "workflow_pre_resume_dialogue.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = MockLinkedInProvider(str(root / "data" / "mock_linkedin_profiles.json"))
+            pre_resume = PreResumeCommunicationService(templates_path=str(root / "config" / "outreach_templates.json"))
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=pre_resume,
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile = {
+                "linkedin_id": "ln-pre-resume-dialogue-1",
+                "full_name": "Candidate Dialogue",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": [],
+                "years_experience": 2,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.42, "status": "needs_resume", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+
+            outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            conversation_id = int(outreach["items"][0]["conversation_id"])
+            first_reply = workflow.process_inbound_message(conversation_id=conversation_id, text="I'm targeting 145k USD.")
+            self.assertEqual(first_reply["mode"], "pre_resume")
+
+            match_rows = db.list_candidates_for_job(job_id)
+            self.assertEqual(match_rows[0]["status"], "in_dialogue")
+
+    def test_prescreen_first_chat_flow_until_ready_for_interview(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "workflow_pre_resume.sqlite3"))
@@ -120,18 +172,88 @@ class WorkflowPreResumeIntegrationTests(unittest.TestCase):
                 text="I have 6 years of Python and AWS experience, I am based in Berlin, and I have full work authorization.",
             )
             self.assertEqual(third_reply["mode"], "pre_resume")
-            self.assertEqual(third_reply["state"]["prescreen_status"], "ready_for_screening_call")
+            self.assertEqual(third_reply["state"]["prescreen_status"], "ready_for_interview")
 
             match_rows = db.list_candidates_for_job(job_id)
             self.assertEqual(len(match_rows), 1)
             self.assertEqual(match_rows[0]["status"], "resume_received")
-            self.assertEqual(match_rows[0]["candidate_prescreen_status"], "ready_for_screening_call")
+            self.assertEqual(match_rows[0]["candidate_prescreen_status"], "ready_for_interview")
             self.assertEqual(match_rows[0]["candidate_prescreen_salary_expectation_min"], 145000.0)
 
             events = db.list_pre_resume_events(limit=20, session_id=session_id)
             event_types = {x["event_type"] for x in events}
             self.assertIn("session_started", event_types)
             self.assertIn("inbound_processed", event_types)
+
+    def test_followup_exhaustion_marks_candidate_stalled(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "workflow_pre_resume_stalled.sqlite3"))
+            db.init_schema()
+
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = _FollowupChatProvider()
+            pre_resume = PreResumeCommunicationService(
+                templates_path=str(root / "config" / "outreach_templates.json"),
+                max_followups=1,
+                followup_delays_hours=[0],
+            )
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=pre_resume,
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile = {
+                "linkedin_id": "ln-pre-resume-stalled-1",
+                "full_name": "Candidate Stalled",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": [],
+                "years_experience": 2,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.42, "status": "needs_resume", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+            outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            conversation_id = int(outreach["items"][0]["conversation_id"])
+
+            session = db.get_pre_resume_session_by_conversation(conversation_id)
+            state = dict(session["state_json"])
+            state["next_followup_at"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+            db.upsert_pre_resume_session(
+                session_id=str(session["session_id"]),
+                conversation_id=conversation_id,
+                job_id=job_id,
+                candidate_id=candidate_id,
+                state=state,
+                instruction="",
+            )
+
+            first = workflow.run_due_pre_resume_followups(job_id=job_id, limit=20)
+            self.assertEqual(first["sent"], 1)
+
+            second = workflow.run_due_pre_resume_followups(job_id=job_id, limit=20)
+            self.assertEqual(second["skipped"], 1)
+
+            match_rows = db.list_candidates_for_job(job_id)
+            self.assertEqual(match_rows[0]["status"], "stalled")
 
     def test_followup_binds_external_chat_id_from_delivery(self) -> None:
         root = Path(__file__).resolve().parents[1]
