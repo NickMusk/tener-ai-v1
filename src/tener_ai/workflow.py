@@ -251,6 +251,62 @@ class WorkflowService:
             for item in (exclude_profile_keys or set())
             if str(item or "").strip()
         }
+        forced_seed_profiles: List[Dict[str, Any]] = []
+        if forced_only:
+            profiles = self._inject_forced_test_candidates(
+                job=job,
+                profiles=[],
+                limit=limit,
+                forced_identifiers=forced_test_ids,
+                forced_only=True,
+            )
+            included = sorted(
+                {
+                    matched
+                    for profile in profiles
+                    for matched in [self._forced_test_identifier_for_profile(profile, forced_test_ids)]
+                    if matched
+                }
+            )
+            self.db.log_operation(
+                operation="agent.sourcing.search",
+                status="ok",
+                entity_type="job",
+                entity_id=str(job_id),
+                details={
+                    "profiles_found": len(profiles),
+                    "limit": limit,
+                    "forced_test_ids_file": self.forced_test_ids_path,
+                    "forced_test_ids_configured": forced_test_ids,
+                    "forced_test_ids_included": included,
+                    "test_mode_active": True,
+                    "test_mode_requested": test_mode,
+                    "excluded_profile_keys": len(exclude_profile_keys or set()),
+                    "forced_only_short_circuit": True,
+                },
+            )
+            return {
+                "job_id": job_id,
+                "profiles": profiles,
+                "total": len(profiles),
+                "test_mode_active": True,
+                "test_mode_requested": test_mode,
+                "instruction": self.stage_instructions.get("sourcing", ""),
+            }
+        if forced_test_ids and max(1, min(int(limit or 1), 100)) == 1:
+            forced_seed_profiles = self._inject_forced_test_candidates(
+                job=job,
+                profiles=[],
+                limit=limit,
+                forced_identifiers=forced_test_ids,
+                forced_only=True,
+            )
+            for profile in forced_seed_profiles:
+                key = self._profile_identity_key(profile)
+                if key in seen_profile_keys:
+                    continue
+                seen_profile_keys.add(key)
+                profiles.append(profile)
         source_accounts = sorted(
             self._list_dispatchable_linkedin_accounts(limit=500),
             key=self._source_account_priority,
@@ -291,20 +347,20 @@ class WorkflowService:
                 raise RuntimeError("; ".join(search_errors[:5]))
         elif provider is not None and hasattr(provider, "account_id"):
             raise RuntimeError("no_active_linkedin_accounts")
-        else:
-            profiles = self.sourcing_agent.find_candidates(
-                job=job,
-                limit=limit,
-                exclude_profile_keys=exclude_profile_keys,
+        elif len(profiles) < limit:
+            profiles.extend(
+                self.sourcing_agent.find_candidates(
+                    job=job,
+                    limit=max(1, limit - len(profiles)),
+                    exclude_profile_keys=seen_profile_keys,
+                )
             )
-        if forced_only:
-            profiles = self._inject_forced_test_candidates(
-                job=job,
-                profiles=profiles,
-                limit=limit,
+        if forced_seed_profiles:
+            retained_search_profiles = self._exclude_forced_test_profiles(
+                profiles=profiles[len(forced_seed_profiles) :],
                 forced_identifiers=forced_test_ids,
-                forced_only=True,
             )
+            profiles = (forced_seed_profiles + retained_search_profiles)[: max(1, min(int(limit or 1), 100))]
         else:
             profiles = self._exclude_forced_test_profiles(
                 profiles=profiles,
@@ -1129,6 +1185,39 @@ class WorkflowService:
                         entity_id=str(candidate_id),
                         details={"job_id": job_id, "connect_request": connect_request},
                     )
+                elif str(connect_request.get("reason") or "").strip().lower() == "connection_request_not_supported":
+                    try:
+                        delivery = self.sourcing_agent.send_outreach(candidate_profile=candidate, message=message)
+                    except Exception as exc:
+                        delivery = {"sent": False, "provider": "linkedin", "error": str(exc)}
+                    if delivery.get("sent"):
+                        sent += 1
+                        delivery_status = "sent"
+                        connect_request = None
+                        self.db.update_conversation_status(conversation_id=conversation_id, status="active")
+                        self.db.update_candidate_match_status(
+                            job_id=job_id,
+                            candidate_id=candidate_id,
+                            status="outreach_sent",
+                            extra_notes={
+                                "outreach_state": "sent",
+                                "delivery_fallback": "message_without_connect",
+                            },
+                        )
+                    else:
+                        failed += 1
+                        self.db.log_operation(
+                            operation="agent.outreach.connect_request",
+                            status="error",
+                            entity_type="candidate",
+                            entity_id=str(candidate_id),
+                            details={
+                                "job_id": job_id,
+                                "connect_request": connect_request,
+                                "delivery": delivery,
+                                "fallback": "message_without_connect",
+                            },
+                        )
                 else:
                     failed += 1
                     self.db.log_operation(
@@ -1857,20 +1946,34 @@ class WorkflowService:
                     )
 
                 prescreen_status = str((state_out or {}).get("prescreen_status") or "").strip().lower()
-                if prescreen_status == "ready_for_screening_call":
+                if prescreen_status in {"ready_for_screening_call", "cv_received_pending_answers"} and not (
+                    isinstance(interview_result, dict) and interview_result.get("started")
+                ):
                     self.db.update_candidate_match_status(
                         job_id=int(conversation["job_id"]),
                         candidate_id=int(conversation["candidate_id"]),
                         status="resume_received",
-                        extra_notes={"resume_received_at": (state_out or {}).get("updated_at")},
+                        extra_notes={
+                            "resume_received_at": (state_out or {}).get("updated_at"),
+                            "prescreen_status": prescreen_status or None,
+                        },
                     )
-                    self.db.log_operation(
-                        operation="candidate.prescreen.completed",
-                        status="ok",
-                        entity_type="candidate",
-                        entity_id=str(conversation["candidate_id"]),
-                        details={"conversation_id": conversation_id, "session_id": session_id},
-                    )
+                    if prescreen_status == "ready_for_screening_call":
+                        self.db.log_operation(
+                            operation="candidate.prescreen.completed",
+                            status="ok",
+                            entity_type="candidate",
+                            entity_id=str(conversation["candidate_id"]),
+                            details={"conversation_id": conversation_id, "session_id": session_id},
+                        )
+                    else:
+                        self.db.log_operation(
+                            operation="candidate.resume.received",
+                            status="ok",
+                            entity_type="candidate",
+                            entity_id=str(conversation["candidate_id"]),
+                            details={"conversation_id": conversation_id, "session_id": session_id},
+                        )
                     self._record_outreach_account_event(
                         event_key=f"message:{inbound_id}:resume_received",
                         account_id=account_id,
@@ -1894,7 +1997,7 @@ class WorkflowService:
                     "intent": intent,
                     "reply": "" if job_paused else outbound,
                     "mode": "paused" if job_paused else "pre_resume",
-                    "state": state_out,
+                    "state": self._public_pre_resume_state(state_out),
                 }
                 if job_paused:
                     response["job_paused"] = True
@@ -2485,6 +2588,10 @@ class WorkflowService:
                 "raw": provider_payload if isinstance(provider_payload, dict) else None,
             },
         )
+        pre_resume = self.db.get_pre_resume_session_by_conversation(int(conversation["id"]))
+        if isinstance(pre_resume, dict) and isinstance(pre_resume.get("state_json"), dict) and isinstance(result, dict):
+            result = dict(result)
+            result["state"] = dict(pre_resume.get("state_json") or {})
         return {
             "processed": True,
             "conversation_id": int(conversation["id"]),
@@ -5622,6 +5729,31 @@ class WorkflowService:
             details=details,
             created_at=created_at,
         )
+
+    @staticmethod
+    def _normalize_pre_resume_public_status(status: Any) -> str:
+        normalized = str(status or "").strip().lower()
+        if normalized in {"cv_received_pending_answers", "ready_for_screening_call"}:
+            return "resume_received"
+        return normalized
+
+    @classmethod
+    def _public_pre_resume_state(cls, state: Dict[str, Any] | None) -> Dict[str, Any] | None:
+        if not isinstance(state, dict):
+            return state
+        out = dict(state)
+        out["status"] = cls._normalize_pre_resume_public_status(out.get("status"))
+        return out
+
+    @classmethod
+    def _public_pre_resume_session(cls, row: Dict[str, Any] | None) -> Dict[str, Any] | None:
+        if not isinstance(row, dict):
+            return row
+        out = dict(row)
+        out["status"] = cls._normalize_pre_resume_public_status(out.get("status"))
+        if isinstance(out.get("state_json"), dict):
+            out["state_json"] = cls._public_pre_resume_state(out.get("state_json"))
+        return out
 
     @staticmethod
     def _utc_day_key() -> str:

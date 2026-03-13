@@ -10,6 +10,9 @@ from .db_read_pg import PostgresReadDatabase
 class PostgresRuntimeDatabase(PostgresReadDatabase):
     """Primary runtime database backed by Postgres (read + write)."""
 
+    def init_schema(self) -> None:
+        return None
+
     def _json(self, value: Any) -> Any:
         return self._psycopg.types.json.Json(value)
 
@@ -235,6 +238,127 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
             "job_state": "active",
             "job": refreshed,
         }
+
+    def set_job_archived(self, job_id: int, archived: bool = True) -> bool:
+        archived_at = utc_now_iso() if archived else None
+        job_state = "archived" if archived else "active"
+        with self.transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE jobs
+                    SET archived_at = %s,
+                        job_state = %s,
+                        paused_at = NULL,
+                        pause_reason = NULL
+                    WHERE id = %s
+                    """,
+                    (archived_at, job_state, int(job_id)),
+                )
+                return int(cur.rowcount or 0) > 0
+
+    def archive_jobs(
+        self,
+        *,
+        job_ids: Optional[List[int]] = None,
+        exclude_job_ids: Optional[List[int]] = None,
+        exclude_titles: Optional[List[str]] = None,
+    ) -> Dict[str, Any]:
+        explicit_ids: List[int] = []
+        explicit_seen: set[int] = set()
+        for raw in job_ids or []:
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if value <= 0 or value in explicit_seen:
+                continue
+            explicit_seen.add(value)
+            explicit_ids.append(value)
+
+        excluded_ids: set[int] = set()
+        for raw in exclude_job_ids or []:
+            try:
+                value = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if value > 0:
+                excluded_ids.add(value)
+
+        normalized_titles = {
+            str(raw or "").strip().lower()
+            for raw in (exclude_titles or [])
+            if str(raw or "").strip()
+        }
+
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute("SELECT id, title, archived_at FROM jobs ORDER BY id ASC")
+                rows = cur.fetchall()
+
+        target_ids: List[int] = []
+        archived_jobs: List[Dict[str, Any]] = []
+        for row in rows:
+            job_id = int(row["id"] or 0)
+            title = str(row["title"] or "").strip()
+            if job_id <= 0:
+                continue
+            if explicit_ids and job_id not in explicit_seen:
+                continue
+            if job_id in excluded_ids:
+                continue
+            if title.lower() in normalized_titles:
+                continue
+            if row.get("archived_at") is not None:
+                continue
+            target_ids.append(job_id)
+            archived_jobs.append({"id": job_id, "title": title})
+
+        if not target_ids:
+            return {"updated": 0, "archived_jobs": []}
+
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE jobs
+                    SET archived_at = %s,
+                        job_state = 'archived',
+                        paused_at = NULL,
+                        pause_reason = NULL
+                    WHERE id = ANY(%s)
+                    """,
+                    (now, target_ids),
+                )
+                cur.execute(
+                    """
+                    UPDATE outbound_actions
+                    SET status = 'failed',
+                        result_json = %s,
+                        last_error = %s,
+                        updated_at = %s
+                    WHERE job_id = ANY(%s)
+                      AND status IN ('pending', 'running')
+                    """,
+                    (
+                        self._json({"reason": "job_archived"}),
+                        "job_archived",
+                        now,
+                        target_ids,
+                    ),
+                )
+                cur.execute(
+                    """
+                    UPDATE pre_resume_sessions
+                    SET next_followup_at = NULL,
+                        updated_at = %s
+                    WHERE job_id = ANY(%s)
+                    """,
+                    (now, target_ids),
+                )
+
+        return {"updated": len(target_ids), "archived_jobs": archived_jobs}
 
     def upsert_job_culture_profile(
         self,
@@ -1473,6 +1597,321 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 )
                 row = cur.fetchone()
         return self._row_to_dict(dict(row)) if row else None
+
+    def insert_outreach_account_event(
+        self,
+        *,
+        event_key: str,
+        account_id: int,
+        event_type: str,
+        job_id: Optional[int] = None,
+        candidate_id: Optional[int] = None,
+        conversation_id: Optional[int] = None,
+        details: Optional[Dict[str, Any]] = None,
+        created_at: Optional[str] = None,
+    ) -> bool:
+        normalized_key = str(event_key or "").strip()
+        if not normalized_key:
+            raise ValueError("event_key is required")
+        normalized_type = str(event_type or "").strip().lower()
+        if not normalized_type:
+            raise ValueError("event_type is required")
+        occurred_at = str(created_at or utc_now_iso())
+        with self.transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    INSERT INTO outreach_account_events (
+                        event_key, account_id, job_id, candidate_id, conversation_id,
+                        event_type, details, created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (event_key) DO NOTHING
+                    """,
+                    (
+                        normalized_key,
+                        int(account_id),
+                        int(job_id) if job_id is not None else None,
+                        int(candidate_id) if candidate_id is not None else None,
+                        int(conversation_id) if conversation_id is not None else None,
+                        normalized_type,
+                        self._json(details or {}),
+                        occurred_at,
+                    ),
+                )
+                return int(cur.rowcount or 0) > 0
+
+    def summarize_outreach_account_funnel(
+        self,
+        *,
+        account_ids: List[int],
+        recent_limit: int = 5,
+    ) -> Dict[int, Dict[str, Any]]:
+        valid_account_ids = [int(x) for x in account_ids if int(x) > 0]
+        if not valid_account_ids:
+            return {}
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    SELECT
+                        e.*,
+                        c.full_name AS candidate_name,
+                        j.title AS job_title
+                    FROM outreach_account_events e
+                    LEFT JOIN candidates c ON c.id = e.candidate_id
+                    LEFT JOIN jobs j ON j.id = e.job_id
+                    WHERE e.account_id = ANY(%s)
+                    ORDER BY e.created_at DESC, e.id DESC
+                    """,
+                    (valid_account_ids,),
+                )
+                rows = cur.fetchall()
+
+        summary: Dict[int, Dict[str, Any]] = {
+            account_id: {
+                "connects_planned": 0,
+                "connects_sent": 0,
+                "connects_accepted": 0,
+                "messages_planned": 0,
+                "messages_sent": 0,
+                "replies_received": 0,
+                "resumes_received": 0,
+                "recent_candidates": [],
+            }
+            for account_id in valid_account_ids
+        }
+        stage_count_keys = {
+            "connect_planned": "connects_planned",
+            "connect_sent": "connects_sent",
+            "connect_accepted": "connects_accepted",
+            "message_planned": "messages_planned",
+            "message_sent": "messages_sent",
+            "reply_received": "replies_received",
+            "resume_received": "resumes_received",
+        }
+        stage_labels = {
+            "connect_planned": "Connect planned",
+            "connect_sent": "Connect sent",
+            "connect_accepted": "Accepted",
+            "message_planned": "Message planned",
+            "message_sent": "Message sent",
+            "message_failed": "Message failed",
+            "reply_received": "Replied",
+            "resume_received": "Resume received",
+        }
+        counted_keys: Dict[int, Dict[str, set[str]]] = {
+            account_id: {metric_key: set() for metric_key in stage_count_keys.values()}
+            for account_id in valid_account_ids
+        }
+        recent_seen: Dict[int, set[str]] = {account_id: set() for account_id in valid_account_ids}
+
+        for raw_row in rows:
+            item = self._row_to_dict(dict(raw_row))
+            account_id = int(item.get("account_id") or 0)
+            if account_id <= 0 or account_id not in summary:
+                continue
+            event_type = str(item.get("event_type") or "").strip().lower()
+            count_key = stage_count_keys.get(event_type)
+            candidate_id = int(item.get("candidate_id") or 0)
+            dedupe_key = f"candidate:{candidate_id}" if candidate_id > 0 else f"event:{int(item.get('id') or 0)}"
+            if count_key and dedupe_key not in counted_keys[account_id][count_key]:
+                counted_keys[account_id][count_key].add(dedupe_key)
+                summary[account_id][count_key] += 1
+
+            if len(summary[account_id]["recent_candidates"]) >= max(1, int(recent_limit or 5)):
+                continue
+            if event_type not in stage_labels:
+                continue
+            if dedupe_key in recent_seen[account_id]:
+                continue
+            recent_seen[account_id].add(dedupe_key)
+            summary[account_id]["recent_candidates"].append(
+                {
+                    "candidate_id": candidate_id or None,
+                    "candidate_name": str(item.get("candidate_name") or "").strip() or f"Candidate {candidate_id or '-'}",
+                    "job_id": int(item.get("job_id") or 0) or None,
+                    "job_title": str(item.get("job_title") or "").strip() or "-",
+                    "conversation_id": int(item.get("conversation_id") or 0) or None,
+                    "event_type": event_type,
+                    "stage_label": stage_labels.get(event_type) or event_type.replace("_", " ").title(),
+                    "created_at": item.get("created_at"),
+                }
+            )
+
+        return summary
+
+    @staticmethod
+    def _prefer_nonempty_text(candidate: Optional[str], existing: Any) -> Optional[str]:
+        candidate_text = str(candidate or "").strip()
+        if candidate_text:
+            return candidate_text
+        existing_text = str(existing or "").strip()
+        return existing_text or None
+
+    def create_newsletter_subscription(
+        self,
+        *,
+        email: str,
+        full_name: Optional[str] = None,
+        company_name: Optional[str] = None,
+        notes: Optional[str] = None,
+        source_path: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        normalized_email = str(email or "").strip().lower()
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    "SELECT * FROM newsletter_subscriptions WHERE email = %s LIMIT 1",
+                    (normalized_email,),
+                )
+                existing = cur.fetchone()
+                if existing is not None:
+                    row_id = int(existing["id"])
+                    cur.execute(
+                        """
+                        UPDATE newsletter_subscriptions
+                        SET full_name = %s,
+                            company_name = %s,
+                            notes = %s,
+                            source_path = %s,
+                            status = 'active',
+                            ip_address = %s,
+                            user_agent = %s,
+                            updated_at = %s
+                        WHERE id = %s
+                        """,
+                        (
+                            self._prefer_nonempty_text(full_name, existing["full_name"]),
+                            self._prefer_nonempty_text(company_name, existing["company_name"]),
+                            self._prefer_nonempty_text(notes, existing["notes"]),
+                            self._prefer_nonempty_text(source_path, existing["source_path"]),
+                            self._prefer_nonempty_text(ip_address, existing["ip_address"]),
+                            self._prefer_nonempty_text(user_agent, existing["user_agent"]),
+                            now,
+                            row_id,
+                        ),
+                    )
+                    cur.execute(
+                        "SELECT * FROM newsletter_subscriptions WHERE id = %s LIMIT 1",
+                        (row_id,),
+                    )
+                    row = cur.fetchone()
+                    return {
+                        "created": False,
+                        "subscription": self._row_to_dict(dict(row)) if row is not None else None,
+                    }
+
+                cur.execute(
+                    """
+                    INSERT INTO newsletter_subscriptions (
+                        email, full_name, company_name, notes, source_path, status,
+                        ip_address, user_agent, created_at, updated_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, 'active', %s, %s, %s, %s)
+                    RETURNING *
+                    """,
+                    (
+                        normalized_email,
+                        str(full_name or "").strip() or None,
+                        str(company_name or "").strip() or None,
+                        str(notes or "").strip() or None,
+                        str(source_path or "").strip() or None,
+                        str(ip_address or "").strip() or None,
+                        str(user_agent or "").strip() or None,
+                        now,
+                        now,
+                    ),
+                )
+                row = cur.fetchone()
+                return {
+                    "created": True,
+                    "subscription": self._row_to_dict(dict(row)) if row is not None else None,
+                }
+
+    def get_newsletter_subscription(self, email: str) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    "SELECT * FROM newsletter_subscriptions WHERE email = %s LIMIT 1",
+                    (str(email or "").strip().lower(),),
+                )
+                row = cur.fetchone()
+        return self._row_to_dict(dict(row)) if row else None
+
+    def list_newsletter_subscriptions(self, limit: int = 100) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 100), 1000))
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    "SELECT * FROM newsletter_subscriptions ORDER BY id DESC LIMIT %s",
+                    (safe_limit,),
+                )
+                rows = cur.fetchall()
+        return [self._row_to_dict(dict(row)) for row in rows]
+
+    def create_contact_request(
+        self,
+        *,
+        full_name: str,
+        work_email: str,
+        company_name: str,
+        job_title: Optional[str],
+        hiring_need: str,
+        source_path: Optional[str] = None,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        now = utc_now_iso()
+        with self.transaction() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    """
+                    INSERT INTO contact_requests (
+                        full_name, work_email, company_name, job_title, hiring_need,
+                        source_path, status, ip_address, user_agent, created_at
+                    )
+                    VALUES (%s, %s, %s, %s, %s, %s, 'new', %s, %s, %s)
+                    RETURNING *
+                    """,
+                    (
+                        str(full_name or "").strip(),
+                        str(work_email or "").strip().lower(),
+                        str(company_name or "").strip(),
+                        str(job_title or "").strip() or None,
+                        str(hiring_need or "").strip(),
+                        str(source_path or "").strip() or None,
+                        str(ip_address or "").strip() or None,
+                        str(user_agent or "").strip() or None,
+                        now,
+                    ),
+                )
+                row = cur.fetchone()
+        return self._row_to_dict(dict(row)) if row else {}
+
+    def get_contact_request(self, request_id: int) -> Optional[Dict[str, Any]]:
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    "SELECT * FROM contact_requests WHERE id = %s LIMIT 1",
+                    (int(request_id),),
+                )
+                row = cur.fetchone()
+        return self._row_to_dict(dict(row)) if row else None
+
+    def list_contact_requests(self, limit: int = 100) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 100), 1000))
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(
+                    "SELECT * FROM contact_requests ORDER BY id DESC LIMIT %s",
+                    (safe_limit,),
+                )
+                rows = cur.fetchall()
+        return [self._row_to_dict(dict(row)) for row in rows]
 
     def get_linkedin_account_daily_counter(self, account_id: int, day_utc: str) -> Dict[str, Any]:
         with self._connect() as conn:

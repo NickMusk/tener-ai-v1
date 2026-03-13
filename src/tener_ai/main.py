@@ -6,6 +6,7 @@ import ipaddress
 import mimetypes
 import os
 import re
+import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
@@ -36,11 +37,12 @@ try:
 except ModuleNotFoundError:  # Optional demo tooling is not part of every deploy branch.
     seed_full_demo_job = None  # type: ignore[assignment]
 from .db import Database
-from .db_backfill import backfill_sqlite_to_postgres
+from .db_backfill import TABLE_ORDER, backfill_sqlite_to_postgres
 from .db_parity import DEFAULT_PARITY_TABLES, build_parity_report
 from .db_dual import DualWriteDatabase, PostgresMirrorWriter
 from .db_pg import PostgresMigrationRunner
 from .db_read_pg import PostgresReadDatabase
+from .db_runtime_pg import PostgresRuntimeDatabase
 from .emulator import EmulatorProjectStore
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
 from .interview_client import InterviewAPIClient
@@ -66,6 +68,25 @@ def env_bool(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def list_sqlite_user_tables(sqlite_path: str) -> List[str]:
+    db_path = str(sqlite_path or "").strip()
+    if not db_path or not Path(db_path).exists():
+        return []
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            """
+            SELECT name
+            FROM sqlite_master
+            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+            ORDER BY name ASC
+            """
+        ).fetchall()
+    finally:
+        conn.close()
+    return [str(row[0]) for row in rows if row and str(row[0] or "").strip()]
 
 
 def default_interview_api_base() -> str:
@@ -135,11 +156,12 @@ def build_services() -> Dict[str, Any]:
             migrations_dir=str(root / "migrations"),
         )
         postgres_migration_status = runner.apply_all()
-    try:
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        db_path = local_db_path
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    if db_backend != "postgres":
+        try:
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            db_path = local_db_path
+            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
     rules_path = os.environ.get("TENER_MATCHING_RULES_PATH", str(root / "config" / "matching_rules.json"))
     templates_path = os.environ.get("TENER_TEMPLATES_PATH", str(root / "config" / "outreach_templates.json"))
     instructions_path = os.environ.get("TENER_AGENT_INSTRUCTIONS_PATH", str(root / "config" / "agent_instructions.json"))
@@ -174,16 +196,23 @@ def build_services() -> Dict[str, Any]:
     except ValueError:
         forced_test_score = 0.99
 
-    try:
-        sqlite_db = Database(db_path=db_path)
-    except Exception:
-        if db_path != local_db_path:
-            sqlite_db = Database(db_path=local_db_path)
-        else:
-            raise
-    sqlite_db.init_schema()
-    db: Any = sqlite_db
-    if db_backend in {"postgres", "dual"}:
+    sqlite_db: Any = None
+    db_primary_path = ""
+    if db_backend == "postgres":
+        db = PostgresRuntimeDatabase(postgres_dsn)
+        db_runtime_mode = "postgres_primary"
+    else:
+        try:
+            sqlite_db = Database(db_path=db_path)
+        except Exception:
+            if db_path != local_db_path:
+                sqlite_db = Database(db_path=local_db_path)
+            else:
+                raise
+        sqlite_db.init_schema()
+        db = sqlite_db
+        db_primary_path = str(sqlite_db.db_path or "")
+    if db_backend == "dual":
         dual_strict = env_bool("TENER_DB_DUAL_STRICT", False)
         db = DualWriteDatabase(
             primary=sqlite_db,
@@ -205,7 +234,15 @@ def build_services() -> Dict[str, Any]:
         "reason": "default",
     }
     read_db: Any = db
-    if db_read_source == "postgres":
+    if db_runtime_mode == "postgres_primary":
+        read_db = db
+        db_read_status = {
+            "status": "ok",
+            "source": "postgres",
+            "requested_source": db_read_source_raw,
+            "reason": "postgres_runtime_primary",
+        }
+    elif db_read_source == "postgres":
         if not postgres_dsn:
             db_read_status = {
                 "status": "degraded",
@@ -467,7 +504,7 @@ def build_services() -> Dict[str, Any]:
     services = {
         "db": db,
         "read_db": read_db,
-        "db_primary_path": sqlite_db.db_path,
+        "db_primary_path": db_primary_path,
         "postgres_dsn": postgres_dsn,
         "db_backend": db_backend,
         "db_runtime_mode": db_runtime_mode,
@@ -1138,6 +1175,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             job_id_raw = (params.get("job_id") or [None])[0]
             job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
             items = SERVICES["db"].list_pre_resume_sessions(limit=limit or 100, status=status, job_id=job_id)
+            workflow = SERVICES.get("workflow")
+            session_public = getattr(workflow, "_public_pre_resume_session", None)
+            if callable(session_public):
+                items = [session_public(item) for item in items]
             self._json_response(HTTPStatus.OK, {"items": items})
             return
 
@@ -1162,6 +1203,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 if not session:
                     self._json_response(HTTPStatus.NOT_FOUND, {"error": "session not found"})
                     return
+                workflow = SERVICES.get("workflow")
+                state_public = getattr(workflow, "_public_pre_resume_state", None)
+                if callable(state_public):
+                    session = state_public(session)
                 self._json_response(HTTPStatus.OK, session)
                 return
 
@@ -3083,6 +3128,11 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                     state_status=state.get("status"),
                     details={"source": "api"},
                 )
+            workflow = SERVICES.get("workflow")
+            state_public = getattr(workflow, "_public_pre_resume_state", None)
+            if callable(state_public) and isinstance(result.get("state"), dict):
+                result = dict(result)
+                result["state"] = state_public(result.get("state"))
             self._json_response(HTTPStatus.OK, result)
             return
 
@@ -4558,6 +4608,38 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     @staticmethod
     def _switch_read_source(*, source: str, postgres_dsn: str = "", reason: str = "manual_switch") -> Dict[str, Any]:
         normalized = str(source or "").strip().lower()
+        runtime_mode = str(SERVICES.get("db_runtime_mode") or "").strip().lower()
+        if runtime_mode == "postgres_primary":
+            if normalized == "sqlite":
+                SERVICES["db_read_status"] = {
+                    "status": "ok",
+                    "source": "postgres",
+                    "requested_source": "runtime",
+                    "reason": "postgres_runtime_primary",
+                }
+                SERVICES["read_db"] = SERVICES.get("db")
+                return {
+                    "status": "skipped",
+                    "source": "postgres",
+                    "reason": "postgres_runtime_primary",
+                    "db_read_status": SERVICES.get("db_read_status"),
+                }
+            if normalized == "postgres":
+                SERVICES["read_db"] = SERVICES.get("db")
+                dsn = str(postgres_dsn or SERVICES.get("postgres_dsn") or os.environ.get("TENER_DB_DSN", "") or "").strip()
+                if dsn:
+                    SERVICES["postgres_dsn"] = dsn
+                SERVICES["db_read_status"] = {
+                    "status": "ok",
+                    "source": "postgres",
+                    "requested_source": "runtime",
+                    "reason": reason,
+                }
+                return {
+                    "status": "ok",
+                    "source": "postgres",
+                    "db_read_status": SERVICES.get("db_read_status"),
+                }
         if normalized == "sqlite":
             SERVICES["read_db"] = SERVICES["db"]
             SERVICES["db_read_status"] = {
@@ -4609,8 +4691,18 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     def _build_cutover_preflight_report(*, sqlite_path: str, postgres_dsn: str) -> Dict[str, Any]:
         sqlite_exists = Path(sqlite_path).exists()
         migration_files = sorted([path.name for path in (project_root() / "migrations").glob("*.sql") if path.is_file()])
+        sqlite_tables = list_sqlite_user_tables(sqlite_path) if sqlite_exists else []
+        backfill_tables = list(TABLE_ORDER)
+        backfill_table_set = set(backfill_tables)
+        missing_backfill_tables = [name for name in sqlite_tables if name not in backfill_table_set]
         checks: Dict[str, Any] = {
             "sqlite_exists": sqlite_exists,
+            "sqlite_tables_total": len(sqlite_tables),
+            "sqlite_tables": sqlite_tables,
+            "backfill_tables_total": len(backfill_tables),
+            "backfill_tables": backfill_tables,
+            "backfill_missing_tables": missing_backfill_tables,
+            "backfill_complete": len(missing_backfill_tables) == 0,
             "migrations_total": len(migration_files),
             "migrations_files": migration_files,
             "postgres_connected": False,
@@ -4660,6 +4752,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             sqlite_exists
             and bool(checks.get("postgres_connected"))
             and len(checks.get("postgres_migrations_missing") or []) == 0
+            and bool(checks.get("backfill_complete"))
         )
         return {
             "status": "ok" if ready else "warning",

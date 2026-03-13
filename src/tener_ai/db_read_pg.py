@@ -272,6 +272,70 @@ class PostgresReadDatabase:
             )
         return items
 
+    def list_outreach_ats_candidates(
+        self,
+        *,
+        job_id: Optional[int] = None,
+        limit: Optional[int] = 500,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = None if limit is None else max(1, min(int(limit or 500), 10000))
+        account_labels = {
+            int(item.get("id") or 0): str(item.get("label") or "").strip() or f"Account {int(item.get('id') or 0)}"
+            for item in self.list_linkedin_accounts(limit=500)
+            if int(item.get("id") or 0) > 0
+        }
+
+        rows: List[Dict[str, Any]] = []
+        job_refs: List[Dict[str, Any]] = []
+        if job_id is not None:
+            job = self.get_job(int(job_id))
+            if job and not bool(job.get("is_archived")):
+                job_refs = [job]
+        else:
+            job_refs = self.list_jobs(limit=300)
+
+        for job in job_refs:
+            row_job_id = int(job.get("id") or 0)
+            if row_job_id <= 0:
+                continue
+            for row in self.list_candidates_for_job(row_job_id):
+                if not isinstance(row, dict):
+                    continue
+                current_status_key = str(row.get("current_status_key") or "").strip().lower()
+                if current_status_key in {"unknown"}:
+                    continue
+                enriched = dict(row)
+                enriched["job_id"] = row_job_id
+                enriched["job_title"] = str(job.get("title") or "").strip() or "-"
+                enriched.update(Database._derive_candidate_ats_stage(enriched))
+                assigned_account_id = int(
+                    enriched.get("pending_action_account_id")
+                    or enriched.get("linkedin_account_id")
+                    or 0
+                ) or None
+                enriched["assigned_account_id"] = assigned_account_id
+                enriched["assigned_account_label"] = (
+                    account_labels.get(int(assigned_account_id or 0)) if assigned_account_id else None
+                )
+                enriched["last_activity_at"] = (
+                    enriched.get("pending_action_not_before")
+                    or enriched.get("last_message_created_at")
+                    or enriched.get("last_message_at")
+                    or enriched.get("match_created_at")
+                )
+                rows.append(enriched)
+
+        rows.sort(
+            key=lambda item: (
+                int(item.get("ats_stage_rank") or 999),
+                str(item.get("last_activity_at") or ""),
+                -float(item.get("score") or 0.0),
+                int(item.get("candidate_id") or 0),
+            ),
+            reverse=False,
+        )
+        return rows if safe_limit is None else rows[:safe_limit]
+
     def list_conversations_overview(
         self,
         limit: int = 200,

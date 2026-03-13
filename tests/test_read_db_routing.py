@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import threading
 import unittest
 from http.server import ThreadingHTTPServer
 from pathlib import Path
-from tempfile import gettempdir
+from tempfile import TemporaryDirectory, gettempdir
 from typing import Any, Dict, List, Optional, Tuple
 from unittest.mock import patch
 from urllib import error, request
@@ -302,6 +303,146 @@ class ReadDbRoutingTests(unittest.TestCase):
             status, payload = self._request("GET", "/api/db/cutover/preflight")
         self.assertEqual(status, 200)
         self.assertEqual(str(payload.get("status") or ""), "ok")
+
+    def test_cutover_preflight_report_includes_backfill_coverage(self) -> None:
+        migration_versions = sorted(path.name for path in (Path(__file__).resolve().parents[1] / "migrations").glob("*.sql"))
+
+        class _FakeCursor:
+            def __init__(self) -> None:
+                self._rows: List[Tuple[Any, ...]] = []
+
+            def execute(self, sql: str, params: Optional[Tuple[Any, ...]] = None) -> None:
+                normalized = " ".join(str(sql).split())
+                if "to_regclass('public.schema_migrations')" in normalized:
+                    self._rows = [("schema_migrations",)]
+                    return
+                if "SELECT version FROM schema_migrations" in normalized:
+                    self._rows = [(item,) for item in migration_versions]
+                    return
+                raise AssertionError(f"unexpected SQL: {sql}")
+
+            def fetchone(self) -> Optional[Tuple[Any, ...]]:
+                return self._rows[0] if self._rows else None
+
+            def fetchall(self) -> List[Tuple[Any, ...]]:
+                return list(self._rows)
+
+            def __enter__(self) -> "_FakeCursor":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        class _FakePgConnection:
+            def cursor(self) -> _FakeCursor:
+                return _FakeCursor()
+
+            def __enter__(self) -> "_FakePgConnection":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        class _FakePsycopg:
+            @staticmethod
+            def connect(dsn: str) -> _FakePgConnection:
+                self.assertEqual(dsn, "postgres://example")
+                return _FakePgConnection()
+
+        with TemporaryDirectory() as td:
+            sqlite_path = Path(td) / "preflight.sqlite3"
+            conn = sqlite3.connect(str(sqlite_path))
+            try:
+                conn.execute("CREATE TABLE jobs (id INTEGER PRIMARY KEY)")
+                conn.execute("CREATE TABLE outreach_account_events (id INTEGER PRIMARY KEY)")
+                conn.commit()
+            finally:
+                conn.close()
+
+            with patch.dict(api_main.SERVICES, {"db_read_status": {"source": "sqlite"}}, clear=False), patch.dict(
+                "sys.modules",
+                {"psycopg": _FakePsycopg},
+            ):
+                report = api_main.TenerRequestHandler._build_cutover_preflight_report(
+                    sqlite_path=str(sqlite_path),
+                    postgres_dsn="postgres://example",
+                )
+
+        self.assertEqual(str(report.get("status") or ""), "ok")
+        checks = report.get("checks") or {}
+        self.assertEqual(checks.get("sqlite_tables"), ["jobs", "outreach_account_events"])
+        self.assertEqual(checks.get("backfill_missing_tables"), [])
+        self.assertTrue(bool(checks.get("backfill_complete")))
+
+    def test_cutover_preflight_report_warns_when_backfill_plan_is_incomplete(self) -> None:
+        migration_versions = sorted(path.name for path in (Path(__file__).resolve().parents[1] / "migrations").glob("*.sql"))
+
+        class _FakeCursor:
+            def __init__(self) -> None:
+                self._rows: List[Tuple[Any, ...]] = []
+
+            def execute(self, sql: str, params: Optional[Tuple[Any, ...]] = None) -> None:
+                normalized = " ".join(str(sql).split())
+                if "to_regclass('public.schema_migrations')" in normalized:
+                    self._rows = [("schema_migrations",)]
+                    return
+                if "SELECT version FROM schema_migrations" in normalized:
+                    self._rows = [(item,) for item in migration_versions]
+                    return
+                raise AssertionError(f"unexpected SQL: {sql}")
+
+            def fetchone(self) -> Optional[Tuple[Any, ...]]:
+                return self._rows[0] if self._rows else None
+
+            def fetchall(self) -> List[Tuple[Any, ...]]:
+                return list(self._rows)
+
+            def __enter__(self) -> "_FakeCursor":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        class _FakePgConnection:
+            def cursor(self) -> _FakeCursor:
+                return _FakeCursor()
+
+            def __enter__(self) -> "_FakePgConnection":
+                return self
+
+            def __exit__(self, exc_type, exc, tb) -> bool:
+                return False
+
+        class _FakePsycopg:
+            @staticmethod
+            def connect(dsn: str) -> _FakePgConnection:
+                self.assertEqual(dsn, "postgres://example")
+                return _FakePgConnection()
+
+        with TemporaryDirectory() as td:
+            sqlite_path = Path(td) / "preflight.sqlite3"
+            conn = sqlite3.connect(str(sqlite_path))
+            try:
+                conn.execute("CREATE TABLE jobs (id INTEGER PRIMARY KEY)")
+                conn.execute("CREATE TABLE outreach_account_events (id INTEGER PRIMARY KEY)")
+                conn.commit()
+            finally:
+                conn.close()
+
+            incomplete_order = [name for name in api_main.TABLE_ORDER if name != "outreach_account_events"]
+            with patch.dict(api_main.SERVICES, {"db_read_status": {"source": "sqlite"}}, clear=False), patch.dict(
+                "sys.modules",
+                {"psycopg": _FakePsycopg},
+            ), patch.object(api_main, "TABLE_ORDER", incomplete_order):
+                report = api_main.TenerRequestHandler._build_cutover_preflight_report(
+                    sqlite_path=str(sqlite_path),
+                    postgres_dsn="postgres://example",
+                )
+
+        self.assertEqual(str(report.get("status") or ""), "warning")
+        checks = report.get("checks") or {}
+        self.assertEqual(checks.get("backfill_missing_tables"), ["outreach_account_events"])
+        self.assertFalse(bool(checks.get("backfill_complete")))
 
     def test_db_cutover_run_requires_postgres_dsn(self) -> None:
         with patch.dict(os.environ, {"TENER_DB_DSN": ""}, clear=False):

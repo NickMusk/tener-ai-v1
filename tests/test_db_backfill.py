@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+import re
 import unittest
+from pathlib import Path
 
 from tener_ai import db_backfill
 
 
 class BackfillHelpersTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.root = Path(__file__).resolve().parents[1]
+
     def test_validate_identifier(self) -> None:
         self.assertEqual(db_backfill._validate_identifier("jobs"), "jobs")
         with self.assertRaises(ValueError):
@@ -56,6 +62,18 @@ class BackfillHelpersTests(unittest.TestCase):
             _FakePsycopg,
         )
         self.assertEqual(plain_value, "Backend Engineer")
+
+    def test_table_order_covers_all_sqlite_runtime_tables(self) -> None:
+        db_source = (self.root / "src" / "tener_ai" / "db.py").read_text(encoding="utf-8")
+        runtime_tables = set(re.findall(r"CREATE TABLE IF NOT EXISTS\s+([a-zA-Z_][a-zA-Z0-9_]*)", db_source))
+        missing = sorted(runtime_tables - set(db_backfill.TABLE_ORDER))
+        self.assertFalse(missing, f"Missing sqlite runtime tables in backfill order: {missing}")
+
+    def test_outreach_account_events_is_backfilled_after_dependencies(self) -> None:
+        order = db_backfill.TABLE_ORDER
+        event_index = order.index("outreach_account_events")
+        for dependency in ("linkedin_accounts", "jobs", "candidates", "conversations"):
+            self.assertLess(order.index(dependency), event_index)
 
 
 if __name__ == "__main__":
