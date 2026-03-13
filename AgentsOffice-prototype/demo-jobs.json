@@ -1,0 +1,118 @@
+{
+  "items": [
+    {
+      "id": "fixture-industrial-electrician-midland",
+      "company": "Nabors Field Ops",
+      "title": "Industrial Electrician",
+      "location": "Midland, TX",
+      "market": "Skilled trades hiring",
+      "summary": "Field-heavy electrical hiring with immediate start pressure, safety-sensitive screening and active outreach.",
+      "phase_label": "Scanning Midland field talent and warming the first conversations.",
+      "channels": ["LinkedIn Recruiter", "Indeed", "Rigzone", "Referral graph"],
+      "market_leads": 57,
+      "live_threads": 4,
+      "buyer_finalists": 2,
+      "candidate_signals": [
+        {
+          "headline": "Master Electrician | Oil & Gas Maintenance",
+          "location": "Odessa, TX",
+          "score": 97,
+          "note": "Strong industrial depth and same-week availability."
+        },
+        {
+          "headline": "Senior Industrial Electrician | Data Center & Energy",
+          "location": "Midland, TX",
+          "score": 94,
+          "note": "Local fit with active reply signal."
+        },
+        {
+          "headline": "Field Electrical Lead | High-Voltage Systems",
+          "location": "Big Spring, TX",
+          "score": 91,
+          "note": "Strong buyer-fit profile if shortlist expands."
+        }
+      ]
+    },
+    {
+      "id": "fixture-plc-tech-houston",
+      "company": "Gulf Process Systems",
+      "title": "PLC Technician",
+      "location": "Houston, TX",
+      "market": "Industrial automation hiring",
+      "summary": "Automation search balancing controls depth, travel flexibility and fast buyer response expectations.",
+      "phase_label": "Tightening controls filters and opening Houston automation channels.",
+      "channels": ["LinkedIn Recruiter", "Indeed", "Referral graph"],
+      "market_leads": 42,
+      "live_threads": 3,
+      "buyer_finalists": 1,
+      "candidate_signals": [
+        {
+          "headline": "PLC Specialist | Siemens + Allen-Bradley",
+          "location": "Sugar Land, TX",
+          "score": 95,
+          "note": "Strong controls stack and clean travel history."
+        },
+        {
+          "headline": "Automation Technician | Brownfield Retrofits",
+          "location": "Houston, TX",
+          "score": 92,
+          "note": "Buyer-native project background and quick response pace."
+        }
+      ]
+    },
+    {
+      "id": "fixture-safety-manager-corpus",
+      "company": "Coastal Energy Services",
+      "title": "Site Safety Manager",
+      "location": "Corpus Christi, TX",
+      "market": "Field operations hiring",
+      "summary": "Safety leadership search focused on plant discipline, crew credibility and buyer confidence under time pressure.",
+      "phase_label": "Reviewing safety-heavy operators and validating buyer confidence signals.",
+      "channels": ["LinkedIn Recruiter", "Indeed", "Past placements"],
+      "market_leads": 33,
+      "live_threads": 2,
+      "buyer_finalists": 1,
+      "candidate_signals": [
+        {
+          "headline": "EHS Leader | Refinery & Turnaround Ops",
+          "location": "Corpus Christi, TX",
+          "score": 96,
+          "note": "Strong plant credibility and local access."
+        },
+        {
+          "headline": "Safety Supervisor | Industrial Maintenance",
+          "location": "Victoria, TX",
+          "score": 90,
+          "note": "Good backup signal if the buyer wants a second finalist."
+        }
+      ]
+    },
+    {
+      "id": "fixture-field-mechanic-williston",
+      "company": "Northern Basin Logistics",
+      "title": "Field Service Mechanic",
+      "location": "Williston, ND",
+      "market": "Heavy equipment hiring",
+      "summary": "Mechanic search balancing travel readiness, equipment depth and realistic field availability.",
+      "phase_label": "Keeping heavy-equipment conversations warm while the shortlist firms up.",
+      "channels": ["Indeed", "Rigzone", "Referral graph"],
+      "market_leads": 48,
+      "live_threads": 5,
+      "buyer_finalists": 2,
+      "candidate_signals": [
+        {
+          "headline": "Field Mechanic | Diesel + Hydraulic Systems",
+          "location": "Williston, ND",
+          "score": 93,
+          "note": "Strong local availability and buyer-fit field record."
+        },
+        {
+          "headline": "Service Technician | Fleet Maintenance",
+          "location": "Minot, ND",
+          "score": 91,
+          "note": "Good depth if the buyer wants coverage across shifts."
+        }
+      ]
+    }
+  ]
+}

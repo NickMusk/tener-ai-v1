@@ -1221,6 +1221,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, {"items": items})
             return
 
+        if parsed.path == "/api/demo/agents-office/jobs":
+            params = parse_qs(parsed.query or "")
+            limit = self._safe_int((params.get("limit") or ["8"])[0], 8)
+            payload = self._build_agents_office_demo_jobs(limit=limit or 8)
+            self._json_response(HTTPStatus.OK, payload)
+            return
+
         if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/candidates"):
             job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/candidates$")
             if job_id is None:
@@ -4783,6 +4790,179 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         return False
 
     @staticmethod
+    def _agents_office_fixture_jobs() -> List[Dict[str, Any]]:
+        path = project_root() / "AgentsOffice-prototype" / "demo-jobs.json"
+        if not path.exists():
+            return []
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        items = payload.get("items") if isinstance(payload, dict) else []
+        return items if isinstance(items, list) else []
+
+    @staticmethod
+    def _agents_office_phase_label(
+        *,
+        steps: List[Dict[str, Any]],
+        market_leads: int,
+        live_threads: int,
+        buyer_finalists: int,
+        fallback_label: Optional[str],
+    ) -> str:
+        labels = {
+            "source": "Scanning the market and stacking aligned leads.",
+            "enrich": "Enriching raw profiles before they hit the board.",
+            "verify": "Filtering the strongest market signal for the buyer.",
+            "add": "Promoting aligned candidates into the buyer board.",
+            "outreach": "Opening live candidate threads and warming replies.",
+            "faq": "Handling candidate questions while outreach keeps moving.",
+            "pre_resume": "Keeping active conversations moving toward resumes.",
+            "interview_invite": "Packaging interview-ready finalists for review.",
+        }
+        if steps:
+            active = next(
+                (
+                    row for row in steps
+                    if str(row.get("status") or "").strip().lower() not in {"success", "complete", "completed", "idle"}
+                ),
+                steps[0],
+            )
+            step = str(active.get("step") or "").strip().lower()
+            status = str(active.get("status") or "").strip().lower()
+            if status in {"error", "failed"} and step:
+                return f"Recovering from a {step} blocker while the office reroutes."
+            if step in labels:
+                return labels[step]
+        if buyer_finalists > 0 and live_threads > 0:
+            return "Keeping finalist conversations warm while the buyer board stays fresh."
+        if live_threads > 0:
+            return "Opening and maintaining live candidate threads."
+        if market_leads > 0:
+            return "Scanning the market and shaping the first qualified signals."
+        return str(fallback_label or "").strip() or "The office is actively moving this search."
+
+    def _build_agents_office_demo_jobs(self, *, limit: int) -> Dict[str, Any]:
+        safe_limit = max(1, min(int(limit or 8), 12))
+        fixture_items = self._agents_office_fixture_jobs()
+        try:
+            read_db = self._read_db()
+        except Exception:
+            read_db = None
+        if read_db is None:
+            return {"items": fixture_items[:safe_limit], "source": "fixture"}
+        try:
+            jobs = read_db.list_jobs(limit=safe_limit)
+        except Exception:
+            jobs = []
+        if not jobs:
+            return {"items": fixture_items[:safe_limit], "source": "fixture"}
+
+        shortlist_statuses = {
+            "cv_received",
+            "interview_invited",
+            "interview_in_progress",
+            "interview_completed",
+            "interview_scored",
+            "interview_passed",
+        }
+
+        items: List[Dict[str, Any]] = []
+        for index, job in enumerate(jobs[:safe_limit]):
+            job_id = int(job.get("id") or 0)
+            if job_id <= 0:
+                continue
+            fallback = fixture_items[index % len(fixture_items)] if fixture_items else {}
+            try:
+                candidate_rows = read_db.list_candidates_for_job(job_id)
+            except Exception:
+                candidate_rows = []
+            try:
+                steps = read_db.list_job_step_progress(job_id=job_id)
+            except Exception:
+                steps = []
+
+            market_leads = len(candidate_rows)
+            live_threads = sum(1 for row in candidate_rows if int(row.get("conversation_id") or 0) > 0)
+
+            sorted_rows = sorted(
+                candidate_rows,
+                key=lambda row: float(row.get("score") or 0.0),
+                reverse=True,
+            )
+            candidate_signals: List[Dict[str, Any]] = []
+            for row in sorted_rows[:3]:
+                headline = str(row.get("headline") or "").strip() or "Qualified market signal"
+                location = str(row.get("location") or job.get("location") or fallback.get("location") or "").strip()
+                score = max(1, min(int(round(float(row.get("score") or 0.0))) if row.get("score") is not None else 0, 99))
+                note = str(row.get("current_status_label") or "").strip() or "Strong market signal"
+                candidate_signals.append(
+                    {
+                        "headline": headline,
+                        "location": location,
+                        "score": score or 90,
+                        "note": note,
+                    }
+                )
+
+            buyer_finalists = sum(
+                1
+                for row in candidate_rows
+                if str(row.get("current_status_key") or "").strip().lower() in shortlist_statuses
+            )
+            if candidate_signals:
+                buyer_finalists = max(1 if buyer_finalists <= 0 else buyer_finalists, min(len(candidate_signals), 3))
+
+            if market_leads <= 0:
+                market_leads = int(fallback.get("market_leads") or 0)
+            if live_threads <= 0:
+                live_threads = int(fallback.get("live_threads") or 0)
+            if buyer_finalists <= 0:
+                buyer_finalists = int(fallback.get("buyer_finalists") or 0)
+            if not candidate_signals and isinstance(fallback, dict):
+                fallback_signals = fallback.get("candidate_signals")
+                if isinstance(fallback_signals, list):
+                    candidate_signals = fallback_signals[:3]
+
+            title = str(job.get("title") or fallback.get("title") or "Field Role").strip() or "Field Role"
+            location = str(job.get("location") or fallback.get("location") or "").strip()
+            company = str(job.get("company") or fallback.get("company") or "Tener Buyer").strip() or "Tener Buyer"
+            market = str(fallback.get("market") or "Talent search").strip() or "Talent search"
+            summary = str(fallback.get("summary") or "").strip()
+            if not summary:
+                location_tail = f" in {location}" if location else ""
+                summary = (
+                    f"Buyer search for {title}{location_tail}, with sourcing, fit review and outreach moving in parallel."
+                )
+
+            items.append(
+                {
+                    "id": str(job_id),
+                    "company": company,
+                    "title": title,
+                    "location": location or str(fallback.get("location") or "").strip(),
+                    "market": market,
+                    "summary": summary,
+                    "phase_label": self._agents_office_phase_label(
+                        steps=steps,
+                        market_leads=market_leads,
+                        live_threads=live_threads,
+                        buyer_finalists=buyer_finalists,
+                        fallback_label=str(fallback.get("phase_label") or "").strip() or None,
+                    ),
+                    "channels": list(fallback.get("channels") or []),
+                    "market_leads": market_leads,
+                    "live_threads": live_threads,
+                    "buyer_finalists": min(max(buyer_finalists, 0), 3),
+                    "candidate_signals": candidate_signals[:3],
+                }
+            )
+
+        if items:
+            return {"items": items, "source": "db"}
+        return {"items": fixture_items[:safe_limit], "source": "fixture"}
+
+    @staticmethod
     def _is_public_path(*, method: str, path: str) -> bool:
         normalized = str(path or "").strip()
         if normalized in {
@@ -4805,6 +4985,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         if normalized == "/skilled-trades" or normalized.startswith("/skilled-trades/"):
             return True
         if normalized == "/agents-office" or normalized.startswith("/agents-office/"):
+            return True
+        if normalized == "/api/demo/agents-office/jobs":
             return True
         if normalized.startswith("/candidate/"):
             return True

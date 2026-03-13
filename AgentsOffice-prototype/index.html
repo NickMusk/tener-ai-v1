@@ -17,18 +17,13 @@
 
     :root {
       --bg: #1f2235;
-      --bg-2: #2d3147;
       --panel: #362f4f;
-      --panel-2: #2a243f;
-      --frame: #171421;
       --text: #f6f2ff;
       --muted: #b0a9ca;
       --accent: #fec742;
       --accent-2: #dd7c42;
       --ok: #78ff8f;
       --warn: #ffbf5f;
-      --hot: #ff7a7a;
-      --tile-size: 16px;
     }
 
     * {
@@ -77,38 +72,10 @@
     }
 
     .hero p {
-      max-width: 900px;
+      max-width: 860px;
       font-size: 0.95rem;
       color: var(--muted);
       line-height: 1.6;
-    }
-
-    .meta-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 12px;
-    }
-
-    .meta-pill,
-    .button {
-      border: 16px solid transparent;
-      border-image: url('./assets/ui/button.svg') 25% stretch;
-      background: transparent;
-      color: var(--text);
-      font: inherit;
-      line-height: 1;
-      min-height: 44px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      padding: 0 12px;
-      text-decoration: none;
-      image-rendering: pixelated;
-    }
-
-    .button {
-      cursor: pointer;
     }
 
     .layout {
@@ -191,6 +158,20 @@
       font-family: 'Upheaval Pro', sans-serif;
       font-size: 1.8rem;
       letter-spacing: 0.06em;
+    }
+
+    .error-banner {
+      display: none;
+      border: 1px solid rgba(255, 122, 122, 0.4);
+      background: rgba(138, 51, 51, 0.24);
+      color: #ffd6d6;
+      padding: 10px 12px;
+      font-size: 0.76rem;
+      margin-bottom: 14px;
+    }
+
+    .error-banner.visible {
+      display: block;
     }
 
     .world {
@@ -314,6 +295,55 @@
       opacity: 1;
     }
 
+    .handoff {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 180ms ease;
+    }
+
+    .handoff.visible {
+      opacity: 1;
+    }
+
+    .handoff-line {
+      position: absolute;
+      height: 4px;
+      transform-origin: left center;
+      background: linear-gradient(90deg, rgba(254, 199, 66, 0.15), rgba(254, 199, 66, 0.95), rgba(255, 255, 255, 0.12));
+      box-shadow: 0 0 16px rgba(254, 199, 66, 0.45);
+      border-radius: 999px;
+    }
+
+    .handoff-line::after {
+      content: "";
+      position: absolute;
+      right: -8px;
+      top: 50%;
+      width: 0;
+      height: 0;
+      transform: translateY(-50%);
+      border-top: 6px solid transparent;
+      border-bottom: 6px solid transparent;
+      border-left: 10px solid rgba(254, 199, 66, 0.92);
+    }
+
+    .handoff-label {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      background: rgba(19, 16, 28, 0.92);
+      border: 1px solid rgba(254, 199, 66, 0.45);
+      color: var(--accent);
+      font-size: 0.68rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      box-shadow: 0 0 18px rgba(0, 0, 0, 0.24);
+      text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+      white-space: nowrap;
+    }
+
     .ticker {
       display: flex;
       align-items: center;
@@ -372,12 +402,25 @@
       min-height: 120px;
     }
 
-    .job-summary {
+    .job-summary,
+    .job-list,
+    .agent-list,
+    .shortlist,
+    .activity-list {
       display: grid;
-      gap: 10px;
+      gap: 8px;
+    }
+
+    .job-summary {
       color: var(--muted);
       font-size: 0.82rem;
       line-height: 1.5;
+    }
+
+    .job-list {
+      max-height: 260px;
+      overflow: auto;
+      padding-right: 4px;
     }
 
     .job-summary strong {
@@ -386,13 +429,7 @@
       margin-bottom: 2px;
     }
 
-    .agent-list,
-    .shortlist,
-    .activity-list {
-      display: grid;
-      gap: 8px;
-    }
-
+    .job-card,
     .agent-card,
     .candidate-card,
     .activity-item {
@@ -401,11 +438,24 @@
       padding: 10px;
     }
 
-    .agent-card {
+    .job-card {
+      width: 100%;
+      appearance: none;
+      text-align: left;
+      color: inherit;
+      cursor: pointer;
       display: grid;
-      gap: 6px;
+      gap: 8px;
+      font: inherit;
     }
 
+    .job-card.active {
+      border-color: rgba(254, 199, 66, 0.55);
+      box-shadow: inset 0 0 0 1px rgba(254, 199, 66, 0.35);
+      background: rgba(41, 35, 58, 0.92);
+    }
+
+    .job-card-head,
     .agent-head,
     .candidate-head {
       display: flex;
@@ -414,9 +464,42 @@
       align-items: baseline;
     }
 
+    .job-card-head strong,
     .agent-head strong,
     .candidate-head strong {
       color: var(--text);
+    }
+
+    .job-card-location,
+    .job-card-meta,
+    .agent-meta,
+    .candidate-meta {
+      color: var(--muted);
+      font-size: 0.72rem;
+      line-height: 1.5;
+    }
+
+    .job-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .job-chip {
+      color: var(--text);
+      font-size: 0.66rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      padding: 3px 6px;
+    }
+
+    .agent-card,
+    .candidate-card,
+    .activity-item {
+      display: grid;
+      gap: 6px;
     }
 
     .status {
@@ -441,18 +524,6 @@
     .status.ready,
     .status.shortlisted {
       color: var(--ok);
-    }
-
-    .agent-meta,
-    .candidate-meta {
-      color: var(--muted);
-      font-size: 0.72rem;
-      line-height: 1.5;
-    }
-
-    .activity-item {
-      display: grid;
-      gap: 4px;
     }
 
     .activity-head {
@@ -501,11 +572,6 @@
       line-height: 1.45;
     }
 
-    .candidate-card {
-      display: grid;
-      gap: 6px;
-    }
-
     .candidate-score {
       color: var(--ok);
       font-family: 'Upheaval Pro', sans-serif;
@@ -521,68 +587,6 @@
 
     .footer-note a {
       color: var(--accent);
-    }
-
-    .error-banner {
-      display: none;
-      border: 1px solid rgba(255, 122, 122, 0.4);
-      background: rgba(138, 51, 51, 0.24);
-      color: #ffd6d6;
-      padding: 10px 12px;
-      font-size: 0.76rem;
-    }
-
-    .error-banner.visible {
-      display: block;
-    }
-
-    .handoff {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      opacity: 0;
-      transition: opacity 180ms ease;
-    }
-
-    .handoff.visible {
-      opacity: 1;
-    }
-
-    .handoff-line {
-      position: absolute;
-      height: 4px;
-      transform-origin: left center;
-      background: linear-gradient(90deg, rgba(254, 199, 66, 0.15), rgba(254, 199, 66, 0.95), rgba(255, 255, 255, 0.12));
-      box-shadow: 0 0 16px rgba(254, 199, 66, 0.45);
-      border-radius: 999px;
-    }
-
-    .handoff-line::after {
-      content: "";
-      position: absolute;
-      right: -8px;
-      top: 50%;
-      width: 0;
-      height: 0;
-      transform: translateY(-50%);
-      border-top: 6px solid transparent;
-      border-bottom: 6px solid transparent;
-      border-left: 10px solid rgba(254, 199, 66, 0.92);
-    }
-
-    .handoff-label {
-      position: absolute;
-      transform: translate(-50%, -50%);
-      background: rgba(19, 16, 28, 0.92);
-      border: 1px solid rgba(254, 199, 66, 0.45);
-      color: var(--accent);
-      font-size: 0.68rem;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      padding: 3px 8px;
-      box-shadow: 0 0 18px rgba(0, 0, 0, 0.24);
-      text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
-      white-space: nowrap;
     }
 
     @media (max-width: 1180px) {
@@ -619,11 +623,6 @@
 <body>
   <main class="shell">
     <header class="hero">
-      <div class="meta-row">
-        <span class="meta-pill">Marketing Demo</span>
-        <span class="meta-pill">AI Workforce Theater</span>
-        <button class="button" id="restart-btn" type="button">Replay Office</button>
-      </div>
       <h1>Tener Agent Office</h1>
       <p>
         A vivid office view for sales conversations, built to make Tener feel like a staffed
@@ -674,7 +673,7 @@
         </div>
 
         <div class="ticker">
-          <span id="run-clock">00:00</span>
+          <span id="run-clock">Live 00:00</span>
           <div class="progress"><span id="progress-fill"></span></div>
           <span id="run-phase">Opening the buyer-facing office...</span>
         </div>
@@ -682,13 +681,18 @@
 
       <aside class="panel-frame">
         <section class="panel-section">
+          <h2>Jobs</h2>
+          <div class="section-box job-list" id="job-list"></div>
+        </section>
+
+        <section class="panel-section">
           <h2>Buyer Brief</h2>
           <div class="section-box job-summary">
             <div>
               <strong id="brief-company">Tener Demo Search</strong>
               <span id="brief-role">Preparing run details...</span>
             </div>
-            <div id="brief-objective">Loading objective...</div>
+            <div id="brief-summary">Loading summary...</div>
             <div id="brief-sources">Loading channels...</div>
           </div>
         </section>
@@ -699,7 +703,7 @@
         </section>
 
         <section class="panel-section">
-          <h2>Buyer Shortlist</h2>
+          <h2>Buyer Finalists</h2>
           <div class="section-box shortlist" id="shortlist"></div>
         </section>
 
@@ -718,545 +722,6 @@
     </div>
   </main>
 
-  <script>
-    const TILEMAP_PATH = './assets/tilemap.json';
-    const TILESET_PATH = './assets/rpg-tileset.png';
-    const SPRITE_SHEET_PATH = './assets/32x32folk.png';
-    const SCENARIO_PATH = './scenario.json';
-
-    const SPRITES = {
-      f1: { baseX: 0, baseY: 0 },
-      f3: { baseX: 192, baseY: 0 },
-      f4: { baseX: 288, baseY: 0 },
-      f6: { baseX: 96, baseY: 128 },
-      f7: { baseX: 192, baseY: 128 }
-    };
-    const DIRECTIONS = ['down', 'left', 'right', 'up'];
-    const DIRECTION_ROWS = { down: 0, left: 1, right: 2, up: 3 };
-    const TILESET_COLUMNS = 100;
-    const TILE_SIZE = 16;
-    const LOOP_PADDING_SECONDS = 10;
-    const ACTIVITY_LIMIT = 8;
-    const SHORTLIST_LIMIT = 4;
-
-    const canvas = document.getElementById('world-canvas');
-    const ctx = canvas.getContext('2d');
-    const overlay = document.getElementById('world-overlay');
-    const progressFill = document.getElementById('progress-fill');
-    const errorBanner = document.getElementById('error-banner');
-
-    const state = {
-      scenario: null,
-      spriteSheet: null,
-      timelineStartMs: 0,
-      activeLoopSeconds: 90,
-      nextEventIndex: 0,
-      frameHandle: 0,
-      clockHandle: 0,
-      agents: [],
-      metrics: { profiles: 0, conversations: 0, shortlisted: 0 },
-      shortlist: [],
-      activity: [],
-      phase: 'Initializing office...',
-      lastAmbientBucket: -1,
-      handoff: null
-    };
-
-    function $(id) {
-      return document.getElementById(id);
-    }
-
-    function setError(message) {
-      if (!message) {
-        errorBanner.textContent = '';
-        errorBanner.classList.remove('visible');
-        return;
-      }
-      errorBanner.textContent = message;
-      errorBanner.classList.add('visible');
-    }
-
-    function escapeHtml(value) {
-      return String(value || '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-    }
-
-    function formatClock(totalSeconds) {
-      const seconds = Math.max(0, Math.floor(totalSeconds));
-      const mins = String(Math.floor(seconds / 60)).padStart(2, '0');
-      const secs = String(seconds % 60).padStart(2, '0');
-      return mins + ':' + secs;
-    }
-
-    function addActivity(item) {
-      state.activity.unshift({
-        title: item.title,
-        detail: item.detail,
-        when: item.when || formatClock(getElapsedSeconds())
-      });
-      state.activity = state.activity.slice(0, ACTIVITY_LIMIT);
-      renderActivity();
-    }
-
-    function updateMetrics(patch) {
-      state.metrics = { ...state.metrics, ...patch };
-      $('metric-profiles').textContent = String(state.metrics.profiles);
-      $('metric-conversations').textContent = String(state.metrics.conversations);
-      $('metric-shortlisted').textContent = String(state.metrics.shortlisted);
-    }
-
-    function renderActivity() {
-      const el = $('activity-list');
-      const items = state.activity.length ? state.activity : [{
-        title: 'Office ready',
-        detail: 'Agents are syncing their first actions.',
-        when: '00:00',
-        kind: 'signal'
-      }];
-      el.innerHTML = items.map((item) => `
-        <article class="activity-item">
-          <div class="activity-head">
-            <strong>${escapeHtml(item.title)}</strong>
-            <span class="activity-kind ${escapeHtml(item.kind || 'signal')}">${escapeHtml(item.kind || 'signal')}</span>
-          </div>
-          <span>${escapeHtml(item.detail)}</span>
-          <time>${escapeHtml(item.when)}</time>
-        </article>
-      `).join('');
-    }
-
-    function renderShortlist() {
-      const el = $('shortlist');
-      const items = state.shortlist.length ? state.shortlist : [{
-        name: 'No finalists yet',
-        score: '--',
-        meta: 'The office will surface the first shortlist once sourcing and outreach converge.',
-        reason: 'Jordan is waiting for enough evidence to lock a recommendation.'
-      }];
-      el.innerHTML = items.slice(0, SHORTLIST_LIMIT).map((item) => `
-        <article class="candidate-card">
-          <div class="candidate-head">
-            <strong>${escapeHtml(item.name)}</strong>
-            <span class="candidate-score">${escapeHtml(item.score)}</span>
-          </div>
-          <div class="candidate-meta">${escapeHtml(item.meta)}</div>
-          <div class="candidate-meta">${escapeHtml(item.reason)}</div>
-        </article>
-      `).join('');
-    }
-
-    function renderAgents() {
-      $('agent-list').innerHTML = state.agents.map((agent) => `
-        <article class="agent-card">
-          <div class="agent-head">
-            <strong>${escapeHtml(agent.name)}</strong>
-            <span class="status ${escapeHtml(agent.status)}">${escapeHtml(agent.status_label)}</span>
-          </div>
-          <div class="agent-meta">${escapeHtml(agent.role)}</div>
-          <div class="agent-meta">${escapeHtml(agent.note)}</div>
-        </article>
-      `).join('');
-    }
-
-    function updateAgentCard(agentId, patch) {
-      const agent = state.agents.find((item) => item.id === agentId);
-      if (!agent) return;
-      Object.assign(agent, patch);
-      renderAgents();
-    }
-
-    function createAgentDom(agent) {
-      const root = document.createElement('div');
-      root.className = 'agent';
-      root.dataset.agentId = agent.id;
-      root.innerHTML = `
-        <div class="nameplate">${escapeHtml(agent.name)}</div>
-        <div class="mood">${escapeHtml(agent.emoji || '')}</div>
-        <div class="bubble"></div>
-        <div class="avatar-ring"></div>
-        <div class="sprite"></div>
-      `;
-      overlay.appendChild(root);
-      agent.el = root;
-      syncAgentDom(agent);
-    }
-
-    function syncAgentDom(agent) {
-      if (!agent.el) return;
-      const left = ((agent.x + 0.5) / 40) * 100;
-      const top = ((agent.y + 0.7) / 40) * 100;
-      agent.el.style.left = left + '%';
-      agent.el.style.top = top + '%';
-      agent.el.classList.toggle('speaking', Boolean(agent.bubbleText));
-      const bubble = agent.el.querySelector('.bubble');
-      if (bubble) bubble.textContent = agent.bubbleText || '';
-      const mood = agent.el.querySelector('.mood');
-      if (mood) mood.textContent = agent.emoji || '';
-      const sprite = agent.el.querySelector('.sprite');
-      if (sprite) {
-        const config = SPRITES[agent.spriteKey] || SPRITES.f1;
-        const frame = agent.frameIndex % 3;
-        const x = config.baseX + frame * 32;
-        const y = config.baseY + DIRECTION_ROWS[agent.direction] * 32;
-        sprite.style.backgroundPosition = `-${x}px -${y}px`;
-      }
-    }
-
-    function clearWorldAgents() {
-      overlay.querySelectorAll('.agent').forEach((node) => node.remove());
-    }
-
-    function clearHandoff() {
-      state.handoff = null;
-      $('handoff').classList.remove('visible');
-    }
-
-    function resetState() {
-      state.nextEventIndex = 0;
-      state.shortlist = [];
-      state.activity = [];
-      state.metrics = { profiles: 0, conversations: 0, shortlisted: 0 };
-      state.phase = state.scenario.job.phase_label;
-      state.lastAmbientBucket = -1;
-      updateMetrics(state.metrics);
-      $('run-phase').textContent = state.phase;
-      renderShortlist();
-      renderActivity();
-      clearWorldAgents();
-      clearHandoff();
-      state.agents = state.scenario.agents.map((agent) => ({
-        ...agent,
-        x: agent.start[0],
-        y: agent.start[1],
-        targetX: agent.start[0],
-        targetY: agent.start[1],
-        speed: agent.speed || 1.25,
-        direction: 'down',
-        moving: false,
-        frameIndex: 0,
-        frameTick: 0,
-        bubbleText: '',
-        bubbleUntil: 0,
-        emoji: agent.emoji || '',
-        note: agent.idle_note,
-        status: 'idle',
-        status_label: 'idle',
-        el: null
-      }));
-      state.agents.forEach(createAgentDom);
-      renderAgents();
-      $('run-clock').textContent = '00:00';
-      progressFill.style.width = '0%';
-    }
-
-    function getElapsedSeconds(nowMs) {
-      const current = typeof nowMs === 'number' ? nowMs : performance.now();
-      return Math.max(0, (current - state.timelineStartMs) / 1000);
-    }
-
-    function setAgentBubble(agentId, text, durationSeconds, emoji) {
-      const agent = state.agents.find((item) => item.id === agentId);
-      if (!agent) return;
-      const until = performance.now() + durationSeconds * 1000;
-      agent.bubbleText = text;
-      agent.bubbleUntil = until;
-      if (emoji !== undefined) agent.emoji = emoji;
-      syncAgentDom(agent);
-    }
-
-    function setHandoff(fromId, toId, label, durationSeconds) {
-      const from = state.agents.find((item) => item.id === fromId);
-      const to = state.agents.find((item) => item.id === toId);
-      if (!from || !to) return;
-      state.handoff = {
-        fromId,
-        toId,
-        label: label || 'Agent handoff',
-        until: performance.now() + (durationSeconds || 3.2) * 1000
-      };
-      $('handoff-label').textContent = state.handoff.label;
-      $('handoff').classList.add('visible');
-      syncHandoff();
-    }
-
-    function syncHandoff() {
-      if (!state.handoff) return;
-      const from = state.agents.find((item) => item.id === state.handoff.fromId);
-      const to = state.agents.find((item) => item.id === state.handoff.toId);
-      if (!from || !to) {
-        clearHandoff();
-        return;
-      }
-      const x1 = ((from.x + 0.5) / 40) * overlay.clientWidth;
-      const y1 = ((from.y + 0.7) / 40) * overlay.clientHeight;
-      const x2 = ((to.x + 0.5) / 40) * overlay.clientWidth;
-      const y2 = ((to.y + 0.7) / 40) * overlay.clientHeight;
-      const dx = x2 - x1;
-      const dy = y2 - y1;
-      const length = Math.hypot(dx, dy);
-      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
-      const line = $('handoff-line');
-      line.style.left = x1 + 'px';
-      line.style.top = y1 + 'px';
-      line.style.width = Math.max(24, length) + 'px';
-      line.style.transform = `rotate(${angle}deg)`;
-      const label = $('handoff-label');
-      label.style.left = (x1 + dx / 2) + 'px';
-      label.style.top = (y1 + dy / 2 - 14) + 'px';
-    }
-
-    function moveAgent(agentId, to, speed) {
-      const agent = state.agents.find((item) => item.id === agentId);
-      if (!agent) return;
-      agent.targetX = to[0];
-      agent.targetY = to[1];
-      if (speed) agent.speed = speed;
-    }
-
-    function applyAction(action) {
-      if (!action) return;
-      if (action.metrics) updateMetrics(action.metrics);
-      if (action.move) moveAgent(action.agent, action.move.to, action.move.speed);
-      if (action.status) {
-        updateAgentCard(action.agent, {
-          status: action.status.key,
-          status_label: action.status.label,
-          note: action.status.note || ''
-        });
-      }
-      if (action.bubble) {
-        setAgentBubble(action.agent, action.bubble.text, action.bubble.duration || 3.8, action.bubble.emoji);
-      }
-    }
-
-    function applyEvent(event) {
-      if (event.phase) {
-        state.phase = event.phase;
-        $('run-phase').textContent = state.phase;
-      }
-      if (Array.isArray(event.actions) && event.actions.length) {
-        event.actions.forEach(applyAction);
-      } else {
-        applyAction(event);
-      }
-      if (event.handoff) {
-        setHandoff(event.handoff.from, event.handoff.to, event.handoff.label, event.handoff.duration || 3.4);
-      }
-      if (event.shortlist_add) {
-        state.shortlist.unshift(event.shortlist_add);
-        state.shortlist = state.shortlist.slice(0, SHORTLIST_LIMIT);
-        renderShortlist();
-      }
-      if (event.activity) addActivity(event.activity);
-    }
-
-    function updateAgents(deltaSeconds, nowMs) {
-      for (const agent of state.agents) {
-        const dx = agent.targetX - agent.x;
-        const dy = agent.targetY - agent.y;
-        const distance = Math.hypot(dx, dy);
-        if (distance > 0.01) {
-          const step = Math.min(distance, agent.speed * deltaSeconds);
-          agent.x += (dx / distance) * step;
-          agent.y += (dy / distance) * step;
-          agent.moving = true;
-          if (Math.abs(dx) > Math.abs(dy)) {
-            agent.direction = dx > 0 ? 'right' : 'left';
-          } else {
-            agent.direction = dy > 0 ? 'down' : 'up';
-          }
-          agent.frameTick += deltaSeconds * 7;
-          if (agent.frameTick >= 1) {
-            agent.frameTick = 0;
-            agent.frameIndex = (agent.frameIndex + 1) % 3;
-          }
-        } else {
-          agent.x = agent.targetX;
-          agent.y = agent.targetY;
-          agent.moving = false;
-          agent.frameIndex = 1;
-        }
-        if (agent.bubbleUntil && nowMs >= agent.bubbleUntil) {
-          agent.bubbleText = '';
-          agent.bubbleUntil = 0;
-        }
-        syncAgentDom(agent);
-      }
-      if (state.handoff) {
-        if (nowMs >= state.handoff.until) {
-          clearHandoff();
-        } else {
-          syncHandoff();
-        }
-      }
-    }
-
-    function maybeEmitAmbientBubble(nowMs) {
-      const elapsedSeconds = getElapsedSeconds(nowMs);
-      const phaseWindow = Math.floor(elapsedSeconds % 18);
-      const bucket = Math.floor(elapsedSeconds / 18);
-      if (phaseWindow !== 9 || state.lastAmbientBucket === bucket) return;
-      const idleAgents = state.agents.filter((agent) => !agent.bubbleText && !agent.moving);
-      if (!idleAgents.length) return;
-      state.lastAmbientBucket = bucket;
-      const agent = idleAgents[(Math.floor(nowMs / 1000)) % idleAgents.length];
-      const ambient = agent.ambient && agent.ambient.length ? agent.ambient : ['Syncing signal...'];
-      const next = ambient[(Math.floor(nowMs / 2000)) % ambient.length];
-      setAgentBubble(agent.id, next, 2.6, agent.emoji);
-    }
-
-    function tickFrame(nowMs) {
-      const elapsedSeconds = getElapsedSeconds(nowMs);
-      const loopSpan = state.activeLoopSeconds + LOOP_PADDING_SECONDS;
-      while (state.nextEventIndex < state.scenario.events.length && elapsedSeconds >= state.scenario.events[state.nextEventIndex].at) {
-        applyEvent(state.scenario.events[state.nextEventIndex]);
-        state.nextEventIndex += 1;
-      }
-      const previousFrameMs = state.previousFrameMs || nowMs;
-      const deltaSeconds = Math.min(0.05, (nowMs - previousFrameMs) / 1000);
-      state.previousFrameMs = nowMs;
-      updateAgents(deltaSeconds, nowMs);
-      maybeEmitAmbientBubble(nowMs);
-      if (elapsedSeconds >= loopSpan) {
-        startLoop();
-        return;
-      }
-      state.frameHandle = requestAnimationFrame(tickFrame);
-    }
-
-    function refreshClock() {
-      const elapsed = getElapsedSeconds();
-      $('run-clock').textContent = formatClock(elapsed);
-      const width = Math.min(100, (elapsed / state.activeLoopSeconds) * 100);
-      progressFill.style.width = width + '%';
-    }
-
-    function startLoop() {
-      cancelAnimationFrame(state.frameHandle);
-      clearInterval(state.clockHandle);
-      state.timelineStartMs = performance.now();
-      state.previousFrameMs = 0;
-      resetState();
-      state.clockHandle = setInterval(refreshClock, 200);
-      state.frameHandle = requestAnimationFrame(tickFrame);
-    }
-
-    async function renderTileMap() {
-      try {
-        const [tileMapRes, tilesetImage] = await Promise.all([
-          fetch(TILEMAP_PATH),
-          loadImage(TILESET_PATH)
-        ]);
-        if (!tileMapRes.ok) throw new Error('tilemap unavailable');
-        const tileMap = await tileMapRes.json();
-        canvas.width = tileMap.width * tileMap.tilewidth;
-        canvas.height = tileMap.height * tileMap.tileheight;
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        for (const layer of tileMap.layers || []) {
-          if (layer.type !== 'tilelayer' || !Array.isArray(layer.data) || layer.visible === false) continue;
-          drawLayer(layer, tileMap, tilesetImage);
-        }
-      } catch (error) {
-        drawFallbackWorld();
-        setError('AI Town map assets failed to load. Falling back to a lightweight office grid.');
-      }
-    }
-
-    function drawLayer(layer, tileMap, image) {
-      const width = tileMap.width;
-      const height = tileMap.height;
-      const tileWidth = tileMap.tilewidth;
-      const tileHeight = tileMap.tileheight;
-      for (let index = 0; index < layer.data.length; index += 1) {
-        const gid = Number(layer.data[index] || 0);
-        if (!gid) continue;
-        const tileId = gid - 1;
-        const sx = (tileId % TILESET_COLUMNS) * tileWidth;
-        const sy = Math.floor(tileId / TILESET_COLUMNS) * tileHeight;
-        const dx = (index % width) * tileWidth;
-        const dy = Math.floor(index / width) * tileHeight;
-        ctx.drawImage(image, sx, sy, tileWidth, tileHeight, dx, dy, tileWidth, tileHeight);
-      }
-    }
-
-    function drawFallbackWorld() {
-      canvas.width = 640;
-      canvas.height = 640;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#29304a';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      for (let y = 0; y < 40; y += 1) {
-        for (let x = 0; x < 40; x += 1) {
-          ctx.fillStyle = (x + y) % 2 === 0 ? '#33405a' : '#2f3850';
-          ctx.fillRect(x * 16, y * 16, 16, 16);
-        }
-      }
-      ctx.fillStyle = '#4f6b4f';
-      ctx.fillRect(48, 60, 176, 160);
-      ctx.fillStyle = '#594d7a';
-      ctx.fillRect(344, 52, 196, 162);
-      ctx.fillStyle = '#645162';
-      ctx.fillRect(72, 320, 176, 176);
-      ctx.fillStyle = '#6a5d3e';
-      ctx.fillRect(356, 338, 186, 160);
-    }
-
-    function loadImage(src) {
-      return new Promise((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve(image);
-        image.onerror = reject;
-        image.src = src;
-      });
-    }
-
-    async function loadScenario() {
-      const response = await fetch(SCENARIO_PATH);
-      if (!response.ok) throw new Error('scenario unavailable');
-      return response.json();
-    }
-
-    function populateBrief() {
-      const job = state.scenario.job;
-      $('job-title').textContent = job.title;
-      $('job-subtitle').textContent = job.subtitle;
-      $('brief-company').textContent = job.company;
-      $('brief-role').textContent = job.title + ' | ' + job.market;
-      $('brief-objective').textContent = job.objective;
-      $('brief-sources').textContent = 'Channels: ' + job.sources.join(', ');
-    }
-
-    async function bootstrap() {
-      try {
-        setError('');
-        const [scenario, spriteSheet] = await Promise.all([
-          loadScenario(),
-          loadImage(SPRITE_SHEET_PATH)
-        ]);
-        state.scenario = scenario;
-        state.spriteSheet = spriteSheet;
-        state.activeLoopSeconds = Math.max(
-          1,
-          ...scenario.events.map((event) => Number(event.at || 0))
-        ) + 6;
-        populateBrief();
-        await renderTileMap();
-        startLoop();
-      } catch (error) {
-        setError('Demo scenario failed to load. Please refresh the page.');
-      }
-    }
-
-    $('restart-btn').addEventListener('click', () => {
-      if (!state.scenario) return;
-      startLoop();
-    });
-
-    bootstrap();
-  </script>
+  <script type="module" src="./office-engine.js"></script>
 </body>
 </html>

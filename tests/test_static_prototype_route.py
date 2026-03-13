@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import threading
 import unittest
@@ -172,6 +173,20 @@ class StaticPrototypeRouteTests(unittest.TestCase):
     def test_agents_office_path_traversal_is_blocked(self) -> None:
         status, _, _ = self._request_raw("/agents-office/../README.md")
         self.assertEqual(status, 404)
+
+    def test_agents_office_public_jobs_api_returns_catalog(self) -> None:
+        status, raw, headers = self._request_raw("/api/demo/agents-office/jobs")
+        self.assertEqual(status, 200)
+        self.assertIn("application/json", str(headers.get("Content-Type") or ""))
+        payload = json.loads(raw.decode("utf-8"))
+        self.assertIn("items", payload)
+        self.assertTrue(isinstance(payload["items"], list))
+        self.assertTrue(payload["items"])
+        first = payload["items"][0]
+        self.assertIn("title", first)
+        self.assertIn("market_leads", first)
+        self.assertIn("live_threads", first)
+        self.assertIn("buyer_finalists", first)
 
     def test_toptal_root_redirects_to_trailing_slash(self) -> None:
         opener = request.build_opener(_NoRedirectHandler)
