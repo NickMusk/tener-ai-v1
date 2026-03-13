@@ -50,7 +50,7 @@ from .outreach_policy import LinkedInOutreachPolicy
 from .pre_resume_service import PreResumeCommunicationService
 from .signal_rules import SignalRulesEngine
 from .signals import JobSignalsLiveViewService, MonitoringService, SignalIngestionService
-from .workflow import WorkflowService
+from .workflow import JobOperationBlockedError, WorkflowService
 
 
 def project_root() -> Path:
@@ -619,6 +619,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "list_jobs": "GET /api/jobs",
                         "get_job": "GET /api/jobs/{job_id}",
                         "archive_jobs_bulk": "POST /api/jobs/archive-bulk",
+                        "pause_job": "POST /api/jobs/{job_id}/pause",
+                        "resume_job": "POST /api/jobs/{job_id}/resume",
                         "job_progress": "GET /api/jobs/{job_id}/progress",
                         "list_job_candidates": "GET /api/jobs/{job_id}/candidates",
                         "job_source_filters": "GET /api/jobs/{job_id}/source-filters",
@@ -2388,6 +2390,53 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, {"status": "ok", **result})
             return
 
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/pause"):
+            if not self._require_admin_access():
+                return
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/pause$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                body = {}
+            result = SERVICES["db"].pause_job(job_id=job_id, reason=str(body.get("reason") or "").strip() or None)
+            reason = str(result.get("reason") or "").strip().lower()
+            if reason == "job_not_found":
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            SERVICES["db"].log_operation(
+                operation="job.pause",
+                status="ok" if int(result.get("updated") or 0) > 0 else "skipped",
+                entity_type="job",
+                entity_id=str(job_id),
+                details={"reason": body.get("reason"), "result": result},
+            )
+            self._json_response(HTTPStatus.OK, {"status": "ok", **result})
+            return
+
+        if parsed.path.startswith("/api/jobs/") and parsed.path.endswith("/resume"):
+            if not self._require_admin_access():
+                return
+            job_id = self._extract_id(parsed.path, pattern=r"^/api/jobs/(\d+)/resume$")
+            if job_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid job id"})
+                return
+            result = SERVICES["db"].resume_job(job_id=job_id)
+            reason = str(result.get("reason") or "").strip().lower()
+            if reason == "job_not_found":
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": "job not found"})
+                return
+            SERVICES["db"].log_operation(
+                operation="job.resume",
+                status="ok" if int(result.get("updated") or 0) > 0 else "skipped",
+                entity_type="job",
+                entity_id=str(job_id),
+                details={"result": result},
+            )
+            self._json_response(HTTPStatus.OK, {"status": "ok", **result})
+            return
+
         if parsed.path == "/api/jobs":
             body = payload or {}
             if not isinstance(body, dict):
@@ -2544,6 +2593,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
+            except JobOperationBlockedError as exc:
+                self._json_response(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
             except Exception as exc:
                 SERVICES["db"].log_operation(
                     operation="workflow.execute.error",
@@ -2590,6 +2642,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
+            except JobOperationBlockedError as exc:
+                self._json_response(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
             except Exception as exc:
                 SERVICES["db"].log_operation(
                     operation="workflow.source_top_up.error",
@@ -2619,6 +2674,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
+            except JobOperationBlockedError as exc:
+                self._persist_job_step_progress(job_id=job_id, step="source", status="error", output={"error": str(exc)})
+                self._json_response(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
             except Exception as exc:
                 self._persist_job_step_progress(job_id=job_id, step="source", status="error", output={"error": str(exc)})
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "source step failed", "details": str(exc)})
@@ -2647,6 +2706,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
                 return
+            except JobOperationBlockedError as exc:
+                self._persist_job_step_progress(job_id=job_id, step="verify", status="error", output={"error": str(exc)})
+                self._json_response(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
             except Exception as exc:
                 self._persist_job_step_progress(job_id=job_id, step="verify", status="error", output={"error": str(exc)})
                 self._json_response(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "verify step failed", "details": str(exc)})
@@ -2672,6 +2735,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 result = SERVICES["workflow"].enrich_profiles(job_id=job_id, profiles=profiles)
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except JobOperationBlockedError as exc:
+                self._persist_job_step_progress(job_id=job_id, step="enrich", status="error", output={"error": str(exc)})
+                self._json_response(HTTPStatus.CONFLICT, {"error": str(exc)})
                 return
             except Exception as exc:
                 self._persist_job_step_progress(job_id=job_id, step="enrich", status="error", output={"error": str(exc)})
@@ -2700,6 +2767,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 result = SERVICES["workflow"].add_verified_candidates(job_id=job_id, verified_items=items)
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except JobOperationBlockedError as exc:
+                self._persist_job_step_progress(job_id=job_id, step="add", status="error", output={"error": str(exc)})
+                self._json_response(HTTPStatus.CONFLICT, {"error": str(exc)})
                 return
             except Exception as exc:
                 self._persist_job_step_progress(job_id=job_id, step="add", status="error", output={"error": str(exc)})
@@ -2733,6 +2804,10 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 )
             except ValueError as exc:
                 self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except JobOperationBlockedError as exc:
+                self._persist_job_step_progress(job_id=job_id, step="outreach", status="error", output={"error": str(exc)})
+                self._json_response(HTTPStatus.CONFLICT, {"error": str(exc)})
                 return
             except Exception as exc:
                 self._persist_job_step_progress(job_id=job_id, step="outreach", status="error", output={"error": str(exc)})

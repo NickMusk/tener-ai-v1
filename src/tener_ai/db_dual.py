@@ -56,9 +56,9 @@ class PostgresMirrorWriter:
                         id, title, company, company_website, jd_text, location,
                         preferred_languages, must_have_skills, nice_to_have_skills, questionable_skills,
                         seniority, salary_min, salary_max, salary_currency, work_authorization_required,
-                        linkedin_routing_mode, archived_at, created_at
+                        linkedin_routing_mode, job_state, archived_at, paused_at, pause_reason, created_at
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT(id) DO UPDATE SET
                         title = EXCLUDED.title,
                         company = EXCLUDED.company,
@@ -75,7 +75,10 @@ class PostgresMirrorWriter:
                         salary_currency = EXCLUDED.salary_currency,
                         work_authorization_required = EXCLUDED.work_authorization_required,
                         linkedin_routing_mode = EXCLUDED.linkedin_routing_mode,
-                        archived_at = EXCLUDED.archived_at
+                        job_state = EXCLUDED.job_state,
+                        archived_at = EXCLUDED.archived_at,
+                        paused_at = EXCLUDED.paused_at,
+                        pause_reason = EXCLUDED.pause_reason
                     """,
                     (
                         int(row.get("id") or 0),
@@ -94,7 +97,10 @@ class PostgresMirrorWriter:
                         row.get("salary_currency"),
                         bool(row.get("work_authorization_required")),
                         row.get("linkedin_routing_mode") or "auto",
+                        row.get("job_state") or "active",
                         (str(row.get("archived_at") or "").strip() or None),
+                        (str(row.get("paused_at") or "").strip() or None),
+                        (str(row.get("pause_reason") or "").strip() or None),
                         row.get("created_at") or utc_now_iso(),
                     ),
                 )
@@ -797,6 +803,20 @@ class DualWriteDatabase:
         for row in self._primary.list_jobs(limit=1000, include_archived=True):
             if isinstance(row, dict):
                 self._mirror_call("archive_jobs", lambda row=row: self._mirror.upsert_job(row))
+        return result
+
+    def pause_job(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        result = self._primary.pause_job(*args, **kwargs)
+        job = result.get("job")
+        if isinstance(job, dict):
+            self._mirror_call("pause_job", lambda: self._mirror.upsert_job(job))
+        return result
+
+    def resume_job(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        result = self._primary.resume_job(*args, **kwargs)
+        job = result.get("job")
+        if isinstance(job, dict):
+            self._mirror_call("resume_job", lambda: self._mirror.upsert_job(job))
         return result
 
     def upsert_job_culture_profile(self, *args: Any, **kwargs: Any) -> None:

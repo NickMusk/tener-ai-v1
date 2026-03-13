@@ -300,6 +300,42 @@ class OutboundDispatchTests(unittest.TestCase):
             self.assertEqual(len(providers["acc-owner-1"].connect_messages), 0)
             self.assertEqual(len(providers["acc-owner-2"].connect_messages), 1)
 
+    def test_paused_job_pending_action_waits_until_resume(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_dispatch_pause.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-pause-dispatch",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            provider = _ManagedStubProvider(account_ref="acc-pause-dispatch")
+            workflow._build_managed_provider = lambda account_id: provider  # type: ignore[method-assign]
+
+            job_id, candidate_id = self._seed_job_and_candidate(db=db, workflow=workflow, suffix="paused")
+            queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            action_id = int(queued["items"][0]["action_id"])
+
+            paused = db.pause_job(job_id=job_id, reason="ops")
+            self.assertEqual(int(paused.get("updated") or 0), 1)
+
+            while_paused = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
+            self.assertEqual(int(while_paused.get("processed") or 0), 0)
+            self.assertEqual(str((db.get_outbound_action(action_id) or {}).get("status") or ""), "pending")
+            self.assertEqual(len(provider.connect_messages), 0)
+
+            resumed = db.resume_job(job_id=job_id)
+            self.assertEqual(int(resumed.get("updated") or 0), 1)
+
+            after_resume = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
+            self.assertEqual(int(after_resume.get("processed") or 0), 1)
+            self.assertEqual(int(after_resume.get("pending_connection") or 0), 1)
+            self.assertEqual(str((db.get_outbound_action(action_id) or {}).get("status") or ""), "completed")
+            self.assertEqual(len(provider.connect_messages), 1)
+
     def test_connect_request_cannot_resend_yet_releases_action_with_cooldown(self) -> None:
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "outbound_dispatch_cooldown.sqlite3"))

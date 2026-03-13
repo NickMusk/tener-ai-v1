@@ -997,7 +997,7 @@
           </div>
         </div>
         <div class="jobs-toolbar">
-          <div class="muted">Active jobs. Click row to open details. Use checkboxes for bulk actions. <span class="mono" id="jobs-selected-count">0 selected</span></div>
+          <div class="muted">Jobs. Click row to open details. Use checkboxes for bulk actions. <span class="mono" id="jobs-selected-count">0 selected</span></div>
           <div class="button-row">
             <button id="jobs-archive-selected-btn" disabled>Archive Selected</button>
           </div>
@@ -1010,6 +1010,7 @@
               <th>Title</th>
               <th>Company</th>
               <th>Routing</th>
+              <th>Status</th>
               <th>Created</th>
               <th>Actions</th>
             </tr>
@@ -2869,7 +2870,7 @@
       const jobs = Array.isArray(state.jobs) ? state.jobs : [];
       const selected = selectedJobIdsSet();
       if (!jobs.length) {
-        body.innerHTML = '<tr><td colspan="7" class="muted">No active jobs</td></tr>';
+        body.innerHTML = '<tr><td colspan="8" class="muted">No jobs</td></tr>';
         selectAll.checked = false;
         selectAll.indeterminate = false;
         count.textContent = '0 selected';
@@ -2883,11 +2884,15 @@
         const isActive = Number(state.jobId || 0) === jobId;
         const company = escapeHtml(job.company || '-');
         const routing = escapeHtml(job.linkedin_routing_mode || 'auto');
+        const jobState = escapeHtml(job.job_state || 'active');
+        const statusDetail = job.paused_at ? `<div class="muted mono" style="font-size:11px;">paused ${escapeHtml(formatDateTime(job.paused_at))}</div>` : '';
         const created = escapeHtml(formatJobCreatedAt(job.created_at));
         const budget = (job.salary_min || job.salary_max)
           ? `${job.salary_min ? Number(job.salary_min).toLocaleString() : "?"}-${job.salary_max ? Number(job.salary_max).toLocaleString() : "?"} ${escapeHtml(job.salary_currency || "")}`.trim()
           : "budget n/a";
         const auth = job.work_authorization_required ? "work auth required" : "work auth flexible";
+        const pauseLabel = job.job_state === 'paused' ? 'Resume' : 'Pause';
+        const pauseClass = job.job_state === 'paused' ? 'job-resume-btn' : 'job-pause-btn';
         return `
           <tr class="job-row${isActive ? ' active' : ''}" data-job-id="${jobId}" title="Open job details">
             <td><input type="checkbox" class="job-select-checkbox" data-job-id="${jobId}" ${isChecked ? 'checked' : ''} aria-label="Select job #${jobId}"></td>
@@ -2895,8 +2900,9 @@
             <td>${escapeHtml(job.title || '-')}</td>
             <td><div>${company}</div><div class="muted mono" style="font-size:11px;">${budget} • ${escapeHtml(auth)}</div></td>
             <td class="mono">${routing}</td>
+            <td><div class="mono">${jobState}</div>${statusDetail}</td>
             <td class="mono">${created}</td>
-            <td><button class="job-archive-btn" data-job-id="${jobId}">Archive</button></td>
+            <td><button class="${pauseClass}" data-job-id="${jobId}">${pauseLabel}</button> <button class="job-archive-btn" data-job-id="${jobId}">Archive</button></td>
           </tr>
         `;
       }).join('');
@@ -2926,6 +2932,31 @@
       state.selectedJobIds = [];
       await loadJobs();
       await onSelectedJobChanged(currentJobArchived ? state.jobId : state.jobId);
+    }
+
+    async function pauseJob(jobId) {
+      const safeJobId = Number(jobId || 0);
+      if (!safeJobId) return;
+      if (!window.confirm(`Pause job #${safeJobId}? All automated outreach and follow-ups will stop.`)) return;
+      const out = await api(`/api/jobs/${safeJobId}/pause`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      snapshot('jobs.paused', out);
+      await loadJobs();
+      await onSelectedJobChanged(state.jobId);
+    }
+
+    async function resumeJob(jobId) {
+      const safeJobId = Number(jobId || 0);
+      if (!safeJobId) return;
+      const out = await api(`/api/jobs/${safeJobId}/resume`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      snapshot('jobs.resumed', out);
+      await loadJobs();
+      await onSelectedJobChanged(state.jobId);
     }
 
     async function createJob() {
@@ -4253,6 +4284,22 @@
         toggleSelectedJobId(jobId, Boolean(checkbox.checked));
       });
       $("jobs-tbody").addEventListener('click', (event) => {
+        const pauseButton = event.target.closest(".job-pause-btn");
+        if (pauseButton) {
+          const jobId = Number(pauseButton.dataset.jobId || 0) || null;
+          if (!jobId) return;
+          event.stopPropagation();
+          pauseJob(jobId).catch(e => alert(e.message));
+          return;
+        }
+        const resumeButton = event.target.closest(".job-resume-btn");
+        if (resumeButton) {
+          const jobId = Number(resumeButton.dataset.jobId || 0) || null;
+          if (!jobId) return;
+          event.stopPropagation();
+          resumeJob(jobId).catch(e => alert(e.message));
+          return;
+        }
         const archiveButton = event.target.closest(".job-archive-btn");
         if (archiveButton) {
           const jobId = Number(archiveButton.dataset.jobId || 0) || null;

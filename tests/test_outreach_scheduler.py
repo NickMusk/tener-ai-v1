@@ -110,6 +110,62 @@ class OutreachSchedulerTests(unittest.TestCase):
             finally:
                 api_main.SERVICES = previous_services
 
+    def test_connection_poll_scheduler_skips_paused_jobs(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outreach_scheduler_paused.sqlite3"))
+            db.init_schema()
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = _ConnectionAwareProvider()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+            )
+
+            previous_services = api_main.SERVICES
+            api_main.SERVICES = {"db": db, "workflow": workflow}
+            try:
+                job_id = db.insert_job(
+                    title="Senior Backend Engineer",
+                    jd_text="Need Python, AWS and distributed systems.",
+                    location="Remote",
+                    preferred_languages=["en"],
+                    seniority="senior",
+                )
+                profile = {
+                    "linkedin_id": "ln-scheduler-paused-1",
+                    "full_name": "Paused Scheduler Candidate",
+                    "headline": "Backend Engineer",
+                    "location": "Remote",
+                    "languages": ["en"],
+                    "skills": [],
+                    "years_experience": 4,
+                    "raw": {},
+                }
+                added = workflow.add_verified_candidates(
+                    job_id=job_id,
+                    verified_items=[{"profile": profile, "score": 0.51, "status": "needs_resume", "notes": {}}],
+                )
+                candidate_id = int(added["added"][0]["candidate_id"])
+                outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+                conversation_id = int(outreach["items"][0]["conversation_id"])
+
+                db.pause_job(job_id=job_id, reason="ops")
+                provider.connected = True
+                result = api_main._run_outreach_connection_poll_scheduler_tick(poll_limit=20)
+
+                self.assertEqual(int(result.get("checked") or 0), 1)
+                self.assertEqual(int(result.get("skipped") or 0), 1)
+                self.assertEqual(int(result.get("sent") or 0), 0)
+                self.assertEqual(str((db.get_conversation(conversation_id) or {}).get("status") or ""), "waiting_connection")
+            finally:
+                api_main.SERVICES = previous_services
+
 
 if __name__ == "__main__":
     unittest.main()

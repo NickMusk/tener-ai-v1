@@ -168,6 +168,74 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 cur.execute(sql, tuple(params))
                 return int(cur.rowcount or 0) > 0
 
+    def _job_is_archived(self, job_id: int) -> bool:
+        row = self.get_job(int(job_id))
+        return bool(isinstance(row, dict) and row.get("is_archived"))
+
+    def _job_is_paused(self, job_id: int) -> bool:
+        row = self.get_job(int(job_id))
+        return bool(isinstance(row, dict) and row.get("is_paused"))
+
+    def pause_job(self, *, job_id: int, reason: Optional[str] = None) -> Dict[str, Any]:
+        existing = self.get_job(int(job_id))
+        if not existing:
+            return {"updated": 0, "reason": "job_not_found"}
+        if bool(existing.get("is_archived")):
+            return {"updated": 0, "reason": "job_archived", "job": existing}
+        if bool(existing.get("is_paused")):
+            return {"updated": 0, "reason": "already_paused", "job": existing}
+        paused_at = utc_now_iso()
+        pause_reason = str(reason or "").strip() or None
+        with self.transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE jobs
+                    SET job_state = 'paused',
+                        paused_at = %s,
+                        pause_reason = %s
+                    WHERE id = %s
+                    """,
+                    (paused_at, pause_reason, int(job_id)),
+                )
+        refreshed = self.get_job(int(job_id))
+        return {
+            "updated": 1,
+            "job_id": int(job_id),
+            "job_state": "paused",
+            "paused_at": paused_at,
+            "pause_reason": pause_reason,
+            "job": refreshed,
+        }
+
+    def resume_job(self, *, job_id: int) -> Dict[str, Any]:
+        existing = self.get_job(int(job_id))
+        if not existing:
+            return {"updated": 0, "reason": "job_not_found"}
+        if bool(existing.get("is_archived")):
+            return {"updated": 0, "reason": "job_archived", "job": existing}
+        if not bool(existing.get("is_paused")):
+            return {"updated": 0, "reason": "not_paused", "job": existing}
+        with self.transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    UPDATE jobs
+                    SET job_state = 'active',
+                        paused_at = NULL,
+                        pause_reason = NULL
+                    WHERE id = %s
+                    """,
+                    (int(job_id),),
+                )
+        refreshed = self.get_job(int(job_id))
+        return {
+            "updated": 1,
+            "job_id": int(job_id),
+            "job_state": "active",
+            "job": refreshed,
+        }
+
     def upsert_job_culture_profile(
         self,
         *,
@@ -684,6 +752,8 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
         return self.create_conversation(job_id=job_id, candidate_id=candidate_id, channel=channel)
 
     def list_job_outreach_candidates(self, job_id: int, limit: int = 200) -> List[Dict[str, Any]]:
+        if self._job_is_archived(job_id) or self._job_is_paused(job_id):
+            return []
         safe_limit = max(1, min(int(limit or 200), 2000))
         with self._connect() as conn:
             with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
@@ -748,6 +818,8 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                     )
                     LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
                     WHERE m.job_id = %s
+                      AND j.archived_at IS NULL
+                      AND COALESCE(NULLIF(BTRIM(j.job_state), ''), 'active') = 'active'
                       AND m.status IN ('verified', 'needs_resume')
                       AND NOT EXISTS (
                           SELECT 1
@@ -1163,8 +1235,11 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                         SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_conversations,
                         SUM(CASE WHEN status = 'waiting_connection' THEN 1 ELSE 0 END) AS waiting_connection
                     FROM conversations
+                    JOIN jobs j ON j.id = conversations.job_id
                     WHERE linkedin_account_id = ANY(%s)
                       AND status IN ('active', 'waiting_connection')
+                      AND j.archived_at IS NULL
+                      AND COALESCE(NULLIF(BTRIM(j.job_state), ''), 'active') = 'active'
                     GROUP BY linkedin_account_id
                     """,
                     (valid_ids,),
@@ -1178,12 +1253,15 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 cur.execute(
                     """
                     SELECT
-                        account_id,
+                        outbound_actions.account_id,
                         COUNT(*) AS assigned_actions
                     FROM outbound_actions
-                    WHERE account_id = ANY(%s)
-                      AND status IN ('pending', 'running')
-                    GROUP BY account_id
+                    JOIN jobs j ON j.id = outbound_actions.job_id
+                    WHERE outbound_actions.account_id = ANY(%s)
+                      AND outbound_actions.status IN ('pending', 'running')
+                      AND j.archived_at IS NULL
+                      AND COALESCE(NULLIF(BTRIM(j.job_state), ''), 'active') = 'active'
+                    GROUP BY outbound_actions.account_id
                     """,
                     (valid_ids,),
                 )
@@ -1209,20 +1287,23 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
     ) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 100), 2000))
         args: List[Any] = [utc_now_iso()]
-        where_parts = ["status = 'pending'", "not_before <= %s"]
+        where_parts = ["outbound_actions.status = 'pending'", "outbound_actions.not_before <= %s"]
         if job_id is not None:
-            where_parts.append("job_id = %s")
+            where_parts.append("outbound_actions.job_id = %s")
             args.append(int(job_id))
         if action_ids:
             valid_ids = [int(x) for x in action_ids if int(x) > 0]
             if valid_ids:
-                where_parts.append("id = ANY(%s)")
+                where_parts.append("outbound_actions.id = ANY(%s)")
                 args.append(valid_ids)
         query = f"""
-            SELECT *
+            SELECT outbound_actions.*
             FROM outbound_actions
+            JOIN jobs ON jobs.id = outbound_actions.job_id
             WHERE {' AND '.join(where_parts)}
-            ORDER BY priority DESC, id ASC
+              AND jobs.archived_at IS NULL
+              AND COALESCE(NULLIF(BTRIM(jobs.job_state), ''), 'active') = 'active'
+            ORDER BY outbound_actions.priority DESC, outbound_actions.id ASC
             LIMIT %s
         """
         args.append(safe_limit)
@@ -1238,9 +1319,13 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
         limit: int = 200,
         job_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
+        if job_id is not None and (self._job_is_archived(job_id) or self._job_is_paused(job_id)):
+            return []
         safe_limit = max(1, min(int(limit or 200), 2000))
         where_parts = [
             "prs.status = 'awaiting_reply'",
+            "j.archived_at IS NULL",
+            "COALESCE(NULLIF(BTRIM(j.job_state), ''), 'active') = 'active'",
             "COALESCE(conv.linkedin_account_id, 0) = 0",
             "COALESCE(conv.external_chat_id, '') = ''",
             "conv.status IN ('active', 'waiting_connection')",

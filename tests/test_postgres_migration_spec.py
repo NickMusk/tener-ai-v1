@@ -88,6 +88,15 @@ class PostgresMigrationSpecTests(unittest.TestCase):
         ):
             self.assertIn(column, normalized)
 
+    def test_job_pause_columns_are_present(self) -> None:
+        migrations_sql = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted((self.root / "migrations").glob("*.sql"))
+        )
+        normalized = migrations_sql.lower()
+        for column in ("job_state", "paused_at", "pause_reason"):
+            self.assertIn(column, normalized)
+
 
 if __name__ == "__main__":
     unittest.main()
