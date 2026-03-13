@@ -68,6 +68,46 @@ class StaticPrototypeRouteTests(unittest.TestCase):
         status, _, _ = self._request_raw("/zalando/../README.md")
         self.assertEqual(status, 404)
 
+    def test_it_root_redirects_to_trailing_slash(self) -> None:
+        opener = request.build_opener(_NoRedirectHandler)
+        req = request.Request(url=f"{self.base_url}/it", method="GET")
+        with self.assertRaises(error.HTTPError) as ctx:
+            opener.open(req, timeout=20)
+        self.assertEqual(ctx.exception.code, 301)
+        self.assertEqual(str(ctx.exception.headers.get("Location") or ""), "/it/")
+
+    def test_it_index_is_served_without_diversity_copy(self) -> None:
+        status, raw, headers = self._request_raw("/it/")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", str(headers.get("Content-Type") or ""))
+        body = raw.decode("utf-8")
+        self.assertIn("top 0.01% IT talent", body)
+        self.assertNotIn("Diversity", body)
+        self.assertNotIn("Zalando", body)
+        self.assertNotIn("Women in Tech", body)
+
+    def test_it_linked_pages_are_served_without_diversity_copy(self) -> None:
+        status, raw, headers = self._request_raw("/it/searching.html")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", str(headers.get("Content-Type") or ""))
+        body = raw.decode("utf-8")
+        self.assertIn("High-Skill Search", body)
+        self.assertNotIn("Diversity", body)
+        self.assertNotIn("Zalando", body)
+
+        status, raw, headers = self._request_raw("/it/results.html")
+        self.assertEqual(status, 200)
+        self.assertIn("text/html", str(headers.get("Content-Type") or ""))
+        body = raw.decode("utf-8")
+        self.assertIn("12 Candidates Ready for Review", body)
+        self.assertNotIn("Diversity", body)
+        self.assertNotIn("Zalando", body)
+        self.assertNotIn("Women in Tech", body)
+
+    def test_it_path_traversal_is_blocked(self) -> None:
+        status, _, _ = self._request_raw("/it/../README.md")
+        self.assertEqual(status, 404)
+
     def test_liveramp_root_redirects_to_trailing_slash(self) -> None:
         opener = request.build_opener(_NoRedirectHandler)
         req = request.Request(url=f"{self.base_url}/liveramp", method="GET")

@@ -561,6 +561,14 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             if self._serve_static_directory(prefix="/zalando/", directory=project_root() / "Zalando-prototype", path=parsed.path):
                 return
 
+        if parsed.path == "/it":
+            self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/it/")
+            return
+
+        if parsed.path.startswith("/it/"):
+            if self._serve_static_directory(prefix="/it/", directory=project_root() / "IT-prototype", path=parsed.path):
+                return
+
         if parsed.path == "/liveramp":
             self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/liveramp/")
             return
@@ -4972,6 +4980,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         }:
             return True
         if normalized == "/zalando" or normalized.startswith("/zalando/"):
+            return True
+        if normalized == "/it" or normalized.startswith("/it/"):
             return True
         if normalized == "/liveramp" or normalized.startswith("/liveramp/"):
             return True
