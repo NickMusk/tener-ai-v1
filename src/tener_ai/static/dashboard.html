@@ -259,6 +259,18 @@
       word-break: break-word;
     }
 
+    .casey-dialogues-wrap {
+      overflow: auto;
+      max-height: 29rem;
+    }
+
+    .casey-dialogues-wrap thead th {
+      position: sticky;
+      top: 0;
+      background: var(--bg-card);
+      z-index: 1;
+    }
+
     .ops-events {
       max-height: 280px;
       overflow: auto;
@@ -1284,8 +1296,8 @@
             <div class="label">Failed 1h</div>
             <div class="value" id="casey-health-failed-1h">0</div>
           </div>
-          <div class="ops-mini-card">
-            <div class="label">Stuck</div>
+          <div class="ops-mini-card" id="casey-health-stuck-card">
+            <div class="label" id="casey-health-stuck-label">Stuck</div>
             <div class="value" id="casey-health-stuck">0</div>
           </div>
           <div class="ops-mini-card">
@@ -1301,16 +1313,10 @@
           <div class="panel-title"><span>LinkedIn Accounts (Unipile)</span><span class="mono">/api/linkedin/accounts</span></div>
           <div class="form-grid">
             <div class="full">
-              <label class="muted">Admin Token (optional, required if backend enforces TENER_ADMIN_API_TOKEN)</label>
+              <label class="muted">Admin Token (optional, used for Import/Refresh if backend enforces TENER_ADMIN_API_TOKEN)</label>
               <input id="linkedin-admin-token" placeholder="Bearer token value">
             </div>
-            <div>
-              <label class="muted">Account Label (optional)</label>
-              <input id="linkedin-account-label" placeholder="US Recruiter 01">
-            </div>
             <div class="full button-row" style="justify-content:flex-start;">
-              <button id="linkedin-save-token-btn">Save Token</button>
-              <button id="linkedin-connect-btn">Connect LinkedIn</button>
               <button id="linkedin-import-btn">Import from Unipile</button>
               <button id="linkedin-refresh-btn">Refresh Accounts</button>
             </div>
@@ -1360,12 +1366,12 @@
         </div>
 
         <div class="card">
-          <div class="panel-title"><span>Accounts In Active Communication</span><span class="mono">GET /api/chats/overview</span></div>
-          <div style="overflow:auto;">
+          <div class="panel-title"><span>Active Candidate Dialogues</span><span class="mono">GET /api/chats/overview?started_only=1</span></div>
+          <div class="casey-dialogues-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Conversation</th>
+                  <th>Chat</th>
                   <th>Candidate</th>
                   <th>Job</th>
                   <th>Source</th>
@@ -1378,31 +1384,6 @@
                 <tr><td colspan="7" class="muted">No conversations yet</td></tr>
               </tbody>
             </table>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="panel-title"><span>Add Manual Account (test)</span><span class="mono">POST /api/agent/accounts/manual</span></div>
-          <div class="form-grid">
-            <div>
-              <label class="muted">Candidate Name</label>
-              <input id="agent-manual-name" placeholder="Test Candidate">
-            </div>
-            <div>
-              <label class="muted">Language</label>
-              <input id="agent-manual-language" value="en" placeholder="en">
-            </div>
-            <div>
-              <label class="muted">LinkedIn ID (optional)</label>
-              <input id="agent-manual-linkedin-id" placeholder="manual-linkedin-id">
-            </div>
-            <div>
-              <label class="muted">External Chat ID (optional)</label>
-              <input id="agent-manual-chat-id" placeholder="manual-chat-1">
-            </div>
-            <div class="full button-row" style="justify-content:flex-start;">
-              <button id="agent-add-manual-btn">Add Account</button>
-            </div>
           </div>
         </div>
       </section>
@@ -1714,9 +1695,25 @@
       jd_text: "Need Python, Django, AWS, Docker, PostgreSQL for backend microservices."
     };
 
+    function syncLinkedinAdminToken(rawValue = null) {
+      const input = $("linkedin-admin-token");
+      const nextValue = rawValue == null
+        ? String((input && input.value) || state.linkedinAdminToken || "").trim()
+        : String(rawValue || "").trim();
+      state.linkedinAdminToken = nextValue;
+      if (input && String(input.value || "") !== nextValue) input.value = nextValue;
+      if (nextValue) {
+        localStorage.setItem(LINKEDIN_ADMIN_TOKEN_STORAGE_KEY, nextValue);
+      } else {
+        localStorage.removeItem(LINKEDIN_ADMIN_TOKEN_STORAGE_KEY);
+      }
+      return nextValue;
+    }
+
     async function api(path, opts = {}) {
-      const authHeader = state.linkedinAdminToken
-        ? { Authorization: `Bearer ${state.linkedinAdminToken}` }
+      const authToken = syncLinkedinAdminToken();
+      const authHeader = authToken
+        ? { Authorization: `Bearer ${authToken}` }
         : {};
       const res = await fetch(path, {
         ...opts,
@@ -3269,30 +3266,6 @@
       }
     }
 
-    function saveLinkedinAdminToken() {
-      const input = $("linkedin-admin-token");
-      if (!input) return;
-      state.linkedinAdminToken = String(input.value || "").trim();
-      if (state.linkedinAdminToken) {
-        localStorage.setItem(LINKEDIN_ADMIN_TOKEN_STORAGE_KEY, state.linkedinAdminToken);
-      } else {
-        localStorage.removeItem(LINKEDIN_ADMIN_TOKEN_STORAGE_KEY);
-      }
-    }
-
-    async function startLinkedinConnect() {
-      const label = String(($("linkedin-account-label") || {}).value || "").trim();
-      const out = await api('/api/linkedin/accounts/connect/start', {
-        method: 'POST',
-        body: JSON.stringify({ label }),
-      });
-      const connectUrl = String(out.connect_url || "").trim();
-      if (!connectUrl) {
-        throw new Error("Connect URL is missing in response");
-      }
-      window.open(connectUrl, '_blank', 'noopener,noreferrer');
-    }
-
     async function importLinkedinAccountsFromUnipile() {
       const out = await api('/api/linkedin/accounts/sync-all', {
         method: 'POST',
@@ -3305,12 +3278,20 @@
 
     function renderCaseyOutreachHealth() {
       const summary = (state.outreachOps || {}).summary || {};
+      const thresholds = (state.outreachOps || {}).thresholds || {};
+      const staleMinutes = Number(thresholds.stale_minutes || 0);
+      const stuckTooltip = staleMinutes > 0
+        ? `Candidate dialogues still awaiting a reply after ${staleMinutes} minutes without a response.`
+        : "Candidate dialogues still awaiting a reply past the stale threshold.";
       applyHealthPill($("casey-health-pill"), summary.delivery_health || summary.health || "unknown");
       $("casey-health-sent-1h").textContent = String(Number(summary.sent_1h || 0));
       $("casey-health-sent-24h").textContent = String(Number(summary.sent_24h || 0));
       $("casey-health-failed-1h").textContent = String(Number(summary.failed_1h || 0));
       $("casey-health-stuck").textContent = String(Number(summary.stuck_threads || 0));
       $("casey-health-last-success").textContent = formatTimestampCompact(summary.last_successful_send_at);
+      if ($("casey-health-stuck-card")) $("casey-health-stuck-card").title = stuckTooltip;
+      if ($("casey-health-stuck-label")) $("casey-health-stuck-label").title = stuckTooltip;
+      if ($("casey-health-stuck")) $("casey-health-stuck").title = stuckTooltip;
       const issues = Array.isArray(summary.delivery_issues) ? summary.delivery_issues : (Array.isArray(summary.issues) ? summary.issues : []);
       $("casey-health-issues").textContent = issues.length
         ? issues.slice(0, 3).join(" • ")
@@ -3710,8 +3691,8 @@
       const accounts = state.agentAccounts || [];
       if (!accounts.length) {
         const msg = selectedAgentJobId()
-          ? "No active conversations for this job"
-          : "No active conversations across all jobs";
+          ? "No started candidate dialogues for this job"
+          : "No started candidate dialogues across all jobs";
         body.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(msg)}</td></tr>`;
         return;
       }
@@ -3750,8 +3731,9 @@
     async function refreshAgentAccounts() {
       const jobId = selectedAgentJobId();
       const scopeQuery = jobId ? `&job_id=${encodeURIComponent(jobId)}` : "";
-      const out = await api(`/api/chats/overview?limit=300${scopeQuery}`);
-      state.agentAccounts = out.items || [];
+      const out = await api(`/api/chats/overview?limit=300&started_only=1${scopeQuery}`);
+      const items = Array.isArray(out.items) ? out.items : [];
+      state.agentAccounts = items.filter((row) => String(row.channel || "").trim().toLowerCase() !== "manual");
       if (!state.agentAccounts.some((x) => Number(x.conversation_id) === Number(state.agentConversationId))) {
         state.agentConversationId = null;
       }
@@ -3802,34 +3784,6 @@
           await onSelectedJobChanged(Number(convo.job_id));
         }
       }
-    }
-
-    async function addManualAgentAccount() {
-      const jobId = selectedAgentJobId();
-      if (!jobId) return alert('Select a specific job (not All jobs)');
-      const fullName = $("agent-manual-name").value.trim();
-      if (!fullName) return alert('Candidate name is required');
-      const payload = {
-        job_id: jobId,
-        full_name: fullName,
-        language: $("agent-manual-language").value.trim() || "en",
-        linkedin_id: $("agent-manual-linkedin-id").value.trim() || null,
-        external_chat_id: $("agent-manual-chat-id").value.trim() || null,
-        scope_summary: $("agent-jd-text").value.trim() || null,
-      };
-      const out = await api('/api/agent/accounts/manual', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
-      snapshot('agent.account_added', out);
-      $("agent-manual-name").value = '';
-      $("agent-manual-linkedin-id").value = '';
-      $("agent-manual-chat-id").value = '';
-      state.agentConversationId = Number(out.conversation_id);
-      await refreshAgentAccounts();
-      await openAgentConversation(state.agentConversationId);
-      await refreshCandidates();
-      await refreshLogs();
     }
 
     async function sendAgentInboundMessage() {
@@ -4296,16 +4250,14 @@
       $("agent-refresh-accounts-btn").addEventListener('click', () => refreshAgentAccounts().catch(e => alert(e.message)));
       $("casey-health-refresh-btn").addEventListener('click', () => refreshOutreachOps().catch(e => alert(e.message)));
       $("ops-refresh-btn").addEventListener('click', () => refreshOutreachOps().catch(e => alert(e.message)));
-      $("linkedin-save-token-btn").addEventListener('click', () => {
-        saveLinkedinAdminToken();
-        refreshLinkedinAccounts().catch(e => alert(e.message));
-      });
+      if ($("linkedin-admin-token")) {
+        $("linkedin-admin-token").addEventListener('change', () => syncLinkedinAdminToken());
+        $("linkedin-admin-token").addEventListener('blur', () => syncLinkedinAdminToken());
+      }
       $("linkedin-import-btn").addEventListener('click', () => importLinkedinAccountsFromUnipile().catch(e => alert(e.message)));
       $("linkedin-refresh-btn").addEventListener('click', () => refreshLinkedinAccounts().catch(e => alert(e.message)));
-      $("linkedin-connect-btn").addEventListener('click', () => startLinkedinConnect().catch(e => alert(e.message)));
       $("linkedin-job-routing-mode").addEventListener('change', () => renderLinkedinJobRouting());
       $("linkedin-save-job-routing-btn").addEventListener('click', () => saveJobLinkedinRouting().catch(e => alert(e.message)));
-      $("agent-add-manual-btn").addEventListener('click', () => addManualAgentAccount().catch(e => alert(e.message)));
       $("agent-send-inbound-btn").addEventListener('click', () => sendAgentInboundMessage().catch(e => alert(e.message)));
       $("agent-refresh-chat-btn").addEventListener('click', () => {
         if (!state.agentConversationId) return;
@@ -4402,7 +4354,7 @@
     if (initialDashboardRoute.conversationId) {
       state.agentConversationId = initialDashboardRoute.conversationId;
     }
-    if ($("linkedin-admin-token")) $("linkedin-admin-token").value = state.linkedinAdminToken;
+    syncLinkedinAdminToken(state.linkedinAdminToken);
     setTestMode((localStorage.getItem(TEST_MODE_STORAGE_KEY) || "1") !== "0");
     setCandidatesOverallFilter(localStorage.getItem(CANDS_OVERALL_FILTER_STORAGE_KEY) || "all");
     renderSnapshotTabs();

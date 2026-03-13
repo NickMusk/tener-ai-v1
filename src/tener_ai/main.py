@@ -1320,7 +1320,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             limit = self._safe_int((params.get("limit") or ["200"])[0], 200)
             job_id_raw = (params.get("job_id") or [None])[0]
             job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
-            items = self._read_db().list_conversations_overview(limit=limit or 200, job_id=job_id)
+            started_only_raw = str((params.get("started_only") or ["0"])[0] or "").strip().lower()
+            started_only = started_only_raw in {"1", "true", "yes", "y", "on"}
+            items = self._read_db().list_conversations_overview(
+                limit=limit or 200,
+                job_id=job_id,
+                started_only=started_only,
+            )
             self._json_response(HTTPStatus.OK, {"items": items})
             return
 

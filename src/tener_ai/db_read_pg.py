@@ -272,13 +272,30 @@ class PostgresReadDatabase:
             )
         return items
 
-    def list_conversations_overview(self, limit: int = 200, job_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    def list_conversations_overview(
+        self,
+        limit: int = 200,
+        job_id: Optional[int] = None,
+        started_only: bool = False,
+    ) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 200), 2000))
         where_parts = ["j.archived_at IS NULL"]
         args: List[Any] = []
         if job_id is not None:
             where_parts.append("conv.job_id = %s")
             args.append(int(job_id))
+        if started_only:
+            where_parts.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM messages msg_started
+                    WHERE msg_started.conversation_id = conv.id
+                      AND msg_started.direction = %s
+                )
+                """.strip()
+            )
+            args.append("outbound")
         where = f"WHERE {' AND '.join(where_parts)}"
         args.append(safe_limit)
         query = f"""

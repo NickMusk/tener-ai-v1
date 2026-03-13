@@ -47,7 +47,12 @@ class _FailWriteDB:
     def list_candidates_for_job(self, job_id: int) -> List[Dict[str, Any]]:
         raise AssertionError("primary db list_candidates_for_job should not be called")
 
-    def list_conversations_overview(self, limit: int = 200, job_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    def list_conversations_overview(
+        self,
+        limit: int = 200,
+        job_id: Optional[int] = None,
+        started_only: bool = False,
+    ) -> List[Dict[str, Any]]:
         raise AssertionError("primary db list_conversations_overview should not be called")
 
     def log_operation(
@@ -98,7 +103,12 @@ class _ReadDBStub:
             }
         ]
 
-    def list_conversations_overview(self, limit: int = 200, job_id: Optional[int] = None) -> List[Dict[str, Any]]:
+    def list_conversations_overview(
+        self,
+        limit: int = 200,
+        job_id: Optional[int] = None,
+        started_only: bool = False,
+    ) -> List[Dict[str, Any]]:
         return [
             {
                 "conversation_id": 3001,
