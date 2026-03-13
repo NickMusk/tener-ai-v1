@@ -92,6 +92,9 @@ class PostgresPrimaryRuntimeTests(unittest.TestCase):
         self.assertEqual(str(out.get("source") or ""), "postgres")
         self.assertIs(api_main.SERVICES.get("read_db"), runtime_db)
 
+    def test_postgres_runtime_exposes_outreach_ats_board_reader(self) -> None:
+        self.assertTrue(callable(getattr(api_main.PostgresRuntimeDatabase, "list_outreach_ats_candidates", None)))
+
 
 if __name__ == "__main__":
     unittest.main()
