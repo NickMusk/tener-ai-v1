@@ -285,6 +285,26 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         }
         self.assertEqual(queued_names, {"Light Read Candidate"})
 
+    def test_outreach_ats_board_uses_dedicated_query_not_candidate_list_builder(self) -> None:
+        job_id = self._create_job("Manual QA Engineer")
+        candidate_id = self._create_candidate("dedicated-query", "Dedicated Query Candidate")
+        self._attach_match(job_id=job_id, candidate_id=candidate_id, status="verified")
+
+        def _unexpected_candidate_list(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("ATS board should not route through list_candidates_for_job")
+
+        self.db.list_candidates_for_job = _unexpected_candidate_list  # type: ignore[method-assign]
+
+        status, payload = self._request("GET", f"/api/outreach/ats-board?job_id={job_id}")
+        self.assertEqual(status, 200)
+
+        all_names = [
+            str(item.get("candidate_name") or "")
+            for column in (payload.get("columns") or [])
+            for item in (column.get("items") or [])
+        ]
+        self.assertIn("Dedicated Query Candidate", all_names)
+
     def test_outreach_ats_board_hides_forced_test_candidates_for_normal_jobs(self) -> None:
         job_id = self._create_job("Manual QA Engineer")
 

@@ -4978,48 +4978,174 @@ class Database:
             for item in self.list_linkedin_accounts(limit=500)
             if int(item.get("id") or 0) > 0
         }
-
-        rows: List[Dict[str, Any]] = []
-        job_refs: List[Dict[str, Any]] = []
+        args: List[Any] = []
+        where_parts = ["j.archived_at IS NULL"]
         if job_id is not None:
-            job = self.get_job(int(job_id))
-            if job and not bool(job.get("is_archived")):
-                job_refs = [job]
-        else:
-            job_refs = self.list_jobs(limit=300)
-
-        for job in job_refs:
-            row_job_id = int(job.get("id") or 0)
-            if row_job_id <= 0:
+            where_parts.append("m.job_id = ?")
+            args.append(int(job_id))
+        query = f"""
+        WITH latest_conversations AS (
+            SELECT
+                conv.id,
+                conv.job_id,
+                conv.candidate_id,
+                conv.status,
+                conv.external_chat_id,
+                conv.linkedin_account_id,
+                conv.last_message_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY conv.job_id, conv.candidate_id
+                    ORDER BY conv.id DESC
+                ) AS rn
+            FROM conversations conv
+        ),
+        latest_messages AS (
+            SELECT
+                msg.conversation_id,
+                msg.direction,
+                msg.created_at,
+                ROW_NUMBER() OVER (
+                    PARTITION BY msg.conversation_id
+                    ORDER BY msg.id DESC
+                ) AS rn
+            FROM messages msg
+        ),
+        latest_outbound_messages AS (
+            SELECT
+                msg.conversation_id,
+                msg.meta,
+                ROW_NUMBER() OVER (
+                    PARTITION BY msg.conversation_id
+                    ORDER BY msg.id DESC
+                ) AS rn
+            FROM messages msg
+            WHERE msg.direction = 'outbound'
+        ),
+        ranked_pending_actions AS (
+            SELECT
+                oa.job_id,
+                oa.candidate_id,
+                oa.account_id,
+                oa.action_type,
+                oa.status,
+                oa.not_before,
+                oa.payload_json,
+                ROW_NUMBER() OVER (
+                    PARTITION BY oa.job_id, oa.candidate_id
+                    ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
+                ) AS rn
+            FROM outbound_actions oa
+            WHERE oa.status IN ('pending', 'running')
+        ),
+        ranked_interview_scores AS (
+            SELECT
+                ca.job_id,
+                ca.candidate_id,
+                ca.score,
+                ROW_NUMBER() OVER (
+                    PARTITION BY ca.job_id, ca.candidate_id
+                    ORDER BY ca.updated_at DESC, ca.id DESC
+                ) AS rn
+            FROM candidate_agent_assessments ca
+            WHERE ca.agent_key = 'interview_evaluation'
+              AND ca.score IS NOT NULL
+        )
+        SELECT
+            m.job_id,
+            m.created_at AS match_created_at,
+            m.score,
+            m.status,
+            m.verification_notes,
+            c.id AS candidate_id,
+            c.linkedin_id,
+            c.provider_id,
+            c.unipile_profile_id,
+            c.attendee_provider_id,
+            c.linkedin_public_url,
+            c.full_name,
+            c.headline,
+            c.location,
+            c.languages,
+            c.skills,
+            c.years_experience,
+            j.title AS job_title,
+            conv.id AS conversation_id,
+            conv.status AS conversation_status,
+            conv.external_chat_id,
+            conv.linkedin_account_id,
+            conv.last_message_at,
+            prs.session_id AS pre_resume_session_id,
+            prs.status AS pre_resume_status,
+            prs.last_error AS pre_resume_last_error,
+            prs.next_followup_at AS pre_resume_next_followup_at,
+            cps.status AS candidate_prescreen_status,
+            cps.cv_received AS candidate_prescreen_cv_received,
+            msg.direction AS last_message_direction,
+            msg.created_at AS last_message_created_at,
+            outbound.meta AS last_outbound_meta,
+            pending.account_id AS pending_action_account_id,
+            pending.action_type AS pending_action_type,
+            pending.status AS pending_action_status,
+            pending.not_before AS pending_action_not_before,
+            pending.payload_json AS pending_action_payload_json,
+            interview.score AS latest_interview_score
+        FROM candidate_job_matches m
+        JOIN jobs j ON j.id = m.job_id
+        JOIN candidates c ON c.id = m.candidate_id
+        LEFT JOIN latest_conversations conv
+            ON conv.job_id = m.job_id
+           AND conv.candidate_id = m.candidate_id
+           AND conv.rn = 1
+        LEFT JOIN pre_resume_sessions prs ON prs.conversation_id = conv.id
+        LEFT JOIN candidate_prescreens cps
+            ON cps.job_id = m.job_id
+           AND cps.candidate_id = m.candidate_id
+        LEFT JOIN latest_messages msg
+            ON msg.conversation_id = conv.id
+           AND msg.rn = 1
+        LEFT JOIN latest_outbound_messages outbound
+            ON outbound.conversation_id = conv.id
+           AND outbound.rn = 1
+        LEFT JOIN ranked_pending_actions pending
+            ON pending.job_id = m.job_id
+           AND pending.candidate_id = m.candidate_id
+           AND pending.rn = 1
+        LEFT JOIN ranked_interview_scores interview
+            ON interview.job_id = m.job_id
+           AND interview.candidate_id = m.candidate_id
+           AND interview.rn = 1
+        WHERE {' AND '.join(where_parts)}
+        ORDER BY m.job_id DESC, m.score DESC, m.id DESC
+        """
+        rows = [self._row_to_dict(row) for row in self._conn.execute(query, tuple(args)).fetchall()]
+        enriched_rows: List[Dict[str, Any]] = []
+        for row in rows:
+            current_status_key, current_status_label = self._derive_candidate_current_status(row)
+            if current_status_key in {"unknown"}:
                 continue
-            for row in self.list_candidates_for_job(row_job_id, include_assessments=False):
-                if not isinstance(row, dict):
-                    continue
-                current_status_key = str(row.get("current_status_key") or "").strip().lower()
-                if current_status_key in {"unknown"}:
-                    continue
-                enriched = dict(row)
-                enriched["job_id"] = row_job_id
-                enriched["job_title"] = str(job.get("title") or "").strip() or "-"
-                enriched.update(self._derive_candidate_ats_stage(enriched))
-                assigned_account_id = int(
-                    enriched.get("pending_action_account_id")
-                    or enriched.get("linkedin_account_id")
-                    or 0
-                ) or None
-                enriched["assigned_account_id"] = assigned_account_id
-                enriched["assigned_account_label"] = (
-                    account_labels.get(int(assigned_account_id or 0)) if assigned_account_id else None
-                )
-                enriched["last_activity_at"] = (
-                    enriched.get("pending_action_not_before")
-                    or enriched.get("last_message_created_at")
-                    or enriched.get("last_message_at")
-                    or enriched.get("match_created_at")
-                )
-                rows.append(enriched)
+            enriched = dict(row)
+            enriched["current_status_key"] = current_status_key
+            enriched["current_status_label"] = current_status_label
+            enriched.update(self._derive_candidate_lifecycle(enriched))
+            enriched.update(self._derive_candidate_ats_stage(enriched))
+            assigned_account_id = int(
+                enriched.get("pending_action_account_id")
+                or enriched.get("linkedin_account_id")
+                or 0
+            ) or None
+            enriched["assigned_account_id"] = assigned_account_id
+            enriched["assigned_account_label"] = (
+                account_labels.get(int(assigned_account_id or 0)) if assigned_account_id else None
+            )
+            enriched["last_activity_at"] = (
+                enriched.get("pending_action_not_before")
+                or enriched.get("last_message_created_at")
+                or enriched.get("last_message_at")
+                or enriched.get("match_created_at")
+            )
+            enriched_rows.append(enriched)
 
-        rows.sort(
+        enriched_rows.sort(
             key=lambda item: (
                 int(item.get("ats_stage_rank") or 999),
                 str(item.get("last_activity_at") or ""),
@@ -5028,4 +5154,4 @@ class Database:
             ),
             reverse=False,
         )
-        return rows if safe_limit is None else rows[:safe_limit]
+        return enriched_rows if safe_limit is None else enriched_rows[:safe_limit]
