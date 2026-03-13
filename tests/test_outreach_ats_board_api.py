@@ -255,6 +255,36 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.assertIn("Manual QA Candidate", all_names)
         self.assertNotIn("Backend Candidate", all_names)
 
+    def test_outreach_ats_board_skips_agent_scorecard_hydration(self) -> None:
+        job_id = self._create_job("Manual QA Engineer")
+        candidate_id = self._create_candidate("light-read", "Light Read Candidate")
+        self._attach_match(job_id=job_id, candidate_id=candidate_id, status="verified")
+        self.db.upsert_candidate_agent_assessment(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            agent_key="interview_evaluation",
+            agent_name="Jordan AI",
+            stage_key="summary",
+            score=82.5,
+            status="completed",
+        )
+
+        def _unexpected_assessment_read(*args: Any, **kwargs: Any) -> Any:
+            raise AssertionError("ATS board should not build full agent scorecards")
+
+        self.db._list_candidate_assessments_grouped = _unexpected_assessment_read  # type: ignore[method-assign]
+
+        status, payload = self._request("GET", f"/api/outreach/ats-board?job_id={job_id}")
+        self.assertEqual(status, 200)
+
+        queued_names = {
+            str(item.get("candidate_name") or "")
+            for column in (payload.get("columns") or [])
+            if str(column.get("key") or "") == "queued"
+            for item in (column.get("items") or [])
+        }
+        self.assertEqual(queued_names, {"Light Read Candidate"})
+
     def test_outreach_ats_board_hides_forced_test_candidates_for_normal_jobs(self) -> None:
         job_id = self._create_job("Manual QA Engineer")
 

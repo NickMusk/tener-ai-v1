@@ -1236,7 +1236,7 @@ class Database:
                 ),
             )
 
-    def list_candidates_for_job(self, job_id: int) -> List[Dict[str, Any]]:
+    def list_candidates_for_job(self, job_id: int, include_assessments: bool = True) -> List[Dict[str, Any]]:
         query = """
         SELECT
             m.id AS match_id,
@@ -1348,6 +1348,16 @@ class Database:
                 ORDER BY CASE WHEN oa.status = 'running' THEN 0 ELSE 1 END, oa.priority DESC, oa.id DESC
                 LIMIT 1
             ) AS pending_action_payload_json
+            ,
+            (
+                SELECT ca.score
+                FROM candidate_agent_assessments ca
+                WHERE ca.job_id = m.job_id
+                  AND ca.candidate_id = m.candidate_id
+                  AND ca.agent_key = 'interview_evaluation'
+                ORDER BY ca.updated_at DESC, ca.id DESC
+                LIMIT 1
+            ) AS latest_interview_score
         FROM candidate_job_matches m
         JOIN jobs j ON j.id = m.job_id
         JOIN candidates c ON c.id = m.candidate_id
@@ -1366,19 +1376,22 @@ class Database:
         """
         rows = self._conn.execute(query, (job_id,)).fetchall()
         items = [self._row_to_dict(r) for r in rows]
-        assessments_by_candidate = self._list_candidate_assessments_grouped(job_id=job_id)
+        assessments_by_candidate: Dict[int, List[Dict[str, Any]]] = {}
+        if include_assessments:
+            assessments_by_candidate = self._list_candidate_assessments_grouped(job_id=job_id)
         for item in items:
             key, label = self._derive_candidate_current_status(item)
             item["current_status_key"] = key
             item["current_status_label"] = label
             item.update(self._derive_candidate_lifecycle(item))
-            candidate_id = int(item.get("candidate_id") or 0)
-            candidate_assessments = list(assessments_by_candidate.get(candidate_id, []))
-            item["agent_assessments"] = candidate_assessments
-            item["agent_scorecard"] = self._build_agent_scorecard(
-                assessments=candidate_assessments,
-                candidate_row=item,
-            )
+            if include_assessments:
+                candidate_id = int(item.get("candidate_id") or 0)
+                candidate_assessments = list(assessments_by_candidate.get(candidate_id, []))
+                item["agent_assessments"] = candidate_assessments
+                item["agent_scorecard"] = self._build_agent_scorecard(
+                    assessments=candidate_assessments,
+                    candidate_row=item,
+                )
         return items
 
     def list_job_outreach_candidates(self, job_id: int, limit: int = 200) -> List[Dict[str, Any]]:
@@ -4642,6 +4655,12 @@ class Database:
                 return float(raw)
             except (TypeError, ValueError):
                 continue
+        raw_latest_score = item.get("latest_interview_score")
+        if raw_latest_score is not None:
+            try:
+                return float(raw_latest_score)
+            except (TypeError, ValueError):
+                pass
         scorecard = item.get("agent_scorecard") if isinstance(item.get("agent_scorecard"), dict) else {}
         interview = scorecard.get("interview_evaluation") if isinstance(scorecard.get("interview_evaluation"), dict) else {}
         raw_score = interview.get("latest_score")
@@ -4973,7 +4992,7 @@ class Database:
             row_job_id = int(job.get("id") or 0)
             if row_job_id <= 0:
                 continue
-            for row in self.list_candidates_for_job(row_job_id):
+            for row in self.list_candidates_for_job(row_job_id, include_assessments=False):
                 if not isinstance(row, dict):
                     continue
                 current_status_key = str(row.get("current_status_key") or "").strip().lower()

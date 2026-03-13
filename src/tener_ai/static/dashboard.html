@@ -1770,47 +1770,71 @@
     }
 
     async function api(path, opts = {}) {
+      const timeoutMs = Math.max(0, Number(opts.timeoutMs || 0));
+      const fetchOpts = { ...opts };
+      delete fetchOpts.timeoutMs;
       const authToken = syncLinkedinAdminToken();
       const authHeader = authToken
         ? { Authorization: `Bearer ${authToken}` }
         : {};
-      const res = await fetch(path, {
-        ...opts,
-        headers: { 'Content-Type': 'application/json', ...authHeader, ...(opts.headers || {}) }
-      });
-      const rawText = await res.text();
-      let data = {};
-      if (rawText) {
-        try {
-          data = JSON.parse(rawText);
-        } catch {
-          data = { raw_text: rawText };
+      const controller = timeoutMs > 0 && typeof AbortController === "function"
+        ? new AbortController()
+        : null;
+      let timeoutId = null;
+      let timedOut = false;
+      if (controller) {
+        timeoutId = setTimeout(() => {
+          timedOut = true;
+          controller.abort();
+        }, timeoutMs);
+      }
+      try {
+        const res = await fetch(path, {
+          ...fetchOpts,
+          signal: controller ? controller.signal : fetchOpts.signal,
+          headers: { 'Content-Type': 'application/json', ...authHeader, ...(fetchOpts.headers || {}) }
+        });
+        const rawText = await res.text();
+        let data = {};
+        if (rawText) {
+          try {
+            data = JSON.parse(rawText);
+          } catch {
+            data = { raw_text: rawText };
+          }
         }
+        if (!res.ok) {
+          const compactErrorText = (value, fallback) => {
+            const raw = String(value || "").trim();
+            if (!raw) return fallback;
+            const stripped = raw
+              .replace(/<style[\s\S]*?<\/style>/gi, " ")
+              .replace(/<script[\s\S]*?<\/script>/gi, " ")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            const normalized = stripped || raw;
+            const clipped = normalized.length > 220 ? `${normalized.slice(0, 217)}...` : normalized;
+            return clipped || fallback;
+          };
+          const detail = [
+            typeof data.error === 'string' ? data.error : '',
+            typeof data.details === 'string' ? data.details : '',
+            typeof data.message === 'string' ? data.message : '',
+            typeof data.raw_text === 'string' ? data.raw_text : ''
+          ].find((x) => String(x || '').trim());
+          const fallback = `${res.status} ${res.statusText || 'Request failed'}`.trim();
+          throw new Error(detail ? `HTTP ${res.status}: ${compactErrorText(detail, fallback)}` : fallback);
+        }
+        return data;
+      } catch (error) {
+        if (timedOut) {
+          throw new Error(`request_timeout_after_${timeoutMs}ms`);
+        }
+        throw error;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
       }
-      if (!res.ok) {
-        const compactErrorText = (value, fallback) => {
-          const raw = String(value || "").trim();
-          if (!raw) return fallback;
-          const stripped = raw
-            .replace(/<style[\s\S]*?<\/style>/gi, " ")
-            .replace(/<script[\s\S]*?<\/script>/gi, " ")
-            .replace(/<[^>]+>/g, " ")
-            .replace(/\s+/g, " ")
-            .trim();
-          const normalized = stripped || raw;
-          const clipped = normalized.length > 220 ? `${normalized.slice(0, 217)}...` : normalized;
-          return clipped || fallback;
-        };
-        const detail = [
-          typeof data.error === 'string' ? data.error : '',
-          typeof data.details === 'string' ? data.details : '',
-          typeof data.message === 'string' ? data.message : '',
-          typeof data.raw_text === 'string' ? data.raw_text : ''
-        ].find((x) => String(x || '').trim());
-        const fallback = `${res.status} ${res.statusText || 'Request failed'}`.trim();
-        throw new Error(detail ? `HTTP ${res.status}: ${compactErrorText(detail, fallback)}` : fallback);
-      }
-      return data;
     }
 
     function setStepStatus(step, status) {
@@ -3754,7 +3778,7 @@
       state.outreachAtsLoading = true;
       renderOutreachAtsBoard();
 
-      api(atsPath)
+      api(atsPath, { timeoutMs: 10000 })
         .then((payload) => {
           if (Number(state.outreachAtsRequestSeq || 0) !== atsRequestSeq) return;
           state.outreachAtsBoard = payload || {};
