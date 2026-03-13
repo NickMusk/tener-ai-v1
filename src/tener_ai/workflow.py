@@ -31,8 +31,9 @@ from .linkedin_limits import (
     policy_weekly_connect_cap,
 )
 from .linkedin_provider import UnipileLinkedInProvider
-from .language import resolve_conversation_language, resolve_outbound_language
-from .pre_resume_service import PreResumeCommunicationService, parse_resume_links
+from .language import normalize_language, resolve_conversation_language, resolve_outbound_language
+from .message_extraction import CandidateMessageExtractionService, parse_resume_links
+from .pre_resume_service import PreResumeCommunicationService
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
 TERMINAL_PRE_RESUME_STATUSES = {
@@ -106,6 +107,7 @@ class WorkflowService:
         self.faq_agent = faq_agent
         self.pre_resume_service = pre_resume_service
         self.llm_responder = llm_responder
+        self.message_extraction_service = CandidateMessageExtractionService(llm_client=llm_responder)
         self.interview_client = interview_client
         self.agent_evaluation_playbook = agent_evaluation_playbook
         self.contact_all_mode = contact_all_mode
@@ -1757,6 +1759,7 @@ class WorkflowService:
             job_id=int(conversation["job_id"]),
             candidate_id=int(conversation["candidate_id"]),
         )
+        pre_resume = self.db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
 
         messages = self.db.list_messages(conversation_id)
         previous_lang = None
@@ -1764,22 +1767,42 @@ class WorkflowService:
             if item.get("candidate_language"):
                 previous_lang = item["candidate_language"]
                 break
-        inbound_language = resolve_conversation_language(
-            latest_message_text=text,
-            previous_language=previous_lang,
-            profile_languages=candidate.get("languages"),
-            fallback="en",
-        )
         llm_history = self._build_llm_history(messages=messages, latest_inbound=text)
 
         normalized_meta = self._normalize_inbound_meta(inbound_meta)
         capture_meta = inbound_meta if isinstance(inbound_meta, dict) else normalized_meta
+        extraction_mode = "pre_resume" if pre_resume and self.pre_resume_service is not None else "faq"
+        extraction_state = pre_resume.get("state_json") if isinstance((pre_resume or {}).get("state_json"), dict) else None
+        extraction_attachments = extract_attachment_descriptors_from_values([capture_meta or {}, normalized_meta or {}], limit=8)
+        extraction = self.message_extraction_service.extract(
+            mode=extraction_mode,
+            inbound_text=text,
+            history=llm_history,
+            candidate=candidate,
+            job=job,
+            state=extraction_state,
+            attachments=extraction_attachments,
+            previous_language=previous_lang,
+            fallback_language="en",
+            instruction=self.stage_instructions.get(extraction_mode, ""),
+        )
+        inbound_language = normalize_language(
+            extraction.language,
+            fallback=resolve_conversation_language(
+                latest_message_text=text,
+                previous_language=previous_lang,
+                profile_languages=candidate.get("languages"),
+                fallback="en",
+            ),
+        ) or "en"
+        message_meta = dict(normalized_meta)
+        message_meta["extraction"] = extraction.to_dict()
         inbound_id = self.db.add_message(
             conversation_id=conversation_id,
             direction="inbound",
             content=text,
             candidate_language=inbound_language,
-            meta=normalized_meta,
+            meta=message_meta,
         )
         self._capture_resume_assets_from_inbound(
             job=job,
@@ -1818,25 +1841,23 @@ class WorkflowService:
             )
         job_paused = self._job_is_paused(job)
 
-        pre_resume = self.db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
         if pre_resume and self.pre_resume_service is not None:
             session_id = str(pre_resume.get("session_id") or "")
             state = pre_resume.get("state_json")
             if session_id and isinstance(state, dict):
                 if self.pre_resume_service.get_session(session_id) is None:
                     self.pre_resume_service.seed_session(state)
-                result = self.pre_resume_service.handle_inbound(session_id=session_id, text=text)
+                result = self.pre_resume_service.handle_inbound(session_id=session_id, text=text, extraction=extraction)
                 state_out = result.get("state") if isinstance(result.get("state"), dict) else state
                 outbound = str(result.get("outbound") or "").strip()
-                intent = str(result.get("intent") or "default")
-                language = resolve_conversation_language(
-                    latest_message_text=text,
-                    previous_language=str((state_out or {}).get("language") or inbound_language or ""),
-                    profile_languages=candidate.get("languages"),
+                intent = str(extraction.intent or result.get("intent") or "default")
+                language = normalize_language(
+                    extraction.language or str((state_out or {}).get("language") or inbound_language or ""),
                     fallback="en",
                 )
                 if isinstance(state_out, dict):
                     state_out["language"] = language
+                    state_out["last_extraction"] = extraction.to_dict()
                 if not job_paused:
                     outbound = self._maybe_llm_reply(
                         mode="pre_resume",
@@ -1920,6 +1941,7 @@ class WorkflowService:
                     details={
                         "result_event": result.get("event"),
                         "prescreen_status": (state_out or {}).get("prescreen_status"),
+                        "extraction": extraction.to_dict(),
                     },
                 )
 
@@ -2023,7 +2045,13 @@ class WorkflowService:
                     response["interview"] = interview_result
                 return response
 
-        lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=inbound_language)
+        lang, intent, reply = self.faq_agent.auto_reply(
+            inbound_text=text,
+            job=job,
+            candidate_lang=inbound_language,
+            extracted_language=extraction.language,
+            extracted_intent=extraction.intent,
+        )
         if job_paused:
             self._record_communication_dialogue_assessment(
                 job_id=int(conversation["job_id"]),

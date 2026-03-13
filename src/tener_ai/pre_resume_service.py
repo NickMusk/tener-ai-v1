@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import json
-import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .language import normalize_language, resolve_conversation_language
+from .message_extraction import (
+    CandidateMessageExtractionResult,
+    classify_pre_resume_intent,
+    extract_pre_resume_heuristic_fields,
+    parse_resume_links,
+)
 
 
 UTC = timezone.utc
@@ -134,50 +139,6 @@ def iso(value: datetime) -> str:
     return value.astimezone(UTC).isoformat()
 
 
-def parse_resume_links(text: str) -> List[str]:
-    raw_text = str(text or "")
-    links = re.findall(r"https?://[^\s)>\"]+", raw_text, flags=re.IGNORECASE)
-    selected: List[str] = []
-    seen: set[str] = set()
-    for link in links:
-        lowered = link.lower()
-        if any(
-            marker in lowered
-            for marker in ("resume", "cv", "curriculum", "currículum", ".pdf", ".doc", ".docx", "drive.", "dropbox", "notion.")
-        ):
-            if link not in seen:
-                selected.append(link)
-                seen.add(link)
-    if selected:
-        return selected
-
-    lowered_text = raw_text.lower()
-    attachment_markers = (
-        "attach",
-        "attachment",
-        "attached file",
-        "attached doc",
-        "file",
-        "document",
-        "cv",
-        "resume",
-        "résumé",
-        "резюме",
-        "файл",
-        "вложение",
-        "adjunto",
-        "archivo",
-        "curriculum",
-        "currículum",
-    )
-    if links and any(marker in lowered_text for marker in attachment_markers):
-        for link in links:
-            if link not in seen:
-                selected.append(link)
-                seen.add(link)
-    return selected
-
-
 def _coerce_boolish(value: Any) -> Optional[bool]:
     if value is None:
         return None
@@ -200,59 +161,6 @@ def _normalize_session_status(value: Any) -> str:
     if status == "ready_for_screening_call":
         return "ready_for_interview"
     return status
-
-
-def _normalize_currency(text: str) -> Optional[str]:
-    lowered = str(text or "").strip().lower()
-    if not lowered:
-        return None
-    mapping = {
-        "$": "USD",
-        "usd": "USD",
-        "dollar": "USD",
-        "dollars": "USD",
-        "€": "EUR",
-        "eur": "EUR",
-        "euro": "EUR",
-        "euros": "EUR",
-        "£": "GBP",
-        "gbp": "GBP",
-        "pound": "GBP",
-        "pounds": "GBP",
-        "aed": "AED",
-        "dirham": "AED",
-        "dirhams": "AED",
-    }
-    for marker, code in mapping.items():
-        if marker in lowered:
-            return code
-    return None
-
-
-def _parse_compensation_values(text: str) -> Tuple[Optional[float], Optional[float], Optional[str]]:
-    raw = str(text or "")
-    currency = _normalize_currency(raw)
-    matches = re.findall(r"(\d{1,3}(?:[,\s]\d{3})+|\d+(?:\.\d+)?)\s*([kKmM])?", raw)
-    values: List[float] = []
-    for number, suffix in matches:
-        cleaned = number.replace(",", "").replace(" ", "")
-        try:
-            value = float(cleaned)
-        except ValueError:
-            continue
-        suffix_norm = str(suffix or "").lower()
-        if suffix_norm == "k":
-            value *= 1000.0
-        elif suffix_norm == "m":
-            value *= 1000000.0
-        elif value < 1000.0:
-            continue
-        values.append(value)
-    if not values:
-        return None, None, currency
-    if len(values) == 1:
-        return values[0], values[0], currency
-    return min(values[0], values[1]), max(values[0], values[1]), currency
 
 
 @dataclass
@@ -459,7 +367,13 @@ class PreResumeCommunicationService:
         self.sessions[session.session_id] = session
         return session.to_dict()
 
-    def handle_inbound(self, session_id: str, text: str, now: Optional[datetime] = None) -> Dict[str, Any]:
+    def handle_inbound(
+        self,
+        session_id: str,
+        text: str,
+        now: Optional[datetime] = None,
+        extraction: CandidateMessageExtractionResult | None = None,
+    ) -> Dict[str, Any]:
         session = self._require_session(session_id)
         current = now or utc_now()
         message = text or ""
@@ -472,25 +386,42 @@ class PreResumeCommunicationService:
                 "state": session.to_dict(),
             }
 
-        session.language = resolve_conversation_language(
-            latest_message_text=message,
-            previous_language=session.language,
-            fallback=self.templates.get("default_language", "en"),
-        )
-
-        intent, links = self._classify_intent(message)
+        if extraction is not None:
+            session.language = normalize_language(
+                extraction.language,
+                fallback=self.templates.get("default_language", "en"),
+            )
+            intent = str(extraction.intent or "default").strip().lower() or "default"
+            links = list(extraction.resume_links or [])
+        else:
+            session.language = resolve_conversation_language(
+                latest_message_text=message,
+                previous_language=session.language,
+                fallback=self.templates.get("default_language", "en"),
+            )
+            intent, links = self._classify_intent(message)
         for link in links:
             if link not in session.resume_links:
                 session.resume_links.append(link)
         if links:
             session.cv_received = True
-        if intent == "resume_shared":
+        if intent == "resume_shared" or bool(getattr(extraction, "resume_shared", False)):
             session.cv_received = True
 
         session.turns += 1
         session.last_intent = intent
 
-        extracted = self._extract_structured_answers(session=session, text=message, intent=intent)
+        if extraction is not None:
+            extracted = {
+                "must_have_answer": extraction.must_have_answer,
+                "salary_expectation_min": extraction.salary_expectation_min,
+                "salary_expectation_max": extraction.salary_expectation_max,
+                "salary_expectation_currency": extraction.salary_expectation_currency,
+                "location_confirmed": extraction.location_confirmed,
+                "work_authorization_confirmed": extraction.work_authorization_confirmed,
+            }
+        else:
+            extracted = self._extract_structured_answers(session=session, text=message, intent=intent)
         if extracted.get("must_have_answer"):
             session.must_have_answer = str(extracted["must_have_answer"])
         salary_min = extracted.get("salary_expectation_min")
@@ -598,184 +529,17 @@ class PreResumeCommunicationService:
         return session.to_dict() if session else None
 
     def _classify_intent(self, text: str) -> Tuple[str, List[str]]:
-        normalized = (text or "").strip()
-        lowered = normalized.lower()
-        links = parse_resume_links(normalized)
-
-        if links:
-            return "resume_shared", links
-        if any(
-            marker in lowered
-            for marker in (
-                "my cv",
-                "my resume",
-                "attached cv",
-                "attached resume",
-                "attached file",
-                "attached document",
-                "here is resume",
-                "here's my resume",
-                "вот резюме",
-                "прикрепил файл",
-                "прикрепила файл",
-                "прикрепил резюме",
-                "отправил резюме",
-                "adjunto archivo",
-                "adjunto documento",
-                "adjunto cv",
-                "adjunto mi cv",
-                "te envío mi cv",
-                "aqui esta mi cv",
-                "aquí está mi cv",
-            )
-        ):
-            return "resume_shared", links
-
-        if any(
-            marker in lowered
-            for marker in (
-                "not interested",
-                "no thanks",
-                "stop",
-                "unsubscribe",
-                "not looking",
-                "не интересно",
-                "не актуально",
-                "не ищу",
-                "no me interesa",
-                "ya no estoy interesado",
-            )
-        ):
-            return "not_interested", links
-
-        if any(
-            marker in lowered
-            for marker in (
-                "will send",
-                "send later",
-                "tomorrow",
-                "next week",
-                "later",
-                "пришлю позже",
-                "отправлю позже",
-                "завтра отправлю",
-                "позже",
-                "lo envio luego",
-                "lo envío luego",
-                "te lo envio mañana",
-                "te lo envío mañana",
-                "despues",
-                "después",
-            )
-        ):
-            return "will_send_later", links
-
-        salary_markers = ("salary", "compensation", "pay", "range", "зарплат", "вилка", "salario", "compensación", "compensacion")
-        stack_markers = ("stack", "technology", "tech", "tools", "requirements", "стек", "технолог", "tecnolog", "stack técnico")
-        timeline_markers = (
-            "timeline",
-            "process",
-            "interview",
-            "steps",
-            "when",
-            "срок",
-            "этап",
-            "процесс",
-            "proceso",
-            "entrevista",
-            "cuando",
-            "cuándo",
-            "screening call",
-            "async interview",
-        )
-        details_markers = (
-            "send jd",
-            "job description",
-            "details first",
-            "share details",
-            "more details",
-            "пришлите jd",
-            "подробности",
-            "описание вакансии",
-            "manda jd",
-            "descripcion del puesto",
-            "descripción del puesto",
-        )
-
-        if any(marker in lowered for marker in salary_markers):
-            return "salary", links
-        if any(marker in lowered for marker in stack_markers):
-            return "stack", links
-        if any(marker in lowered for marker in timeline_markers):
-            return "timeline", links
-        if any(marker in lowered for marker in details_markers):
-            return "send_jd_first", links
-        return "default", links
+        return classify_pre_resume_intent(text)
 
     def _extract_structured_answers(self, *, session: PreResumeSession, text: str, intent: str) -> Dict[str, Any]:
-        normalized = str(text or "").strip()
-        lowered = normalized.lower()
-        word_count = len(re.findall(r"[0-9A-Za-zА-Яа-яЁё]+", normalized))
-        out: Dict[str, Any] = {}
-
-        salary_min, salary_max, salary_currency = _parse_compensation_values(normalized)
-        if salary_min is not None or salary_max is not None:
-            out["salary_expectation_min"] = salary_min
-            out["salary_expectation_max"] = salary_max
-            out["salary_expectation_currency"] = salary_currency or session.salary_currency or "USD"
-
-        if session.auth_confirmation_required():
-            auth_positive = (
-                "authorized to work",
-                "work authorization",
-                "no sponsorship",
-                "no visa needed",
-                "citizen",
-                "green card",
-                "eu passport",
-                "authorized",
-            )
-            auth_negative = (
-                "need sponsorship",
-                "require sponsorship",
-                "need visa",
-                "not authorized",
-                "without authorization",
-            )
-            if any(marker in lowered for marker in auth_positive):
-                out["work_authorization_confirmed"] = True
-            elif any(marker in lowered for marker in auth_negative):
-                out["work_authorization_confirmed"] = False
-
-        if session.location_confirmation_required():
-            location_text = str(session.job_location or "").strip().lower()
-            location_positive = (
-                "based in",
-                "located in",
-                "open to relocate",
-                "can relocate",
-                "open to move",
-            )
-            location_negative = (
-                "not open to relocate",
-                "can't relocate",
-                "cannot relocate",
-                "not based",
-            )
-            if location_text and location_text in lowered:
-                out["location_confirmed"] = True
-            elif any(marker in lowered for marker in location_positive):
-                out["location_confirmed"] = True
-            elif any(marker in lowered for marker in location_negative):
-                out["location_confirmed"] = False
-
-        if not session.must_have_answer:
-            if intent in {"default", "stack", "resume_shared", "will_send_later"} and word_count >= 6 and "?" not in normalized:
-                out["must_have_answer"] = normalized
-            elif any(marker in lowered for marker in ("experience", "hands-on", "worked on", "built", "shipped", "led")) and word_count >= 5:
-                out["must_have_answer"] = normalized
-
-        return out
+        return extract_pre_resume_heuristic_fields(
+            text=text,
+            intent=intent,
+            job_location=session.job_location,
+            work_authorization_required=session.auth_confirmation_required(),
+            must_have_answer_exists=bool(session.must_have_answer),
+            salary_currency=session.salary_expectation_currency or session.salary_currency,
+        )
 
     def _compose_response(self, *, session: PreResumeSession, intent: str) -> str:
         if session.status == "ready_for_interview":

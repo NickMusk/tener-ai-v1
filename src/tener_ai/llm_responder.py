@@ -52,6 +52,39 @@ class CandidateLLMResponder:
         text = (content or "").strip()
         return text or fallback
 
+    def generate_candidate_extraction(
+        self,
+        mode: str,
+        instruction: str,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        inbound_text: str,
+        history: List[Dict[str, Any]],
+        state: Optional[Dict[str, Any]] = None,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+        previous_language: str = "",
+        fallback_language: str = "en",
+    ) -> Dict[str, Any]:
+        if not self.api_key:
+            return {}
+        payload = self._build_extraction_payload(
+            mode=mode,
+            instruction=instruction,
+            job=job,
+            candidate=candidate,
+            inbound_text=inbound_text,
+            history=history,
+            state=state or {},
+            attachments=attachments or [],
+            previous_language=previous_language,
+            fallback_language=fallback_language,
+        )
+        try:
+            content = self._chat_completion(payload)
+        except Exception:
+            return {}
+        return self._parse_json_content(content)
+
     def _build_payload(
         self,
         mode: str,
@@ -140,6 +173,106 @@ class CandidateLLMResponder:
             ],
         }
 
+    def _build_extraction_payload(
+        self,
+        *,
+        mode: str,
+        instruction: str,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        inbound_text: str,
+        history: List[Dict[str, Any]],
+        state: Dict[str, Any],
+        attachments: List[Dict[str, Any]],
+        previous_language: str,
+        fallback_language: str,
+    ) -> Dict[str, Any]:
+        normalized_mode = str(mode or "faq").strip().lower() or "faq"
+        allowed_intents = (
+            [
+                "resume_shared",
+                "not_interested",
+                "will_send_later",
+                "salary",
+                "stack",
+                "timeline",
+                "send_jd_first",
+                "default",
+            ]
+            if normalized_mode == "pre_resume"
+            else ["salary", "stack", "timeline", "default"]
+        )
+        system_rules = [
+            "You are Tener AI structured message extraction agent.",
+            f"Extraction mode: {normalized_mode}.",
+            "Return strict JSON only.",
+            "Do not include markdown fences or commentary.",
+            "Infer the candidate's actual message language from human text, not from filenames, URLs, transport strings, or attachment payloads.",
+            "Ignore technical artifacts such as att:// links, base64-looking text, provider ids, filenames, and URL fragments unless the human explicitly refers to them semantically.",
+            "Extract only what is explicitly stated or strongly implied in the candidate message and immediate context.",
+            "If uncertain, keep the field null or use default intent.",
+            f"Allowed intents: {', '.join(allowed_intents)}.",
+            (
+                "For pre_resume extract intent, language, resume signal, salary expectation, must-have experience answer, location alignment, work authorization, sanitized_text, confidence, warnings."
+                if normalized_mode == "pre_resume"
+                else "For faq extract intent, language, sanitized_text, confidence, warnings."
+            ),
+            "Language must be a short code like en, ru, uk, es, pt, de, fr, it, pl, tr, ar.",
+            "Use previous_language only as fallback when the latest human text does not clearly indicate language.",
+            "Use fallback_language only if both latest text and previous_language are inconclusive.",
+            "Confidence must be an object with per-field numeric values from 0 to 1.",
+            "Warnings must be a list of short strings.",
+        ]
+        if instruction.strip():
+            system_rules.append(f"Agent instruction:\n{instruction.strip()}")
+        trimmed_history = history[-8:]
+        user_context = {
+            "job": {
+                "title": job.get("title"),
+                "location": job.get("location"),
+                "seniority": job.get("seniority"),
+                "salary_min": job.get("salary_min"),
+                "salary_max": job.get("salary_max"),
+                "salary_currency": job.get("salary_currency"),
+                "work_authorization_required": job.get("work_authorization_required"),
+            },
+            "candidate": {
+                "name": candidate.get("full_name"),
+                "location": candidate.get("location"),
+                "languages": candidate.get("languages"),
+            },
+            "state": state or None,
+            "history": trimmed_history,
+            "latest_inbound_message": inbound_text,
+            "attachments": attachments,
+            "previous_language": previous_language,
+            "fallback_language": fallback_language,
+            "json_schema": {
+                "language": "string",
+                "intent": "string",
+                "resume_shared": "boolean|null",
+                "resume_links": ["string"],
+                "salary_expectation_min": "number|null",
+                "salary_expectation_max": "number|null",
+                "salary_expectation_currency": "string|null",
+                "must_have_answer": "string|null",
+                "location_confirmed": "boolean|null",
+                "work_authorization_confirmed": "boolean|null",
+                "sanitized_text": "string",
+                "confidence": {"field_name": "0..1"},
+                "warnings": ["string"],
+            },
+        }
+        return {
+            "model": self.model,
+            "temperature": 0.0,
+            "max_tokens": 420,
+            "messages": [
+                {"role": "system", "content": "\n".join(system_rules)},
+                {"role": "user", "content": json.dumps(user_context, ensure_ascii=False)},
+            ],
+        }
+
     def _chat_completion(self, payload: Dict[str, Any]) -> str:
         url = f"{self.base_url}/chat/completions"
         req = request.Request(
@@ -168,6 +301,21 @@ class CandidateLLMResponder:
             if isinstance(content, str):
                 return content
         return ""
+
+    @staticmethod
+    def _parse_json_content(content: str) -> Dict[str, Any]:
+        text = str(content or "").strip()
+        if not text:
+            return {}
+        if text.startswith("```"):
+            text = text.strip("`")
+            if text.lower().startswith("json"):
+                text = text[4:].strip()
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
 
     @staticmethod
     def _safe_error_body(exc: error.HTTPError) -> str:

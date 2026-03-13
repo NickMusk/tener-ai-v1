@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Iterable
 
 
@@ -158,9 +159,21 @@ def detect_language_from_text_or_none(text: str) -> str | None:
             return language
 
     for language, markers in LANGUAGE_MARKERS.items():
-        if any(marker in normalized for marker in markers):
+        if any(_contains_language_marker(normalized, marker) for marker in markers):
             return language
     return None
+
+
+def _contains_language_marker(text: str, marker: str) -> bool:
+    normalized_text = str(text or "").strip().lower()
+    normalized_marker = str(marker or "").strip().lower()
+    if not normalized_text or not normalized_marker:
+        return False
+    if " " in normalized_marker:
+        return normalized_marker in normalized_text
+    if re.search(rf"(?<![a-z]){re.escape(normalized_marker)}(?![a-z])", normalized_text):
+        return True
+    return False
 
 
 def detect_language_from_text(text: str, fallback: str = "en") -> str:

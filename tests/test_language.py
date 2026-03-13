@@ -24,6 +24,9 @@ class LanguageDetectionTests(unittest.TestCase):
     def test_detect_language_default_english(self) -> None:
         self.assertEqual(detect_language_from_text("What is the interview timeline?"), "en")
 
+    def test_detect_language_does_not_match_inside_other_words(self) -> None:
+        self.assertEqual(detect_language_from_text("I am in Poland and can work remotely."), "en")
+
     def test_normalize_language_handles_aliases_and_locales(self) -> None:
         self.assertEqual(normalize_language("ES_mx"), "es")
         self.assertEqual(normalize_language("Deutsch"), "de")

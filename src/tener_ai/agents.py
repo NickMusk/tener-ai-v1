@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .language import resolve_conversation_language, resolve_outbound_language
+from .message_extraction import classify_faq_intent
 from .matching import MatchingEngine
 
 
@@ -847,13 +848,20 @@ class FAQAgent:
         self.matching_engine = matching_engine
         self.instruction = instruction
 
-    def auto_reply(self, inbound_text: str, job: Dict[str, Any], candidate_lang: str | None = None) -> Tuple[str, str, str]:
+    def auto_reply(
+        self,
+        inbound_text: str,
+        job: Dict[str, Any],
+        candidate_lang: str | None = None,
+        extracted_language: str | None = None,
+        extracted_intent: str | None = None,
+    ) -> Tuple[str, str, str]:
         lang = resolve_conversation_language(
             latest_message_text=inbound_text,
-            previous_language=candidate_lang,
+            previous_language=extracted_language or candidate_lang,
             fallback=self.templates.get("default_language", "en"),
         )
-        intent = self._classify_intent(inbound_text)
+        intent = str(extracted_intent or "").strip().lower() or self._classify_intent(inbound_text)
         template = self._pick_template(self.templates.get("faq", {}), intent=intent, language=lang)
         scope_summary = self.matching_engine.summarize_scope(job)
         response = template.format(scope_summary=scope_summary)
@@ -870,16 +878,7 @@ class FAQAgent:
 
     @staticmethod
     def _classify_intent(message: str) -> str:
-        msg = (message or "").lower()
-        intent_rules = {
-            "salary": ["salary", "compensation", "pay", "вилка", "зарплат", "salario"],
-            "stack": ["stack", "technology", "tech", "стек", "tools", "requirements"],
-            "timeline": ["timeline", "process", "interview", "срок", "этап", "proceso", "entrevista"],
-        }
-        for intent, keywords in intent_rules.items():
-            if any(k in msg for k in keywords):
-                return intent
-        return "default"
+        return classify_faq_intent(message)
 
     @staticmethod
     def _load_templates(path: str) -> Dict[str, Any]:
