@@ -52,6 +52,7 @@ class _FailWriteDB:
         limit: int = 200,
         job_id: Optional[int] = None,
         started_only: bool = False,
+        dialogue_bucket: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         raise AssertionError("primary db list_conversations_overview should not be called")
 
@@ -108,6 +109,7 @@ class _ReadDBStub:
         limit: int = 200,
         job_id: Optional[int] = None,
         started_only: bool = False,
+        dialogue_bucket: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         return [
             {

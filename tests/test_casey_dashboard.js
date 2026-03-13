@@ -80,7 +80,7 @@ function buildHarness() {
   assert.ok(match, "dashboard script block not found");
   const cutoff = match[1].indexOf("const initialDashboardRoute = parseDashboardRoute();");
   assert.ok(cutoff > 0, "dashboard bootstrap marker not found");
-  const script = `${match[1].slice(0, cutoff)}\nthis.__dashboard_exports = { state, refreshAgentAccounts, renderCaseyOutreachHealth };`;
+  const script = `${match[1].slice(0, cutoff)}\nthis.__dashboard_exports = { state, refreshAgentAccounts, renderCaseyOutreachHealth, renderAgentDialogueTabs };`;
 
   const elements = new Map();
   const fetchCalls = [];
@@ -164,6 +164,7 @@ function buildHarness() {
     state: exports.state,
     refreshAgentAccounts: exports.refreshAgentAccounts,
     renderCaseyOutreachHealth: exports.renderCaseyOutreachHealth,
+    renderAgentDialogueTabs: exports.renderAgentDialogueTabs,
     element(id) {
       return getElementById(id);
     },
@@ -176,7 +177,8 @@ test("Casey active dialogues fetches started-only chats and filters manual rows"
   const harness = buildHarness();
   harness.state.activeView = "pipeline";
   harness.state.agentJobId = 42;
-  harness.responses.set("/api/chats/overview?limit=300&started_only=1&job_id=42", {
+  harness.state.agentDialogueTab = "candidate_replied";
+  harness.responses.set("/api/chats/overview?limit=300&started_only=1&dialogue_bucket=candidate_replied&job_id=42", {
     items: [
       { conversation_id: 11, channel: "linkedin", candidate_name: "Live Candidate", job_id: 42, job_title: "Backend" },
       { conversation_id: 12, channel: "manual", candidate_name: "Manual Candidate", job_id: 42, job_title: "Backend" },
@@ -185,7 +187,7 @@ test("Casey active dialogues fetches started-only chats and filters manual rows"
 
   await harness.refreshAgentAccounts();
 
-  assert.deepEqual(harness.fetchCalls, ["/api/chats/overview?limit=300&started_only=1&job_id=42"]);
+  assert.deepEqual(harness.fetchCalls, ["/api/chats/overview?limit=300&started_only=1&dialogue_bucket=candidate_replied&job_id=42"]);
   assert.equal(harness.state.agentAccounts.length, 1);
   assert.equal(harness.state.agentAccounts[0].candidate_name, "Live Candidate");
 });
@@ -219,4 +221,15 @@ test("Casey dashboard markup removes legacy controls and manual account block", 
   assert.ok(!harness.html.includes("Add Manual Account (test)"));
   assert.ok(harness.html.includes("Active Candidate Dialogues"));
   assert.ok(harness.html.includes("casey-dialogues-wrap"));
+  assert.ok(harness.html.includes("Candidate Replied"));
+  assert.ok(harness.html.includes("Outbound Only"));
+});
+
+test("Casey dialogue tabs update the endpoint label for the active bucket", () => {
+  const harness = buildHarness();
+  harness.state.agentDialogueTab = "outbound_only";
+
+  harness.renderAgentDialogueTabs();
+
+  assert.match(harness.element("agent-dialogues-endpoint-label").textContent, /dialogue_bucket=outbound_only/);
 });

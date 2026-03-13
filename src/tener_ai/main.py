@@ -1322,10 +1322,12 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             job_id = self._safe_int(job_id_raw, None) if job_id_raw is not None else None
             started_only_raw = str((params.get("started_only") or ["0"])[0] or "").strip().lower()
             started_only = started_only_raw in {"1", "true", "yes", "y", "on"}
+            dialogue_bucket = str((params.get("dialogue_bucket") or [""])[0] or "").strip().lower() or None
             items = self._read_db().list_conversations_overview(
                 limit=limit or 200,
                 job_id=job_id,
                 started_only=started_only,
+                dialogue_bucket=dialogue_bucket,
             )
             self._json_response(HTTPStatus.OK, {"items": items})
             return

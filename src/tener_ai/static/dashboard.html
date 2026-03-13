@@ -264,6 +264,26 @@
       max-height: 29rem;
     }
 
+    .casey-dialogues-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .casey-dialogue-tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .casey-dialogue-tab.active {
+      border-color: var(--accent-green);
+      color: var(--accent-green);
+      box-shadow: 0 0 12px var(--accent-green-dim);
+    }
+
     .casey-dialogues-wrap thead th {
       position: sticky;
       top: 0;
@@ -1308,83 +1328,91 @@
         <div id="casey-health-issues" class="ops-issues">Waiting for data...</div>
       </section>
 
-      <section class="agent-layout">
-        <div class="card">
-          <div class="panel-title"><span>LinkedIn Accounts (Unipile)</span><span class="mono">/api/linkedin/accounts</span></div>
-          <div class="form-grid">
-            <div class="full">
-              <label class="muted">Admin Token (optional, used for Import/Refresh if backend enforces TENER_ADMIN_API_TOKEN)</label>
-              <input id="linkedin-admin-token" placeholder="Bearer token value">
-            </div>
-            <div class="full button-row" style="justify-content:flex-start;">
-              <button id="linkedin-import-btn">Import from Unipile</button>
-              <button id="linkedin-refresh-btn">Refresh Accounts</button>
-            </div>
-            <div class="full" style="margin-top:6px;border-top:1px solid var(--line);padding-top:8px;">
-              <label class="muted">Job Routing Override</label>
-              <div class="muted mono" id="linkedin-job-routing-job-label">Select a specific job in Casey AI panel</div>
-              <div class="form-grid" style="margin-top:6px;">
-                <div>
-                  <label class="muted">Routing mode</label>
-                  <select id="linkedin-job-routing-mode">
-                    <option value="auto">auto (all connected accounts)</option>
-                    <option value="manual">manual (selected accounts only)</option>
-                  </select>
-                </div>
-                <div>
-                  <label class="muted">Assigned account IDs</label>
-                  <select id="linkedin-job-account-ids" multiple size="4"></select>
-                </div>
-                <div class="full button-row" style="justify-content:flex-start;">
-                  <button id="linkedin-save-job-routing-btn">Save Job Routing</button>
-                  <span class="muted mono" id="linkedin-job-routing-hint">No job selected</span>
-                </div>
+      <section class="card">
+        <div class="panel-title"><span>LinkedIn Accounts (Unipile)</span><span class="mono">/api/linkedin/accounts</span></div>
+        <div class="form-grid">
+          <div class="full">
+            <label class="muted">Admin Token (optional, used for Import/Refresh if backend enforces TENER_ADMIN_API_TOKEN)</label>
+            <input id="linkedin-admin-token" placeholder="Bearer token value">
+          </div>
+          <div class="full button-row" style="justify-content:flex-start;">
+            <button id="linkedin-import-btn">Import from Unipile</button>
+            <button id="linkedin-refresh-btn">Refresh Accounts</button>
+          </div>
+          <div class="full" style="margin-top:6px;border-top:1px solid var(--line);padding-top:8px;">
+            <label class="muted">Job Routing Override</label>
+            <div class="muted mono" id="linkedin-job-routing-job-label">Select a specific job in Casey AI panel</div>
+            <div class="form-grid" style="margin-top:6px;">
+              <div>
+                <label class="muted">Routing mode</label>
+                <select id="linkedin-job-routing-mode">
+                  <option value="auto">auto (all connected accounts)</option>
+                  <option value="manual">manual (selected accounts only)</option>
+                </select>
+              </div>
+              <div>
+                <label class="muted">Assigned account IDs</label>
+                <select id="linkedin-job-account-ids" multiple size="4"></select>
+              </div>
+              <div class="full button-row" style="justify-content:flex-start;">
+                <button id="linkedin-save-job-routing-btn">Save Job Routing</button>
+                <span class="muted mono" id="linkedin-job-routing-hint">No job selected</span>
               </div>
             </div>
           </div>
-          <div style="overflow:auto;margin-top:8px;">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Label</th>
-                  <th>Provider Account ID</th>
-                  <th>Status</th>
-                  <th>Msg/day</th>
-                  <th>Connect/day</th>
-                  <th>Effective</th>
-                  <th>Connected</th>
-                  <th>Synced</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="linkedin-accounts-tbody">
-                <tr><td colspan="10" class="muted">No connected accounts yet</td></tr>
-              </tbody>
-            </table>
+        </div>
+        <div style="overflow:auto;margin-top:8px;">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Label</th>
+                <th>Provider Account ID</th>
+                <th>Status</th>
+                <th>Msg/day</th>
+                <th>Connect/day</th>
+                <th>Effective</th>
+                <th>Connected</th>
+                <th>Synced</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="linkedin-accounts-tbody">
+              <tr><td colspan="10" class="muted">No connected accounts yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="casey-dialogues-head">
+          <div class="panel-title" style="margin-bottom:0;">
+            <span>Active Candidate Dialogues</span>
+            <span class="mono" id="agent-dialogues-endpoint-label">GET /api/chats/overview?started_only=1&amp;dialogue_bucket=all_started</span>
+          </div>
+          <div class="casey-dialogue-tabs" id="agent-dialogue-tabs">
+            <button class="casey-dialogue-tab" data-dialogue-tab="all_started">All Started</button>
+            <button class="casey-dialogue-tab" data-dialogue-tab="candidate_replied">Candidate Replied</button>
+            <button class="casey-dialogue-tab" data-dialogue-tab="outbound_only">Outbound Only</button>
           </div>
         </div>
-
-        <div class="card">
-          <div class="panel-title"><span>Active Candidate Dialogues</span><span class="mono">GET /api/chats/overview?started_only=1</span></div>
-          <div class="casey-dialogues-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Chat</th>
-                  <th>Candidate</th>
-                  <th>Job</th>
-                  <th>Source</th>
-                  <th>Pre-resume</th>
-                  <th>Last Message</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody id="agent-accounts-tbody">
-                <tr><td colspan="7" class="muted">No conversations yet</td></tr>
-              </tbody>
-            </table>
-          </div>
+        <div class="casey-dialogues-wrap" style="margin-top:10px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Chat</th>
+                <th>Candidate</th>
+                <th>Job</th>
+                <th>Source</th>
+                <th>Pre-resume</th>
+                <th>Last Message</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="agent-accounts-tbody">
+              <tr><td colspan="7" class="muted">No conversations yet</td></tr>
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -1633,6 +1661,7 @@
     const state = {
       jobId: null,
       agentJobId: null,
+      agentDialogueTab: "all_started",
       opsJobId: null,
       selectedJobIds: [],
       jobs: [],
@@ -1708,6 +1737,32 @@
         localStorage.removeItem(LINKEDIN_ADMIN_TOKEN_STORAGE_KEY);
       }
       return nextValue;
+    }
+
+    function normalizeAgentDialogueTab(value) {
+      const normalized = String(value || "").trim().toLowerCase();
+      if (normalized === "candidate_replied") return "candidate_replied";
+      if (normalized === "outbound_only") return "outbound_only";
+      return "all_started";
+    }
+
+    function agentDialogueTabLabel(value) {
+      const normalized = normalizeAgentDialogueTab(value);
+      if (normalized === "candidate_replied") return "Candidate replied";
+      if (normalized === "outbound_only") return "Outbound only";
+      return "All started";
+    }
+
+    function renderAgentDialogueTabs() {
+      const activeTab = normalizeAgentDialogueTab(state.agentDialogueTab);
+      const endpointLabel = $("agent-dialogues-endpoint-label");
+      if (endpointLabel) {
+        endpointLabel.textContent = `GET /api/chats/overview?started_only=1&dialogue_bucket=${activeTab}`;
+      }
+      document.querySelectorAll(".casey-dialogue-tab").forEach((btn) => {
+        const isActive = normalizeAgentDialogueTab(btn.dataset.dialogueTab || "") === activeTab;
+        btn.classList.toggle("active", isActive);
+      });
     }
 
     async function api(path, opts = {}) {
@@ -3690,9 +3745,10 @@
       const body = $("agent-accounts-tbody");
       const accounts = state.agentAccounts || [];
       if (!accounts.length) {
+        const dialogueLabel = agentDialogueTabLabel(state.agentDialogueTab).toLowerCase();
         const msg = selectedAgentJobId()
-          ? "No started candidate dialogues for this job"
-          : "No started candidate dialogues across all jobs";
+          ? `No ${dialogueLabel} dialogues for this job`
+          : `No ${dialogueLabel} dialogues across all jobs`;
         body.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(msg)}</td></tr>`;
         return;
       }
@@ -3729,9 +3785,11 @@
     }
 
     async function refreshAgentAccounts() {
+      renderAgentDialogueTabs();
       const jobId = selectedAgentJobId();
       const scopeQuery = jobId ? `&job_id=${encodeURIComponent(jobId)}` : "";
-      const out = await api(`/api/chats/overview?limit=300&started_only=1${scopeQuery}`);
+      const dialogueBucket = normalizeAgentDialogueTab(state.agentDialogueTab);
+      const out = await api(`/api/chats/overview?limit=300&started_only=1&dialogue_bucket=${encodeURIComponent(dialogueBucket)}${scopeQuery}`);
       const items = Array.isArray(out.items) ? out.items : [];
       state.agentAccounts = items.filter((row) => String(row.channel || "").trim().toLowerCase() !== "manual");
       if (!state.agentAccounts.some((x) => Number(x.conversation_id) === Number(state.agentConversationId))) {
@@ -4254,6 +4312,14 @@
         $("linkedin-admin-token").addEventListener('change', () => syncLinkedinAdminToken());
         $("linkedin-admin-token").addEventListener('blur', () => syncLinkedinAdminToken());
       }
+      document.querySelectorAll(".casey-dialogue-tab").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const nextTab = normalizeAgentDialogueTab(btn.dataset.dialogueTab || "");
+          if (nextTab === state.agentDialogueTab) return;
+          state.agentDialogueTab = nextTab;
+          refreshAgentAccounts().catch(e => alert(e.message));
+        });
+      });
       $("linkedin-import-btn").addEventListener('click', () => importLinkedinAccountsFromUnipile().catch(e => alert(e.message)));
       $("linkedin-refresh-btn").addEventListener('click', () => refreshLinkedinAccounts().catch(e => alert(e.message)));
       $("linkedin-job-routing-mode").addEventListener('change', () => renderLinkedinJobRouting());
@@ -4357,6 +4423,7 @@
     syncLinkedinAdminToken(state.linkedinAdminToken);
     setTestMode((localStorage.getItem(TEST_MODE_STORAGE_KEY) || "1") !== "0");
     setCandidatesOverallFilter(localStorage.getItem(CANDS_OVERALL_FILTER_STORAGE_KEY) || "all");
+    renderAgentDialogueTabs();
     renderSnapshotTabs();
     renderSelectedSnapshot();
     renderLinkedinJobRouting();

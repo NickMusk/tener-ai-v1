@@ -277,10 +277,14 @@ class PostgresReadDatabase:
         limit: int = 200,
         job_id: Optional[int] = None,
         started_only: bool = False,
+        dialogue_bucket: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 200), 2000))
         where_parts = ["j.archived_at IS NULL"]
         args: List[Any] = []
+        normalized_bucket = str(dialogue_bucket or "").strip().lower()
+        if normalized_bucket in {"all_started", "candidate_replied", "outbound_only"}:
+            started_only = True
         if job_id is not None:
             where_parts.append("conv.job_id = %s")
             args.append(int(job_id))
@@ -296,6 +300,30 @@ class PostgresReadDatabase:
                 """.strip()
             )
             args.append("outbound")
+        if normalized_bucket == "candidate_replied":
+            where_parts.append(
+                """
+                EXISTS (
+                    SELECT 1
+                    FROM messages msg_inbound
+                    WHERE msg_inbound.conversation_id = conv.id
+                      AND msg_inbound.direction = %s
+                )
+                """.strip()
+            )
+            args.append("inbound")
+        elif normalized_bucket == "outbound_only":
+            where_parts.append(
+                """
+                NOT EXISTS (
+                    SELECT 1
+                    FROM messages msg_inbound
+                    WHERE msg_inbound.conversation_id = conv.id
+                      AND msg_inbound.direction = %s
+                )
+                """.strip()
+            )
+            args.append("inbound")
         where = f"WHERE {' AND '.join(where_parts)}"
         args.append(safe_limit)
         query = f"""

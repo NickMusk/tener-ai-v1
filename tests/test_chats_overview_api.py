@@ -55,7 +55,7 @@ class ChatsOverviewApiTests(unittest.TestCase):
         body = json.loads(raw) if raw else {}
         return status, body
 
-    def test_chats_overview_started_only_returns_only_started_dialogues(self) -> None:
+    def test_chats_overview_filters_started_replied_and_outbound_only_dialogues(self) -> None:
         job_id = self.db.insert_job(
             title="Backend Engineer",
             jd_text="Need Python and PostgreSQL.",
@@ -67,7 +67,7 @@ class ChatsOverviewApiTests(unittest.TestCase):
         started_candidate_id = self.db.upsert_candidate(
             {
                 "linkedin_id": "started-ln-1",
-                "full_name": "Started Candidate",
+                "full_name": "Replied Candidate",
                 "headline": "Backend Engineer",
                 "location": "Remote",
                 "languages": ["en"],
@@ -90,15 +90,48 @@ class ChatsOverviewApiTests(unittest.TestCase):
             },
             source="linkedin",
         )
+        outbound_only_candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "outbound-only-ln-1",
+                "full_name": "Outbound Only Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python"],
+                "years_experience": 4,
+                "raw": {},
+            },
+            source="linkedin",
+        )
 
-        started_conversation_id = self.db.create_conversation(job_id=job_id, candidate_id=started_candidate_id, channel="linkedin")
+        replied_conversation_id = self.db.create_conversation(job_id=job_id, candidate_id=started_candidate_id, channel="linkedin")
+        outbound_only_conversation_id = self.db.create_conversation(
+            job_id=job_id,
+            candidate_id=outbound_only_candidate_id,
+            channel="linkedin",
+        )
         queued_conversation_id = self.db.create_conversation(job_id=job_id, candidate_id=queued_candidate_id, channel="linkedin")
-        self.db.update_conversation_status(conversation_id=started_conversation_id, status="active")
+        self.db.update_conversation_status(conversation_id=replied_conversation_id, status="active")
+        self.db.update_conversation_status(conversation_id=outbound_only_conversation_id, status="active")
         self.db.update_conversation_status(conversation_id=queued_conversation_id, status="queued")
         self.db.add_message(
-            conversation_id=started_conversation_id,
+            conversation_id=replied_conversation_id,
             direction="outbound",
             content="Initial outreach",
+            candidate_language="en",
+            meta={"delivery_status": "sent"},
+        )
+        self.db.add_message(
+            conversation_id=replied_conversation_id,
+            direction="inbound",
+            content="Thanks, I am interested.",
+            candidate_language="en",
+            meta={},
+        )
+        self.db.add_message(
+            conversation_id=outbound_only_conversation_id,
+            direction="outbound",
+            content="Following up on the role.",
             candidate_language="en",
             meta={"delivery_status": "sent"},
         )
@@ -106,7 +139,8 @@ class ChatsOverviewApiTests(unittest.TestCase):
         status_all, payload_all = self._request("GET", f"/api/chats/overview?job_id={job_id}&limit=20")
         self.assertEqual(status_all, 200)
         all_ids = {int(item.get("conversation_id") or 0) for item in (payload_all.get("items") or [])}
-        self.assertIn(started_conversation_id, all_ids)
+        self.assertIn(replied_conversation_id, all_ids)
+        self.assertIn(outbound_only_conversation_id, all_ids)
         self.assertIn(queued_conversation_id, all_ids)
 
         status_started, payload_started = self._request(
@@ -114,10 +148,28 @@ class ChatsOverviewApiTests(unittest.TestCase):
             f"/api/chats/overview?job_id={job_id}&limit=20&started_only=1",
         )
         self.assertEqual(status_started, 200)
-        started_items = payload_started.get("items") or []
-        self.assertEqual(len(started_items), 1)
-        self.assertEqual(int(started_items[0].get("conversation_id") or 0), started_conversation_id)
-        self.assertEqual(str(started_items[0].get("candidate_name") or ""), "Started Candidate")
+        started_ids = {int(item.get("conversation_id") or 0) for item in (payload_started.get("items") or [])}
+        self.assertEqual(started_ids, {replied_conversation_id, outbound_only_conversation_id})
+
+        status_replied, payload_replied = self._request(
+            "GET",
+            f"/api/chats/overview?job_id={job_id}&limit=20&dialogue_bucket=candidate_replied",
+        )
+        self.assertEqual(status_replied, 200)
+        replied_items = payload_replied.get("items") or []
+        self.assertEqual(len(replied_items), 1)
+        self.assertEqual(int(replied_items[0].get("conversation_id") or 0), replied_conversation_id)
+        self.assertEqual(str(replied_items[0].get("candidate_name") or ""), "Replied Candidate")
+
+        status_outbound_only, payload_outbound_only = self._request(
+            "GET",
+            f"/api/chats/overview?job_id={job_id}&limit=20&dialogue_bucket=outbound_only",
+        )
+        self.assertEqual(status_outbound_only, 200)
+        outbound_only_items = payload_outbound_only.get("items") or []
+        self.assertEqual(len(outbound_only_items), 1)
+        self.assertEqual(int(outbound_only_items[0].get("conversation_id") or 0), outbound_only_conversation_id)
+        self.assertEqual(str(outbound_only_items[0].get("candidate_name") or ""), "Outbound Only Candidate")
 
 
 if __name__ == "__main__":
