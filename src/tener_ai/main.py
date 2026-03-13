@@ -585,6 +585,18 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             ):
                 return
 
+        if parsed.path == "/agents-office":
+            self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/agents-office/")
+            return
+
+        if parsed.path.startswith("/agents-office/"):
+            if self._serve_static_directory(
+                prefix="/agents-office/",
+                directory=project_root() / "AgentsOffice-prototype",
+                path=parsed.path,
+            ):
+                return
+
         if parsed.path == "/toptal":
             self._redirect_response(HTTPStatus.MOVED_PERMANENTLY, "/toptal/")
             return
@@ -4792,6 +4804,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         if normalized == "/liveramp" or normalized.startswith("/liveramp/"):
             return True
         if normalized == "/skilled-trades" or normalized.startswith("/skilled-trades/"):
+            return True
+        if normalized == "/agents-office" or normalized.startswith("/agents-office/"):
             return True
         if normalized.startswith("/candidate/"):
             return True
