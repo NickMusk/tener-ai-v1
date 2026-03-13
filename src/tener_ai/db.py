@@ -4775,9 +4775,9 @@ class Database:
         self,
         *,
         job_id: Optional[int] = None,
-        limit: int = 500,
+        limit: Optional[int] = 500,
     ) -> List[Dict[str, Any]]:
-        safe_limit = max(1, min(int(limit or 500), 2000))
+        safe_limit = None if limit is None else max(1, min(int(limit or 500), 10000))
         account_labels = {
             int(item.get("id") or 0): str(item.get("label") or "").strip() or f"Account {int(item.get('id') or 0)}"
             for item in self.list_linkedin_accounts(limit=500)
@@ -4804,6 +4804,8 @@ class Database:
                 if current_status_key in {"unknown"}:
                     continue
                 enriched = dict(row)
+                enriched["job_id"] = row_job_id
+                enriched["job_title"] = str(job.get("title") or "").strip() or "-"
                 enriched.update(self._derive_candidate_ats_stage(enriched))
                 assigned_account_id = int(
                     enriched.get("pending_action_account_id")
@@ -4831,4 +4833,4 @@ class Database:
             ),
             reverse=False,
         )
-        return rows[:safe_limit]
+        return rows if safe_limit is None else rows[:safe_limit]

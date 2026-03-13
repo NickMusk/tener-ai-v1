@@ -197,9 +197,7 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.assertEqual(int(summary.get("dialogue") or 0), 1)
         self.assertEqual(int(summary.get("cv_received") or 0), 1)
         self.assertEqual(int(summary.get("interview_pending") or 0), 1)
-        self.assertEqual(int(summary.get("interview_passed") or 0), 1)
-        self.assertEqual(int(summary.get("interview_failed") or 0), 1)
-        self.assertEqual(int(summary.get("closed") or 0), 1)
+        self.assertEqual(int(summary.get("completed") or 0), 3)
 
         columns = {str(item.get("key") or ""): item for item in (payload.get("columns") or [])}
         self.assertEqual(
@@ -226,17 +224,13 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
             [str(item.get("candidate_name") or "") for item in (columns.get("interview_pending") or {}).get("items", [])],
             ["Interview Candidate"],
         )
+        completed_names = {
+            str(item.get("candidate_name") or "")
+            for item in (columns.get("completed") or {}).get("items", [])
+        }
         self.assertEqual(
-            [str(item.get("candidate_name") or "") for item in (columns.get("interview_passed") or {}).get("items", [])],
-            ["Passed Candidate"],
-        )
-        self.assertEqual(
-            [str(item.get("candidate_name") or "") for item in (columns.get("interview_failed") or {}).get("items", [])],
-            ["Failed Candidate"],
-        )
-        self.assertEqual(
-            [str(item.get("candidate_name") or "") for item in (columns.get("closed") or {}).get("items", [])],
-            ["Closed Candidate"],
+            completed_names,
+            {"Passed Candidate", "Failed Candidate", "Closed Candidate"},
         )
 
     def test_outreach_ats_board_filters_by_job_id(self) -> None:
@@ -293,7 +287,7 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.assertIn("Normal Candidate", all_names)
         self.assertNotIn("Forced Test Candidate (olena-bachek-b8523121a)", all_names)
 
-    def test_outreach_ats_board_groups_terminal_states_into_closed(self) -> None:
+    def test_outreach_ats_board_groups_terminal_states_into_completed(self) -> None:
         job_id = self._create_job("Manual QA Engineer")
         terminal_statuses = [
             ("not-interest", "Not Interested Candidate", "needs_resume", {"pre_resume_status": "not_interested"}),
@@ -325,16 +319,16 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         status, payload = self._request("GET", "/api/outreach/ats-board")
         self.assertEqual(status, 200)
         summary = payload.get("summary") or {}
-        self.assertEqual(int(summary.get("closed") or 0), 2)
-        self.assertEqual(int(summary.get("interview_failed") or 0), 1)
+        self.assertEqual(int(summary.get("completed") or 0), 3)
         columns = {str(item.get("key") or ""): item for item in (payload.get("columns") or [])}
-        closed_names = {str(item.get("candidate_name") or "") for item in (columns.get("closed") or {}).get("items", [])}
+        completed_names = {
+            str(item.get("candidate_name") or "")
+            for item in (columns.get("completed") or {}).get("items", [])
+        }
         self.assertEqual(
-            closed_names,
-            {"Not Interested Candidate", "Unreachable Candidate"},
+            completed_names,
+            {"Not Interested Candidate", "Unreachable Candidate", "Interview Failed Candidate"},
         )
-        failed_names = {str(item.get("candidate_name") or "") for item in (columns.get("interview_failed") or {}).get("items", [])}
-        self.assertEqual(failed_names, {"Interview Failed Candidate"})
 
     def test_outreach_ats_board_surfaces_delivery_blocked_identity_separately_from_closed(self) -> None:
         job_id = self._create_job("Manual QA Engineer")
@@ -358,7 +352,7 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         summary = payload.get("summary") or {}
         self.assertEqual(int(summary.get("delivery_blocked") or 0), 1)
-        self.assertEqual(int(summary.get("closed") or 0), 0)
+        self.assertEqual(int(summary.get("completed") or 0), 0)
 
         columns = {str(item.get("key") or ""): item for item in (payload.get("columns") or [])}
         blocked_names = {
@@ -366,6 +360,28 @@ class OutreachAtsBoardApiTests(unittest.TestCase):
             for item in (columns.get("delivery_blocked") or {}).get("items", [])
         }
         self.assertEqual(blocked_names, {"Delivery Blocked Candidate"})
+
+    def test_outreach_ats_board_summary_counts_all_candidates_even_when_cards_are_limited(self) -> None:
+        job_id = self._create_job("Manual QA Engineer")
+        for index in range(55):
+            candidate_id = self._create_candidate(f"queued-{index}", f"Queued Candidate {index}")
+            self._attach_match(job_id=job_id, candidate_id=candidate_id, status="verified")
+        for index in range(3):
+            candidate_id = self._create_candidate(f"complete-{index}", f"Completed Candidate {index}")
+            self._attach_match(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                status="interview_scored",
+                verification_notes={"interview_status": "scored", "interview_total_score": 85.0 if index == 0 else 50.0},
+            )
+
+        status, payload = self._request("GET", "/api/outreach/ats-board?limit=5")
+        self.assertEqual(status, 200)
+        summary = payload.get("summary") or {}
+        self.assertEqual(int(summary.get("total_candidates") or 0), 58)
+        self.assertEqual(int(summary.get("completed") or 0), 3)
+        self.assertTrue(bool(payload.get("limited")))
+        self.assertEqual(int(payload.get("displayed_candidates") or 0), 50)
 
 
 if __name__ == "__main__":

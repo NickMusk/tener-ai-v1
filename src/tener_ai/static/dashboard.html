@@ -254,6 +254,9 @@
       margin-top: 8px;
       color: var(--text-secondary);
       font-size: 12px;
+      line-height: 1.5;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .ops-events {
@@ -272,10 +275,10 @@
 
     .ats-board {
       display: grid;
-      grid-template-columns: repeat(7, minmax(220px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 12px;
-      overflow-x: auto;
       align-items: start;
+      min-width: 0;
     }
 
     .ats-column {
@@ -285,6 +288,7 @@
       min-height: 220px;
       display: grid;
       grid-template-rows: auto 1fr;
+      min-width: 0;
     }
 
     .ats-column-header {
@@ -306,6 +310,7 @@
       align-content: start;
       max-height: 560px;
       overflow: auto;
+      min-width: 0;
     }
 
     .ats-card {
@@ -317,6 +322,8 @@
       text-align: left;
       color: var(--text-primary);
       cursor: pointer;
+      min-width: 0;
+      overflow: hidden;
     }
 
     .ats-card:hover {
@@ -329,17 +336,39 @@
       font-size: 13px;
       line-height: 1.35;
       margin-bottom: 4px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .ats-card-job {
       font-size: 12px;
       color: var(--text-secondary);
       margin-bottom: 6px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+
+    .ats-card-outcome {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 255, 135, 0.28);
+      background: rgba(0, 255, 135, 0.08);
+      color: var(--accent-green);
+      font-family: 'Space Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
     }
 
     .ats-card-detail {
       font-size: 12px;
       margin-bottom: 6px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .ats-card-meta {
@@ -347,6 +376,8 @@
       gap: 3px;
       color: var(--text-secondary);
       font-size: 11px;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
 
     .ops-summary-grid {
@@ -1701,6 +1732,19 @@
         }
       }
       if (!res.ok) {
+        const compactErrorText = (value, fallback) => {
+          const raw = String(value || "").trim();
+          if (!raw) return fallback;
+          const stripped = raw
+            .replace(/<style[\s\S]*?<\/style>/gi, " ")
+            .replace(/<script[\s\S]*?<\/script>/gi, " ")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+          const normalized = stripped || raw;
+          const clipped = normalized.length > 220 ? `${normalized.slice(0, 217)}...` : normalized;
+          return clipped || fallback;
+        };
         const detail = [
           typeof data.error === 'string' ? data.error : '',
           typeof data.details === 'string' ? data.details : '',
@@ -1708,7 +1752,7 @@
           typeof data.raw_text === 'string' ? data.raw_text : ''
         ].find((x) => String(x || '').trim());
         const fallback = `${res.status} ${res.statusText || 'Request failed'}`.trim();
-        throw new Error(detail ? `HTTP ${res.status}: ${detail}` : fallback);
+        throw new Error(detail ? `HTTP ${res.status}: ${compactErrorText(detail, fallback)}` : fallback);
       }
       return data;
     }
@@ -3300,8 +3344,14 @@
       const board = state.outreachAtsBoard || {};
       const summary = board.summary || {};
       const columns = Array.isArray(board.columns) ? board.columns : [];
+      const compactBoardError = (value, fallback = "Failed to load ATS board") => {
+        const raw = String(value || "").trim();
+        if (!raw) return fallback;
+        const normalized = raw.replace(/\s+/g, " ").trim();
+        return normalized.length > 220 ? `${normalized.slice(0, 217)}...` : normalized;
+      };
       if (String(board.status || "").trim().toLowerCase() === "error") {
-        summaryEl.textContent = String(board.error || "Failed to load ATS board");
+        summaryEl.textContent = compactBoardError(board.error);
         boardEl.innerHTML = '<div class="muted">ATS board unavailable.</div>';
         return;
       }
@@ -3313,11 +3363,12 @@
         `${Number(summary.dialogue || 0)} active dialogue`,
         `${Number(summary.cv_received || 0)} cv received`,
         `${Number(summary.interview_pending || 0)} interview pending`,
-        `${Number(summary.interview_passed || 0)} interview passed`,
         `${Number(summary.delivery_blocked || 0)} delivery blocked`,
-        `${Number(summary.interview_failed || 0)} interview failed`,
-        `${Number(summary.closed || 0)} closed`,
+        `${Number(summary.completed || 0)} completed`,
       ];
+      if (board.limited && Number(board.displayed_candidates || 0) > 0) {
+        summaryParts.push(`showing first ${Number(board.displayed_candidates || 0)}`);
+      }
       summaryEl.textContent = summaryParts.join(" • ");
       if (!columns.length) {
         boardEl.innerHTML = '<div class="muted">No ATS candidates in scope.</div>';
@@ -3349,6 +3400,9 @@
               const nextAction = escapeHtml(actionLabel(item.next_action_kind));
               const nextAt = formatTimestampCompact(item.next_action_at);
               const lastActivity = formatTimestampCompact(item.last_activity_at);
+              const completionLabel = item.completion_label
+                ? `<div class="ats-card-outcome">${escapeHtml(String(item.completion_label))}</div>`
+                : "";
               const metaParts = [
                 assignedAccount !== "-" ? `acc: ${assignedAccount}` : "",
                 nextAction ? nextAction : "",
@@ -3364,6 +3418,7 @@
                 >
                   <div class="ats-card-title">${escapeHtml(item.candidate_name || `Candidate ${candidateId || "-"}`)}</div>
                   <div class="ats-card-job">#${jobId || "-"} ${escapeHtml(item.job_title || "-")}</div>
+                  ${completionLabel}
                   <div class="ats-card-detail">${detail}</div>
                   <div class="ats-card-meta">${metaParts.map((part) => `<div>${part}</div>`).join("") || '<div class="muted">No activity yet</div>'}</div>
                 </button>
@@ -3631,13 +3686,12 @@
             total_candidates: 0,
             queued: 0,
             connect_sent: 0,
+            queued_delivery: 0,
             dialogue: 0,
             cv_received: 0,
             interview_pending: 0,
-            interview_passed: 0,
             delivery_blocked: 0,
-            interview_failed: 0,
-            closed: 0,
+            completed: 0,
           },
           columns: [],
           error: String(e.message || "failed_to_load_outreach_ats_board"),

@@ -3842,7 +3842,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
         limit: int,
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc)
-        items = db.list_outreach_ats_candidates(job_id=job_id, limit=limit)
+        safe_limit = max(50, min(int(limit or 600), 2000))
+        items = db.list_outreach_ats_candidates(job_id=job_id, limit=None)
         workflow = SERVICES.get("workflow")
         forced_ids = []
         if workflow is not None:
@@ -3886,6 +3887,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 if include_item:
                     filtered_items.append(item)
             items = filtered_items
+        total_items = len(items)
+        display_items = items[:safe_limit]
         column_defs = [
             ("queued", "Queued"),
             ("connect_sent", "Connect Sent"),
@@ -3893,31 +3896,48 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             ("dialogue", "Dialogue"),
             ("cv_received", "CV Received"),
             ("interview_pending", "Interview Pending"),
-            ("interview_passed", "Interview Passed"),
             ("delivery_blocked", "Delivery Blocked"),
-            ("interview_failed", "Interview Failed"),
-            ("closed", "Closed"),
+            ("completed", "Completed"),
         ]
         columns: List[Dict[str, Any]] = []
         summary = {
-            "total_candidates": len(items),
+            "total_candidates": total_items,
             "queued": 0,
             "connect_sent": 0,
             "queued_delivery": 0,
             "dialogue": 0,
             "cv_received": 0,
             "interview_pending": 0,
-            "interview_passed": 0,
             "delivery_blocked": 0,
-            "interview_failed": 0,
-            "closed": 0,
+            "completed": 0,
         }
         items_by_stage: Dict[str, List[Dict[str, Any]]] = {key: [] for key, _ in column_defs}
+        stage_counts: Dict[str, int] = {key: 0 for key, _ in column_defs}
 
         for item in items:
-            stage_key = str(item.get("ats_stage_key") or "").strip().lower()
+            raw_stage_key = str(item.get("ats_stage_key") or "").strip().lower()
+            stage_key = raw_stage_key
+            if raw_stage_key in {"interview_passed", "interview_failed", "closed"}:
+                stage_key = "completed"
             if stage_key not in items_by_stage:
                 continue
+            stage_counts[stage_key] += 1
+            summary[stage_key] += 1
+
+        for item in display_items:
+            raw_stage_key = str(item.get("ats_stage_key") or "").strip().lower()
+            stage_key = raw_stage_key
+            if raw_stage_key in {"interview_passed", "interview_failed", "closed"}:
+                stage_key = "completed"
+            if stage_key not in items_by_stage:
+                continue
+            completion_label = None
+            if raw_stage_key == "interview_passed":
+                completion_label = "Passed"
+            elif raw_stage_key == "interview_failed":
+                completion_label = "Failed"
+            elif raw_stage_key == "closed":
+                completion_label = "Closed"
             card = {
                 "candidate_id": int(item.get("candidate_id") or 0) or None,
                 "candidate_name": str(item.get("full_name") or item.get("candidate_name") or "").strip()
@@ -3927,7 +3947,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "conversation_id": int(item.get("conversation_id") or 0) or None,
                 "score": float(item.get("score") or 0.0) if item.get("score") is not None else None,
                 "ats_stage_key": stage_key,
-                "ats_stage_label": str(item.get("ats_stage_label") or "").strip() or stage_key.replace("_", " ").title(),
+                "ats_stage_label": "Completed" if stage_key == "completed" else (
+                    str(item.get("ats_stage_label") or "").strip() or stage_key.replace("_", " ").title()
+                ),
                 "stage_detail": str(item.get("ats_stage_detail") or "").strip() or None,
                 "assigned_account_id": int(item.get("assigned_account_id") or 0) or None,
                 "assigned_account_label": str(item.get("assigned_account_label") or "").strip() or None,
@@ -3938,9 +3960,11 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "current_status_label": str(item.get("current_status_label") or "").strip() or None,
                 "candidate_lifecycle_key": str(item.get("candidate_lifecycle_key") or "").strip() or None,
                 "candidate_lifecycle_label": str(item.get("candidate_lifecycle_label") or "").strip() or None,
+                "completion_label": completion_label,
+                "raw_stage_key": raw_stage_key or None,
+                "raw_stage_label": str(item.get("ats_stage_label") or "").strip() or None,
             }
             items_by_stage[stage_key].append(card)
-            summary[stage_key] += 1
 
         for stage_key, stage_label in column_defs:
             stage_items = list(items_by_stage.get(stage_key) or [])
@@ -3955,7 +3979,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 {
                     "key": stage_key,
                     "label": stage_label,
-                    "count": len(stage_items),
+                    "count": int(stage_counts.get(stage_key) or 0),
                     "items": stage_items,
                 }
             )
@@ -3964,6 +3988,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             "status": "ok",
             "generated_at": now.isoformat(),
             "job_id": int(job_id) if job_id else None,
+            "displayed_candidates": len(display_items),
+            "limited": len(display_items) < total_items,
             "summary": summary,
             "columns": columns,
         }
