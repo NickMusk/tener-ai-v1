@@ -4,6 +4,7 @@ from tener_ai.language import (
     detect_language_from_text,
     normalize_language,
     resolve_conversation_language,
+    resolve_outbound_language,
 )
 
 
@@ -53,6 +54,29 @@ class LanguageDetectionTests(unittest.TestCase):
                 profile_languages=["fr-FR", "en"],
             ),
             "fr",
+        )
+
+    def test_resolve_outbound_language_prefers_primary_locale_over_profile_languages(self) -> None:
+        self.assertEqual(
+            resolve_outbound_language(
+                {
+                    "primary_locale": "uk-UA",
+                    "languages": ["en", "ru"],
+                    "location": "Kyiv, Ukraine",
+                }
+            ),
+            "uk",
+        )
+
+    def test_resolve_outbound_language_falls_back_to_ukrainian_location(self) -> None:
+        self.assertEqual(
+            resolve_outbound_language(
+                {
+                    "languages": [],
+                    "location": "Kyiv, Ukraine",
+                }
+            ),
+            "uk",
         )
 
 

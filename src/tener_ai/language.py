@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Any, Dict, Iterable
 
 
 LANGUAGE_ALIASES = {
@@ -52,6 +52,21 @@ LANGUAGE_MARKERS = {
     "tr": {"maas", "maaş", "surec", "süreç", "mulakat", "mülakat", "merhaba"},
 }
 
+LOCATION_LANGUAGE_HINTS = {
+    "uk": (
+        "ukraine",
+        "kyiv",
+        "kiev",
+        "lviv",
+        "odesa",
+        "odessa",
+        "kharkiv",
+        "dnipro",
+        "zaporizhzhia",
+        "ivano-frankivsk",
+    ),
+}
+
 
 def normalize_language(value: str | None, fallback: str = "") -> str:
     text = str(value or "").strip().lower()
@@ -68,11 +83,52 @@ def normalize_language(value: str | None, fallback: str = "") -> str:
 
 def pick_candidate_language(candidates_languages: Iterable[str] | None, fallback: str = "en") -> str:
     if not candidates_languages:
-        return normalize_language(fallback, fallback="en") or "en"
+        return normalize_language(fallback, fallback="") or ""
     for lang in candidates_languages:
         normalized = normalize_language(lang)
         if normalized:
             return normalized
+    return normalize_language(fallback, fallback="") or ""
+
+
+def infer_language_from_location(location: str | None) -> str | None:
+    normalized = str(location or "").strip().lower()
+    if not normalized:
+        return None
+    for language, markers in LOCATION_LANGUAGE_HINTS.items():
+        if any(marker in normalized for marker in markers):
+            return language
+    return None
+
+
+def resolve_outbound_language(candidate: Dict[str, Any] | None, fallback: str = "en") -> str:
+    if isinstance(candidate, dict):
+        primary_locale = normalize_language(candidate.get("primary_locale"), fallback="")
+        if primary_locale:
+            return primary_locale
+
+        profile_languages = candidate.get("languages")
+        normalized_profile_language = pick_candidate_language(profile_languages, fallback="")
+        if normalized_profile_language:
+            return normalized_profile_language
+
+        language = normalize_language(candidate.get("language"), fallback="")
+        if language:
+            return language
+
+        raw = candidate.get("raw")
+        if isinstance(raw, dict):
+            raw_primary_locale = normalize_language(raw.get("primary_locale"), fallback="")
+            if raw_primary_locale:
+                return raw_primary_locale
+            inferred_raw_location = infer_language_from_location(raw.get("location") or raw.get("geo"))
+            if inferred_raw_location:
+                return inferred_raw_location
+
+        inferred_location = infer_language_from_location(candidate.get("location"))
+        if inferred_location:
+            return inferred_location
+
     return normalize_language(fallback, fallback="en") or "en"
 
 

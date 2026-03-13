@@ -243,6 +243,63 @@ class OutboundDispatchTests(unittest.TestCase):
             self.assertEqual(int(conversation["linkedin_account_id"]), account_2)
             self.assertEqual(conversation["status"], "waiting_connection")
 
+    def test_dispatch_uses_ukrainian_for_candidate_in_ukraine_without_language_metadata(self) -> None:
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outbound_dispatch_ukrainian.sqlite3"))
+            db.init_schema()
+            workflow = self._create_workflow(db=db, managed_linkedin_dispatch_inline=False)
+
+            account_id = db.upsert_linkedin_account(
+                provider="unipile",
+                provider_account_id="acc-uk-1",
+                status="connected",
+                connected_at="2025-01-01T00:00:00+00:00",
+            )
+            provider = _ManagedStubProvider(account_ref="acc-uk-1")
+            workflow._build_managed_provider = lambda account_id: provider  # type: ignore[method-assign]
+
+            job_id = db.insert_job(
+                title="Manual QA Engineer",
+                jd_text="Need manual QA and test case design.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="middle",
+            )
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[
+                    {
+                        "profile": {
+                            "linkedin_id": "ln-outbound-uk-1",
+                            "full_name": "Andrey Chaliy",
+                            "headline": "Manual QA Engineer",
+                            "location": "Kyiv, Ukraine",
+                            "languages": [],
+                            "skills": ["manual testing"],
+                            "years_experience": 5,
+                            "raw": {},
+                        },
+                        "score": 0.82,
+                        "status": "verified",
+                        "notes": {},
+                    }
+                ],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+
+            queued = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            conversation_id = int(queued["conversation_ids"][0])
+            self.assertEqual(int(queued["items"][0].get("linkedin_account_id") or 0), account_id)
+
+            dispatched = workflow.dispatch_outbound_actions(limit=10, job_id=job_id)
+            self.assertEqual(dispatched["processed"], 1)
+            self.assertEqual(dispatched["pending_connection"], 1)
+            self.assertEqual(provider.connect_messages[0].split(",", 1)[0], "Привіт")
+
+            messages = db.list_messages(conversation_id)
+            self.assertEqual(messages[-1]["candidate_language"], "uk")
+            self.assertTrue(str(messages[-1]["content"]).startswith("Привіт"))
+
     def test_dispatch_uses_preassigned_account_owner(self) -> None:
         with TemporaryDirectory() as td:
             db = Database(str(Path(td) / "outbound_dispatch_owner.sqlite3"))

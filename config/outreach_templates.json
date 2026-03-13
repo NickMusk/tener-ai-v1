@@ -3,32 +3,38 @@
   "outreach": {
     "en": "Hi {name}, I found your profile and it looks relevant to our role \"{job_title}\". Scope: {scope_summary}. If you are open to a short chat, I can share details and next steps.",
     "ru": "Привет, {name}! Нашли ваш профиль, и он подходит под роль \"{job_title}\". Скоуп: {scope_summary}. Если интересно, могу отправить детали и следующие шаги.",
+    "uk": "Привіт, {name}! Ми знайшли ваш профіль, і він виглядає релевантним для ролі \"{job_title}\". Скоуп: {scope_summary}. Якщо вам цікаво, можу надіслати деталі та наступні кроки.",
     "es": "Hola {name}, encontré tu perfil y parece relevante para el puesto \"{job_title}\". Alcance: {scope_summary}. Si te interesa, te comparto detalles y próximos pasos."
   },
   "outreach_resume_request": {
     "en": "Hi {name}, thanks for connecting regarding \"{job_title}\". To run final matching on real scope ({core_profile_summary}), could you share your latest CV/resume and key project highlights?",
     "ru": "Привет, {name}! Спасибо за интерес к роли \"{job_title}\". Чтобы сделать финальный мэтчинг по ключевому профилю ({core_profile_summary}), отправьте, пожалуйста, актуальное CV/резюме и 2-3 релевантных проекта.",
+    "uk": "Привіт, {name}! Дякую за інтерес до ролі \"{job_title}\". Щоб зробити фінальний метчинг за ключовим профілем ({core_profile_summary}), надішліть, будь ласка, актуальне CV/резюме та 2-3 релевантні проєкти.",
     "es": "Hola {name}, gracias por tu interés en \"{job_title}\". Para hacer el matching final sobre el perfil clave ({core_profile_summary}), ¿puedes compartir tu CV actualizado y 2-3 proyectos relevantes?"
   },
   "faq": {
     "salary": {
       "en": "Compensation depends on seniority and scope fit. If you share expectations, I can confirm range quickly.",
       "ru": "Компенсация зависит от уровня и соответствия скоупу. Если поделитесь ожиданиями, я быстро подтвержу вилку.",
+      "uk": "Компенсація залежить від рівня та відповідності скоупу. Якщо поділитеся очікуваннями, я швидко підтверджу вилку.",
       "es": "La compensación depende del seniority y encaje con el alcance. Si compartes expectativas, te confirmo el rango rápido."
     },
     "stack": {
       "en": "Core stack is defined by the job scope. Main requirements are: {scope_summary}.",
       "ru": "Основной стек определяется скоупом роли. Ключевые требования: {scope_summary}.",
+      "uk": "Основний стек визначається скоупом ролі. Ключові вимоги: {scope_summary}.",
       "es": "El stack principal lo define el alcance del puesto. Requisitos clave: {scope_summary}."
     },
     "timeline": {
       "en": "Current timeline is active now. After short screening we can schedule interview steps promptly.",
       "ru": "Найм идет сейчас. После короткого скрининга быстро назначим этапы интервью.",
+      "uk": "Найм триває зараз. Після короткого скринінгу швидко призначимо етапи інтерв'ю.",
       "es": "El proceso está activo ahora. Tras un breve screening, coordinamos entrevistas rápidamente."
     },
     "default": {
       "en": "Thanks for the question. I can clarify role scope, process, timeline, and compensation details if you share what matters most.",
       "ru": "Спасибо за вопрос. Могу уточнить скоуп роли, процесс, сроки и детали компенсации, если подскажете, что важнее всего.",
+      "uk": "Дякую за запитання. Можу уточнити скоуп ролі, процес, строки та деталі компенсації, якщо підкажете, що для вас найважливіше.",
       "es": "Gracias por tu pregunta. Puedo aclarar alcance del rol, proceso, tiempos y compensación si me dices qué te importa más."
     }
   }

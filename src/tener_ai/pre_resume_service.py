@@ -22,6 +22,10 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
             "Hi {name}, thanks for your interest in \"{job_title}\". First we'll ask a few written qualifying questions, "
             "then request your CV, then a short 10 to 15 minute screening call. Core role focus: {core_profile_summary}."
         ),
+        "uk": (
+            "Привіт, {name}! Дякую за інтерес до \"{job_title}\". Спочатку поставимо кілька письмових кваліфікаційних запитань, "
+            "потім попросимо ваше CV, а далі короткий скринінг-дзвінок на 10-15 хвилин. Основний фокус ролі: {core_profile_summary}."
+        ),
         "es": (
             "Hola {name}, gracias por tu interes en \"{job_title}\". Primero haremos unas preguntas escritas de filtro, "
             "luego pediremos tu CV y despues una llamada breve de screening de 10 a 15 minutos. "
@@ -30,61 +34,75 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
     },
     "written_questions_intro": {
         "en": "Please reply in one message if possible:",
+        "uk": "Будь ласка, по можливості дайте відповідь одним повідомленням:",
         "es": "Si puedes, responde en un solo mensaje:",
     },
     "cv_request": {
         "en": "Thanks, the written qualifying questions are complete. Please share your CV/resume so we can move to the 10 to 15 minute screening call.",
+        "uk": "Дякую, письмові кваліфікаційні запитання завершено. Будь ласка, надішліть ваше CV/резюме, щоб ми могли перейти до скринінг-дзвінка на 10-15 хвилин.",
         "es": "Gracias, las preguntas escritas ya estan completas. Comparte tu CV para pasar a la llamada breve de screening de 10 a 15 minutos.",
     },
     "cv_received_pending": {
         "en": "Thanks, CV received. Before we book the screening call, I still need a few written qualifying answers:",
+        "uk": "Дякую, CV отримано. Перш ніж призначити скринінг-дзвінок, мені ще потрібні кілька письмових кваліфікаційних відповідей:",
         "es": "Gracias, CV recibido. Antes de agendar la llamada de screening, aun necesito algunas respuestas escritas:",
     },
     "screening_call_ready": {
         "en": "Thanks, I have your CV and the written qualifying questions are complete. The next step is a short 10 to 15 minute screening call.",
+        "uk": "Дякую, я вже маю ваше CV, і письмові кваліфікаційні запитання завершено. Наступний крок - короткий скринінг-дзвінок на 10-15 хвилин.",
         "es": "Gracias, ya tengo tu CV y las preguntas escritas estan completas. El siguiente paso es una llamada breve de screening de 10 a 15 minutos.",
     },
     "not_interested_ack": {
         "en": "Understood, thanks for the reply. We will not send further messages.",
+        "uk": "Зрозуміло, дякую за відповідь. Ми більше не надсилатимемо повідомлення.",
         "es": "Entendido, gracias por responder. No enviaremos mas mensajes.",
     },
     "resume_promised_ack": {
         "en": "Thanks, noted. You can send your CV anytime, and I will send one reminder if needed.",
+        "uk": "Дякую, зафіксував. Ви можете надіслати своє CV у будь-який момент, і за потреби я надішлю одне нагадування.",
         "es": "Gracias, anotado. Puedes enviar tu CV en cualquier momento y mandare un recordatorio si hace falta.",
     },
     "followups": {
         "1": {
             "en": "Quick follow-up on \"{job_title}\". We still need the written qualifying answers and then your CV before the short screening call.",
+            "uk": "Швидкий follow-up щодо \"{job_title}\". Нам усе ще потрібні письмові кваліфікаційні відповіді, а потім ваше CV перед коротким скринінг-дзвінком.",
             "es": "Seguimiento rapido sobre \"{job_title}\". Aun necesitamos las respuestas escritas y luego tu CV antes de la llamada breve de screening.",
         },
         "2": {
             "en": "Second follow-up for \"{job_title}\". Once the written qualifying questions are complete, please share your CV so we can move quickly.",
+            "uk": "Другий follow-up щодо \"{job_title}\". Щойно письмові кваліфікаційні запитання будуть завершені, будь ласка, надішліть своє CV, щоб ми могли рухатися швидко.",
             "es": "Segundo seguimiento para \"{job_title}\". Cuando completemos las preguntas escritas, comparte tu CV para avanzar rapido.",
         },
         "3": {
             "en": "Final reminder for \"{job_title}\". Written qualifying questions first, then CV, then a short 10 to 15 minute screening call.",
+            "uk": "Останнє нагадування щодо \"{job_title}\". Спочатку письмові кваліфікаційні запитання, потім CV, а далі короткий скринінг-дзвінок на 10-15 хвилин.",
             "es": "Ultimo recordatorio para \"{job_title}\". Primero preguntas escritas, luego CV y despues una llamada breve de screening de 10 a 15 minutos.",
         },
     },
     "intent_answers": {
         "salary": {
             "en": "Compensation is checked against role fit and budget. If you share your expectations, I can confirm alignment quickly.",
+            "uk": "Компенсація перевіряється щодо відповідності ролі та бюджету. Якщо поділитеся своїми очікуваннями, я швидко підтверджу, чи є узгодження.",
             "es": "La compensacion se revisa contra el encaje y el presupuesto. Si compartes tus expectativas, puedo confirmar rapido si hay alineacion.",
         },
         "stack": {
             "en": "Main stack and responsibilities are aligned with the role core profile we shared.",
+            "uk": "Основний стек і відповідальність узгоджені з core profile ролі, яким ми поділилися.",
             "es": "El stack principal y las responsabilidades estan alineados con el perfil core que compartimos.",
         },
         "timeline": {
             "en": "The process is written qualifying questions first, then CV, then a short 10 to 15 minute screening call.",
+            "uk": "Процес такий: спочатку письмові кваліфікаційні запитання, потім CV, а далі короткий скринінг-дзвінок на 10-15 хвилин.",
             "es": "El proceso es primero preguntas escritas, luego CV y despues una llamada breve de screening de 10 a 15 minutos.",
         },
         "send_jd_first": {
             "en": "Sure, I can share role details first. The process still stays: written qualifying questions, then CV, then a short screening call.",
+            "uk": "Звісно, спочатку можу поділитися деталями ролі. Але процес залишається таким самим: письмові кваліфікаційні запитання, потім CV, а далі короткий скринінг-дзвінок.",
             "es": "Claro, puedo compartir detalles primero. El proceso sigue siendo: preguntas escritas, luego CV y despues una llamada breve de screening.",
         },
         "default": {
             "en": "Thanks for the message. I can clarify details and next steps.",
+            "uk": "Дякую за повідомлення. Можу уточнити деталі та наступні кроки.",
             "es": "Gracias por tu mensaje. Puedo aclarar detalles y siguientes pasos.",
         },
     },

@@ -221,6 +221,30 @@ class UnipileProviderParsingTests(unittest.TestCase):
         parameter_calls = [call for call in provider.calls if "/api/v1/linkedin/search/parameters" in call[1]]
         self.assertEqual(len(parameter_calls), 1)
 
+    def test_normalize_profile_prefers_primary_locale_before_languages(self) -> None:
+        normalized = self.provider._normalize_profile(
+            {
+                "provider_id": "cand-locale-1",
+                "full_name": "Andrey Chaliy",
+                "headline": "Manual QA Engineer",
+                "location": "Kyiv, Ukraine",
+                "primary_locale": "uk-UA",
+                "languages": ["en", "ru"],
+            }
+        )
+        self.assertEqual(normalized["languages"], ["uk-ua", "en", "ru"])
+
+    def test_normalize_profile_does_not_default_languages_to_english(self) -> None:
+        normalized = self.provider._normalize_profile(
+            {
+                "provider_id": "cand-locale-2",
+                "full_name": "Andrey Chaliy",
+                "headline": "Manual QA Engineer",
+                "location": "Kyiv, Ukraine",
+            }
+        )
+        self.assertEqual(normalized["languages"], [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -31,7 +31,7 @@ from .linkedin_limits import (
     policy_weekly_connect_cap,
 )
 from .linkedin_provider import UnipileLinkedInProvider
-from .language import pick_candidate_language, resolve_conversation_language
+from .language import resolve_conversation_language, resolve_outbound_language
 from .pre_resume_service import PreResumeCommunicationService, parse_resume_links
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
@@ -747,7 +747,7 @@ class WorkflowService:
             screening_status = str((match or {}).get("status") or "")
             request_resume = self.require_resume_before_final_verify or screening_status == "needs_resume"
             conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
-            language = pick_candidate_language(candidate.get("languages"), fallback="en")
+            language = resolve_outbound_language(candidate, fallback="en")
             message = ""
             session_state: Dict[str, Any] | None = None
             started_pre_resume_session = False
@@ -770,7 +770,7 @@ class WorkflowService:
                             self.outreach_agent.matching_engine.build_core_profile(job).get("core_skills") or []
                         )
                         or self.outreach_agent.matching_engine.summarize_scope(job),
-                        language=pick_candidate_language(candidate.get("languages"), fallback="en"),
+                        language=resolve_outbound_language(candidate, fallback="en"),
                         job_location=str(job.get("location") or "").strip() or None,
                         salary_min=self._safe_float(job.get("salary_min"), None),
                         salary_max=self._safe_float(job.get("salary_max"), None),
@@ -991,7 +991,7 @@ class WorkflowService:
             screening_status = str((match or {}).get("status") or "")
             request_resume = self.require_resume_before_final_verify or screening_status == "needs_resume"
             conversation_id = self.db.get_or_create_conversation(job_id=job_id, candidate_id=candidate_id, channel="linkedin")
-            language = pick_candidate_language(candidate.get("languages"), fallback="en")
+            language = resolve_outbound_language(candidate, fallback="en")
             message = ""
             session_state: Dict[str, Any] | None = None
             started_pre_resume_session = False
@@ -1014,7 +1014,7 @@ class WorkflowService:
                             self.outreach_agent.matching_engine.build_core_profile(job).get("core_skills") or []
                         )
                         or self.outreach_agent.matching_engine.summarize_scope(job),
-                        language=pick_candidate_language(candidate.get("languages"), fallback="en"),
+                        language=resolve_outbound_language(candidate, fallback="en"),
                         job_location=str(job.get("location") or "").strip() or None,
                         salary_min=self._safe_float(job.get("salary_min"), None),
                         salary_max=self._safe_float(job.get("salary_max"), None),
@@ -3767,13 +3767,7 @@ class WorkflowService:
 
     @staticmethod
     def _candidate_primary_language(candidate: Dict[str, Any]) -> str:
-        langs = candidate.get("languages")
-        if isinstance(langs, list):
-            for item in langs:
-                lang = str(item or "").strip().lower()
-                if lang:
-                    return lang
-        return "en"
+        return resolve_outbound_language(candidate, fallback="en")
 
     @staticmethod
     def _safe_int(value: Any, fallback: int = 0) -> int:

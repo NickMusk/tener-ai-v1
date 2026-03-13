@@ -835,8 +835,14 @@ class UnipileLinkedInProvider(LinkedInProvider):
         )
         location = item.get("location") or item.get("geo") or ""
         languages = item.get("languages")
-        if not isinstance(languages, list):
-            languages = [item.get("language")] if item.get("language") else ["en"]
+        ordered_languages = []
+        primary_locale = item.get("primary_locale")
+        if primary_locale:
+            ordered_languages.append(primary_locale)
+        if isinstance(languages, list):
+            ordered_languages.extend(languages)
+        elif item.get("language"):
+            ordered_languages.append(item.get("language"))
 
         skills = item.get("skills")
         if not isinstance(skills, list):
@@ -860,7 +866,7 @@ class UnipileLinkedInProvider(LinkedInProvider):
             "full_name": full_name,
             "headline": headline,
             "location": location,
-            "languages": [str(x).lower() for x in languages if x],
+            "languages": [str(x).lower() for x in ordered_languages if x],
             "skills": [str(x).lower() for x in skills if x],
             "years_experience": years_experience,
             "raw": item,

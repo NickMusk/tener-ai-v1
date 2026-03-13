@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .language import pick_candidate_language, resolve_conversation_language
+from .language import resolve_conversation_language, resolve_outbound_language
 from .matching import MatchingEngine
 
 
@@ -770,7 +770,7 @@ class OutreachAgent:
         self.instruction = instruction
 
     def compose_intro(self, job: Dict[str, Any], candidate: Dict[str, Any]) -> Tuple[str, str]:
-        candidate_lang = pick_candidate_language(candidate.get("languages"), fallback=self.templates.get("default_language", "en"))
+        candidate_lang = resolve_outbound_language(candidate, fallback=self.templates.get("default_language", "en"))
         template = self._pick_template(self.templates.get("outreach", {}), candidate_lang)
         scope_summary = self.matching_engine.summarize_scope(job)
         msg = template.format(
@@ -791,7 +791,7 @@ class OutreachAgent:
         return self.compose_intro(job=job, candidate=candidate)
 
     def compose_resume_request(self, job: Dict[str, Any], candidate: Dict[str, Any]) -> Tuple[str, str]:
-        candidate_lang = pick_candidate_language(candidate.get("languages"), fallback=self.templates.get("default_language", "en"))
+        candidate_lang = resolve_outbound_language(candidate, fallback=self.templates.get("default_language", "en"))
         group = self.templates.get("outreach_resume_request") or self.templates.get("outreach", {})
         template = self._pick_template(group, candidate_lang)
         scope_summary = self.matching_engine.summarize_scope(job)
@@ -806,7 +806,7 @@ class OutreachAgent:
         return candidate_lang, msg
 
     def compose_connection_request(self, job: Dict[str, Any], candidate: Dict[str, Any]) -> Tuple[str, str]:
-        candidate_lang = pick_candidate_language(candidate.get("languages"), fallback=self.templates.get("default_language", "en"))
+        candidate_lang = resolve_outbound_language(candidate, fallback=self.templates.get("default_language", "en"))
         group = self.templates.get("outreach_connect_request") or {}
         if isinstance(group, dict) and group:
             template = self._pick_template(group, candidate_lang)
@@ -821,6 +821,7 @@ class OutreachAgent:
         fallback = {
             "en": "Hi {name}, sending a connection request regarding the role \"{job_title}\". If relevant, happy to share details.",
             "ru": "Привет, {name}! Отправляю запрос в контакты по роли \"{job_title}\". Если релевантно, отправлю детали.",
+            "uk": "Привіт, {name}! Надсилаю запит у контакти щодо ролі \"{job_title}\". Якщо релевантно, із задоволенням поділюся деталями.",
             "es": "Hola {name}, te envío solicitud de conexión sobre la posición \"{job_title}\". Si encaja, te comparto detalles.",
         }
         template = fallback.get(candidate_lang, fallback["en"])
