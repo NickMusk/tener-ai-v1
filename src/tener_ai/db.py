@@ -57,7 +57,10 @@ class Database:
             salary_currency TEXT,
             work_authorization_required INTEGER NOT NULL DEFAULT 0,
             linkedin_routing_mode TEXT NOT NULL DEFAULT 'auto',
+            job_state TEXT NOT NULL DEFAULT 'active',
             archived_at TEXT,
+            paused_at TEXT,
+            pause_reason TEXT,
             created_at TEXT NOT NULL
         );
 
@@ -502,16 +505,86 @@ class Database:
         if not row:
             return None
         item = self._row_to_dict(row)
-        item["is_archived"] = bool(str(item.get("archived_at") or "").strip())
+        self._decorate_job_item(item)
         profile = self.get_job_culture_profile(job_id=int(job_id))
         self._attach_job_culture_profile(item=item, profile=profile)
         return item
 
     def _job_is_archived(self, job_id: int) -> bool:
-        row = self._conn.execute("SELECT archived_at FROM jobs WHERE id = ?", (int(job_id),)).fetchone()
+        row = self._conn.execute(
+            "SELECT archived_at, job_state, paused_at FROM jobs WHERE id = ?",
+            (int(job_id),),
+        ).fetchone()
         if not row:
             return False
-        return bool(str(row["archived_at"] or "").strip())
+        return self._normalized_job_state(row) == "archived"
+
+    def _job_is_paused(self, job_id: int) -> bool:
+        row = self._conn.execute(
+            "SELECT archived_at, job_state, paused_at FROM jobs WHERE id = ?",
+            (int(job_id),),
+        ).fetchone()
+        if not row:
+            return False
+        return self._normalized_job_state(row) == "paused"
+
+    def pause_job(self, *, job_id: int, reason: Optional[str] = None) -> Dict[str, Any]:
+        existing = self.get_job(int(job_id))
+        if not existing:
+            return {"updated": 0, "reason": "job_not_found"}
+        if bool(existing.get("is_archived")):
+            return {"updated": 0, "reason": "job_archived", "job": existing}
+        if bool(existing.get("is_paused")):
+            return {"updated": 0, "reason": "already_paused", "job": existing}
+        paused_at = utc_now_iso()
+        pause_reason = str(reason or "").strip() or None
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                UPDATE jobs
+                SET job_state = 'paused',
+                    paused_at = ?,
+                    pause_reason = ?
+                WHERE id = ?
+                """,
+                (paused_at, pause_reason, int(job_id)),
+            )
+        refreshed = self.get_job(int(job_id))
+        return {
+            "updated": 1,
+            "job_id": int(job_id),
+            "job_state": "paused",
+            "paused_at": paused_at,
+            "pause_reason": pause_reason,
+            "job": refreshed,
+        }
+
+    def resume_job(self, *, job_id: int) -> Dict[str, Any]:
+        existing = self.get_job(int(job_id))
+        if not existing:
+            return {"updated": 0, "reason": "job_not_found"}
+        if bool(existing.get("is_archived")):
+            return {"updated": 0, "reason": "job_archived", "job": existing}
+        if not bool(existing.get("is_paused")):
+            return {"updated": 0, "reason": "not_paused", "job": existing}
+        with self.transaction() as conn:
+            conn.execute(
+                """
+                UPDATE jobs
+                SET job_state = 'active',
+                    paused_at = NULL,
+                    pause_reason = NULL
+                WHERE id = ?
+                """,
+                (int(job_id),),
+            )
+        refreshed = self.get_job(int(job_id))
+        return {
+            "updated": 1,
+            "job_id": int(job_id),
+            "job_state": "active",
+            "job": refreshed,
+        }
 
     def update_job_jd_text(self, job_id: int, jd_text: str) -> bool:
         with self.transaction() as conn:
@@ -602,7 +675,7 @@ class Database:
             ).fetchall()
         items = [self._row_to_dict(r) for r in rows]
         for item in items:
-            item["is_archived"] = bool(str(item.get("archived_at") or "").strip())
+            self._decorate_job_item(item)
         job_ids = [int(item.get("id") or 0) for item in items if int(item.get("id") or 0) > 0]
         profiles = self.list_job_culture_profiles(job_ids=job_ids)
         for item in items:
@@ -612,14 +685,18 @@ class Database:
 
     def set_job_archived(self, job_id: int, archived: bool = True) -> bool:
         archived_at = utc_now_iso() if archived else None
+        job_state = "archived" if archived else "active"
         with self.transaction() as conn:
             cur = conn.execute(
                 """
                 UPDATE jobs
                 SET archived_at = ?
+                  , job_state = ?
+                  , paused_at = NULL
+                  , pause_reason = NULL
                 WHERE id = ?
                 """,
-                (archived_at, int(job_id)),
+                (archived_at, job_state, int(job_id)),
             )
             return cur.rowcount > 0
 
@@ -686,7 +763,14 @@ class Database:
         placeholders = ",".join(["?"] * len(target_ids))
         with self.transaction() as conn:
             conn.execute(
-                f"UPDATE jobs SET archived_at = ? WHERE id IN ({placeholders})",
+                f"""
+                UPDATE jobs
+                SET archived_at = ?,
+                    job_state = 'archived',
+                    paused_at = NULL,
+                    pause_reason = NULL
+                WHERE id IN ({placeholders})
+                """,
                 (now, *target_ids),
             )
             conn.execute(
@@ -1169,7 +1253,7 @@ class Database:
         return items
 
     def list_job_outreach_candidates(self, job_id: int, limit: int = 200) -> List[Dict[str, Any]]:
-        if self._job_is_archived(job_id):
+        if self._job_is_archived(job_id) or self._job_is_paused(job_id):
             return []
         safe_limit = max(1, min(int(limit or 200), 2000))
         query = """
@@ -1715,6 +1799,8 @@ class Database:
             conv.linkedin_account_id,
             conv.last_message_at,
             j.title AS job_title,
+            j.job_state,
+            j.paused_at,
             c.full_name AS candidate_name,
             c.linkedin_id AS candidate_linkedin_id,
             c.source AS candidate_source,
@@ -2096,8 +2182,11 @@ class Database:
                 SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active_conversations,
                 SUM(CASE WHEN status = 'waiting_connection' THEN 1 ELSE 0 END) AS waiting_connection
             FROM conversations
+            JOIN jobs j ON j.id = conversations.job_id
             WHERE linkedin_account_id IN ({placeholders})
               AND status IN ('active', 'waiting_connection')
+              AND j.archived_at IS NULL
+              AND COALESCE(NULLIF(TRIM(j.job_state), ''), 'active') = 'active'
             GROUP BY linkedin_account_id
             """,
             tuple(valid_ids),
@@ -2112,12 +2201,15 @@ class Database:
         action_rows = self._conn.execute(
             f"""
             SELECT
-                account_id,
+                outbound_actions.account_id,
                 COUNT(*) AS assigned_actions
             FROM outbound_actions
-            WHERE account_id IN ({placeholders})
-              AND status IN ('pending', 'running')
-            GROUP BY account_id
+            JOIN jobs j ON j.id = outbound_actions.job_id
+            WHERE outbound_actions.account_id IN ({placeholders})
+              AND outbound_actions.status IN ('pending', 'running')
+              AND j.archived_at IS NULL
+              AND COALESCE(NULLIF(TRIM(j.job_state), ''), 'active') = 'active'
+            GROUP BY outbound_actions.account_id
             """,
             tuple(valid_ids),
         ).fetchall()
@@ -2160,6 +2252,7 @@ class Database:
         JOIN jobs ON jobs.id = outbound_actions.job_id
         WHERE {' AND '.join(where_parts)}
           AND jobs.archived_at IS NULL
+          AND COALESCE(NULLIF(TRIM(jobs.job_state), ''), 'active') = 'active'
         ORDER BY outbound_actions.priority DESC, outbound_actions.id ASC
         LIMIT ?
         """
@@ -2173,12 +2266,13 @@ class Database:
         limit: int = 200,
         job_id: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        if job_id is not None and self._job_is_archived(job_id):
+        if job_id is not None and (self._job_is_archived(job_id) or self._job_is_paused(job_id)):
             return []
         safe_limit = max(1, min(int(limit or 200), 2000))
         where_parts = [
             "prs.status = 'awaiting_reply'",
             "j.archived_at IS NULL",
+            "COALESCE(NULLIF(TRIM(j.job_state), ''), 'active') = 'active'",
             "COALESCE(conv.linkedin_account_id, 0) = 0",
             "COALESCE(conv.external_chat_id, '') = ''",
             "conv.status IN ('active', 'waiting_connection')",
@@ -3854,6 +3948,38 @@ class Database:
         if "archived_at" not in job_columns:
             with self.transaction() as conn:
                 conn.execute("ALTER TABLE jobs ADD COLUMN archived_at TEXT")
+        if "paused_at" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN paused_at TEXT")
+        if "pause_reason" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN pause_reason TEXT")
+        if "job_state" not in job_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE jobs ADD COLUMN job_state TEXT")
+                conn.execute(
+                    """
+                    UPDATE jobs
+                    SET job_state = CASE
+                        WHEN archived_at IS NOT NULL AND TRIM(archived_at) <> '' THEN 'archived'
+                        ELSE 'active'
+                    END
+                    WHERE job_state IS NULL OR TRIM(job_state) = ''
+                    """
+                )
+        else:
+            with self.transaction() as conn:
+                conn.execute(
+                    """
+                    UPDATE jobs
+                    SET job_state = CASE
+                        WHEN archived_at IS NOT NULL AND TRIM(archived_at) <> '' THEN 'archived'
+                        WHEN paused_at IS NOT NULL AND TRIM(paused_at) <> '' THEN 'paused'
+                        ELSE 'active'
+                    END
+                    WHERE job_state IS NULL OR TRIM(job_state) = ''
+                    """
+                )
         linkedin_columns = self._table_columns("linkedin_accounts")
         if "daily_message_limit" not in linkedin_columns:
             with self.transaction() as conn:
@@ -4264,6 +4390,43 @@ class Database:
             if field in item:
                 item[field] = Database._coerce_boolish(item.get(field))
         return item
+
+    @staticmethod
+    def _normalize_job_state(value: Any, *, archived_at: Any = None, paused_at: Any = None) -> str:
+        if str(archived_at or "").strip():
+            return "archived"
+        normalized = str(value or "").strip().lower()
+        if normalized in {"active", "paused", "archived"}:
+            return normalized
+        if str(paused_at or "").strip():
+            return "paused"
+        return "active"
+
+    @classmethod
+    def _normalized_job_state(cls, item: Any) -> str:
+        if isinstance(item, sqlite3.Row):
+            keys = item.keys()
+            return cls._normalize_job_state(
+                item["job_state"] if "job_state" in keys else None,
+                archived_at=item["archived_at"] if "archived_at" in keys else None,
+                paused_at=item["paused_at"] if "paused_at" in keys else None,
+            )
+        if isinstance(item, dict):
+            return cls._normalize_job_state(
+                item.get("job_state"),
+                archived_at=item.get("archived_at"),
+                paused_at=item.get("paused_at"),
+            )
+        return "active"
+
+    @classmethod
+    def _decorate_job_item(cls, item: Dict[str, Any]) -> None:
+        if not isinstance(item, dict):
+            return
+        state = cls._normalized_job_state(item)
+        item["job_state"] = state
+        item["is_archived"] = state == "archived"
+        item["is_paused"] = state == "paused"
 
     @staticmethod
     def _coerce_boolish(value: Any) -> Optional[bool]:

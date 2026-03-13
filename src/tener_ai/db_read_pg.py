@@ -89,7 +89,7 @@ class PostgresReadDatabase:
                 rows = cur.fetchall()
         items = [self._row_to_dict(dict(row)) for row in rows]
         for item in items:
-            item["is_archived"] = bool(str(item.get("archived_at") or "").strip())
+            Database._decorate_job_item(item)
         if include_archived:
             return items
         return [item for item in items if not bool(item.get("is_archived"))]
@@ -115,7 +115,7 @@ class PostgresReadDatabase:
         if not row:
             return None
         item = self._row_to_dict(dict(row))
-        item["is_archived"] = bool(str(item.get("archived_at") or "").strip())
+        Database._decorate_job_item(item)
         return item
 
     def list_job_step_progress(self, job_id: int) -> List[Dict[str, Any]]:

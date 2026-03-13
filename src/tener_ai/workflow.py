@@ -67,6 +67,10 @@ class WorkflowSummary:
     conversation_ids: List[int]
 
 
+class JobOperationBlockedError(RuntimeError):
+    pass
+
+
 class WorkflowService:
     def __init__(
         self,
@@ -235,6 +239,7 @@ class WorkflowService:
         exclude_profile_keys: set[str] | None = None,
     ) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
+        self._assert_job_automation_allowed(job, operation="source_candidates")
         forced_test_ids = self._load_forced_test_identifiers()
         forced_only = self._effective_test_mode(job=job, test_mode=test_mode, forced_identifiers=forced_test_ids)
         provider = getattr(self.sourcing_agent, "linkedin_provider", None)
@@ -341,6 +346,7 @@ class WorkflowService:
 
     def top_up_job_candidates(self, job_id: int, limit: int = 30, test_mode: bool | None = None) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
+        self._assert_job_automation_allowed(job, operation="top_up_job_candidates")
         forced_test_ids = self._load_forced_test_identifiers()
         effective_test_mode = self._effective_test_mode(
             job=job,
@@ -466,6 +472,7 @@ class WorkflowService:
         enrich_result: Dict[str, Any] | None = None,
     ) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
+        self._assert_job_automation_allowed(job, operation="verify_profiles")
         job_culture_profile = (
             job.get("company_culture_profile")
             if isinstance(job.get("company_culture_profile"), dict)
@@ -547,7 +554,8 @@ class WorkflowService:
         }
 
     def enrich_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
-        self._get_job_or_raise(job_id)
+        job = self._get_job_or_raise(job_id)
+        self._assert_job_automation_allowed(job, operation="enrich_profiles")
         enriched_profiles, failed = self.sourcing_agent.enrich_candidates(profiles)
         forced_ids = self._load_forced_test_identifiers()
         forced_preserved = 0
@@ -583,7 +591,8 @@ class WorkflowService:
         }
 
     def add_verified_candidates(self, job_id: int, verified_items: List[Dict[str, Any]]) -> Dict[str, Any]:
-        self._get_job_or_raise(job_id)
+        job = self._get_job_or_raise(job_id)
+        self._assert_job_automation_allowed(job, operation="add_verified_candidates")
 
         added: List[Dict[str, Any]] = []
         for item in verified_items:
@@ -639,10 +648,14 @@ class WorkflowService:
         }
 
     def outreach_candidates(self, job_id: int, candidate_ids: List[int], test_mode: bool | None = None) -> Dict[str, Any]:
+        job = self._get_job_or_raise(job_id)
+        self._assert_job_automation_allowed(job, operation="outreach_candidates")
         try:
             if self._managed_linkedin_available():
                 return self._outreach_candidates_managed(job_id=job_id, candidate_ids=candidate_ids, test_mode=test_mode)
             return self._outreach_candidates_direct(job_id=job_id, candidate_ids=candidate_ids, test_mode=test_mode)
+        except JobOperationBlockedError:
+            raise
         except Exception as exc:
             self.db.log_operation(
                 operation="agent.outreach.execute",
@@ -1242,12 +1255,28 @@ class WorkflowService:
         sent = 0
         still_waiting = 0
         failed = 0
+        skipped = 0
         items: List[Dict[str, Any]] = []
 
         for row in rows:
             checked += 1
             conversation_id = int(row["conversation_id"])
             candidate_id = int(row["candidate_id"])
+            job = self.db.get_job(int(row["job_id"]))
+            if not job:
+                failed += 1
+                items.append({"conversation_id": conversation_id, "status": "job_missing"})
+                continue
+            if self._job_is_paused(job):
+                skipped += 1
+                items.append(
+                    {
+                        "conversation_id": conversation_id,
+                        "candidate_id": candidate_id,
+                        "status": "job_paused",
+                    }
+                )
+                continue
             candidate = self.db.get_candidate(candidate_id)
             if not candidate:
                 failed += 1
@@ -1298,6 +1327,7 @@ class WorkflowService:
                 "sent": sent,
                 "still_waiting": still_waiting,
                 "failed": failed,
+                "skipped": skipped,
             },
         )
 
@@ -1308,6 +1338,7 @@ class WorkflowService:
             "sent": sent,
             "still_waiting": still_waiting,
             "failed": failed,
+            "skipped": skipped,
             "items": items,
         }
 
@@ -1323,6 +1354,7 @@ class WorkflowService:
         scope_summary: str | None = None,
     ) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
+        self._assert_job_automation_allowed(job, operation="add_manual_test_account")
         name = full_name.strip()
         if not name:
             raise ValueError("full_name is required")
@@ -1481,6 +1513,7 @@ class WorkflowService:
 
     def execute_job_workflow(self, job_id: int, limit: int = 30, test_mode: bool | None = None) -> WorkflowSummary:
         job = self._get_job_or_raise(job_id)
+        self._assert_job_automation_allowed(job, operation="execute_job_workflow")
         forced_test_ids = self._load_forced_test_identifiers()
         effective_test_mode = self._effective_test_mode(
             job=job,
@@ -1693,6 +1726,7 @@ class WorkflowService:
                 conversation_id=conversation_id,
                 details={"source": "inbound_message", "message_id": inbound_id},
             )
+        job_paused = self._job_is_paused(job)
 
         pre_resume = self.db.get_pre_resume_session_by_conversation(conversation_id=conversation_id)
         if pre_resume and self.pre_resume_service is not None:
@@ -1713,17 +1747,18 @@ class WorkflowService:
                 )
                 if isinstance(state_out, dict):
                     state_out["language"] = language
-                outbound = self._maybe_llm_reply(
-                    mode="pre_resume",
-                    instruction=self.stage_instructions.get("pre_resume", ""),
-                    job=job,
-                    candidate=candidate,
-                    inbound_text=text,
-                    history=llm_history,
-                    fallback_reply=outbound,
-                    language=language,
-                    state=state_out if isinstance(state_out, dict) else None,
-                )
+                if not job_paused:
+                    outbound = self._maybe_llm_reply(
+                        mode="pre_resume",
+                        instruction=self.stage_instructions.get("pre_resume", ""),
+                        job=job,
+                        candidate=candidate,
+                        inbound_text=text,
+                        history=llm_history,
+                        fallback_reply=outbound,
+                        language=language,
+                        state=state_out if isinstance(state_out, dict) else None,
+                    )
                 if isinstance(state_out, dict):
                     self.db.upsert_pre_resume_session(
                         session_id=session_id,
@@ -1745,7 +1780,7 @@ class WorkflowService:
                 should_attempt_interview = intent == "resume_shared" or (
                     intent == "default" and self._is_pre_vetting_opt_in_message(text=text)
                 )
-                if should_attempt_interview:
+                if should_attempt_interview and not job_paused:
                     if intent == "default":
                         intent = "pre_vetting_opt_in"
                     interview_result = self._send_interview_invite_after_opt_in(
@@ -1787,7 +1822,11 @@ class WorkflowService:
                     },
                 )
 
-                if outbound and not (isinstance(interview_result, dict) and interview_result.get("started")):
+                if (
+                    outbound
+                    and not job_paused
+                    and not (isinstance(interview_result, dict) and interview_result.get("started"))
+                ):
                     delivery = self._send_auto_reply(candidate=candidate, message=outbound, conversation=conversation)
                     outbound_id = self.db.add_message(
                         conversation_id=conversation_id,
@@ -1853,15 +1892,27 @@ class WorkflowService:
                 response = {
                     "language": language,
                     "intent": intent,
-                    "reply": outbound,
-                    "mode": "pre_resume",
+                    "reply": "" if job_paused else outbound,
+                    "mode": "paused" if job_paused else "pre_resume",
                     "state": state_out,
                 }
+                if job_paused:
+                    response["job_paused"] = True
                 if interview_result is not None:
                     response["interview"] = interview_result
                 return response
 
         lang, intent, reply = self.faq_agent.auto_reply(inbound_text=text, job=job, candidate_lang=inbound_language)
+        if job_paused:
+            self._record_communication_dialogue_assessment(
+                job_id=int(conversation["job_id"]),
+                candidate_id=int(conversation["candidate_id"]),
+                mode="paused",
+                intent=intent,
+                state=None,
+                inbound_text=text,
+            )
+            return {"language": lang, "intent": intent, "reply": "", "mode": "paused", "job_paused": True}
         reply = self._maybe_llm_reply(
             mode="faq",
             instruction=self.stage_instructions.get("faq", ""),
@@ -2453,11 +2504,16 @@ class WorkflowService:
                 conversation = self.db.get_latest_conversation_for_candidate(int(candidate["id"]))
         if not conversation:
             return {"processed": False, "reason": "conversation_not_found"}
+        job = self.db.get_job(int(conversation["job_id"]))
+        if not job:
+            return {"processed": False, "reason": "job_not_found", "conversation_id": int(conversation["id"])}
         candidate = self.db.get_candidate(int(conversation["candidate_id"]))
         if not candidate:
             return {"processed": False, "reason": "candidate_not_found", "conversation_id": int(conversation["id"])}
         if str(conversation.get("status") or "") != "waiting_connection":
             return {"processed": False, "reason": "conversation_not_waiting_connection", "conversation_id": int(conversation["id"])}
+        if self._job_is_paused(job):
+            return {"processed": True, "reason": "job_paused", "conversation_id": int(conversation["id"])}
         self._record_outreach_account_event(
             event_key=f"conversation:{int(conversation['id'])}:connect_accepted",
             account_id=int(conversation.get("linkedin_account_id") or 0),
@@ -2765,6 +2821,18 @@ class WorkflowService:
             conversation_id = int(row["conversation_id"])
             job_ref = int(row["job_id"])
             candidate_id = int(row["candidate_id"])
+            job_ctx = self.db.get_job(job_ref) or {"id": job_ref}
+            if self._job_is_paused(job_ctx):
+                skipped += 1
+                items.append(
+                    {
+                        "session_id": session_id,
+                        "conversation_id": conversation_id,
+                        "status": "skipped",
+                        "reason": "job_paused",
+                    }
+                )
+                continue
             state_json = row.get("state_json") if isinstance(row.get("state_json"), dict) else {}
             if self.pre_resume_service.get_session(session_id) is None and state_json:
                 self.pre_resume_service.seed_session(state_json)
@@ -2772,7 +2840,6 @@ class WorkflowService:
             if forced_identifiers:
                 forced_only = forced_mode_by_job.get(job_ref)
                 if forced_only is None:
-                    job_ctx = self.db.get_job(job_ref) or {"id": job_ref}
                     forced_only = self._effective_test_mode(
                         job=job_ctx,
                         test_mode=None,
@@ -2782,7 +2849,6 @@ class WorkflowService:
                 if forced_only:
                     lookup = forced_lookup_by_job.get(job_ref)
                     if lookup is None:
-                        job_ctx = self.db.get_job(job_ref) or {"id": job_ref}
                         lookup = self._build_forced_identifier_lookup(
                             job=job_ctx,
                             forced_identifiers=forced_identifiers,
@@ -2851,7 +2917,7 @@ class WorkflowService:
                 instruction=self.stage_instructions.get("pre_resume", ""),
             )
             self._sync_candidate_prescreen_from_state(
-                job=self.db.get_job(job_ref) or {"id": job_ref},
+                job=job_ctx,
                 candidate_id=candidate_id,
                 conversation_id=conversation_id,
                 state=state,
@@ -2860,7 +2926,6 @@ class WorkflowService:
             candidate = self.db.get_candidate(candidate_id)
             conversation = self.db.get_conversation(conversation_id)
             if result.get("sent") and outbound and candidate and conversation:
-                job_ctx = self.db.get_job(job_ref) or {"id": job_ref}
                 language = resolve_conversation_language(
                     latest_message_text="",
                     previous_language=str((state or {}).get("language") or ""),
@@ -3194,6 +3259,18 @@ class WorkflowService:
                         "session_id": session_id,
                         "status": "error",
                         "reason": "missing_candidate_or_conversation_or_job",
+                    }
+                )
+                continue
+            if self._job_is_paused(job):
+                skipped += 1
+                items.append(
+                    {
+                        "job_id": job_ref,
+                        "candidate_id": candidate_id,
+                        "session_id": session_id,
+                        "status": "skipped",
+                        "reason": "job_paused",
                     }
                 )
                 continue
@@ -3734,11 +3811,13 @@ class WorkflowService:
         job_ids: List[int] = []
         if job_id is not None:
             job_row = self.db.get_job(int(job_id))
-            if not job_row or bool(job_row.get("is_archived")):
+            if not job_row or bool(job_row.get("is_archived")) or bool(job_row.get("is_paused")):
                 return []
             job_ids = [int(job_id)]
         else:
             for job in self.db.list_jobs(limit=300):
+                if bool(job.get("is_archived")) or bool(job.get("is_paused")):
+                    continue
                 try:
                     job_ids.append(int(job.get("id")))
                 except (TypeError, ValueError):
@@ -4759,6 +4838,8 @@ class WorkflowService:
             job_id = int(job.get("id") or 0)
             if job_id <= 0:
                 continue
+            if self._job_is_paused(job) or self._job_is_archived(job):
+                continue
             routing_mode = str(job.get("linkedin_routing_mode") or "auto").strip().lower()
             if routing_mode != "auto":
                 continue
@@ -4817,6 +4898,19 @@ class WorkflowService:
                 "candidate_id": candidate_id,
                 "delivery_status": "failed",
                 "error": error,
+            }
+        if self._job_is_paused(job):
+            self.db.release_outbound_action(
+                action_id=action_id,
+                not_before=utc_now_iso(),
+                error="job_paused",
+            )
+            return {
+                "action_id": action_id,
+                "conversation_id": conversation_id,
+                "candidate_id": candidate_id,
+                "delivery_status": "deferred",
+                "error": "job_paused",
             }
 
         delivery_mode = str(payload.get("delivery_mode") or "").strip().lower()
@@ -6216,6 +6310,10 @@ class WorkflowService:
         )
 
     def _deliver_pending_outreach_message(self, conversation_id: int, candidate: Dict[str, Any]) -> Dict[str, Any]:
+        conversation = self.db.get_conversation(conversation_id)
+        job = self.db.get_job(int((conversation or {}).get("job_id") or 0)) if conversation else None
+        if job and self._job_is_paused(job):
+            return {"sent": False, "reason": "job_paused"}
         messages = self.db.list_messages(conversation_id=conversation_id)
         pending = None
         for msg in reversed(messages):
@@ -6729,3 +6827,33 @@ class WorkflowService:
         if not job:
             raise ValueError(f"Job {job_id} not found")
         return job
+
+    @staticmethod
+    def _job_state(job: Dict[str, Any] | None) -> str:
+        if not isinstance(job, dict):
+            return "active"
+        state = str(job.get("job_state") or "").strip().lower()
+        if state in {"active", "paused", "archived"}:
+            return state
+        if bool(job.get("is_archived")):
+            return "archived"
+        if bool(job.get("is_paused")):
+            return "paused"
+        return "active"
+
+    def _job_is_paused(self, job: Dict[str, Any] | None) -> bool:
+        return self._job_state(job) == "paused"
+
+    def _job_is_archived(self, job: Dict[str, Any] | None) -> bool:
+        return self._job_state(job) == "archived"
+
+    def _assert_job_automation_allowed(self, job: Dict[str, Any], *, operation: str) -> None:
+        state = self._job_state(job)
+        if state == "paused":
+            raise JobOperationBlockedError(
+                f"Job {int(job.get('id') or 0)} is paused; {operation} is blocked"
+            )
+        if state == "archived":
+            raise JobOperationBlockedError(
+                f"Job {int(job.get('id') or 0)} is archived; {operation} is blocked"
+            )

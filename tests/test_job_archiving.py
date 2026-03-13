@@ -124,6 +124,168 @@ class JobArchivingTests(unittest.TestCase):
         visible_titles = [str(item.get("title") or "") for item in (payload_jobs.get("items") or [])]
         self.assertEqual(visible_titles, ["Frontend Engineer", "Manual QA Engineer"])
 
+    def test_pause_job_keeps_job_visible_and_resume_restores_active_state(self) -> None:
+        paused = self.db.pause_job(job_id=self.backend_job_id, reason="ops")
+        self.assertEqual(int(paused.get("updated") or 0), 1)
+        paused_job = paused.get("job") if isinstance(paused.get("job"), dict) else {}
+        self.assertEqual(str(paused_job.get("job_state") or ""), "paused")
+        self.assertTrue(bool(paused_job.get("is_paused")))
+        self.assertFalse(bool(paused_job.get("is_archived")))
+        self.assertTrue(str(paused_job.get("paused_at") or "").strip())
+
+        visible_jobs = self.db.list_jobs(limit=10)
+        visible_ids = {int(job.get("id") or 0) for job in visible_jobs}
+        self.assertIn(self.backend_job_id, visible_ids)
+
+        resumed = self.db.resume_job(job_id=self.backend_job_id)
+        self.assertEqual(int(resumed.get("updated") or 0), 1)
+        resumed_job = resumed.get("job") if isinstance(resumed.get("job"), dict) else {}
+        self.assertEqual(str(resumed_job.get("job_state") or ""), "active")
+        self.assertFalse(bool(resumed_job.get("is_paused")))
+        self.assertEqual(resumed_job.get("paused_at"), None)
+
+    def test_jobs_api_pause_and_resume_job(self) -> None:
+        status_pause, payload_pause = self._request(
+            "POST",
+            f"/api/jobs/{self.backend_job_id}/pause",
+            {"reason": "ops"},
+        )
+        self.assertEqual(status_pause, 200)
+        paused_job = payload_pause.get("job") if isinstance(payload_pause.get("job"), dict) else {}
+        self.assertEqual(str(paused_job.get("job_state") or ""), "paused")
+
+        status_jobs, payload_jobs = self._request("GET", "/api/jobs")
+        self.assertEqual(status_jobs, 200)
+        listed = {
+            int(item.get("id") or 0): str(item.get("job_state") or "")
+            for item in (payload_jobs.get("items") or [])
+        }
+        self.assertEqual(listed.get(self.backend_job_id), "paused")
+
+        status_resume, payload_resume = self._request(
+            "POST",
+            f"/api/jobs/{self.backend_job_id}/resume",
+            {},
+        )
+        self.assertEqual(status_resume, 200)
+        resumed_job = payload_resume.get("job") if isinstance(payload_resume.get("job"), dict) else {}
+        self.assertEqual(str(resumed_job.get("job_state") or ""), "active")
+
+    def test_pause_job_hides_backlog_reads_and_account_workload_until_resume(self) -> None:
+        account_id = self.db.upsert_linkedin_account(
+            provider="unipile",
+            provider_account_id="acc-pause-1",
+            status="connected",
+            connected_at="2025-01-01T00:00:00+00:00",
+        )
+        active_candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "pause-active-candidate",
+                "full_name": "Pause Active Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python"],
+                "years_experience": 6,
+            }
+        )
+        self.db.create_candidate_match(
+            job_id=self.backend_job_id,
+            candidate_id=active_candidate_id,
+            score=0.91,
+            status="outreach_sent",
+            verification_notes={},
+        )
+        active_conversation_id = self.db.create_conversation(
+            job_id=self.backend_job_id,
+            candidate_id=active_candidate_id,
+            channel="linkedin",
+        )
+        self.db.set_conversation_linkedin_account(conversation_id=active_conversation_id, account_id=account_id)
+        self.db.update_conversation_status(conversation_id=active_conversation_id, status="active")
+        self.db.create_outbound_action(
+            job_id=self.backend_job_id,
+            candidate_id=active_candidate_id,
+            conversation_id=active_conversation_id,
+            action_type="outreach_message",
+            payload={"message": "Hello"},
+            account_id=account_id,
+        )
+
+        backlog_candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "pause-backlog-candidate",
+                "full_name": "Pause Backlog Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python"],
+                "years_experience": 5,
+            }
+        )
+        self.db.create_candidate_match(
+            job_id=self.backend_job_id,
+            candidate_id=backlog_candidate_id,
+            score=0.95,
+            status="verified",
+            verification_notes={},
+        )
+
+        recovery_candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "pause-recovery-candidate",
+                "full_name": "Pause Recovery Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python"],
+                "years_experience": 5,
+            }
+        )
+        self.db.create_candidate_match(
+            job_id=self.backend_job_id,
+            candidate_id=recovery_candidate_id,
+            score=0.78,
+            status="needs_resume",
+            verification_notes={},
+        )
+        recovery_conversation_id = self.db.create_conversation(
+            job_id=self.backend_job_id,
+            candidate_id=recovery_candidate_id,
+            channel="linkedin",
+        )
+        self.db.update_conversation_status(conversation_id=recovery_conversation_id, status="waiting_connection")
+        self.db.upsert_pre_resume_session(
+            session_id=f"pause-recovery-{recovery_conversation_id}",
+            conversation_id=recovery_conversation_id,
+            job_id=self.backend_job_id,
+            candidate_id=recovery_candidate_id,
+            state={"status": "awaiting_reply", "language": "en"},
+            instruction="follow up",
+        )
+
+        before = self.db.summarize_linkedin_account_workload([account_id])[account_id]
+        self.assertEqual(int(before.get("active_conversations") or 0), 1)
+        self.assertEqual(int(before.get("assigned_actions") or 0), 1)
+        self.assertTrue(self.db.list_job_outreach_candidates(job_id=self.backend_job_id, limit=20))
+        self.assertTrue(self.db.list_unassigned_outreach_conversations(job_id=self.backend_job_id, limit=20))
+        self.assertTrue(self.db.list_pending_outbound_actions(limit=20, job_id=self.backend_job_id))
+
+        paused = self.db.pause_job(job_id=self.backend_job_id, reason="ops")
+        self.assertEqual(int(paused.get("updated") or 0), 1)
+        after_pause = self.db.summarize_linkedin_account_workload([account_id])[account_id]
+        self.assertEqual(int(after_pause.get("total_load") or 0), 0)
+        self.assertEqual(self.db.list_job_outreach_candidates(job_id=self.backend_job_id, limit=20), [])
+        self.assertEqual(self.db.list_unassigned_outreach_conversations(job_id=self.backend_job_id, limit=20), [])
+        self.assertEqual(self.db.list_pending_outbound_actions(limit=20, job_id=self.backend_job_id), [])
+
+        resumed = self.db.resume_job(job_id=self.backend_job_id)
+        self.assertEqual(int(resumed.get("updated") or 0), 1)
+        after_resume = self.db.summarize_linkedin_account_workload([account_id])[account_id]
+        self.assertEqual(int(after_resume.get("active_conversations") or 0), 1)
+        self.assertEqual(int(after_resume.get("assigned_actions") or 0), 1)
+        self.assertTrue(self.db.list_pending_outbound_actions(limit=20, job_id=self.backend_job_id))
+
     def test_jobs_api_updates_explicit_requirements(self) -> None:
         status_update, payload_update = self._request(
             "POST",

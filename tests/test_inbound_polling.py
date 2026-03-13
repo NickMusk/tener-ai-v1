@@ -187,6 +187,80 @@ class InboundPollingTests(unittest.TestCase):
             self.assertGreaterEqual(len(assets), 1)
             self.assertEqual(str(assets[0].get("processing_status")), "stored_unparsed")
 
+    def test_poll_provider_inbound_for_paused_job_stores_message_without_auto_reply(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "inbound_polling_paused.sqlite3"))
+            db.init_schema()
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = _PollingProvider()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),  # type: ignore[arg-type]
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                pre_resume_service=PreResumeCommunicationService(
+                    templates_path=str(root / "config" / "outreach_templates.json")
+                ),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+                stage_instructions={"pre_resume": "request cv and track status"},
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python and AWS",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+
+            profile = {
+                "linkedin_id": "ln-poll-paused-1",
+                "unipile_profile_id": "ln-poll-paused-1",
+                "attendee_provider_id": "ln-poll-paused-1",
+                "full_name": "Paused Polling Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": ["python"],
+                "years_experience": 5,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.6, "status": "needs_resume", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+            outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            conversation_id = int(outreach["items"][0]["conversation_id"])
+            db.set_conversation_external_chat_id(conversation_id=conversation_id, external_chat_id="chat-poll-paused-1")
+            db.pause_job(job_id=job_id, reason="ops")
+
+            provider.messages_by_chat["chat-poll-paused-1"] = [
+                {
+                    "provider_message_id": "msg-paused-1",
+                    "sender_provider_id": "ln-poll-paused-1",
+                    "direction": "inbound",
+                    "text": "Tell me more",
+                    "created_at": "2026-02-24T15:58:00Z",
+                }
+            ]
+
+            result = workflow.poll_provider_inbound_messages(job_id=job_id, limit=20, per_chat_limit=10)
+            self.assertEqual(int(result.get("processed") or 0), 1)
+            self.assertEqual(str((result.get("items") or [{}])[0].get("result_mode") or ""), "paused")
+
+            messages = db.list_messages(conversation_id=conversation_id)
+            inbound = [m for m in messages if m.get("direction") == "inbound"]
+            auto_replies = [
+                m for m in messages
+                if m.get("direction") == "outbound" and (m.get("meta") or {}).get("type") == "pre_resume_auto_reply"
+            ]
+            self.assertEqual(len(inbound), 1)
+            self.assertEqual(auto_replies, [])
+
     def test_poll_provider_inbound_processes_attachment_name_without_url(self) -> None:
         root = Path(__file__).resolve().parents[1]
         with TemporaryDirectory() as td:
