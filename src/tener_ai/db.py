@@ -4702,6 +4702,10 @@ class Database:
 
     @classmethod
     def _derive_ats_stage_from_job_candidate_status(cls, item: Dict[str, Any]) -> Dict[str, Any]:
+        # ATS board reads the persisted job_candidates.status as the source of
+        # truth for candidate pipeline state. Transport-level conversation
+        # fields may help delivery flows, but they must stay synchronized with
+        # the match status instead of redefining the stage independently.
         status = cls._canonical_job_candidate_status(item)
         stage_map = {
             "verified": ("queued", "Queued", "Ready for outreach"),

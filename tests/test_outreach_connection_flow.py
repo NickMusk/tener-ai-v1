@@ -117,6 +117,64 @@ class OutreachConnectionFlowTests(unittest.TestCase):
             self.assertEqual((last_outbound.get("meta") or {}).get("type"), "outreach_after_connection")
             self.assertTrue((last_outbound.get("meta") or {}).get("delivery", {}).get("sent"))
 
+    def test_send_after_connection_reasserts_match_status_when_connection_is_still_required(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        with TemporaryDirectory() as td:
+            db = Database(str(Path(td) / "outreach_connection.sqlite3"))
+            db.init_schema()
+            matching = MatchingEngine(str(root / "config" / "matching_rules.json"))
+            provider = _ConnectionAwareProvider()
+            workflow = WorkflowService(
+                db=db,
+                sourcing_agent=SourcingAgent(provider),
+                verification_agent=VerificationAgent(matching),
+                outreach_agent=OutreachAgent(str(root / "config" / "outreach_templates.json"), matching),
+                faq_agent=FAQAgent(str(root / "config" / "outreach_templates.json"), matching),
+                contact_all_mode=True,
+                require_resume_before_final_verify=True,
+            )
+
+            job_id = db.insert_job(
+                title="Senior Backend Engineer",
+                jd_text="Need Python, AWS and distributed systems.",
+                location="Remote",
+                preferred_languages=["en"],
+                seniority="senior",
+            )
+            profile = {
+                "linkedin_id": "ln-conn-2",
+                "full_name": "Still Pending Candidate",
+                "headline": "Backend Engineer",
+                "location": "Remote",
+                "languages": ["en"],
+                "skills": [],
+                "years_experience": 4,
+                "raw": {},
+            }
+            added = workflow.add_verified_candidates(
+                job_id=job_id,
+                verified_items=[{"profile": profile, "score": 0.51, "status": "needs_resume", "notes": {}}],
+            )
+            candidate_id = int(added["added"][0]["candidate_id"])
+
+            outreach = workflow.outreach_candidates(job_id=job_id, candidate_ids=[candidate_id])
+            conversation_id = int(outreach["items"][0]["conversation_id"])
+
+            db.update_candidate_match_status(
+                job_id=job_id,
+                candidate_id=candidate_id,
+                status="needs_resume",
+            )
+
+            delivery = workflow._deliver_pending_outreach_message(conversation_id, db.get_candidate(candidate_id) or {})
+            self.assertFalse(bool(delivery.get("sent")))
+
+            conversation = db.get_conversation(conversation_id)
+            self.assertEqual(str((conversation or {}).get("status") or ""), "waiting_connection")
+
+            match = db.get_candidate_match(job_id=job_id, candidate_id=candidate_id)
+            self.assertEqual(str((match or {}).get("status") or ""), "outreach_pending_connection")
+
 
 if __name__ == "__main__":
     unittest.main()

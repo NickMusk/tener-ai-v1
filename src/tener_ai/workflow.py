@@ -6634,6 +6634,17 @@ class WorkflowService:
 
         if self._is_connection_required_error(delivery):
             self.db.update_conversation_status(conversation_id=conversation_id, status="waiting_connection")
+            conversation = self.db.get_conversation(conversation_id)
+            if conversation:
+                # job_candidates.status is the source of truth for funnel stage;
+                # keep it aligned whenever the transport layer falls back to a
+                # waiting-for-connection state.
+                self.db.update_candidate_match_status(
+                    job_id=int(conversation["job_id"]),
+                    candidate_id=int(conversation["candidate_id"]),
+                    status="outreach_pending_connection",
+                    extra_notes={"outreach_state": "waiting_connection_retry"},
+                )
         else:
             self.db.update_conversation_status(conversation_id=conversation_id, status="active")
         conversation = self.db.get_conversation(conversation_id)
