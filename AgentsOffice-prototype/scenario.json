@@ -1,0 +1,474 @@
+{
+  "job": {
+    "company": "Tener Buyer Preview",
+    "title": "Industrial Electrician, Midland TX",
+    "subtitle": "A staged office replay showing how Tener can feel like a staffed recruiting floor.",
+    "market": "Skilled trades hiring",
+    "objective": "Make the buyer feel like five specialists are already on the search: sourcing, calibrating fit, opening threads, and surfacing buyer-ready finalists without waiting for a human recruiter to orchestrate every move.",
+    "phase_label": "Opening the office and loading the buyer brief.",
+    "sources": ["LinkedIn Recruiter", "Indeed", "Rigzone", "Past placements", "Referral graph"]
+  },
+  "agents": [
+    {
+      "id": "reed",
+      "name": "Reed AI",
+      "role": "Talent Scout",
+      "spriteKey": "f1",
+      "start": [8, 8],
+      "speed": 1.4,
+      "emoji": "🔎",
+      "idle_note": "Watching talent channels for stronger leads.",
+      "ambient": ["Refreshing candidate graph.", "Cross-checking field certifications.", "Watching new profile activity."]
+    },
+    {
+      "id": "spencer",
+      "name": "Spencer AI",
+      "role": "Job Architect",
+      "spriteKey": "f3",
+      "start": [19, 15],
+      "speed": 1.2,
+      "emoji": "🧩",
+      "idle_note": "Tightening the search brief before the market opens.",
+      "ambient": ["Rewriting scope summary.", "Updating must-have filters.", "Adjusting pay-band language."]
+    },
+    {
+      "id": "harper",
+      "name": "Harper AI",
+      "role": "Culture Analyst",
+      "spriteKey": "f6",
+      "start": [10, 24],
+      "speed": 1.15,
+      "emoji": "🧠",
+      "idle_note": "Keeping the fit rubric aligned with the buyer.",
+      "ambient": ["Refreshing culture rubric.", "Checking team signal notes.", "Comparing previous placements."]
+    },
+    {
+      "id": "casey",
+      "name": "Casey AI",
+      "role": "Hiring Coordinator",
+      "spriteKey": "f7",
+      "start": [29, 28],
+      "speed": 1.3,
+      "emoji": "💬",
+      "idle_note": "Maintaining candidate conversations and follow-ups.",
+      "ambient": ["Keeping candidate inbox warm.", "Waiting for a fast reply.", "Preparing the next outreach wave."]
+    },
+    {
+      "id": "jordan",
+      "name": "Jordan AI",
+      "role": "Hiring Advisor",
+      "spriteKey": "f4",
+      "start": [30, 10],
+      "speed": 1.1,
+      "emoji": "⭐",
+      "idle_note": "Waiting for enough evidence to lock the buyer shortlist.",
+      "ambient": ["Watching fit signals.", "Holding final scorecards.", "Reviewing the latest evidence."]
+    }
+  ],
+  "events": [
+    {
+      "at": 2,
+      "phase": "Spencer and Harper are turning a rough req into a buyer-specific search brief.",
+      "actions": [
+        {
+          "agent": "spencer",
+          "move": { "to": [19, 12], "speed": 1.2 },
+          "status": {
+            "key": "syncing",
+            "label": "syncing",
+            "note": "Tightening the role around PLC exposure, OSHA 30 and field leadership."
+          },
+          "bubble": { "text": "Cutting noise from the brief...", "duration": 4.0, "emoji": "🧩" }
+        },
+        {
+          "agent": "harper",
+          "move": { "to": [12, 21], "speed": 1.1 },
+          "status": {
+            "key": "reviewing",
+            "label": "reviewing",
+            "note": "Loading buyer tone, team expectations and prior placement signal."
+          },
+          "bubble": { "text": "Matching the buyer's style...", "duration": 4.0, "emoji": "🧠" }
+        }
+      ],
+      "activity": {
+        "kind": "buyer",
+        "title": "Buyer brief opened",
+        "detail": "The office turned a generic req into a tighter Midland field-search brief before sourcing started."
+      }
+    },
+    {
+      "at": 7,
+      "phase": "The brief is calibrated and Spencer is handing Reed a cleaner market target.",
+      "agent": "reed",
+      "move": { "to": [10, 10], "speed": 1.5 },
+      "status": {
+        "key": "sourcing",
+        "label": "sourcing",
+        "note": "Opening external channels with the narrowed spec."
+      },
+      "bubble": { "text": "Opening the market now", "duration": 4.2, "emoji": "🔎" },
+      "handoff": {
+        "from": "spencer",
+        "to": "reed",
+        "label": "Clean brief -> live market",
+        "duration": 3.8
+      },
+      "activity": {
+        "kind": "handoff",
+        "title": "Spec handoff",
+        "detail": "Spencer pushed a sharpened brief to Reed so sourcing starts with fewer false positives."
+      },
+      "metrics": { "profiles": 12 }
+    },
+    {
+      "at": 12,
+      "phase": "Reed is fanning out across channels while Harper keeps fit constraints tight.",
+      "actions": [
+        {
+          "agent": "reed",
+          "move": { "to": [14, 9], "speed": 1.5 },
+          "status": {
+            "key": "sourcing",
+            "label": "sourcing",
+            "note": "Running LinkedIn Recruiter, Indeed, Rigzone and referral graph in parallel."
+          },
+          "bubble": { "text": "LinkedIn + Rigzone are live", "duration": 4.5, "emoji": "🔎" },
+          "metrics": { "profiles": 31 }
+        },
+        {
+          "agent": "harper",
+          "move": { "to": [15, 18], "speed": 1.1 },
+          "status": {
+            "key": "monitoring",
+            "label": "ready",
+            "note": "Keeping the search biased toward practical, low-ego field operators."
+          },
+          "bubble": { "text": "Filtering for buyer-native operators", "duration": 4.3, "emoji": "✅" }
+        }
+      ],
+      "activity": {
+        "kind": "signal",
+        "title": "Search widened with guardrails",
+        "detail": "Reed opened multiple channels while Harper kept the funnel anchored to field-fit signal."
+      }
+    },
+    {
+      "at": 18,
+      "phase": "The first evidence packet is strong enough to open outreach without waiting for a recruiter.",
+      "actions": [
+        {
+          "agent": "reed",
+          "status": {
+            "key": "reviewing",
+            "label": "reviewing",
+            "note": "James Mitchell surfaced with strong industrial depth and a clean safety record."
+          },
+          "bubble": { "text": "James looks buyer-ready", "duration": 4.0, "emoji": "⭐" },
+          "metrics": { "profiles": 44 }
+        },
+        {
+          "agent": "casey",
+          "move": { "to": [28, 23], "speed": 1.35 },
+          "status": {
+            "key": "messaging",
+            "label": "messaging",
+            "note": "Preparing a personalized intro tied to pay, commute and site context."
+          },
+          "bubble": { "text": "Drafting a warm intro now", "duration": 4.2, "emoji": "💬" }
+        }
+      ],
+      "handoff": {
+        "from": "reed",
+        "to": "casey",
+        "label": "Qualified lead -> outreach",
+        "duration": 3.8
+      },
+      "activity": {
+        "kind": "handoff",
+        "title": "First candidate packet handed off",
+        "detail": "Reed promoted James Mitchell into Casey's queue with buyer-fit evidence already attached."
+      }
+    },
+    {
+      "at": 24,
+      "phase": "Casey is opening real momentum while Reed keeps the market warm behind the scenes.",
+      "actions": [
+        {
+          "agent": "casey",
+          "move": { "to": [30, 26], "speed": 1.25 },
+          "status": {
+            "key": "messaging",
+            "label": "messaging",
+            "note": "Sending the first outreach wave with same-day reply prompts."
+          },
+          "bubble": { "text": "Outbound sent to James", "duration": 4.4, "emoji": "💬" },
+          "metrics": { "conversations": 1 }
+        },
+        {
+          "agent": "reed",
+          "move": { "to": [11, 12], "speed": 1.35 },
+          "status": {
+            "key": "sourcing",
+            "label": "sourcing",
+            "note": "Scanning the second page of the funnel for backup finalists."
+          },
+          "bubble": { "text": "Keeping a second wave ready", "duration": 4.1, "emoji": "🔎" }
+        }
+      ],
+      "activity": {
+        "kind": "outreach",
+        "title": "First outreach wave opened",
+        "detail": "Casey turned the first qualified lead into a live candidate thread while Reed kept sourcing."
+      }
+    },
+    {
+      "at": 30,
+      "phase": "A fast reply comes back and Casey is routing signal straight into scoring.",
+      "actions": [
+        {
+          "agent": "casey",
+          "status": {
+            "key": "messaging",
+            "label": "messaging",
+            "note": "James replied quickly, confirmed timing and asked for site details."
+          },
+          "bubble": { "text": "Reply in under 10 minutes", "duration": 4.2, "emoji": "📨" },
+          "metrics": { "conversations": 2 }
+        },
+        {
+          "agent": "jordan",
+          "move": { "to": [28, 14], "speed": 1.1 },
+          "status": {
+            "key": "scoring",
+            "label": "scoring",
+            "note": "Starting a buyer-facing scorecard using fit, safety and responsiveness."
+          },
+          "bubble": { "text": "Pulling the packet into review", "duration": 4.0, "emoji": "⭐" }
+        }
+      ],
+      "handoff": {
+        "from": "casey",
+        "to": "jordan",
+        "label": "Warm reply -> scorecard",
+        "duration": 3.8
+      },
+      "activity": {
+        "kind": "signal",
+        "title": "Live reply converted into evidence",
+        "detail": "Casey moved James from outreach into scorecard review as soon as the candidate showed real intent."
+      }
+    },
+    {
+      "at": 36,
+      "phase": "Jordan is turning candidate signal into a shortlist the buyer can actually act on.",
+      "agent": "jordan",
+      "status": {
+        "key": "scoring",
+        "label": "scoring",
+        "note": "Stack-ranking technical depth, field maturity and response quality."
+      },
+      "bubble": { "text": "James clears the bar", "duration": 4.3, "emoji": "🏁" },
+      "activity": {
+        "kind": "buyer",
+        "title": "First finalist locked",
+        "detail": "Jordan promoted James Mitchell as a buyer-ready finalist instead of leaving him buried in the funnel."
+      },
+      "shortlist_add": {
+        "name": "James Mitchell",
+        "score": "97",
+        "meta": "Master Electrician | Odessa, TX | 14 yrs",
+        "reason": "Strong industrial depth, clean safety history and immediate start signal."
+      },
+      "metrics": { "shortlisted": 1 }
+    },
+    {
+      "at": 42,
+      "phase": "Reed and Harper are building depth so the buyer sees options, not a single lucky match.",
+      "actions": [
+        {
+          "agent": "reed",
+          "move": { "to": [12, 14], "speed": 1.35 },
+          "status": {
+            "key": "sourcing",
+            "label": "sourcing",
+            "note": "A second candidate is emerging from the oil-and-gas and data-center crossover pool."
+          },
+          "bubble": { "text": "Roberto has real signal too", "duration": 4.3, "emoji": "🔎" },
+          "metrics": { "profiles": 57 }
+        },
+        {
+          "agent": "harper",
+          "move": { "to": [13, 25], "speed": 1.0 },
+          "status": {
+            "key": "reviewing",
+            "label": "reviewing",
+            "note": "Re-checking whether the second candidate still feels buyer-native."
+          },
+          "bubble": { "text": "Fit still looks clean", "duration": 3.9, "emoji": "🧠" }
+        }
+      ],
+      "activity": {
+        "kind": "signal",
+        "title": "Second-wave signal surfaced",
+        "detail": "The office pulled a second serious operator forward so the buyer sees depth instead of a one-name pipeline."
+      }
+    },
+    {
+      "at": 48,
+      "phase": "Reed is handing a second qualified lead to Casey while the first finalist stays warm.",
+      "actions": [
+        {
+          "agent": "casey",
+          "status": {
+            "key": "messaging",
+            "label": "messaging",
+            "note": "Opening a second personalized thread while maintaining the first conversation."
+          },
+          "bubble": { "text": "Launching Roberto outreach", "duration": 4.4, "emoji": "💬" },
+          "metrics": { "conversations": 3 }
+        },
+        {
+          "agent": "reed",
+          "status": {
+            "key": "reviewing",
+            "label": "reviewing",
+            "note": "Roberto's packet is clean enough to move without more manual review."
+          },
+          "bubble": { "text": "Sending Roberto to Casey", "duration": 3.8, "emoji": "📦" }
+        }
+      ],
+      "handoff": {
+        "from": "reed",
+        "to": "casey",
+        "label": "Second qualified lead -> outreach",
+        "duration": 3.8
+      },
+      "activity": {
+        "kind": "outreach",
+        "title": "Second outreach wave launched",
+        "detail": "Casey opened a second candidate thread without losing momentum on the first finalist."
+      }
+    },
+    {
+      "at": 54,
+      "phase": "The second thread turns warm quickly and Jordan is pulled back into ranking mode.",
+      "actions": [
+        {
+          "agent": "casey",
+          "status": {
+            "key": "messaging",
+            "label": "messaging",
+            "note": "Roberto replied same-day and confirmed Midland proximity."
+          },
+          "bubble": { "text": "Roberto is engaged too", "duration": 4.1, "emoji": "📅" },
+          "metrics": { "conversations": 4 }
+        },
+        {
+          "agent": "jordan",
+          "move": { "to": [26, 13], "speed": 1.05 },
+          "status": {
+            "key": "scoring",
+            "label": "scoring",
+            "note": "Comparing James and Roberto side-by-side for buyer confidence."
+          },
+          "bubble": { "text": "Reopening the board", "duration": 3.9, "emoji": "⭐" }
+        }
+      ],
+      "handoff": {
+        "from": "casey",
+        "to": "jordan",
+        "label": "Second warm reply -> ranking",
+        "duration": 3.8
+      },
+      "activity": {
+        "kind": "handoff",
+        "title": "Second thread escalated",
+        "detail": "Casey passed a fresh reply to Jordan so the shortlist could become a real buyer choice set."
+      }
+    },
+    {
+      "at": 60,
+      "phase": "Jordan is now turning a promising funnel into a board the buyer can review immediately.",
+      "agent": "jordan",
+      "status": {
+        "key": "ready",
+        "label": "ready",
+        "note": "Two finalists are now evidence-backed and ordered by confidence."
+      },
+      "bubble": { "text": "Roberto clears the bar too", "duration": 4.5, "emoji": "🏁" },
+      "activity": {
+        "kind": "buyer",
+        "title": "Second finalist promoted",
+        "detail": "Jordan added Roberto Garcia to the shortlist so the buyer sees two warm, defendable options."
+      },
+      "shortlist_add": {
+        "name": "Roberto Garcia",
+        "score": "94",
+        "meta": "Senior Industrial Electrician | Midland, TX | 11 yrs",
+        "reason": "Strong infrastructure background, local fit and active conversation momentum."
+      },
+      "metrics": { "shortlisted": 2 }
+    },
+    {
+      "at": 66,
+      "phase": "Harper and Spencer are sanity-checking the shortlist against the original buyer brief.",
+      "actions": [
+        {
+          "agent": "harper",
+          "status": {
+            "key": "reviewing",
+            "label": "reviewing",
+            "note": "Making sure both finalists still feel practical, field-tested and low-maintenance."
+          },
+          "bubble": { "text": "Both finalists feel buyer-native", "duration": 4.3, "emoji": "🧠" }
+        },
+        {
+          "agent": "spencer",
+          "move": { "to": [20, 14], "speed": 1.1 },
+          "status": {
+            "key": "syncing",
+            "label": "syncing",
+            "note": "Verifying the shortlist still matches the brief that opened the search."
+          },
+          "bubble": { "text": "Spec still matches the board", "duration": 4.1, "emoji": "🧩" }
+        }
+      ],
+      "activity": {
+        "kind": "buyer",
+        "title": "Buyer confidence check",
+        "detail": "The office validated that the shortlist still matches the buyer brief, not just the keyword filter."
+      }
+    },
+    {
+      "at": 72,
+      "phase": "Casey keeps both finalists warm while Jordan packages the board for the buyer.",
+      "actions": [
+        {
+          "agent": "casey",
+          "status": {
+            "key": "messaging",
+            "label": "messaging",
+            "note": "Sending site details, timing notes and next-step prompts to both finalists."
+          },
+          "bubble": { "text": "Keeping both threads warm", "duration": 4.0, "emoji": "💬" }
+        },
+        {
+          "agent": "jordan",
+          "move": { "to": [25, 11], "speed": 1.0 },
+          "status": {
+            "key": "ready",
+            "label": "ready",
+            "note": "The buyer board is packaged with score, fit context and conversation readiness."
+          },
+          "bubble": { "text": "Buyer board ready", "duration": 4.8, "emoji": "⭐" }
+        }
+      ],
+      "activity": {
+        "kind": "buyer",
+        "title": "Buyer-ready board packaged",
+        "detail": "The scene closes with two warm finalists, live conversations and a shortlist that looks ready to review."
+      }
+    }
+  ]
+}
