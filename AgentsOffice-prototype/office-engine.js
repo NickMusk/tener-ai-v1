@@ -506,15 +506,12 @@ function createDomContext(documentRef) {
   const elements = {
     canvas: documentRef.getElementById("world-canvas"),
     overlay: documentRef.getElementById("world-overlay"),
-    progressFill: documentRef.getElementById("progress-fill"),
     errorBanner: documentRef.getElementById("error-banner"),
     jobTitle: documentRef.getElementById("job-title"),
     jobSubtitle: documentRef.getElementById("job-subtitle"),
     metricProfiles: documentRef.getElementById("metric-profiles"),
     metricConversations: documentRef.getElementById("metric-conversations"),
     metricShortlisted: documentRef.getElementById("metric-shortlisted"),
-    runClock: documentRef.getElementById("run-clock"),
-    runPhase: documentRef.getElementById("run-phase"),
     briefCompany: documentRef.getElementById("brief-company"),
     briefRole: documentRef.getElementById("brief-role"),
     briefSummary: documentRef.getElementById("brief-summary"),
@@ -601,7 +598,6 @@ function renderBrief(dom, runtime) {
   dom.briefRole.textContent = `${job.title} | ${job.location}`;
   dom.briefSummary.textContent = job.summary;
   dom.briefSources.textContent = `Channels: ${(job.channels || []).join(", ")}`;
-  dom.runPhase.textContent = runtime.phase;
 }
 
 function renderJobs(dom, state) {
@@ -775,7 +771,6 @@ function applyAction(dom, state, runtime, action) {
 
 function applyEvent(dom, state, runtime, event) {
   runtime.phase = event.phase || runtime.phase;
-  dom.runPhase.textContent = runtime.phase;
   if (Array.isArray(event.actions) && event.actions.length) {
     event.actions.forEach((action) => applyAction(dom, state, runtime, action));
   }
@@ -996,26 +991,6 @@ async function refreshJobCatalog(dom, state, { preserveSelection = true } = {}) 
   }
 }
 
-function getElapsedSeconds(state, nowMs) {
-  return Math.max(0, (Number(nowMs || performance.now()) - state.sessionStartMs) / 1000);
-}
-
-function refreshTicker(dom, state) {
-  if (!state.runtime) return;
-  const elapsed = getElapsedSeconds(state);
-  dom.runClock.textContent = `Live ${new Date(elapsed * 1000).toISOString().slice(14, 19)}`;
-  const fill = clamp(
-    28
-      + state.runtime.metrics.buyerFinalists * 18
-      + state.runtime.metrics.liveThreads * 9
-      + Math.min(24, Math.round(state.runtime.metrics.marketLeads / 3)),
-    26,
-    94
-  );
-  dom.progressFill.style.width = `${fill}%`;
-  dom.runPhase.textContent = state.runtime.phase;
-}
-
 function tickFrame(dom, state, nowMs) {
   const previousFrameMs = state.previousFrameMs || nowMs;
   const deltaSeconds = Math.min(0.05, (nowMs - previousFrameMs) / 1000);
@@ -1043,7 +1018,6 @@ export async function bootstrap() {
     sessionStartMs: performance.now(),
     previousFrameMs: 0,
     frameHandle: 0,
-    clockHandle: 0,
     refreshHandle: 0,
     spriteSheet: null,
     selectedJobId: "",
@@ -1058,7 +1032,6 @@ export async function bootstrap() {
     state.spriteSheet = await loadImage(SPRITE_SHEET_PATH);
     await renderTileMap(dom);
     await refreshJobCatalog(dom, state, { preserveSelection: false });
-    state.clockHandle = setInterval(() => refreshTicker(dom, state), 250);
     state.refreshHandle = setInterval(() => {
       refreshJobCatalog(dom, state).catch(() => {
         // Keep the current scene alive if catalog refresh fails.
@@ -1071,7 +1044,6 @@ export async function bootstrap() {
       if (!jobId || jobId === state.selectedJobId) return;
       activateJob(dom, state, jobId);
     });
-    refreshTicker(dom, state);
     state.frameHandle = requestAnimationFrame((nowMs) => tickFrame(dom, state, nowMs));
   } catch (error) {
     setError(dom, "Agents office failed to load. Please refresh the page.");
