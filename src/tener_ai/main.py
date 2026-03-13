@@ -3851,7 +3851,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
     ) -> Dict[str, Any]:
         now = datetime.now(timezone.utc)
         safe_limit = max(50, min(int(limit or 600), 2000))
-        items = db.list_outreach_ats_candidates(job_id=job_id, limit=None)
+        scan_limit = None if job_id is not None else max(safe_limit, 200)
+        items = db.list_outreach_ats_candidates(job_id=job_id, limit=scan_limit)
         workflow = SERVICES.get("workflow")
         forced_ids = []
         if workflow is not None:

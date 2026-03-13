@@ -1682,6 +1682,11 @@
       linkedinAccounts: [],
       outreachOps: null,
       outreachAtsBoard: null,
+      outreachOpsLoadError: "",
+      outreachAtsLoadError: "",
+      outreachAtsLoading: false,
+      outreachOpsRequestSeq: 0,
+      outreachAtsRequestSeq: 0,
       sourceFiltersPreview: null,
       jobLinkedinRouting: null,
       linkedinAdminToken: "",
@@ -3332,6 +3337,16 @@
     }
 
     function renderCaseyOutreachHealth() {
+      if (!state.outreachOps) {
+        applyHealthPill($("casey-health-pill"), "unknown");
+        $("casey-health-sent-1h").textContent = "-";
+        $("casey-health-sent-24h").textContent = "-";
+        $("casey-health-failed-1h").textContent = "-";
+        $("casey-health-stuck").textContent = "-";
+        $("casey-health-last-success").textContent = "-";
+        $("casey-health-issues").textContent = "Loading outreach telemetry...";
+        return;
+      }
       const summary = (state.outreachOps || {}).summary || {};
       const thresholds = (state.outreachOps || {}).thresholds || {};
       const staleMinutes = Number(thresholds.stale_minutes || 0);
@@ -3348,12 +3363,27 @@
       if ($("casey-health-stuck-label")) $("casey-health-stuck-label").title = stuckTooltip;
       if ($("casey-health-stuck")) $("casey-health-stuck").title = stuckTooltip;
       const issues = Array.isArray(summary.delivery_issues) ? summary.delivery_issues : (Array.isArray(summary.issues) ? summary.issues : []);
-      $("casey-health-issues").textContent = issues.length
-        ? issues.slice(0, 3).join(" • ")
-        : "No blocking issues detected.";
+      const loadError = String(state.outreachOpsLoadError || "").trim();
+      const issueText = issues.length ? issues.slice(0, 3).join(" • ") : "No blocking issues detected.";
+      $("casey-health-issues").textContent = loadError
+        ? `${issueText} • stale: ${shortText(loadError, 120)}`
+        : issueText;
     }
 
     function renderOutreachOpsSummary() {
+      if (!state.outreachOps) {
+        applyHealthPill($("ops-summary-delivery-health"), "unknown");
+        applyHealthPill($("ops-summary-backlog-health"), "unknown");
+        $("ops-summary-active-accounts").textContent = "-/-";
+        $("ops-summary-new-threads").textContent = "-";
+        $("ops-summary-waiting-connection").textContent = "-";
+        $("ops-summary-sent-1h").textContent = "-";
+        $("ops-summary-failed-1h").textContent = "-";
+        $("ops-summary-stuck").textContent = "-";
+        $("ops-summary-last-success").textContent = "-";
+        $("ops-summary-issues").textContent = "Loading outreach telemetry...";
+        return;
+      }
       const summary = (state.outreachOps || {}).summary || {};
       const backlogSummary = ((state.outreachOps || {}).backlog || {}).summary || {};
       const activeAccounts = Number(summary.active_accounts || 0);
@@ -3370,7 +3400,11 @@
       $("ops-summary-stuck").textContent = String(Number(backlogSummary.stuck_replies || summary.stuck_threads || 0));
       $("ops-summary-last-success").textContent = formatTimestampCompact(summary.last_successful_send_at);
       const issues = [].concat(deliveryIssues, backlogIssues).filter(Boolean);
-      $("ops-summary-issues").textContent = issues.length ? issues.join(" • ") : "No issues detected.";
+      const issueText = issues.length ? issues.join(" • ") : "No issues detected.";
+      const loadError = String(state.outreachOpsLoadError || "").trim();
+      $("ops-summary-issues").textContent = loadError
+        ? `${issueText} • stale: ${shortText(loadError, 120)}`
+        : issueText;
     }
 
     function renderOutreachAtsBoard() {
@@ -3385,7 +3419,12 @@
         if (!raw) return fallback;
         const normalized = raw.replace(/\s+/g, " ").trim();
         return normalized.length > 220 ? `${normalized.slice(0, 217)}...` : normalized;
-      };
+        };
+      if (!state.outreachAtsBoard) {
+        summaryEl.textContent = state.outreachAtsLoading ? "Loading ATS board..." : "ATS board pending...";
+        boardEl.innerHTML = '<div class="muted">Loading ATS board...</div>';
+        return;
+      }
       if (String(board.status || "").trim().toLowerCase() === "error") {
         summaryEl.textContent = compactBoardError(board.error);
         boardEl.innerHTML = '<div class="muted">ATS board unavailable.</div>';
@@ -3404,6 +3443,10 @@
       ];
       if (board.limited && Number(board.displayed_candidates || 0) > 0) {
         summaryParts.push(`showing first ${Number(board.displayed_candidates || 0)}`);
+      }
+      const loadError = String(state.outreachAtsLoadError || "").trim();
+      if (loadError) {
+        summaryParts.push(`stale: ${compactBoardError(loadError, "ATS board unavailable")}`);
       }
       summaryEl.textContent = summaryParts.join(" • ");
       if (!columns.length) {
@@ -3494,6 +3537,11 @@
       const body = $("ops-backlog-tbody");
       const summaryEl = $("ops-backlog-summary");
       if (!body || !summaryEl) return;
+      if (!state.outreachOps) {
+        summaryEl.textContent = "Loading backlog...";
+        body.innerHTML = '<tr><td colspan="7" class="muted">Loading backlog...</td></tr>';
+        return;
+      }
       const backlog = (state.outreachOps || {}).backlog || {};
       const summary = backlog.summary || {};
       const items = Array.isArray(backlog.items) ? backlog.items : [];
@@ -3560,6 +3608,10 @@
     function renderOutreachOpsAccounts() {
       const body = $("ops-accounts-tbody");
       if (!body) return;
+      if (!state.outreachOps) {
+        body.innerHTML = '<tr><td colspan="13" class="muted">Loading account telemetry...</td></tr>';
+        return;
+      }
       const rows = Array.isArray((state.outreachOps || {}).accounts) ? state.outreachOps.accounts : [];
       if (!rows.length) {
         body.innerHTML = '<tr><td colspan="13" class="muted">No LinkedIn account telemetry yet</td></tr>';
@@ -3656,6 +3708,10 @@
     function renderOutreachOpsEvents() {
       const box = $("ops-events-box");
       if (!box) return;
+      if (!state.outreachOps) {
+        box.innerHTML = '<div class="muted">Loading outreach events...</div>';
+        return;
+      }
       const events = Array.isArray((state.outreachOps || {}).events) ? state.outreachOps.events : [];
       if (!events.length) {
         box.innerHTML = '<div class="muted">No outreach events yet</div>';
@@ -3682,60 +3738,82 @@
       const jobId = selectedOpsJobId();
       const scopeQuery = jobId ? `&job_id=${encodeURIComponent(jobId)}` : "";
       const opsPath = `/api/outreach/ops?limit_logs=1000&limit_chats=800&stale_minutes=${staleMinutes}${scopeQuery}`;
-      const atsPath = `/api/outreach/ats-board?limit=600${scopeQuery}`;
-      const [opsResult, atsResult] = await Promise.allSettled([
-        api(opsPath),
-        api(atsPath),
-      ]);
-      if (opsResult.status === "fulfilled") {
-        state.outreachOps = opsResult.value || {};
-      } else {
-        const e = opsResult.reason || {};
-        state.outreachOps = {
-          summary: {
-            health: "critical",
-            delivery_health: "critical",
-            backlog_health: "warning",
-            sent_1h: 0,
-            sent_24h: 0,
-            failed_1h: 0,
-            stuck_threads: 0,
-            last_successful_send_at: null,
-            issues: [String(e.message || "failed_to_load_outreach_ops")],
-            delivery_issues: [String(e.message || "failed_to_load_outreach_ops")],
-            backlog_issues: [],
-            active_accounts: 0,
-            connected_accounts: 0,
-          },
-          backlog: { summary: {}, jobs: [], items: [] },
-          accounts: [],
-          events: [],
-        };
-      }
-      if (atsResult.status === "fulfilled") {
-        state.outreachAtsBoard = atsResult.value || {};
-      } else {
-        const e = atsResult.reason || {};
-        state.outreachAtsBoard = {
-          status: "error",
-          summary: {
-            total_candidates: 0,
-            queued: 0,
-            connect_sent: 0,
-            queued_delivery: 0,
-            dialogue: 0,
-            cv_received: 0,
-            interview_pending: 0,
-            delivery_blocked: 0,
-            completed: 0,
-          },
-          columns: [],
-          error: String(e.message || "failed_to_load_outreach_ats_board"),
-        };
+      const atsPath = `/api/outreach/ats-board?limit=200${scopeQuery}`;
+      const opsRequestSeq = Number(state.outreachOpsRequestSeq || 0) + 1;
+      const atsRequestSeq = Number(state.outreachAtsRequestSeq || 0) + 1;
+      state.outreachOpsRequestSeq = opsRequestSeq;
+      state.outreachAtsRequestSeq = atsRequestSeq;
+      state.outreachAtsLoading = true;
+      renderOutreachAtsBoard();
+
+      api(atsPath)
+        .then((payload) => {
+          if (Number(state.outreachAtsRequestSeq || 0) !== atsRequestSeq) return;
+          state.outreachAtsBoard = payload || {};
+          state.outreachAtsLoadError = "";
+          state.outreachAtsLoading = false;
+          renderOutreachAtsBoard();
+        })
+        .catch((e) => {
+          if (Number(state.outreachAtsRequestSeq || 0) !== atsRequestSeq) return;
+          const message = String((e && e.message) || "failed_to_load_outreach_ats_board");
+          state.outreachAtsLoading = false;
+          if (!state.outreachAtsBoard) {
+            state.outreachAtsBoard = {
+              status: "error",
+              summary: {
+                total_candidates: 0,
+                queued: 0,
+                connect_sent: 0,
+                queued_delivery: 0,
+                dialogue: 0,
+                cv_received: 0,
+                interview_pending: 0,
+                delivery_blocked: 0,
+                completed: 0,
+              },
+              columns: [],
+              error: message,
+            };
+          }
+          state.outreachAtsLoadError = message;
+          renderOutreachAtsBoard();
+        });
+
+      try {
+        const payload = await api(opsPath);
+        if (Number(state.outreachOpsRequestSeq || 0) !== opsRequestSeq) return;
+        state.outreachOps = payload || {};
+        state.outreachOpsLoadError = "";
+      } catch (e) {
+        if (Number(state.outreachOpsRequestSeq || 0) !== opsRequestSeq) return;
+        const message = String((e && e.message) || "failed_to_load_outreach_ops");
+        if (!state.outreachOps) {
+          state.outreachOps = {
+            summary: {
+              health: "critical",
+              delivery_health: "critical",
+              backlog_health: "warning",
+              sent_1h: 0,
+              sent_24h: 0,
+              failed_1h: 0,
+              stuck_threads: 0,
+              last_successful_send_at: null,
+              issues: [message],
+              delivery_issues: [message],
+              backlog_issues: [],
+              active_accounts: 0,
+              connected_accounts: 0,
+            },
+            backlog: { summary: {}, jobs: [], items: [] },
+            accounts: [],
+            events: [],
+          };
+        }
+        state.outreachOpsLoadError = message;
       }
       renderCaseyOutreachHealth();
       renderOutreachOpsSummary();
-      renderOutreachAtsBoard();
       renderOutreachBacklog();
       renderOutreachOpsAccounts();
       renderOutreachOpsEvents();
