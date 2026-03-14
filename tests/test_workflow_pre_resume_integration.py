@@ -179,7 +179,7 @@ class WorkflowPreResumeIntegrationTests(unittest.TestCase):
             self.assertEqual(len(match_rows), 1)
             self.assertEqual(match_rows[0]["status"], "resume_received")
             self.assertEqual(match_rows[0]["candidate_prescreen_status"], "ready_for_interview")
-            self.assertEqual(match_rows[0]["candidate_prescreen_salary_expectation_min"], 145000.0)
+            self.assertEqual(match_rows[0]["candidate_prescreen_salary_expectation_gross_monthly"], 145000.0)
 
             events = db.list_pre_resume_events(limit=20, session_id=session_id)
             event_types = {x["event_type"] for x in events}

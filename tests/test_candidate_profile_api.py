@@ -193,8 +193,7 @@ class CandidateProfileApiTests(unittest.TestCase):
             "resume_links": ["https://example.com/candidate-cv.pdf"],
             "cv_received": True,
             "must_have_answer": "6 years of Python and AWS backend work.",
-            "salary_expectation_min": 145000,
-            "salary_expectation_max": 145000,
+            "salary_expectation_gross_monthly": 145000,
             "salary_expectation_currency": "USD",
             "location_confirmed": True,
             "work_authorization_confirmed": True,
@@ -224,8 +223,7 @@ class CandidateProfileApiTests(unittest.TestCase):
             conversation_id=conversation_id,
             status="ready_for_screening_call",
             must_have_answers_json=[{"question": "must_have_experience", "answer": "6 years of Python and AWS backend work."}],
-            salary_expectation_min=145000,
-            salary_expectation_max=145000,
+            salary_expectation_gross_monthly=145000,
             salary_expectation_currency="USD",
             location_confirmed=True,
             work_authorization_confirmed=True,
@@ -265,7 +263,7 @@ class CandidateProfileApiTests(unittest.TestCase):
         self.assertIn("/dashboard?view=agent", str(conversation.get("dashboard_path") or ""))
         prescreen = first.get("prescreen") if isinstance(first.get("prescreen"), dict) else {}
         self.assertEqual(str(prescreen.get("status") or ""), "ready_for_screening_call")
-        self.assertEqual(float(prescreen.get("salary_expectation_min") or 0.0), 145000.0)
+        self.assertEqual(float(prescreen.get("salary_expectation_gross_monthly") or 0.0), 145000.0)
         self.assertTrue(bool(prescreen.get("work_authorization_confirmed")))
         self.assertEqual(float(((first.get("job") or {}).get("salary_max") or 0.0)), 150000.0)
         kinds = {str(x.get("kind") or "") for x in (first.get("signals_timeline") or [])}

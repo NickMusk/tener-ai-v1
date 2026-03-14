@@ -93,14 +93,13 @@ class _FakeLLMResponder:
                 "intent": "resume_shared",
                 "resume_shared": True,
                 "resume_links": [],
-                "salary_expectation_min": 3900,
-                "salary_expectation_max": 3900,
+                "salary_expectation_gross_monthly": 3900,
                 "salary_expectation_currency": "USD",
                 "must_have_answer": None,
                 "location_confirmed": None,
                 "work_authorization_confirmed": None,
                 "sanitized_text": "I am in Poland and I can work remotely as B2B. My salary expectation is 3900$ gross.",
-                "confidence": {"language": 0.98, "salary_expectation_min": 0.95, "salary_expectation_max": 0.95},
+                "confidence": {"language": 0.98, "salary_expectation_gross_monthly": 0.95},
                 "warnings": ["attachment_payload_ignored"],
             }
         if "timeline" in lowered:
@@ -475,8 +474,7 @@ class LLMReplyIntegrationTests(unittest.TestCase):
             self.assertEqual(reply["language"], "en")
             self.assertEqual(reply["state"]["language"], "en")
             self.assertEqual(reply["state"]["prescreen_status"], "cv_received_pending_answers")
-            self.assertEqual(float(reply["state"]["salary_expectation_min"] or 0.0), 3900.0)
-            self.assertEqual(float(reply["state"]["salary_expectation_max"] or 0.0), 3900.0)
+            self.assertEqual(float(reply["state"]["salary_expectation_gross_monthly"] or 0.0), 3900.0)
             self.assertFalse(bool(reply.get("interview", {}).get("started")))
             self.assertIsNone(reply["state"].get("must_have_answer"))
             self.assertTrue(llm.extraction_calls)

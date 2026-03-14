@@ -25,6 +25,7 @@ class InterviewPostgresConfigTests(unittest.TestCase):
     def test_build_services_uses_postgres_database_when_enabled(self) -> None:
         fake_db = MagicMock()
         fake_db.init_schema.return_value = None
+        fake_source_db = MagicMock()
 
         with patch.dict(
             os.environ,
@@ -34,15 +35,18 @@ class InterviewPostgresConfigTests(unittest.TestCase):
                 "TENER_INTERVIEW_PROVIDER": "hireflix_mock",
             },
             clear=False,
-        ), patch.object(http_api, "InterviewPostgresDatabase", return_value=fake_db) as pg_db_cls:
+        ), patch.object(http_api, "InterviewPostgresDatabase", return_value=fake_db) as pg_db_cls, patch.object(
+            http_api, "PostgresReadDatabase", return_value=fake_source_db
+        ) as source_db_cls:
             services = http_api.build_services()
 
         pg_db_cls.assert_called_once_with(dsn="postgres://user:pass@localhost:5432/interview")
+        source_db_cls.assert_called_once_with(dsn="postgres://user:pass@localhost:5432/interview")
         fake_db.init_schema.assert_called_once()
         self.assertIs(services["db"], fake_db)
+        self.assertIs(services["source_db"], fake_source_db)
         self.assertEqual(services["config"].db_backend, "postgres")
 
 
 if __name__ == "__main__":
     unittest.main()
-

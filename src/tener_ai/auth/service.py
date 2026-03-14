@@ -29,22 +29,15 @@ class AuthService:
         if not enabled:
             return cls(enabled=False, repository=None, legacy_admin_token=legacy_admin_token)
 
-        backend = str(
-            os.environ.get("TENER_AUTH_DB_BACKEND") or os.environ.get("TENER_DB_BACKEND") or "sqlite"
-        ).strip().lower()
-        if backend not in {"sqlite", "postgres"}:
-            backend = "sqlite"
-
-        sqlite_path = str(
-            os.environ.get("TENER_AUTH_DB_PATH") or (root / "runtime" / "tener_auth.sqlite3")
-        )
+        backend = "postgres"
         postgres_dsn = str(
             os.environ.get("TENER_AUTH_DB_DSN") or os.environ.get("TENER_DB_DSN") or ""
         ).strip() or None
+        if not postgres_dsn:
+            raise RuntimeError("TENER_AUTH_DB_DSN or TENER_DB_DSN is required for postgres auth repository")
 
         repo = AuthRepository(
             backend=backend,
-            sqlite_path=sqlite_path,
             postgres_dsn=postgres_dsn,
         )
         repo.init_schema()
@@ -144,4 +137,3 @@ class AuthService:
                 if f"{prefix}:*" in granted_norm:
                     return True
         return False
-

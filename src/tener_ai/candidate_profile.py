@@ -10,6 +10,7 @@ from .candidate_scoring import CandidateScoringPolicy
 from .db import AGENT_DEFAULT_NAMES, Database
 from .llm_responder import CandidateLLMResponder
 from .matching import MatchingEngine
+from .prescreen_policy import PrescreenPolicy
 
 
 UTC = timezone.utc
@@ -148,8 +149,10 @@ class CandidateProfileService:
                 "must_have_answers": match.get("candidate_prescreen_must_have_answers")
                 if isinstance(match.get("candidate_prescreen_must_have_answers"), list)
                 else [],
-                "salary_expectation_min": self._safe_float(match.get("candidate_prescreen_salary_expectation_min"), None),
-                "salary_expectation_max": self._safe_float(match.get("candidate_prescreen_salary_expectation_max"), None),
+                "salary_expectation_gross_monthly": self._safe_float(
+                    match.get("candidate_prescreen_salary_expectation_gross_monthly"),
+                    None,
+                ),
                 "salary_expectation_currency": str(match.get("candidate_prescreen_salary_expectation_currency") or "").strip().upper() or None,
                 "location_confirmed": match.get("candidate_prescreen_location_confirmed"),
                 "work_authorization_confirmed": match.get("candidate_prescreen_work_authorization_confirmed"),
@@ -725,41 +728,32 @@ class CandidateProfileService:
                     "message": "Interview score is not available yet.",
                 }
             )
-        salary_expectation_min = self._safe_float(prescreen.get("salary_expectation_min"), None)
-        salary_expectation_max = self._safe_float(prescreen.get("salary_expectation_max"), None)
+        salary_expectation_gross_monthly = self._safe_float(prescreen.get("salary_expectation_gross_monthly"), None)
         job_salary_min = self._safe_float(job.get("salary_min"), None)
         job_salary_max = self._safe_float(job.get("salary_max"), None)
         salary_currency = str(prescreen.get("salary_expectation_currency") or job.get("salary_currency") or "").strip().upper() or None
-        salary_status = "unknown"
-        if salary_expectation_min is not None or salary_expectation_max is not None:
-            candidate_floor = salary_expectation_min if salary_expectation_min is not None else salary_expectation_max
-            candidate_ceiling = salary_expectation_max if salary_expectation_max is not None else salary_expectation_min
-            if job_salary_max is not None and candidate_floor is not None:
-                overage = candidate_floor - job_salary_max
-                if overage <= 0:
-                    salary_status = "within_budget"
-                elif overage <= max(10000.0, float(job_salary_max) * 0.10):
-                    salary_status = "slightly_above"
-                    risks.append(
-                        {
-                            "type": "salary_fit",
-                            "severity": "medium",
-                            "message": "Salary expectations are slightly above the current budget.",
-                        }
-                    )
-                else:
-                    salary_status = "far_above"
-                    risks.append(
-                        {
-                            "type": "salary_fit",
-                            "severity": "high",
-                            "message": "Salary expectations are materially above the current budget.",
-                        }
-                    )
-            elif job_salary_min is not None and candidate_ceiling is not None and candidate_ceiling < job_salary_min:
-                salary_status = "below_budget"
-            else:
-                salary_status = "unknown"
+        salary_fit = PrescreenPolicy.salary_alignment(
+            job_salary_min=job_salary_min,
+            job_salary_max=job_salary_max,
+            candidate_salary_expectation_gross_monthly=salary_expectation_gross_monthly,
+        )
+        salary_status = str(salary_fit.get("status") or "unknown")
+        if salary_status == "slightly_above":
+            risks.append(
+                {
+                    "type": "salary_fit",
+                    "severity": "medium",
+                    "message": "Salary expectations are slightly above the current budget.",
+                }
+            )
+        elif salary_status == "far_above":
+            risks.append(
+                {
+                    "type": "salary_fit",
+                    "severity": "high",
+                    "message": "Salary expectations are materially above the current budget.",
+                }
+            )
         return {
             "must_have": {
                 "required": required_skills,
@@ -791,8 +785,7 @@ class CandidateProfileService:
                 "job_salary_min": job_salary_min,
                 "job_salary_max": job_salary_max,
                 "currency": salary_currency,
-                "candidate_salary_min": salary_expectation_min,
-                "candidate_salary_max": salary_expectation_max,
+                "candidate_salary_expectation_gross_monthly": salary_expectation_gross_monthly,
                 "status": salary_status,
             },
             "risk_flags": risks,

@@ -7,8 +7,8 @@ from tempfile import gettempdir
 from typing import Any, Dict, Optional
 from unittest.mock import MagicMock, patch
 
-# Prevent import-time default service bootstrap from writing inside repository runtime dir.
-os.environ.setdefault("TENER_DB_PATH", str(Path(gettempdir()) / "tener_postgres_primary_runtime_bootstrap.sqlite3"))
+# Prevent import-time default service bootstrap from failing before mocks install.
+os.environ.setdefault("TENER_DB_DSN", "postgres://bootstrap:test@localhost:5432/tener_tests")
 
 from tener_ai import main as api_main
 
@@ -59,7 +59,7 @@ class PostgresPrimaryRuntimeTests(unittest.TestCase):
         self.assertEqual(str(services.get("db_primary_path") or ""), "")
         self.assertEqual(str((services.get("postgres_migration_status") or {}).get("status") or ""), "ok")
 
-    def test_switch_read_source_sqlite_is_skipped_in_postgres_primary(self) -> None:
+    def test_switch_read_source_sqlite_is_rejected_in_postgres_only_runtime(self) -> None:
         runtime_db = _FakePostgresRuntimeDB("postgres://example")
         api_main.SERVICES = {
             "db": runtime_db,
@@ -68,9 +68,8 @@ class PostgresPrimaryRuntimeTests(unittest.TestCase):
             "db_read_status": {"status": "ok", "source": "postgres"},
             "postgres_dsn": "postgres://example",
         }
-        out = api_main.TenerRequestHandler._switch_read_source(source="sqlite", reason="test")
-        self.assertEqual(str(out.get("status") or ""), "skipped")
-        self.assertEqual(str(out.get("source") or ""), "postgres")
+        with self.assertRaisesRegex(ValueError, "postgres_only_runtime"):
+            api_main.TenerRequestHandler._switch_read_source(source="sqlite", reason="test")
         self.assertIs(api_main.SERVICES.get("read_db"), runtime_db)
         self.assertEqual(str((api_main.SERVICES.get("db_read_status") or {}).get("source") or ""), "postgres")
 

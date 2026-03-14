@@ -13,6 +13,7 @@ from .message_extraction import (
     extract_pre_resume_heuristic_fields,
     parse_resume_links,
 )
+from .prescreen_policy import PrescreenPolicy, collapse_salary_range_to_expectation
 
 
 UTC = timezone.utc
@@ -94,9 +95,9 @@ DEFAULT_TEMPLATES: Dict[str, Any] = {
     },
     "intent_answers": {
         "salary": {
-            "en": "Compensation is checked against role fit and budget. If you share your expectations, I can confirm alignment quickly.",
-            "uk": "Компенсація перевіряється щодо відповідності ролі та бюджету. Якщо поділитеся своїми очікуваннями, я швидко підтверджу, чи є узгодження.",
-            "es": "La compensacion se revisa contra el encaje y el presupuesto. Si compartes tus expectativas, puedo confirmar rapido si hay alineacion.",
+            "en": "Compensation is checked against role fit and budget. If you share your expected gross monthly salary, I can confirm alignment quickly.",
+            "uk": "Компенсація перевіряється щодо відповідності ролі та бюджету. Якщо поділитеся вашим очікуваним gross monthly salary, я швидко підтверджу, чи є узгодження.",
+            "es": "La compensacion se revisa contra el encaje y el presupuesto. Si compartes tu expected gross monthly salary, puedo confirmar rapido si hay alineacion.",
         },
         "stack": {
             "en": "Main stack and responsibilities are aligned with the role core profile we shared.",
@@ -187,54 +188,48 @@ class PreResumeSession:
     updated_at: str = field(default_factory=lambda: iso(utc_now()))
     next_followup_at: Optional[str] = None
     must_have_answer: Optional[str] = None
-    salary_expectation_min: Optional[float] = None
-    salary_expectation_max: Optional[float] = None
+    salary_expectation_gross_monthly: Optional[float] = None
     salary_expectation_currency: Optional[str] = None
     location_confirmed: Optional[bool] = None
     work_authorization_confirmed: Optional[bool] = None
     cv_received: bool = False
 
     def location_confirmation_required(self) -> bool:
-        location = str(self.job_location or "").strip().lower()
-        if not location:
-            return False
-        return not any(marker in location for marker in REMOTE_LOCATION_MARKERS)
+        return PrescreenPolicy.location_confirmation_required(self.job_location)
 
     def auth_confirmation_required(self) -> bool:
-        return bool(self.work_authorization_required)
+        return PrescreenPolicy.auth_confirmation_required(self.work_authorization_required)
 
     def prescreen_status(self) -> str:
-        written_complete = self.written_answers_complete()
-        if self.cv_received and written_complete:
-            return "ready_for_interview"
-        if self.cv_received:
-            return "cv_received_pending_answers"
-        if written_complete:
-            return "ready_for_cv"
-        return "incomplete"
+        return PrescreenPolicy.prescreen_status(
+            cv_received=self.cv_received,
+            must_have_answer=self.must_have_answer,
+            salary_expectation_gross_monthly=self.salary_expectation_gross_monthly,
+            job_location=self.job_location,
+            location_confirmed=self.location_confirmed,
+            work_authorization_required=self.work_authorization_required,
+            work_authorization_confirmed=self.work_authorization_confirmed,
+        )
 
     def written_answers_complete(self) -> bool:
-        if not str(self.must_have_answer or "").strip():
-            return False
-        if self.salary_expectation_min is None and self.salary_expectation_max is None:
-            return False
-        if self.location_confirmation_required() and self.location_confirmed is None:
-            return False
-        if self.auth_confirmation_required() and self.work_authorization_confirmed is None:
-            return False
-        return True
+        return PrescreenPolicy.written_answers_complete(
+            must_have_answer=self.must_have_answer,
+            salary_expectation_gross_monthly=self.salary_expectation_gross_monthly,
+            job_location=self.job_location,
+            location_confirmed=self.location_confirmed,
+            work_authorization_required=self.work_authorization_required,
+            work_authorization_confirmed=self.work_authorization_confirmed,
+        )
 
     def missing_question_keys(self) -> List[str]:
-        missing: List[str] = []
-        if not str(self.must_have_answer or "").strip():
-            missing.append("must_have")
-        if self.salary_expectation_min is None and self.salary_expectation_max is None:
-            missing.append("salary")
-        if self.location_confirmation_required() and self.location_confirmed is None:
-            missing.append("location_auth")
-        elif self.auth_confirmation_required() and self.work_authorization_confirmed is None:
-            missing.append("location_auth")
-        return missing
+        return PrescreenPolicy.missing_question_keys(
+            must_have_answer=self.must_have_answer,
+            salary_expectation_gross_monthly=self.salary_expectation_gross_monthly,
+            job_location=self.job_location,
+            location_confirmed=self.location_confirmed,
+            work_authorization_required=self.work_authorization_required,
+            work_authorization_confirmed=self.work_authorization_confirmed,
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -260,8 +255,7 @@ class PreResumeSession:
             "updated_at": self.updated_at,
             "next_followup_at": self.next_followup_at,
             "must_have_answer": self.must_have_answer,
-            "salary_expectation_min": self.salary_expectation_min,
-            "salary_expectation_max": self.salary_expectation_max,
+            "salary_expectation_gross_monthly": self.salary_expectation_gross_monthly,
             "salary_expectation_currency": self.salary_expectation_currency,
             "location_confirmed": self.location_confirmed,
             "work_authorization_confirmed": self.work_authorization_confirmed,
@@ -295,8 +289,15 @@ class PreResumeSession:
             updated_at=str(payload.get("updated_at") or iso(utc_now())),
             next_followup_at=str(payload.get("next_followup_at")) if payload.get("next_followup_at") else None,
             must_have_answer=str(payload.get("must_have_answer") or "").strip() or None,
-            salary_expectation_min=float(payload.get("salary_expectation_min")) if payload.get("salary_expectation_min") is not None else None,
-            salary_expectation_max=float(payload.get("salary_expectation_max")) if payload.get("salary_expectation_max") is not None else None,
+            salary_expectation_gross_monthly=collapse_salary_range_to_expectation(
+                payload.get("salary_expectation_gross_monthly"),
+                payload.get("salary_expectation_gross_monthly"),
+            )
+            if payload.get("salary_expectation_gross_monthly") is not None
+            else collapse_salary_range_to_expectation(
+                payload.get("salary_expectation_min"),
+                payload.get("salary_expectation_max"),
+            ),
             salary_expectation_currency=str(payload.get("salary_expectation_currency") or "").strip().upper() or None,
             location_confirmed=_coerce_boolish(payload.get("location_confirmed")),
             work_authorization_confirmed=_coerce_boolish(payload.get("work_authorization_confirmed")),
@@ -415,8 +416,7 @@ class PreResumeCommunicationService:
         if extraction is not None:
             extracted = {
                 "must_have_answer": extraction.must_have_answer,
-                "salary_expectation_min": extraction.salary_expectation_min,
-                "salary_expectation_max": extraction.salary_expectation_max,
+                "salary_expectation_gross_monthly": extraction.salary_expectation_gross_monthly,
                 "salary_expectation_currency": extraction.salary_expectation_currency,
                 "location_confirmed": extraction.location_confirmed,
                 "work_authorization_confirmed": extraction.work_authorization_confirmed,
@@ -425,12 +425,9 @@ class PreResumeCommunicationService:
             extracted = self._extract_structured_answers(session=session, text=message, intent=intent)
         if extracted.get("must_have_answer"):
             session.must_have_answer = str(extracted["must_have_answer"])
-        salary_min = extracted.get("salary_expectation_min")
-        salary_max = extracted.get("salary_expectation_max")
-        if salary_min is not None:
-            session.salary_expectation_min = float(salary_min)
-        if salary_max is not None:
-            session.salary_expectation_max = float(salary_max)
+        salary_value = extracted.get("salary_expectation_gross_monthly")
+        if salary_value is not None:
+            session.salary_expectation_gross_monthly = float(salary_value)
         salary_currency = extracted.get("salary_expectation_currency")
         if salary_currency:
             session.salary_expectation_currency = str(salary_currency)
@@ -584,10 +581,10 @@ class PreResumeCommunicationService:
                 budget = self._format_budget(session)
                 if budget:
                     prompts.append(
-                        f"{question_number}) What salary range are you targeting? Budget on our side is {budget}."
+                        f"{question_number}) What gross monthly salary are you targeting? Budget on our side is {budget}."
                     )
                 else:
-                    prompts.append(f"{question_number}) What salary range are you targeting?")
+                    prompts.append(f"{question_number}) What gross monthly salary are you targeting?")
             elif key == "location_auth":
                 prompts.append(f"{question_number}) {self._location_auth_question(session)}")
             question_number += 1

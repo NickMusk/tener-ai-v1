@@ -97,7 +97,7 @@ class CandidateScoringPolicyTests(unittest.TestCase):
             row={
                 "job_salary_max": 150000,
                 "job_salary_currency": "USD",
-                "candidate_prescreen_salary_expectation_min": 170000,
+                "candidate_prescreen_salary_expectation_gross_monthly": 170000,
                 "candidate_prescreen_salary_expectation_currency": "USD",
             },
         )

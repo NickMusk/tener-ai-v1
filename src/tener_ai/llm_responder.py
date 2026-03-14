@@ -225,7 +225,7 @@ class CandidateLLMResponder:
             "If uncertain, keep the field null or use default intent.",
             f"Allowed intents: {', '.join(allowed_intents)}.",
             (
-                "For pre_resume extract intent, language, resume signal, salary expectation, must-have experience answer, location alignment, work authorization, sanitized_text, confidence, warnings."
+                "For pre_resume extract intent, language, resume signal, expected gross monthly salary, must-have experience answer, location alignment, work authorization, sanitized_text, confidence, warnings."
                 if normalized_mode == "pre_resume"
                 else "For faq extract intent, language, sanitized_text, confidence, warnings."
             ),
@@ -264,8 +264,7 @@ class CandidateLLMResponder:
                 "intent": "string",
                 "resume_shared": "boolean|null",
                 "resume_links": ["string"],
-                "salary_expectation_min": "number|null",
-                "salary_expectation_max": "number|null",
+                "salary_expectation_gross_monthly": "number|null",
                 "salary_expectation_currency": "string|null",
                 "must_have_answer": "string|null",
                 "location_confirmed": "boolean|null",

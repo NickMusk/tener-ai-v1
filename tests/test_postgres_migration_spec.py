@@ -80,8 +80,7 @@ class PostgresMigrationSpecTests(unittest.TestCase):
             self.assertIn(column, normalized)
         for column in (
             "must_have_answers_json",
-            "salary_expectation_min",
-            "salary_expectation_max",
+            "salary_expectation_gross_monthly",
             "salary_expectation_currency",
             "location_confirmed",
             "work_authorization_confirmed",

@@ -4440,8 +4440,8 @@
           const skills = (x.skills || []).slice(0, 6).join(', ');
           const currentStatus = escapeHtml(x.current_status_label || x.status || '-');
           const prescreenStatus = String(x.candidate_prescreen_status || '').trim() || 'n/a';
-          const salaryExpectation = (x.candidate_prescreen_salary_expectation_min || x.candidate_prescreen_salary_expectation_max)
-            ? `${x.candidate_prescreen_salary_expectation_min ? Number(x.candidate_prescreen_salary_expectation_min).toLocaleString() : "?"}-${x.candidate_prescreen_salary_expectation_max ? Number(x.candidate_prescreen_salary_expectation_max).toLocaleString() : "?"} ${String(x.candidate_prescreen_salary_expectation_currency || '').toUpperCase()}`.trim()
+          const salaryExpectation = x.candidate_prescreen_salary_expectation_gross_monthly
+            ? `${Number(x.candidate_prescreen_salary_expectation_gross_monthly).toLocaleString()} ${String(x.candidate_prescreen_salary_expectation_currency || '').toUpperCase()}`.trim()
             : 'salary n/a';
           const lifecycleLabel = escapeHtml(x.candidate_lifecycle_label || '-');
           const lifecycleParts = [];

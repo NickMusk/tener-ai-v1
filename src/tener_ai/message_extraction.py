@@ -7,6 +7,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from .attachments import AttachmentDescriptor, descriptors_to_text
 from .language import normalize_language, resolve_conversation_language
+from .prescreen_policy import collapse_salary_range_to_expectation
 
 
 PRE_RESUME_INTENTS = {
@@ -339,7 +340,7 @@ def normalize_currency(text: str) -> Optional[str]:
     return None
 
 
-def parse_compensation_values(text: str) -> Tuple[Optional[float], Optional[float], Optional[str]]:
+def parse_compensation_value(text: str) -> Tuple[Optional[float], Optional[str]]:
     raw = str(text or "")
     currency = normalize_currency(raw)
     matches = re.findall(r"(\d{1,3}(?:[,\s]\d{3})+|\d+(?:\.\d+)?)\s*([kKmM])?", raw)
@@ -359,10 +360,11 @@ def parse_compensation_values(text: str) -> Tuple[Optional[float], Optional[floa
             continue
         values.append(value)
     if not values:
-        return None, None, currency
+        return None, currency
     if len(values) == 1:
-        return values[0], values[0], currency
-    return min(values[0], values[1]), max(values[0], values[1]), currency
+        return values[0], currency
+    collapsed = collapse_salary_range_to_expectation(values[0], values[1])
+    return collapsed, currency
 
 
 def extract_pre_resume_heuristic_fields(
@@ -379,10 +381,9 @@ def extract_pre_resume_heuristic_fields(
     word_count = len(re.findall(r"[0-9A-Za-zА-Яа-яЁё]+", normalized))
     out: Dict[str, Any] = {}
 
-    salary_min, salary_max, parsed_currency = parse_compensation_values(normalized)
-    if salary_min is not None or salary_max is not None:
-        out["salary_expectation_min"] = salary_min
-        out["salary_expectation_max"] = salary_max
+    salary_value, parsed_currency = parse_compensation_value(normalized)
+    if salary_value is not None:
+        out["salary_expectation_gross_monthly"] = salary_value
         out["salary_expectation_currency"] = parsed_currency or salary_currency or "USD"
 
     if work_authorization_required:
@@ -458,8 +459,7 @@ class CandidateMessageExtractionResult:
     intent: str
     resume_shared: bool = False
     resume_links: List[str] = field(default_factory=list)
-    salary_expectation_min: Optional[float] = None
-    salary_expectation_max: Optional[float] = None
+    salary_expectation_gross_monthly: Optional[float] = None
     salary_expectation_currency: Optional[str] = None
     must_have_answer: Optional[str] = None
     location_confirmed: Optional[bool] = None
@@ -477,8 +477,7 @@ class CandidateMessageExtractionResult:
             "intent": self.intent,
             "resume_shared": self.resume_shared,
             "resume_links": list(self.resume_links),
-            "salary_expectation_min": self.salary_expectation_min,
-            "salary_expectation_max": self.salary_expectation_max,
+            "salary_expectation_gross_monthly": self.salary_expectation_gross_monthly,
             "salary_expectation_currency": self.salary_expectation_currency,
             "must_have_answer": self.must_have_answer,
             "location_confirmed": self.location_confirmed,
@@ -591,8 +590,7 @@ class CandidateMessageExtractionService:
             intent=intent,
             resume_shared=bool(intent == "resume_shared" or links),
             resume_links=links,
-            salary_expectation_min=fields.get("salary_expectation_min"),
-            salary_expectation_max=fields.get("salary_expectation_max"),
+            salary_expectation_gross_monthly=fields.get("salary_expectation_gross_monthly"),
             salary_expectation_currency=fields.get("salary_expectation_currency"),
             must_have_answer=fields.get("must_have_answer"),
             location_confirmed=fields.get("location_confirmed"),
@@ -635,14 +633,12 @@ class CandidateMessageExtractionService:
             resume_links = parse_resume_links(merged_text)
         if resume_links and intent == "default" and mode == "pre_resume":
             intent = "resume_shared"
-        has_salary_min = "salary_expectation_min" in raw
-        has_salary_max = "salary_expectation_max" in raw
+        has_salary_value = "salary_expectation_gross_monthly" in raw
         has_currency = "salary_expectation_currency" in raw
         has_must_have = "must_have_answer" in raw
         has_location = "location_confirmed" in raw
         has_auth = "work_authorization_confirmed" in raw
-        salary_min = self._coerce_float(raw.get("salary_expectation_min"))
-        salary_max = self._coerce_float(raw.get("salary_expectation_max"))
+        salary_value = self._coerce_float(raw.get("salary_expectation_gross_monthly"))
         currency = normalize_currency(str(raw.get("salary_expectation_currency") or "")) if has_currency else None
         must_have_answer = self._coerce_text(raw.get("must_have_answer")) if has_must_have else fallback.must_have_answer
         sanitized_text = self._coerce_text(raw.get("sanitized_text")) or str(inbound_text or "").strip()
@@ -660,8 +656,7 @@ class CandidateMessageExtractionService:
             intent=intent,
             resume_shared=bool(resume_shared or resume_links),
             resume_links=resume_links,
-            salary_expectation_min=salary_min if has_salary_min else fallback.salary_expectation_min,
-            salary_expectation_max=salary_max if has_salary_max else fallback.salary_expectation_max,
+            salary_expectation_gross_monthly=salary_value if has_salary_value else fallback.salary_expectation_gross_monthly,
             salary_expectation_currency=currency if has_currency else fallback.salary_expectation_currency,
             must_have_answer=must_have_answer,
             location_confirmed=location_confirmed,

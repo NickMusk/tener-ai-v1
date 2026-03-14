@@ -34,6 +34,7 @@ from .linkedin_provider import UnipileLinkedInProvider
 from .language import normalize_language, resolve_conversation_language, resolve_outbound_language
 from .message_extraction import CandidateMessageExtractionService, parse_resume_links
 from .pre_resume_service import PreResumeCommunicationService
+from .prescreen_policy import PrescreenPolicy, collapse_salary_range_to_expectation
 
 DEFAULT_FORCED_TEST_SCORE = 0.99
 TERMINAL_PRE_RESUME_STATUSES = {
@@ -1930,10 +1931,10 @@ class WorkflowService:
                         candidate=candidate,
                         inbound_text=text,
                         history=llm_history,
-                        fallback_reply="",
+                        fallback_reply=outbound,
                         language=language,
                         state=state_out if isinstance(state_out, dict) else None,
-                        allow_fallback=False,
+                        allow_fallback=True,
                     )
                 outbound = str(outbound or "").strip()
                 if isinstance(state_out, dict):
@@ -2156,10 +2157,10 @@ class WorkflowService:
             candidate=candidate,
             inbound_text=text,
             history=llm_history,
-            fallback_reply="",
+            fallback_reply=reply,
             language=lang,
             state=None,
-            allow_fallback=False,
+            allow_fallback=True,
         )
         reply = str(reply or "").strip()
         if not reply:
@@ -2434,6 +2435,15 @@ class WorkflowService:
             return
         must_have_answer = str(state_payload.get("must_have_answer") or "").strip()
         must_have_answers = [{"question": "must_have_experience", "answer": must_have_answer}] if must_have_answer else []
+        salary_expectation_gross_monthly = collapse_salary_range_to_expectation(
+            state_payload.get("salary_expectation_gross_monthly"),
+            state_payload.get("salary_expectation_gross_monthly"),
+        )
+        if salary_expectation_gross_monthly is None:
+            salary_expectation_gross_monthly = collapse_salary_range_to_expectation(
+                state_payload.get("salary_expectation_min"),
+                state_payload.get("salary_expectation_max"),
+            )
         salary_currency = str(
             state_payload.get("salary_expectation_currency") or state_payload.get("salary_currency") or job.get("salary_currency") or ""
         ).strip().upper() or None
@@ -2443,8 +2453,7 @@ class WorkflowService:
             conversation_id=int(conversation_id),
             status=str(state_payload.get("prescreen_status") or state_payload.get("status") or "incomplete"),
             must_have_answers_json=must_have_answers,
-            salary_expectation_min=self._safe_float(state_payload.get("salary_expectation_min"), None),
-            salary_expectation_max=self._safe_float(state_payload.get("salary_expectation_max"), None),
+            salary_expectation_gross_monthly=salary_expectation_gross_monthly,
             salary_expectation_currency=salary_currency,
             location_confirmed=self._safe_bool(state_payload.get("location_confirmed"), None),
             work_authorization_confirmed=self._safe_bool(state_payload.get("work_authorization_confirmed"), None),
@@ -4241,12 +4250,12 @@ class WorkflowService:
             candidate=candidate,
             inbound_text=f"Interview URL to include exactly: {entry_url}",
             history=[],
-            fallback_reply="",
+            fallback_reply=fallback,
             language=lang,
             state=None,
-            allow_fallback=False,
+            allow_fallback=True,
         )
-        with_link = self._ensure_interview_url(text=generated, fallback="", entry_url=entry_url) if generated else ""
+        with_link = self._ensure_interview_url(text=generated, fallback=fallback, entry_url=entry_url) if generated else fallback
         return str(with_link or "").strip()
 
     def _compose_interview_followup_message(
@@ -4284,12 +4293,12 @@ class WorkflowService:
             candidate=candidate,
             inbound_text=f"Followup number {followup_number}. Include this URL exactly: {entry_url}",
             history=[],
-            fallback_reply="",
+            fallback_reply=fallback,
             language=lang,
             state=None,
-            allow_fallback=False,
+            allow_fallback=True,
         )
-        with_link = self._ensure_interview_url(text=generated, fallback="", entry_url=entry_url) if generated else ""
+        with_link = self._ensure_interview_url(text=generated, fallback=fallback, entry_url=entry_url) if generated else fallback
         return str(with_link or "").strip()
 
     def _apply_interview_progress_update(
@@ -6329,16 +6338,7 @@ class WorkflowService:
 
     @staticmethod
     def _match_status_from_prescreen_status(prescreen_status: Any) -> str | None:
-        normalized = str(prescreen_status or "").strip().lower()
-        if normalized == "ready_for_screening_call":
-            normalized = "ready_for_interview"
-        if normalized == "ready_for_cv":
-            return "must_have_approved"
-        if normalized == "cv_received_pending_answers":
-            return "resume_received_pending_must_have"
-        if normalized == "ready_for_interview":
-            return "resume_received"
-        return None
+        return PrescreenPolicy.match_status_from_prescreen_status(prescreen_status)
 
     @classmethod
     def _public_pre_resume_state(cls, state: Dict[str, Any] | None) -> Dict[str, Any] | None:
@@ -6428,12 +6428,12 @@ class WorkflowService:
             candidate=candidate,
             inbound_text="",
             history=history,
-            fallback_reply="",
+            fallback_reply=fallback,
             language=language,
             state=state,
-            allow_fallback=False,
+            allow_fallback=True,
         )
-        return str(generated or "").strip()
+        return str(generated or fallback).strip()
 
     def _linkedin_initial_fallback_message(self, *, job: Dict[str, Any], recruiter_name: str, request_resume: bool) -> str:
         position = str(job.get("title") or "AI Engineer").strip() or "AI Engineer"
@@ -6641,18 +6641,31 @@ class WorkflowService:
         source = "llm"
         reason = "generated"
         try:
-            generated = self.llm_responder.generate_candidate_reply(
-                mode=mode,
-                instruction=instruction,
-                job=job,
-                candidate=candidate,
-                inbound_text=inbound_text,
-                history=history,
-                fallback_reply=fallback,
-                language=language,
-                state=state,
-                allow_fallback=allow_fallback,
-            )
+            try:
+                generated = self.llm_responder.generate_candidate_reply(
+                    mode=mode,
+                    instruction=instruction,
+                    job=job,
+                    candidate=candidate,
+                    inbound_text=inbound_text,
+                    history=history,
+                    fallback_reply=fallback,
+                    language=language,
+                    state=state,
+                    allow_fallback=allow_fallback,
+                )
+            except TypeError:
+                generated = self.llm_responder.generate_candidate_reply(
+                    mode=mode,
+                    instruction=instruction,
+                    job=job,
+                    candidate=candidate,
+                    inbound_text=inbound_text,
+                    history=history,
+                    fallback_reply=fallback,
+                    language=language,
+                    state=state,
+                )
         except Exception as exc:
             self.db.log_operation(
                 operation="agent.llm.reply.error",

@@ -348,6 +348,7 @@ class Database:
             conversation_id INTEGER,
             status TEXT NOT NULL,
             must_have_answers_json TEXT,
+            salary_expectation_gross_monthly REAL,
             salary_expectation_min REAL,
             salary_expectation_max REAL,
             salary_expectation_currency TEXT,
@@ -1276,6 +1277,7 @@ class Database:
             prs.next_followup_at AS pre_resume_next_followup_at,
             cps.status AS candidate_prescreen_status,
             cps.must_have_answers_json AS candidate_prescreen_must_have_answers,
+            cps.salary_expectation_gross_monthly AS candidate_prescreen_salary_expectation_gross_monthly,
             cps.salary_expectation_min AS candidate_prescreen_salary_expectation_min,
             cps.salary_expectation_max AS candidate_prescreen_salary_expectation_max,
             cps.salary_expectation_currency AS candidate_prescreen_salary_expectation_currency,
@@ -1580,6 +1582,7 @@ class Database:
             prs.state_json AS pre_resume_state_json,
             cps.status AS candidate_prescreen_status,
             cps.must_have_answers_json AS candidate_prescreen_must_have_answers,
+            cps.salary_expectation_gross_monthly AS candidate_prescreen_salary_expectation_gross_monthly,
             cps.salary_expectation_min AS candidate_prescreen_salary_expectation_min,
             cps.salary_expectation_max AS candidate_prescreen_salary_expectation_max,
             cps.salary_expectation_currency AS candidate_prescreen_salary_expectation_currency,
@@ -3439,6 +3442,7 @@ class Database:
         conversation_id: Optional[int],
         status: str,
         must_have_answers_json: Optional[List[Dict[str, Any]]] = None,
+        salary_expectation_gross_monthly: Optional[float] = None,
         salary_expectation_min: Optional[float] = None,
         salary_expectation_max: Optional[float] = None,
         salary_expectation_currency: Optional[str] = None,
@@ -3465,11 +3469,12 @@ class Database:
                 """
                 INSERT OR REPLACE INTO candidate_prescreens (
                     job_id, candidate_id, conversation_id, status, must_have_answers_json,
+                    salary_expectation_gross_monthly,
                     salary_expectation_min, salary_expectation_max, salary_expectation_currency,
                     location_confirmed, work_authorization_confirmed, cv_received,
                     summary, notes, created_at, updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     int(job_id),
@@ -3477,6 +3482,7 @@ class Database:
                     int(conversation_id) if conversation_id is not None else None,
                     str(status or "incomplete").strip().lower() or "incomplete",
                     json.dumps(must_have_answers_json or []),
+                    float(salary_expectation_gross_monthly) if salary_expectation_gross_monthly is not None else None,
                     float(salary_expectation_min) if salary_expectation_min is not None else None,
                     float(salary_expectation_max) if salary_expectation_max is not None else None,
                     str(salary_expectation_currency or "").strip().upper() or None,
@@ -4516,6 +4522,7 @@ class Database:
                     conversation_id INTEGER,
                     status TEXT NOT NULL,
                     must_have_answers_json TEXT,
+                    salary_expectation_gross_monthly REAL,
                     salary_expectation_min REAL,
                     salary_expectation_max REAL,
                     salary_expectation_currency TEXT,

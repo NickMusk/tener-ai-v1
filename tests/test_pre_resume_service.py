@@ -33,8 +33,7 @@ class PreResumeServiceTests(unittest.TestCase):
 
         out = service.handle_inbound("s1", "I'm targeting 145k USD.")
         self.assertEqual(out["state"]["prescreen_status"], "incomplete")
-        self.assertEqual(out["state"]["salary_expectation_min"], 145000.0)
-        self.assertEqual(out["state"]["salary_expectation_max"], 145000.0)
+        self.assertEqual(out["state"]["salary_expectation_gross_monthly"], 145000.0)
         self.assertEqual(out["state"]["salary_expectation_currency"], "USD")
         self.assertIn("What hands-on experience", out["outbound"])
         self.assertNotIn("Please share your CV", out["outbound"])
@@ -97,7 +96,7 @@ class PreResumeServiceTests(unittest.TestCase):
 
         first = service.handle_inbound("s1", "I have worked with Python and AWS for 6 years.")
         self.assertEqual(first["state"]["prescreen_status"], "incomplete")
-        self.assertIsNone(first["state"]["salary_expectation_min"])
+        self.assertIsNone(first["state"]["salary_expectation_gross_monthly"])
 
         second = service.handle_inbound("s1", "I'm targeting 140k USD and I'm based in Berlin with full work authorization.")
         self.assertEqual(second["state"]["status"], "ready_for_cv")

@@ -6,7 +6,6 @@ import ipaddress
 import mimetypes
 import os
 import re
-import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
 from http import HTTPStatus
@@ -37,11 +36,7 @@ try:
 except ModuleNotFoundError:  # Optional demo tooling is not part of every deploy branch.
     seed_full_demo_job = None  # type: ignore[assignment]
 from .db import Database
-from .db_backfill import TABLE_ORDER, backfill_sqlite_to_postgres
-from .db_parity import DEFAULT_PARITY_TABLES, build_parity_report
-from .db_dual import DualWriteDatabase, PostgresMirrorWriter
 from .db_pg import PostgresMigrationRunner
-from .db_read_pg import PostgresReadDatabase
 from .db_runtime_pg import PostgresRuntimeDatabase
 from .emulator import EmulatorProjectStore
 from .instructions import AgentEvaluationPlaybook, AgentInstructions
@@ -68,25 +63,6 @@ def env_bool(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
-
-
-def list_sqlite_user_tables(sqlite_path: str) -> List[str]:
-    db_path = str(sqlite_path or "").strip()
-    if not db_path or not Path(db_path).exists():
-        return []
-    conn = sqlite3.connect(db_path)
-    try:
-        rows = conn.execute(
-            """
-            SELECT name
-            FROM sqlite_master
-            WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
-            ORDER BY name ASC
-            """
-        ).fetchall()
-    finally:
-        conn.close()
-    return [str(row[0]) for row in rows if row and str(row[0] or "").strip()]
 
 
 def default_interview_api_base() -> str:
@@ -144,28 +120,16 @@ def _run_outreach_connection_poll_scheduler_tick(*, poll_limit: int) -> Dict[str
 
 def build_services() -> Dict[str, Any]:
     root = project_root()
-    db_backend = str(os.environ.get("TENER_DB_BACKEND", "sqlite") or "sqlite").strip().lower()
-    local_db_path = str(root / "runtime" / "tener_v1.sqlite3")
-    default_db_path = "/var/data/tener_v1.sqlite3" if os.environ.get("RENDER") else local_db_path
-    configured_db_path = os.environ.get("TENER_DB_PATH", default_db_path)
-    db_path = configured_db_path
+    db_backend = "postgres"
     postgres_dsn = str(os.environ.get("TENER_DB_DSN", "") or "").strip()
-    postgres_migration_status: Dict[str, Any] = {"status": "disabled", "reason": "sqlite_backend"}
-    db_runtime_mode = "sqlite_primary"
-    if db_backend in {"postgres", "dual"}:
-        if not postgres_dsn:
-            raise RuntimeError("TENER_DB_DSN is required when TENER_DB_BACKEND is set to postgres/dual")
-        runner = PostgresMigrationRunner(
-            dsn=postgres_dsn,
-            migrations_dir=str(root / "migrations"),
-        )
-        postgres_migration_status = runner.apply_all()
-    if db_backend != "postgres":
-        try:
-            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-        except OSError:
-            db_path = local_db_path
-            Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+    if not postgres_dsn:
+        raise RuntimeError("TENER_DB_DSN is required for the Postgres-only runtime")
+    runner = PostgresMigrationRunner(
+        dsn=postgres_dsn,
+        migrations_dir=str(root / "migrations"),
+    )
+    postgres_migration_status = runner.apply_all()
+    db_runtime_mode = "postgres_primary"
     rules_path = os.environ.get("TENER_MATCHING_RULES_PATH", str(root / "config" / "matching_rules.json"))
     templates_path = os.environ.get("TENER_TEMPLATES_PATH", str(root / "config" / "outreach_templates.json"))
     instructions_path = os.environ.get("TENER_AGENT_INSTRUCTIONS_PATH", str(root / "config" / "agent_instructions.json"))
@@ -200,85 +164,15 @@ def build_services() -> Dict[str, Any]:
     except ValueError:
         forced_test_score = 0.99
 
-    sqlite_db: Any = None
     db_primary_path = ""
-    if db_backend == "postgres":
-        db = PostgresRuntimeDatabase(postgres_dsn)
-        db_runtime_mode = "postgres_primary"
-    else:
-        try:
-            sqlite_db = Database(db_path=db_path)
-        except Exception:
-            if db_path != local_db_path:
-                sqlite_db = Database(db_path=local_db_path)
-            else:
-                raise
-        sqlite_db.init_schema()
-        db = sqlite_db
-        db_primary_path = str(sqlite_db.db_path or "")
-    if db_backend == "dual":
-        dual_strict = env_bool("TENER_DB_DUAL_STRICT", False)
-        db = DualWriteDatabase(
-            primary=sqlite_db,
-            mirror=PostgresMirrorWriter(postgres_dsn),
-            strict=dual_strict,
-        )
-        db_runtime_mode = "sqlite_primary_postgres_mirror"
-
-    db_read_source_raw = str(os.environ.get("TENER_DB_READ_SOURCE", "auto") or "auto").strip().lower()
-    if db_read_source_raw not in {"sqlite", "postgres", "auto"}:
-        db_read_source_raw = "auto"
-    db_read_source = db_read_source_raw
-    if db_read_source == "auto":
-        db_read_source = "postgres" if db_backend in {"postgres", "dual"} else "sqlite"
+    db = PostgresRuntimeDatabase(postgres_dsn)
+    read_db: Any = db
     db_read_status: Dict[str, Any] = {
         "status": "ok",
-        "source": db_read_source,
-        "requested_source": db_read_source_raw,
-        "reason": "default",
+        "source": "postgres",
+        "requested_source": "postgres",
+        "reason": "postgres_only_runtime",
     }
-    read_db: Any = db
-    if db_runtime_mode == "postgres_primary":
-        read_db = db
-        db_read_status = {
-            "status": "ok",
-            "source": "postgres",
-            "requested_source": db_read_source_raw,
-            "reason": "postgres_runtime_primary",
-        }
-    elif db_read_source == "postgres":
-        if not postgres_dsn:
-            db_read_status = {
-                "status": "degraded",
-                "source": "sqlite",
-                "requested_source": db_read_source_raw,
-                "reason": "postgres_read_requested_without_dsn",
-            }
-        else:
-            try:
-                read_db = PostgresReadDatabase(postgres_dsn)
-                db_read_status = {
-                    "status": "ok",
-                    "source": "postgres",
-                    "requested_source": db_read_source_raw,
-                    "reason": "postgres_read_enabled",
-                }
-            except Exception as exc:
-                if env_bool("TENER_DB_READ_STRICT", False):
-                    raise
-                db_read_status = {
-                    "status": "degraded",
-                    "source": "sqlite",
-                    "requested_source": db_read_source_raw,
-                    "reason": f"postgres_read_init_failed:{exc}",
-                }
-    else:
-        db_read_status = {
-            "status": "ok",
-            "source": "sqlite",
-            "requested_source": db_read_source_raw,
-            "reason": "sqlite_read_enabled",
-        }
 
     instructions = AgentInstructions(path=instructions_path)
     evaluation_playbook = AgentEvaluationPlaybook(path=evaluation_playbook_path)
@@ -513,12 +407,6 @@ def build_services() -> Dict[str, Any]:
         "db_backend": db_backend,
         "db_runtime_mode": db_runtime_mode,
         "db_read_status": db_read_status,
-        "db_cutover_state": {
-            "status": "idle",
-            "executed_at": None,
-            "details": {},
-        },
-        "db_cutover_lock": threading.Lock(),
         "postgres_migration_status": postgres_migration_status,
         "instructions": instructions,
         "evaluation_playbook": evaluation_playbook,
@@ -541,8 +429,33 @@ def build_services() -> Dict[str, Any]:
     apply_agent_instructions(services)
     return services
 
+def _bootstrap_services() -> Dict[str, Any]:
+    try:
+        return build_services()
+    except Exception as exc:
+        return {
+            "bootstrap_error": str(exc),
+            "db": None,
+            "read_db": None,
+            "postgres_dsn": str(os.environ.get("TENER_DB_DSN", "") or "").strip(),
+            "db_backend": "postgres",
+            "db_runtime_mode": "postgres_primary",
+            "db_read_status": {
+                "status": "error",
+                "source": "postgres",
+                "reason": "bootstrap_failed",
+                "details": str(exc),
+            },
+            "postgres_migration_status": {
+                "status": "error",
+                "reason": "bootstrap_failed",
+                "details": str(exc),
+            },
+            "auth": AuthService(enabled=False, repository=None, legacy_admin_token=""),
+        }
 
-SERVICES = build_services()
+
+SERVICES = _bootstrap_services()
 
 
 class TenerRequestHandler(BaseHTTPRequestHandler):
@@ -752,14 +665,6 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "unipile_webhook": "POST /api/webhooks/unipile",
                         "conversation_inbound": "POST /api/conversations/{conversation_id}/inbound",
                         "logs": "GET /api/logs?limit=100",
-                        "db_parity": "GET /api/db/parity?deep=0|1&sample_limit=20",
-                        "db_backfill_run": "POST /api/db/backfill/run",
-                        "db_read_source_set": "POST /api/db/read-source",
-                        "db_cutover_status": "GET /api/db/cutover/status",
-                        "db_cutover_preflight": "GET /api/db/cutover/preflight",
-                        "db_cutover_run": "POST /api/db/cutover/run",
-                        "db_cutover_rollback": "POST /api/db/cutover/rollback",
-                        "db_dual_write_strict": "POST /api/db/dual-write/strict",
                         "reload_rules": "POST /api/rules/reload",
                         "landing_newsletter": "POST /api/landing/newsletter",
                         "landing_contact": "POST /api/landing/contact",
@@ -952,22 +857,13 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 return
 
         if parsed.path == "/health":
-            cutover_state = SERVICES.get("db_cutover_state") if isinstance(SERVICES.get("db_cutover_state"), dict) else {}
             payload: Dict[str, Any] = {
                 "status": "ok",
                 "db_backend": SERVICES.get("db_backend"),
                 "db_runtime_mode": SERVICES.get("db_runtime_mode"),
                 "db_read_status": SERVICES.get("db_read_status"),
-                "db_cutover": {
-                    "status": cutover_state.get("status"),
-                    "executed_at": cutover_state.get("executed_at"),
-                },
                 "postgres_migration_status": SERVICES.get("postgres_migration_status"),
             }
-            db_obj = SERVICES.get("db")
-            dual_status = getattr(db_obj, "dual_write_status", None)
-            if isinstance(dual_status, dict):
-                payload["dual_write"] = dual_status
             self._json_response(HTTPStatus.OK, payload)
             return
 
@@ -994,97 +890,15 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/db/parity":
-            params = parse_qs(parsed.query or "")
-            tables = list(DEFAULT_PARITY_TABLES)
-            deep = bool(self._safe_bool((params.get("deep") or ["0"])[0], False))
-            sample_limit_raw = self._safe_int((params.get("sample_limit") or ["20"])[0], 20)
-            sample_limit = max(1, min(int(sample_limit_raw or 20), 200))
-            sqlite_path = str(SERVICES.get("db_primary_path") or "").strip()
-            postgres_dsn = str(SERVICES.get("postgres_dsn") or os.environ.get("TENER_DB_DSN", "") or "").strip()
-            if not sqlite_path:
-                self._json_response(
-                    HTTPStatus.SERVICE_UNAVAILABLE,
-                    {"status": "error", "reason": "sqlite_primary_path_missing"},
-                )
-                return
-            if not postgres_dsn:
-                self._json_response(
-                    HTTPStatus.SERVICE_UNAVAILABLE,
-                    {
-                        "status": "error",
-                        "reason": "postgres_dsn_missing",
-                        "sqlite_path": sqlite_path,
-                        "tables": tables,
-                    },
-                )
-                return
-            try:
-                report = build_parity_report(
-                    sqlite_path=sqlite_path,
-                    postgres_dsn=postgres_dsn,
-                    tables=tables,
-                    deep=deep,
-                    sample_limit=sample_limit,
-                )
-            except Exception as exc:
-                self._json_response(
-                    HTTPStatus.INTERNAL_SERVER_ERROR,
-                    {"status": "error", "reason": "parity_check_failed", "details": str(exc)},
-                )
-                return
-            self._json_response(HTTPStatus.OK, report)
+            self._postgres_only_db_admin_response(operation="parity")
             return
 
         if parsed.path == "/api/db/cutover/status":
-            if not self._require_admin_access():
-                return
-            cutover_lock = SERVICES.get("db_cutover_lock")
-            in_progress = bool(getattr(cutover_lock, "locked", lambda: False)())
-            payload = {
-                "status": "ok",
-                "cutover": SERVICES.get("db_cutover_state") or {"status": "idle", "executed_at": None, "details": {}},
-                "in_progress": in_progress,
-                "db_read_status": SERVICES.get("db_read_status"),
-                "db_backend": SERVICES.get("db_backend"),
-                "db_runtime_mode": SERVICES.get("db_runtime_mode"),
-            }
-            db_obj = SERVICES.get("db")
-            dual_status = getattr(db_obj, "dual_write_status", None)
-            if isinstance(dual_status, dict):
-                payload["dual_write"] = dual_status
-            self._json_response(HTTPStatus.OK, payload)
+            self._postgres_only_db_admin_response(operation="cutover_status")
             return
 
         if parsed.path == "/api/db/cutover/preflight":
-            if not self._require_admin_access():
-                return
-            sqlite_path = str(SERVICES.get("db_primary_path") or "").strip()
-            postgres_dsn = str(SERVICES.get("postgres_dsn") or os.environ.get("TENER_DB_DSN", "") or "").strip()
-            if not sqlite_path:
-                self._json_response(
-                    HTTPStatus.SERVICE_UNAVAILABLE,
-                    {"status": "error", "reason": "sqlite_primary_path_missing"},
-                )
-                return
-            if not postgres_dsn:
-                self._json_response(
-                    HTTPStatus.SERVICE_UNAVAILABLE,
-                    {"status": "error", "reason": "postgres_dsn_missing"},
-                )
-                return
-            try:
-                report = self._build_cutover_preflight_report(
-                    sqlite_path=sqlite_path,
-                    postgres_dsn=postgres_dsn,
-                )
-            except Exception as exc:
-                self._json_response(
-                    HTTPStatus.INTERNAL_SERVER_ERROR,
-                    {"status": "error", "reason": "cutover_preflight_failed", "details": str(exc)},
-                )
-                return
-            code = HTTPStatus.OK if str(report.get("status") or "") == "ok" else HTTPStatus.CONFLICT
-            self._json_response(code, report)
+            self._postgres_only_db_admin_response(operation="cutover_preflight")
             return
 
         if parsed.path == "/api/linkedin/accounts":
@@ -1504,339 +1318,23 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             return
 
         if parsed.path == "/api/db/backfill/run":
-            if not self._require_admin_access():
-                return
-            body = payload or {}
-            if not isinstance(body, dict):
-                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
-                return
-            sqlite_path = str(body.get("sqlite_path") or SERVICES.get("db_primary_path") or "").strip()
-            postgres_dsn = str(
-                body.get("postgres_dsn")
-                or SERVICES.get("postgres_dsn")
-                or os.environ.get("TENER_DB_DSN", "")
-                or ""
-            ).strip()
-            if not sqlite_path:
-                self._json_response(
-                    HTTPStatus.SERVICE_UNAVAILABLE,
-                    {"status": "error", "reason": "sqlite_primary_path_missing"},
-                )
-                return
-            if not postgres_dsn:
-                self._json_response(
-                    HTTPStatus.SERVICE_UNAVAILABLE,
-                    {
-                        "status": "error",
-                        "reason": "postgres_dsn_missing",
-                        "sqlite_path": sqlite_path,
-                    },
-                )
-                return
-            batch_size_raw = self._safe_int(body.get("batch_size"), 500)
-            batch_size = max(1, min(int(batch_size_raw or 500), 5000))
-            truncate_first = bool(self._safe_bool(body.get("truncate_first"), False))
-            tables_raw = body.get("tables")
-            tables: Optional[List[str]] = None
-            if tables_raw is not None:
-                if not isinstance(tables_raw, list):
-                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": "tables must be an array"})
-                    return
-                normalized = [str(item).strip() for item in tables_raw if str(item).strip()]
-                tables = normalized or None
-            try:
-                result = backfill_sqlite_to_postgres(
-                    sqlite_path=sqlite_path,
-                    postgres_dsn=postgres_dsn,
-                    batch_size=batch_size,
-                    truncate_first=truncate_first,
-                    tables=tables,
-                )
-                output = result.to_dict()
-                output["status"] = "ok" if int(output.get("failed_total") or 0) == 0 else "partial"
-                output["batch_size"] = batch_size
-                output["truncate_first"] = truncate_first
-                output["tables_requested"] = tables or []
-                SERVICES["db"].log_operation(
-                    operation="db.backfill.run",
-                    status=str(output.get("status") or "unknown"),
-                    entity_type="database",
-                    entity_id="sqlite_to_postgres",
-                    details=output,
-                )
-            except Exception as exc:
-                SERVICES["db"].log_operation(
-                    operation="db.backfill.run",
-                    status="error",
-                    entity_type="database",
-                    entity_id="sqlite_to_postgres",
-                    details={
-                        "sqlite_path": sqlite_path,
-                        "batch_size": batch_size,
-                        "truncate_first": truncate_first,
-                        "tables_requested": tables or [],
-                        "error": str(exc),
-                    },
-                )
-                self._json_response(
-                    HTTPStatus.INTERNAL_SERVER_ERROR,
-                    {"status": "error", "reason": "backfill_failed", "details": str(exc)},
-                )
-                return
-            self._json_response(HTTPStatus.OK, output)
+            self._postgres_only_db_admin_response(operation="backfill")
             return
 
         if parsed.path == "/api/db/read-source":
-            if not self._require_admin_access():
-                return
-            body = payload or {}
-            if not isinstance(body, dict):
-                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
-                return
-            source = str(body.get("source") or "").strip().lower()
-            if source not in {"sqlite", "postgres"}:
-                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "source must be sqlite or postgres"})
-                return
-            postgres_dsn = str(
-                body.get("postgres_dsn")
-                or SERVICES.get("postgres_dsn")
-                or os.environ.get("TENER_DB_DSN", "")
-                or ""
-            ).strip()
-            try:
-                out = self._switch_read_source(source=source, postgres_dsn=postgres_dsn, reason="manual_switch")
-                SERVICES["db"].log_operation(
-                    operation="db.read_source.set",
-                    status="ok",
-                    entity_type="database",
-                    entity_id="read_source",
-                    details={"source": source},
-                )
-                self._json_response(HTTPStatus.OK, out)
-            except RuntimeError as exc:
-                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"status": "error", "reason": str(exc)})
-                return
-            except Exception as exc:
-                SERVICES["db"].log_operation(
-                    operation="db.read_source.set",
-                    status="error",
-                    entity_type="database",
-                    entity_id="read_source",
-                    details={"source": source, "error": str(exc)},
-                )
-                self._json_response(
-                    HTTPStatus.INTERNAL_SERVER_ERROR,
-                    {"status": "error", "reason": "read_source_switch_failed", "details": str(exc)},
-                )
-                return
+            self._postgres_only_db_admin_response(operation="read_source")
             return
 
         if parsed.path == "/api/db/cutover/run":
-            if not self._require_admin_access():
-                return
-            body = payload or {}
-            if not isinstance(body, dict):
-                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
-                return
-            cutover_lock = SERVICES.get("db_cutover_lock")
-            acquired = bool(getattr(cutover_lock, "acquire", lambda blocking=False: True)(False))
-            if not acquired:
-                self._json_response(
-                    HTTPStatus.CONFLICT,
-                    {"status": "error", "reason": "cutover_in_progress"},
-                )
-                return
-            sqlite_path = str(body.get("sqlite_path") or SERVICES.get("db_primary_path") or "").strip()
-            postgres_dsn = str(
-                body.get("postgres_dsn")
-                or SERVICES.get("postgres_dsn")
-                or os.environ.get("TENER_DB_DSN", "")
-                or ""
-            ).strip()
-            if not sqlite_path:
-                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"status": "error", "reason": "sqlite_primary_path_missing"})
-                if acquired:
-                    getattr(cutover_lock, "release", lambda: None)()
-                return
-            if not postgres_dsn:
-                self._json_response(HTTPStatus.SERVICE_UNAVAILABLE, {"status": "error", "reason": "postgres_dsn_missing"})
-                if acquired:
-                    getattr(cutover_lock, "release", lambda: None)()
-                return
-
-            execute_backfill = bool(self._safe_bool(body.get("execute_backfill"), False))
-            truncate_first = bool(self._safe_bool(body.get("truncate_first"), False))
-            strict_parity = bool(self._safe_bool(body.get("strict_parity"), True))
-            auto_switch_read_source = bool(self._safe_bool(body.get("auto_switch_read_source"), True))
-            set_dual_strict_on_success = bool(self._safe_bool(body.get("set_dual_strict_on_success"), True))
-            deep = bool(self._safe_bool(body.get("deep"), True))
-            batch_size_raw = self._safe_int(body.get("batch_size"), 500)
-            batch_size = max(1, min(int(batch_size_raw or 500), 5000))
-            sample_limit_raw = self._safe_int(body.get("sample_limit"), 20)
-            sample_limit = max(1, min(int(sample_limit_raw or 20), 200))
-            tables_raw = body.get("tables")
-            tables: Optional[List[str]] = None
-            if tables_raw is not None:
-                if not isinstance(tables_raw, list):
-                    self._json_response(HTTPStatus.BAD_REQUEST, {"error": "tables must be an array"})
-                    return
-                normalized = [str(item).strip() for item in tables_raw if str(item).strip()]
-                tables = normalized or None
-
-            result: Dict[str, Any] = {
-                "status": "ok",
-                "executed_at": datetime.now(timezone.utc).isoformat(),
-                "config": {
-                    "execute_backfill": execute_backfill,
-                    "truncate_first": truncate_first,
-                    "strict_parity": strict_parity,
-                    "auto_switch_read_source": auto_switch_read_source,
-                    "set_dual_strict_on_success": set_dual_strict_on_success,
-                    "deep": deep,
-                    "batch_size": batch_size,
-                    "sample_limit": sample_limit,
-                    "tables_requested": tables or [],
-                },
-                "sqlite_path": sqlite_path,
-                "backfill": None,
-                "parity": None,
-                "switch_read_source": None,
-                "dual_write_strict": None,
-            }
-            try:
-                try:
-                    if execute_backfill:
-                        backfill_result = backfill_sqlite_to_postgres(
-                            sqlite_path=sqlite_path,
-                            postgres_dsn=postgres_dsn,
-                            batch_size=batch_size,
-                            truncate_first=truncate_first,
-                            tables=tables,
-                        )
-                        backfill_out = backfill_result.to_dict()
-                        backfill_out["status"] = "ok" if int(backfill_out.get("failed_total") or 0) == 0 else "partial"
-                        result["backfill"] = backfill_out
-
-                    parity_report = build_parity_report(
-                        sqlite_path=sqlite_path,
-                        postgres_dsn=postgres_dsn,
-                        tables=tables or DEFAULT_PARITY_TABLES,
-                        deep=deep,
-                        sample_limit=sample_limit,
-                    )
-                    result["parity"] = parity_report
-                    parity_ok = str(parity_report.get("status") or "") == "ok"
-                    if not parity_ok and strict_parity:
-                        result["status"] = "blocked"
-                        result["reason"] = "parity_mismatch"
-                    else:
-                        result["status"] = "ok" if parity_ok else "warning"
-                        if not parity_ok:
-                            result["reason"] = "parity_mismatch_but_not_strict"
-
-                    if auto_switch_read_source and (parity_ok or not strict_parity):
-                        switch_out = self._switch_read_source(
-                            source="postgres",
-                            postgres_dsn=postgres_dsn,
-                            reason="cutover_run",
-                        )
-                        result["switch_read_source"] = switch_out
-
-                    if set_dual_strict_on_success and str(result.get("status") or "") in {"ok", "warning"}:
-                        dual_out = self._set_dual_write_strict_mode(True)
-                        result["dual_write_strict"] = dual_out
-                except Exception as exc:
-                    result["status"] = "error"
-                    result["reason"] = "cutover_failed"
-                    result["details"] = str(exc)
-
-                SERVICES["db_cutover_state"] = result
-                SERVICES["db"].log_operation(
-                    operation="db.cutover.run",
-                    status=str(result.get("status") or "unknown"),
-                    entity_type="database",
-                    entity_id="cutover",
-                    details=result,
-                )
-                http_status = HTTPStatus.OK if str(result.get("status") or "") in {"ok", "warning"} else HTTPStatus.CONFLICT
-                if str(result.get("status") or "") == "error":
-                    http_status = HTTPStatus.INTERNAL_SERVER_ERROR
-                self._json_response(http_status, result)
-            finally:
-                if acquired:
-                    getattr(cutover_lock, "release", lambda: None)()
+            self._postgres_only_db_admin_response(operation="cutover_run")
             return
 
         if parsed.path == "/api/db/cutover/rollback":
-            if not self._require_admin_access():
-                return
-            body = payload or {}
-            if not isinstance(body, dict):
-                body = {}
-            cutover_lock = SERVICES.get("db_cutover_lock")
-            acquired = bool(getattr(cutover_lock, "acquire", lambda blocking=False: True)(False))
-            if not acquired:
-                self._json_response(
-                    HTTPStatus.CONFLICT,
-                    {"status": "error", "reason": "cutover_in_progress"},
-                )
-                return
-            force_disable_strict = bool(self._safe_bool(body.get("disable_dual_strict"), True))
-            result: Dict[str, Any] = {
-                "status": "ok",
-                "executed_at": datetime.now(timezone.utc).isoformat(),
-                "switch_read_source": None,
-                "dual_write_strict": None,
-            }
-            try:
-                try:
-                    result["switch_read_source"] = self._switch_read_source(source="sqlite", reason="cutover_rollback")
-                    if force_disable_strict:
-                        result["dual_write_strict"] = self._set_dual_write_strict_mode(False)
-                except Exception as exc:
-                    result["status"] = "error"
-                    result["reason"] = "rollback_failed"
-                    result["details"] = str(exc)
-                SERVICES["db_cutover_state"] = {
-                    "status": "rolled_back" if str(result.get("status") or "") == "ok" else "rollback_error",
-                    "executed_at": result.get("executed_at"),
-                    "details": result,
-                }
-                SERVICES["db"].log_operation(
-                    operation="db.cutover.rollback",
-                    status=str(result.get("status") or "unknown"),
-                    entity_type="database",
-                    entity_id="cutover",
-                    details=result,
-                )
-                status = HTTPStatus.OK if str(result.get("status") or "") == "ok" else HTTPStatus.INTERNAL_SERVER_ERROR
-                self._json_response(status, result)
-            finally:
-                if acquired:
-                    getattr(cutover_lock, "release", lambda: None)()
+            self._postgres_only_db_admin_response(operation="cutover_rollback")
             return
 
         if parsed.path == "/api/db/dual-write/strict":
-            if not self._require_admin_access():
-                return
-            body = payload or {}
-            if not isinstance(body, dict):
-                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
-                return
-            strict_value = self._safe_bool(body.get("strict"), None)
-            if strict_value is None:
-                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "strict is required and must be boolean"})
-                return
-            result = self._set_dual_write_strict_mode(bool(strict_value))
-            SERVICES["db"].log_operation(
-                operation="db.dual_write.strict.set",
-                status=str(result.get("status") or "unknown"),
-                entity_type="database",
-                entity_id="dual_write",
-                details=result,
-            )
-            code = HTTPStatus.OK if str(result.get("status") or "") == "ok" else HTTPStatus.BAD_REQUEST
-            self._json_response(code, result)
+            self._postgres_only_db_admin_response(operation="dual_write_strict")
             return
 
         if parsed.path == "/api/linkedin/accounts/connect/start":
@@ -4716,61 +4214,27 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             db = SERVICES["db"]
         return db
 
+    def _postgres_only_db_admin_response(self, *, operation: str) -> None:
+        if not self._require_admin_access():
+            return
+        self._json_response(
+            HTTPStatus.GONE,
+            {
+                "status": "unsupported",
+                "reason": "postgres_only_runtime",
+                "operation": str(operation or "").strip() or "unknown",
+            },
+        )
+
     @staticmethod
     def _switch_read_source(*, source: str, postgres_dsn: str = "", reason: str = "manual_switch") -> Dict[str, Any]:
         normalized = str(source or "").strip().lower()
-        runtime_mode = str(SERVICES.get("db_runtime_mode") or "").strip().lower()
-        if runtime_mode == "postgres_primary":
-            if normalized == "sqlite":
-                SERVICES["db_read_status"] = {
-                    "status": "ok",
-                    "source": "postgres",
-                    "requested_source": "runtime",
-                    "reason": "postgres_runtime_primary",
-                }
-                SERVICES["read_db"] = SERVICES.get("db")
-                return {
-                    "status": "skipped",
-                    "source": "postgres",
-                    "reason": "postgres_runtime_primary",
-                    "db_read_status": SERVICES.get("db_read_status"),
-                }
-            if normalized == "postgres":
-                SERVICES["read_db"] = SERVICES.get("db")
-                dsn = str(postgres_dsn or SERVICES.get("postgres_dsn") or os.environ.get("TENER_DB_DSN", "") or "").strip()
-                if dsn:
-                    SERVICES["postgres_dsn"] = dsn
-                SERVICES["db_read_status"] = {
-                    "status": "ok",
-                    "source": "postgres",
-                    "requested_source": "runtime",
-                    "reason": reason,
-                }
-                return {
-                    "status": "ok",
-                    "source": "postgres",
-                    "db_read_status": SERVICES.get("db_read_status"),
-                }
-        if normalized == "sqlite":
-            SERVICES["read_db"] = SERVICES["db"]
-            SERVICES["db_read_status"] = {
-                "status": "ok",
-                "source": "sqlite",
-                "requested_source": "runtime",
-                "reason": reason,
-            }
-            return {
-                "status": "ok",
-                "source": "sqlite",
-                "db_read_status": SERVICES.get("db_read_status"),
-            }
         if normalized != "postgres":
-            raise ValueError("source must be sqlite or postgres")
+            raise ValueError("postgres_only_runtime")
         dsn = str(postgres_dsn or SERVICES.get("postgres_dsn") or os.environ.get("TENER_DB_DSN", "") or "").strip()
-        if not dsn:
-            raise RuntimeError("postgres_dsn_missing")
-        SERVICES["read_db"] = PostgresReadDatabase(dsn)
-        SERVICES["postgres_dsn"] = dsn
+        SERVICES["read_db"] = SERVICES.get("db")
+        if dsn:
+            SERVICES["postgres_dsn"] = dsn
         SERVICES["db_read_status"] = {
             "status": "ok",
             "source": "postgres",
@@ -4785,89 +4249,19 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
     @staticmethod
     def _set_dual_write_strict_mode(strict: bool) -> Dict[str, Any]:
-        db = SERVICES.get("db")
-        if db is None:
-            return {"status": "skipped", "reason": "db_unavailable"}
-        setter = getattr(db, "set_strict_mode", None)
-        if not callable(setter):
-            return {"status": "skipped", "reason": "db_is_not_dual_write"}
-        out = setter(bool(strict))
         return {
-            "status": "ok",
+            "status": "unsupported",
+            "reason": "postgres_only_runtime",
             "strict": bool(strict),
-            "dual_write": out if isinstance(out, dict) else {},
         }
 
     @staticmethod
     def _build_cutover_preflight_report(*, sqlite_path: str, postgres_dsn: str) -> Dict[str, Any]:
-        sqlite_exists = Path(sqlite_path).exists()
-        migration_files = sorted([path.name for path in (project_root() / "migrations").glob("*.sql") if path.is_file()])
-        sqlite_tables = list_sqlite_user_tables(sqlite_path) if sqlite_exists else []
-        backfill_tables = list(TABLE_ORDER)
-        backfill_table_set = set(backfill_tables)
-        missing_backfill_tables = [name for name in sqlite_tables if name not in backfill_table_set]
-        checks: Dict[str, Any] = {
-            "sqlite_exists": sqlite_exists,
-            "sqlite_tables_total": len(sqlite_tables),
-            "sqlite_tables": sqlite_tables,
-            "backfill_tables_total": len(backfill_tables),
-            "backfill_tables": backfill_tables,
-            "backfill_missing_tables": missing_backfill_tables,
-            "backfill_complete": len(missing_backfill_tables) == 0,
-            "migrations_total": len(migration_files),
-            "migrations_files": migration_files,
-            "postgres_connected": False,
-            "postgres_migrations_applied": [],
-            "postgres_migrations_missing": [],
-            "read_source": str((SERVICES.get("db_read_status") or {}).get("source") or ""),
-            "db_backend": SERVICES.get("db_backend"),
-            "db_runtime_mode": SERVICES.get("db_runtime_mode"),
-            "db_cutover_state": SERVICES.get("db_cutover_state"),
-        }
-
-        db_obj = SERVICES.get("db")
-        dual_status = getattr(db_obj, "dual_write_status", None)
-        if isinstance(dual_status, dict):
-            checks["dual_write"] = dual_status
-
-        try:
-            import psycopg  # type: ignore
-        except Exception as exc:
-            checks["postgres_error"] = f"psycopg_missing:{exc}"
-            return {
-                "status": "warning" if sqlite_exists else "error",
-                "checks": checks,
-            }
-
-        try:
-            with psycopg.connect(postgres_dsn) as conn:
-                checks["postgres_connected"] = True
-                with conn.cursor() as cur:
-                    cur.execute("SELECT to_regclass('public.schema_migrations')")
-                    reg = cur.fetchone()
-                    if reg and reg[0] is not None:
-                        cur.execute("SELECT version FROM schema_migrations ORDER BY version ASC")
-                        checks["postgres_migrations_applied"] = [str(row[0]) for row in cur.fetchall()]
-                    else:
-                        checks["postgres_migrations_applied"] = []
-        except Exception as exc:
-            checks["postgres_error"] = str(exc)
-            return {
-                "status": "warning" if sqlite_exists else "error",
-                "checks": checks,
-            }
-
-        applied_set = set(str(x) for x in (checks.get("postgres_migrations_applied") or []))
-        checks["postgres_migrations_missing"] = [name for name in migration_files if name not in applied_set]
-        ready = (
-            sqlite_exists
-            and bool(checks.get("postgres_connected"))
-            and len(checks.get("postgres_migrations_missing") or []) == 0
-            and bool(checks.get("backfill_complete"))
-        )
         return {
-            "status": "ok" if ready else "warning",
-            "checks": checks,
+            "status": "unsupported",
+            "reason": "postgres_only_runtime",
+            "sqlite_path": str(sqlite_path or ""),
+            "postgres_dsn_configured": bool(str(postgres_dsn or "").strip()),
         }
 
     def _require_request_auth(self, *, method: str, path: str) -> bool:
@@ -5223,6 +4617,9 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
 
 def run() -> None:
+    bootstrap_error = str(SERVICES.get("bootstrap_error") or "").strip()
+    if bootstrap_error:
+        raise RuntimeError(f"service bootstrap failed: {bootstrap_error}")
     # Cloud runtimes usually inject PORT; prefer it when TENER_PORT is not set.
     host = os.environ.get("TENER_HOST", "0.0.0.0")
     port = int(os.environ.get("TENER_PORT", os.environ.get("PORT", "8080")))

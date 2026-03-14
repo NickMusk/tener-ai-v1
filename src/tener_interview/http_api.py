@@ -9,14 +9,15 @@ from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
 from urllib.parse import parse_qs, urlparse
 
+from tener_ai.db_read_pg import PostgresReadDatabase
+
 from .config import InterviewModuleConfig
-from .db import InterviewDatabase, InterviewPostgresDatabase
+from .db import InterviewPostgresDatabase
 from .providers import HireflixConfig, HireflixHTTPAdapter, HireflixMockAdapter
 from .question_generation import InterviewQuestionGenerator
 from .scoring import InterviewScoringEngine
 from .service import InterviewService
 from .source_api import SourceAPIClient
-from .source_db import SourceReadDatabase
 from .token_service import InterviewTokenService
 from .transcription_scoring import TranscriptionScoringEngine
 
@@ -27,12 +28,9 @@ def project_root() -> Path:
 
 def build_services() -> Dict[str, Any]:
     config = InterviewModuleConfig.from_env()
-    if config.db_backend == "postgres":
-        if not config.db_dsn:
-            raise RuntimeError("TENER_INTERVIEW_DB_DSN (or TENER_DB_DSN) is required for postgres interview backend")
-        db = InterviewPostgresDatabase(dsn=config.db_dsn)
-    else:
-        db = InterviewDatabase(db_path=config.db_path)
+    if not config.db_dsn:
+        raise RuntimeError("TENER_INTERVIEW_DB_DSN (or TENER_DB_DSN) is required for postgres interview backend")
+    db = InterviewPostgresDatabase(dsn=config.db_dsn)
     db.init_schema()
     if config.source_api_base:
         source_db = SourceAPIClient(
@@ -40,7 +38,9 @@ def build_services() -> Dict[str, Any]:
             timeout_seconds=config.source_api_timeout_seconds,
         )
     else:
-        source_db = SourceReadDatabase(db_path=config.source_db_path)
+        if not config.source_db_dsn:
+            raise RuntimeError("TENER_INTERVIEW_SOURCE_DB_DSN (or TENER_DB_DSN) is required for postgres source catalog")
+        source_db = PostgresReadDatabase(dsn=config.source_db_dsn)
 
     provider_name = config.provider_name
     provider_error = ""
@@ -100,8 +100,22 @@ def build_services() -> Dict[str, Any]:
         "interview": service,
     }
 
+def _bootstrap_services() -> Dict[str, Any]:
+    try:
+        return build_services()
+    except Exception as exc:
+        return {
+            "bootstrap_error": str(exc),
+            "config": InterviewModuleConfig.from_env(),
+            "db": None,
+            "source_db": None,
+            "provider_name": "unavailable",
+            "provider_error": str(exc),
+            "interview": None,
+        }
 
-SERVICES = build_services()
+
+SERVICES = _bootstrap_services()
 
 
 class InterviewRequestHandler(BaseHTTPRequestHandler):
@@ -645,6 +659,9 @@ class InterviewRequestHandler(BaseHTTPRequestHandler):
 
 
 def run_server() -> None:
+    bootstrap_error = str(SERVICES.get("bootstrap_error") or "").strip()
+    if bootstrap_error:
+        raise RuntimeError(f"service bootstrap failed: {bootstrap_error}")
     config = SERVICES["config"]
     server = ThreadingHTTPServer((config.host, config.port), InterviewRequestHandler)
     print(f"Interview module listening on http://{config.host}:{config.port}")

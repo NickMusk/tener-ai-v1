@@ -68,6 +68,13 @@ class PostgresReadDatabase:
         with self._psycopg.connect(self.dsn) as conn:
             yield conn
 
+    def status(self) -> Dict[str, Any]:
+        return {
+            "backend": "postgres",
+            "available": True,
+            "dsn_configured": bool(self.dsn),
+        }
+
     def list_jobs(self, limit: int = 100, include_archived: bool = False) -> List[Dict[str, Any]]:
         safe_limit = max(1, min(int(limit or 100), 1000))
         with self._connect() as conn:
@@ -185,8 +192,7 @@ class PostgresReadDatabase:
                         prs.next_followup_at AS pre_resume_next_followup_at,
                         cps.status AS candidate_prescreen_status,
                         cps.must_have_answers_json AS candidate_prescreen_must_have_answers,
-                        cps.salary_expectation_min AS candidate_prescreen_salary_expectation_min,
-                        cps.salary_expectation_max AS candidate_prescreen_salary_expectation_max,
+                        cps.salary_expectation_gross_monthly AS candidate_prescreen_salary_expectation_gross_monthly,
                         cps.salary_expectation_currency AS candidate_prescreen_salary_expectation_currency,
                         cps.location_confirmed AS candidate_prescreen_location_confirmed,
                         cps.work_authorization_confirmed AS candidate_prescreen_work_authorization_confirmed,

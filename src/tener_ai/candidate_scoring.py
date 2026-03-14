@@ -242,18 +242,15 @@ class CandidateScoringPolicy:
     def _salary_fit(cls, row: Dict[str, Any], gates: Dict[str, Any]) -> Dict[str, Any]:
         job_max = cls._coerce_optional_float(row.get("job_salary_max"))
         job_min = cls._coerce_optional_float(row.get("job_salary_min"))
-        candidate_min = cls._coerce_optional_float(row.get("candidate_prescreen_salary_expectation_min"))
-        candidate_max = cls._coerce_optional_float(row.get("candidate_prescreen_salary_expectation_max"))
+        candidate_salary = cls._coerce_optional_float(row.get("candidate_prescreen_salary_expectation_gross_monthly"))
         currency = str(
             row.get("candidate_prescreen_salary_expectation_currency") or row.get("job_salary_currency") or ""
         ).strip().upper() or None
-        if (candidate_min is None and candidate_max is None) or (job_min is None and job_max is None):
+        if candidate_salary is None or (job_min is None and job_max is None):
             return {"status": "unknown", "blocked": False, "penalty_points": 0.0, "currency": currency}
 
-        candidate_floor = candidate_min if candidate_min is not None else candidate_max
-        candidate_ceiling = candidate_max if candidate_max is not None else candidate_min
-        if job_max is not None and candidate_floor is not None:
-            over_budget = candidate_floor - job_max
+        if job_max is not None:
+            over_budget = candidate_salary - job_max
             if over_budget <= 0:
                 return {"status": "within_budget", "blocked": False, "penalty_points": 0.0, "currency": currency}
             moderate_cutoff = max(
@@ -284,7 +281,7 @@ class CandidateScoringPolicy:
                 "penalty_points": float(gates["salary_moderate_penalty_points"]) / 2.0,
                 "currency": currency,
             }
-        if job_min is not None and candidate_ceiling is not None and candidate_ceiling < job_min:
+        if job_min is not None and candidate_salary < job_min:
             return {"status": "below_budget", "blocked": False, "penalty_points": 0.0, "currency": currency}
         return {"status": "unknown", "blocked": False, "penalty_points": 0.0, "currency": currency}
 
