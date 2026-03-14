@@ -230,6 +230,9 @@ class MatchingEngine:
             notes["human_explanation"] = f"{notes['human_explanation']} Evidence: {evidence_summary}."
         return MatchResult(score=round(score, 3), status=status, notes=notes)
 
+    def match_skills_with_evidence(self, *, profile: Dict[str, Any], skills: List[str]) -> Dict[str, Any]:
+        return self._match_skills_with_evidence(profile=profile, skills=skills)
+
     def build_job_requirements(
         self,
         job: Dict[str, Any],

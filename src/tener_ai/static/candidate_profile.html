@@ -411,6 +411,39 @@
       overflow-wrap: anywhere;
     }
 
+    .section-tools {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+
+    .conversation-messages-wrap {
+      margin-top: 14px;
+      border-top: 1px solid rgba(48, 54, 61, 0.72);
+      padding-top: 14px;
+    }
+
+    .conversation-messages {
+      display: grid;
+      gap: 10px;
+    }
+
+    .chat-msg {
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px;
+      background: #0d121a;
+    }
+
+    .chat-msg.inbound {
+      border-left: 3px solid var(--accent-green);
+    }
+
+    .chat-msg.outbound {
+      border-left: 3px solid var(--accent-blue);
+    }
+
     .analysis-box {
       padding: 14px;
       border: 1px solid var(--border-color);
@@ -479,14 +512,6 @@
       min-width: 280px;
       max-width: 100%;
       font-family: 'DM Sans', sans-serif;
-    }
-
-    iframe {
-      width: 100%;
-      min-height: 480px;
-      border: 1px solid var(--border-color);
-      border-radius: 10px;
-      background: #fff;
     }
 
     .muted { color: var(--text-secondary); }
@@ -576,7 +601,7 @@
           </div>
           <div class="score-list">
             <div>
-              <div class="score-item-head"><span>Technical Skills</span><span class="score-item-value" id="score-tech">N/A</span></div>
+              <div class="score-item-head"><span>Profile and CV</span><span class="score-item-value" id="score-tech">N/A</span></div>
               <div class="score-bar"><div class="score-fill" id="bar-tech"></div></div>
             </div>
             <div>
@@ -584,7 +609,7 @@
               <div class="score-bar"><div class="score-fill" id="bar-soft"></div></div>
             </div>
             <div>
-              <div class="score-item-head"><span>Culture Fit</span><span class="score-item-value" id="score-culture">N/A</span></div>
+              <div class="score-item-head"><span>Interview</span><span class="score-item-value" id="score-culture">N/A</span></div>
               <div class="score-bar"><div class="score-fill" id="bar-culture"></div></div>
             </div>
           </div>
@@ -606,8 +631,12 @@
             <div id="conversation-summary"></div>
             <div id="conversation-account" class="muted mono" style="margin-top:8px;"></div>
             <div id="conversation-chat-id" class="muted mono" style="margin-top:6px;"></div>
-            <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap;">
+            <div class="section-tools">
+              <button class="btn" id="conversation-toggle-btn" type="button" style="display:none;">Show Messages</button>
               <a class="btn" id="conversation-open-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open Conversation</a>
+            </div>
+            <div id="conversation-messages-wrap" class="conversation-messages-wrap" style="display:none;">
+              <div id="conversation-messages" class="conversation-messages"></div>
             </div>
           </div>
         </section>
@@ -620,7 +649,7 @@
         <section class="panel">
           <h3 class="card-title">Culture Fit Analysis</h3>
           <div class="analysis-box">
-            <div class="analysis-sub">WHY THIS CANDIDATE MAY FIT</div>
+            <div class="analysis-sub" id="fit-analysis-source">WHY THIS CANDIDATE MAY FIT</div>
             <div id="fit-explanation" class="fit-explanation"></div>
           </div>
           <div class="fit-grid" id="fit-grid"></div>
@@ -630,10 +659,10 @@
           <h3 class="card-title">Resume</h3>
           <div class="resume-controls">
             <select id="resume-select" class="resume-select"></select>
-            <button class="btn" id="resume-open-btn">Open</button>
+            <button class="btn" id="resume-open-btn">Download</button>
           </div>
-          <div id="resume-empty" class="muted" style="margin-bottom:8px;">No resume links yet</div>
-          <iframe id="resume-frame" style="display:none;"></iframe>
+          <div id="resume-empty" class="muted" style="margin-bottom:8px;">No resume files linked yet</div>
+          <div id="resume-note" class="muted">Preview is hidden on this page. Use Download to open the stored resume file.</div>
         </section>
 
         <section class="panel" id="audit-card" style="display:none;">
@@ -651,7 +680,9 @@
       audit: false,
       profile: null,
       selectedResumeUrl: "",
-      selectedResumeProxyUrl: "",
+      selectedResumeDownloadUrl: "",
+      expandedConversationId: null,
+      conversationMessagesById: {},
     };
 
     const $ = (id) => document.getElementById(id);
@@ -728,6 +759,7 @@
     }
 
     function clampScore(value) {
+      if (value === null || value === undefined || value === "") return null;
       const parsed = Number(value);
       if (!Number.isFinite(parsed)) return null;
       return Math.max(0, Math.min(100, parsed));
@@ -806,7 +838,7 @@
       const item = selectedJobPayload();
       if (!item) {
         $("overall-score-big").textContent = "N/A";
-        $("score-meta").textContent = "status: review";
+        $("score-meta").textContent = "status: review | overall pending: no active job context";
         setProgress("score-tech", "bar-tech", null);
         setProgress("score-soft", "bar-soft", null);
         setProgress("score-culture", "bar-culture", null);
@@ -819,16 +851,29 @@
       const comm = scorecard.communication || {};
       const commStage = String(comm.latest_stage || "").toLowerCase();
       const commScore = commStage === "dialogue" ? comm.latest_score : null;
-      const culture = (item.fit_breakdown || {}).culture_fit || {};
-      const alignmentCount = Array.isArray(culture.alignment_highlights) ? culture.alignment_highlights.length : 0;
-      const concernCount = Array.isArray(culture.concerns) ? culture.concerns.length : 0;
-      const cultureFit = Math.max(0, Math.min(100, 62 + alignmentCount * 9 - concernCount * 7));
+      const interview = scorecard.interview_evaluation || {};
+      const interviewStatus = String(interview.latest_status || "").toLowerCase();
+      const interviewScore = interviewStatus === "scored" ? interview.latest_score : null;
+      const sourceDetails = (source.latest_details && typeof source.latest_details === "object") ? source.latest_details : {};
+      const sourceScore = (typeof sourceDetails.match_score === "number" && Number.isFinite(sourceDetails.match_score))
+        ? sourceDetails.match_score
+        : source.latest_score;
+      let scoreReason = `status: ${overall.overall_status || "review"}`;
+      if (typeof overall.overall_score === "number" && Number.isFinite(overall.overall_score)) {
+        scoreReason += ` | generated: ${String(state.profile?.generated_at || "-").replace("T", " ").slice(0, 19)}`;
+      } else if (!overall.has_interview_score) {
+        scoreReason += " | overall pending: interview score not available yet";
+      } else if (!overall.has_cv) {
+        scoreReason += " | overall pending: profile/CV stage is not complete";
+      } else if (!overall.has_all_scores) {
+        scoreReason += " | overall pending: one or more stage scores are missing";
+      }
 
       $("overall-score-big").textContent = formatScore(overall.overall_score);
-      $("score-meta").textContent = `status: ${overall.overall_status || "review"} | generated: ${String(state.profile?.generated_at || "-").replace("T", " ").slice(0, 19)}`;
-      setProgress("score-tech", "bar-tech", source.latest_score);
+      $("score-meta").textContent = scoreReason;
+      setProgress("score-tech", "bar-tech", sourceScore);
       setProgress("score-soft", "bar-soft", commScore);
-      setProgress("score-culture", "bar-culture", cultureFit);
+      setProgress("score-culture", "bar-culture", interviewScore);
 
       const statusSelect = $("status-select");
       if (statusSelect) {
@@ -845,9 +890,16 @@
       const empty = $("conversation-empty");
       const details = $("conversation-details");
       const openLink = $("conversation-open-link");
+      const toggleBtn = $("conversation-toggle-btn");
+      const messagesWrap = $("conversation-messages-wrap");
       if (!conversation || !Number(conversation.conversation_id || 0)) {
         empty.style.display = "block";
         details.style.display = "none";
+        messagesWrap.style.display = "none";
+        if (toggleBtn) {
+          toggleBtn.style.display = "none";
+          toggleBtn.textContent = "Show Messages";
+        }
         if (openLink) {
           openLink.removeAttribute("href");
           openLink.style.display = "none";
@@ -861,6 +913,10 @@
       $("conversation-summary").textContent = `Conversation #${conversationId} • ${status}`;
       $("conversation-account").textContent = `Sent from account: ${String(conversation.linkedin_account_label || "not assigned")}`;
       $("conversation-chat-id").textContent = `LinkedIn chat id: ${String(conversation.external_chat_id || "not synced yet")}`;
+      if (toggleBtn) {
+        toggleBtn.style.display = "inline-block";
+        toggleBtn.textContent = state.expandedConversationId === conversationId ? "Hide Messages" : "Show Messages";
+      }
       const dashboardPath = String(conversation.dashboard_path || "").trim();
       if (openLink) {
         if (dashboardPath) {
@@ -871,6 +927,77 @@
           openLink.style.display = "none";
         }
       }
+      renderConversationMessages(conversationId);
+    }
+
+    function renderConversationMessages(conversationId) {
+      const messagesWrap = $("conversation-messages-wrap");
+      const messagesBox = $("conversation-messages");
+      if (Number(state.expandedConversationId) !== Number(conversationId)) {
+        messagesWrap.style.display = "none";
+        messagesBox.innerHTML = "";
+        return;
+      }
+      messagesWrap.style.display = "block";
+      const cached = state.conversationMessagesById[String(conversationId)] || null;
+      if (!cached || cached.status === "loading") {
+        messagesBox.innerHTML = `<div class="muted">Loading messages...</div>`;
+        return;
+      }
+      if (cached.status === "error") {
+        messagesBox.innerHTML = `<div class="muted">Failed to load messages: ${escapeHtml(cached.error || "unknown error")}</div>`;
+        return;
+      }
+      const items = Array.isArray(cached.items) ? cached.items : [];
+      if (!items.length) {
+        messagesBox.innerHTML = `<div class="muted">No messages yet</div>`;
+        return;
+      }
+      messagesBox.innerHTML = items.map((msg) => {
+        const direction = String(msg.direction || "").toLowerCase() === "inbound" ? "inbound" : "outbound";
+        const created = escapeHtml(String(msg.created_at || ""));
+        const content = escapeHtml(String(msg.content || ""));
+        return `
+          <div class="chat-msg ${direction}">
+            <div style="display:flex;justify-content:space-between;gap:8px;">
+              <b>${escapeHtml(direction)}</b>
+              <span class="mono muted">${created || "-"}</span>
+            </div>
+            <div style="margin-top:6px;white-space:pre-wrap;">${content || "-"}</div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function toggleConversationMessages() {
+      const item = selectedJobPayload();
+      const conversation = item?.conversation || null;
+      const conversationId = Number(conversation?.conversation_id || 0);
+      if (!conversationId) return;
+      if (Number(state.expandedConversationId) === conversationId) {
+        state.expandedConversationId = null;
+        renderConversation();
+        return;
+      }
+      state.expandedConversationId = conversationId;
+      if (!state.conversationMessagesById[String(conversationId)]) {
+        state.conversationMessagesById[String(conversationId)] = { status: "loading", items: [] };
+        renderConversation();
+        try {
+          const out = await api(`/api/conversations/${conversationId}/messages`);
+          state.conversationMessagesById[String(conversationId)] = {
+            status: "loaded",
+            items: Array.isArray(out.items) ? out.items : [],
+          };
+        } catch (err) {
+          state.conversationMessagesById[String(conversationId)] = {
+            status: "error",
+            error: String(err?.message || err || "unknown error"),
+            items: [],
+          };
+        }
+      }
+      renderConversation();
     }
 
     function renderFit() {
@@ -888,13 +1015,22 @@
       const analysis = culture.analysis || {};
       const risks = Array.isArray(fit.risk_flags) ? fit.risk_flags : [];
       const riskClass = risks.length ? "fit-risk" : "";
+      const analysisSource = String(analysis.source || explanation.source || "fallback").toUpperCase();
+      const mustWeak = Array.isArray(must.weak) ? must.weak : [];
+      const niceWeak = Array.isArray(nice.weak) ? nice.weak : [];
+
+      $("fit-analysis-source").textContent = `WHY THIS CANDIDATE MAY FIT • source: ${analysisSource}`;
 
       $("fit-grid").innerHTML = `
         <div class="fit-cell">
           <div class="fit-title">Must Have Coverage (${escapeHtml(formatScore((must.match_ratio || 0) * 100))}%)</div>
-          <div class="muted" style="font-size:12px;margin-bottom:6px;">Matched</div>
+          <div class="muted" style="font-size:12px;margin-bottom:6px;">Verified match</div>
           <ul class="fit-list">
             ${(Array.isArray(must.matched) ? must.matched : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
+          </ul>
+          <div class="muted" style="font-size:12px;margin:8px 0 6px;">Weak evidence</div>
+          <ul class="fit-list">
+            ${mustWeak.map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
           </ul>
           <div class="muted" style="font-size:12px;margin:8px 0 6px;">Missing</div>
           <ul class="fit-list">
@@ -906,6 +1042,10 @@
           <div class="muted" style="font-size:12px;margin-bottom:6px;">Nice to have matched</div>
           <ul class="fit-list">
             ${(Array.isArray(nice.matched) ? nice.matched : []).map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
+          </ul>
+          <div class="muted" style="font-size:12px;margin:8px 0 6px;">Nice to have weak evidence</div>
+          <ul class="fit-list">
+            ${niceWeak.map((x) => `<li>${escapeHtml(x)}</li>`).join("") || "<li>none</li>"}
           </ul>
           <div class="muted" style="font-size:12px;margin:8px 0 6px;">Cultural alignment</div>
           <ul class="fit-list">
@@ -939,9 +1079,11 @@
         const overall = item.overall_scoring || {};
         lines.push(`Overall: ${overall.overall_status || "review"} (${formatScore(overall.overall_score)})`);
         if (analysis.agent_name) lines.push(`Culture analyst: ${analysis.agent_name}`);
+        if (analysis.source) lines.push(`Culture summary source: ${analysis.source}`);
         if (analysis.summary) lines.push(`Culture summary: ${analysis.summary}`);
         const highlights = Array.isArray(culture.alignment_highlights) ? culture.alignment_highlights : [];
         if (highlights.length) lines.push(`Culture highlights: ${highlights.slice(0, 2).join('; ')}`);
+        if (mustWeak.length) lines.push(`Must-have weak evidence: ${mustWeak.slice(0, 3).join('; ')}`);
         const predictive = Array.isArray(culture.predictive_signals) ? culture.predictive_signals : [];
         if (predictive.length) lines.push(`Predictive signals: ${predictive.slice(0, 1).join('; ')}`);
         const risk = risks[0]?.message;
@@ -1045,24 +1187,27 @@
       }).join("");
     }
 
-    async function renderResume() {
+    function renderResume() {
       const item = selectedJobPayload();
       const resumeItems = Array.isArray(item?.resumes?.items) && item.resumes.items.length
         ? item.resumes.items
         : (item?.resumes?.links || []).map((url) => ({ url, label: url }));
       const resumes = resumeItems.map((entry) => String(entry?.url || "").trim()).filter(Boolean);
       const select = $("resume-select");
-      const frame = $("resume-frame");
       const empty = $("resume-empty");
+      const note = $("resume-note");
+      const openBtn = $("resume-open-btn");
       if (!resumes.length) {
         empty.style.display = "block";
-        frame.style.display = "none";
+        note.style.display = "none";
         select.innerHTML = `<option value="">No resume links</option>`;
         state.selectedResumeUrl = "";
-        state.selectedResumeProxyUrl = "";
+        state.selectedResumeDownloadUrl = "";
+        openBtn.disabled = true;
         return;
       }
       empty.style.display = "none";
+      note.style.display = "block";
       if (!state.selectedResumeUrl || !resumes.includes(state.selectedResumeUrl)) {
         state.selectedResumeUrl = resumes[0];
       }
@@ -1077,22 +1222,8 @@
         return `<option value="${encodeURIComponent(url)}">${escapeHtml(optionLabel)}</option>`;
       }).join("");
       select.value = encodeURIComponent(state.selectedResumeUrl);
-      try {
-        const out = await api(`/api/candidates/${state.candidateId}/resume-preview?url=${encodeURIComponent(state.selectedResumeUrl)}`);
-        if (out.available && out.url) {
-          state.selectedResumeProxyUrl = `/api/candidates/${state.candidateId}/resume-preview/content?url=${encodeURIComponent(out.url)}`;
-          frame.src = state.selectedResumeProxyUrl;
-          frame.style.display = "block";
-        } else {
-          frame.style.display = "none";
-          empty.style.display = "block";
-          state.selectedResumeProxyUrl = "";
-        }
-      } catch {
-        frame.style.display = "none";
-        empty.style.display = "block";
-        state.selectedResumeProxyUrl = "";
-      }
+      state.selectedResumeDownloadUrl = `/api/candidates/${state.candidateId}/resume-preview/content?url=${encodeURIComponent(state.selectedResumeUrl)}`;
+      openBtn.disabled = false;
     }
 
     function renderAudit() {
@@ -1111,7 +1242,7 @@
       renderConversation();
       renderSignals();
       renderAudit();
-      renderResume().catch(() => null);
+      renderResume();
       $("audit-btn").textContent = `✕ Audit: ${state.audit ? "on" : "off"}`;
     }
 
@@ -1152,17 +1283,21 @@
         if (!jobId || jobId === state.selectedJobId) return;
         state.selectedJobId = jobId;
         state.selectedResumeUrl = "";
+        state.expandedConversationId = null;
         setQuery();
         renderAll();
       });
       $("resume-select").addEventListener("change", (event) => {
         const value = decodeURIComponent(String(event.target.value || "").trim());
         state.selectedResumeUrl = value;
-        renderResume().catch(() => null);
+        renderResume();
+      });
+      $("conversation-toggle-btn").addEventListener("click", () => {
+        toggleConversationMessages().catch(showError);
       });
       $("resume-open-btn").addEventListener("click", () => {
-        if (!state.selectedResumeProxyUrl) return;
-        window.open(state.selectedResumeProxyUrl, "_blank", "noopener,noreferrer");
+        if (!state.selectedResumeDownloadUrl) return;
+        window.open(state.selectedResumeDownloadUrl, "_blank", "noopener,noreferrer");
       });
     }
 

@@ -613,10 +613,33 @@ class CandidateProfileService:
         required_skills_raw = notes.get("required_skills") if isinstance(notes.get("required_skills"), list) else []
         fallback_required_skills = [str(item).strip() for item in required_skills_raw if str(item).strip()]
         required_skills = current_required_skills or fallback_required_skills
-        matched_skills = [item for item in required_skills if item.lower() in candidate_skills_norm]
+        required_skill_match = (
+            self.matching_engine.match_skills_with_evidence(profile=candidate, skills=required_skills)
+            if self.matching_engine is not None
+            else {
+                "strong_matches": [item for item in required_skills if item.lower() in candidate_skills_norm],
+                "weak_matches": [],
+                "evidence": {},
+            }
+        )
+        matched_skills = [
+            item
+            for item in required_skills
+            if item.lower() in {str(skill).strip().lower() for skill in (required_skill_match.get("strong_matches") or [])}
+        ]
+        weak_required_skills = [
+            item
+            for item in required_skills
+            if item.lower() in {str(skill).strip().lower() for skill in (required_skill_match.get("weak_matches") or [])}
+        ]
         required_norm = {item.lower(): item for item in required_skills}
         matched_norm = {item.lower(): item for item in matched_skills}
-        missing_must_have = [label for key, label in required_norm.items() if key not in matched_norm]
+        weak_required_norm = {item.lower(): item for item in weak_required_skills}
+        missing_must_have = [
+            label
+            for key, label in required_norm.items()
+            if key not in matched_norm and key not in weak_required_norm
+        ]
         current_nice_to_have = [
             str(item).strip()
             for item in (job_requirements.get("nice_to_have_skills") or [])
@@ -628,13 +651,32 @@ class CandidateProfileService:
         if not nice_to_have:
             core_skills = [str(item).strip() for item in (core_profile.get("core_skills") or []) if str(item).strip()]
             nice_to_have = [item for item in core_skills if item.lower() not in required_norm]
+        nice_skill_match = (
+            self.matching_engine.match_skills_with_evidence(profile=candidate, skills=nice_to_have)
+            if self.matching_engine is not None
+            else {
+                "strong_matches": [item for item in nice_to_have if item.lower() in candidate_skills_norm],
+                "weak_matches": [],
+            }
+        )
         questionable_skills = [
             str(item).strip()
             for item in (job_requirements.get("questionable_skills") or [])
             if str(item).strip()
         ]
-        missing_nice = [item for item in nice_to_have if item.lower() not in candidate_skills_norm]
-        matched_nice = [item for item in nice_to_have if item.lower() in candidate_skills_norm]
+        matched_nice = [
+            item
+            for item in nice_to_have
+            if item.lower() in {str(skill).strip().lower() for skill in (nice_skill_match.get("strong_matches") or [])}
+        ]
+        weak_nice = [
+            item
+            for item in nice_to_have
+            if item.lower() in {str(skill).strip().lower() for skill in (nice_skill_match.get("weak_matches") or [])}
+        ]
+        matched_nice_norm = {item.lower() for item in matched_nice}
+        weak_nice_norm = {item.lower() for item in weak_nice}
+        missing_nice = [item for item in nice_to_have if item.lower() not in matched_nice_norm and item.lower() not in weak_nice_norm]
         culture_fit = self._build_culture_fit(
             job=job,
             candidate=candidate,
@@ -651,6 +693,14 @@ class CandidateProfileService:
                     "type": "missing_must_have",
                     "severity": "high",
                     "message": f"Missing must-have skills: {', '.join(missing_must_have[:6])}",
+                }
+            )
+        elif weak_required_skills:
+            risks.append(
+                {
+                    "type": "weak_must_have_evidence",
+                    "severity": "medium",
+                    "message": f"Must-have skills rely on weak profile evidence only: {', '.join(weak_required_skills[:6])}",
                 }
             )
         components = notes.get("components") if isinstance(notes.get("components"), dict) else {}
@@ -714,12 +764,18 @@ class CandidateProfileService:
             "must_have": {
                 "required": required_skills,
                 "matched": matched_skills,
+                "weak": weak_required_skills,
                 "missing": missing_must_have,
-                "match_ratio": round(float(len(matched_skills)) / float(max(len(required_skills), 1)), 3),
+                "match_ratio": round(
+                    float(len(matched_skills) + len(weak_required_skills)) / float(max(len(required_skills), 1)),
+                    3,
+                ),
+                "verified_match_ratio": round(float(len(matched_skills)) / float(max(len(required_skills), 1)), 3),
             },
             "nice_to_have": {
                 "expected": nice_to_have,
                 "matched": matched_nice,
+                "weak": weak_nice,
                 "missing": missing_nice,
             },
             "questionable_skills": questionable_skills,
@@ -1117,17 +1173,27 @@ class CandidateProfileService:
         predictive_signals: List[str],
     ) -> Dict[str, Any]:
         agent_name = AGENT_DEFAULT_NAMES.get("culture_analyst", "Harper AI (Culture Analyst)")
-        fallback = (
-            f"{agent_name} sees culture fit as "
-            f"{'strong' if alignment else 'unclear'} based on resume submission, chat behavior, and interview evidence."
-        )
-        if predictive_signals:
-            fallback = f"{fallback} Key predictive signals: {'; '.join(predictive_signals[:2])}"
+        candidate_name = str(candidate.get("full_name") or "the candidate").strip() or "the candidate"
+        fallback_parts = [
+            (
+                f"After reviewing {candidate_name}'s communication, profile, and available workflow signals, "
+                f"I consider the candidate {'a strong' if alignment and not concerns else 'a promising' if alignment else 'an inconclusive'} fit for this role."
+            )
+        ]
+        if alignment:
+            fallback_parts.append(f"Primary alignment signals: {'; '.join(alignment[:2])}.")
+        if concerns:
+            fallback_parts.append(f"Main caveat: {'; '.join(concerns[:1])}.")
+        elif predictive_signals:
+            fallback_parts.append(f"Main predictive signal: {'; '.join(predictive_signals[:1])}.")
+        fallback = " ".join(part.strip() for part in fallback_parts if part.strip())
 
         if self.llm_responder is not None:
             instruction = (
                 "You are the Culture Analyst for candidate evaluation.\n"
                 "Write one concise paragraph in plain text.\n"
+                "Write for an internal hiring operator, not for the candidate.\n"
+                "Use third person only and never address the candidate as you or your.\n"
                 "Explain culture fit against company culture profile using ONLY available resume, chat, and interview signals.\n"
                 "Include at least one specific behavioral signal and one risk or caveat.\n"
                 "No bullet points."
@@ -1157,7 +1223,11 @@ class CandidateProfileService:
                 language="en",
                 state={"culture_analyst": True},
             )
-            summary = str(generated or fallback).strip() or fallback
+            summary = self._normalize_operator_facing_summary(
+                summary=str(generated or fallback).strip() or fallback,
+                candidate=candidate,
+                fallback=fallback,
+            )
             source = "llm" if summary != fallback else "fallback"
         else:
             summary = fallback
@@ -1174,6 +1244,21 @@ class CandidateProfileService:
                 "interview_score": interview_score,
             },
         }
+
+    @staticmethod
+    def _normalize_operator_facing_summary(*, summary: str, candidate: Dict[str, Any], fallback: str) -> str:
+        text = str(summary or "").strip()
+        if not text:
+            return fallback
+        candidate_name = str(candidate.get("full_name") or "").strip()
+        lowered = text.lower()
+        if any(token in lowered for token in (" your ", " you're ", " you ", " you.", " you,", " you'll ", " looking forward to learning more about you")):
+            return fallback
+        if candidate_name:
+            lowered_name = candidate_name.lower()
+            if lowered.startswith(f"{lowered_name},"):
+                return fallback
+        return text
 
     @staticmethod
     def _filter_logs_for_job(logs: List[Dict[str, Any]], job_id: int, conversation_ids: set[int]) -> List[Dict[str, Any]]:
