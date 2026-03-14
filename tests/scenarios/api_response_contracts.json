@@ -97,6 +97,15 @@
         "reply": "string"
       }
     },
+    "POST /api/conversations/{conversation_id}/messages": {
+      "status": 200,
+      "required": {
+        "conversation_id": "int",
+        "message_id": "int",
+        "language": "string",
+        "delivery": "object"
+      }
+    },
     "GET /api/chats/overview": {
       "status": 200,
       "required": {

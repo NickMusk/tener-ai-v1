@@ -29,10 +29,11 @@ class CandidateLLMResponder:
         fallback_reply: str,
         language: str = "en",
         state: Optional[Dict[str, Any]] = None,
+        allow_fallback: bool = True,
     ) -> str:
         fallback = (fallback_reply or "").strip()
         if not self.api_key:
-            return fallback
+            return fallback if allow_fallback else ""
 
         payload = self._build_payload(
             mode=mode,
@@ -48,9 +49,11 @@ class CandidateLLMResponder:
         try:
             content = self._chat_completion(payload)
         except Exception:
-            return fallback
+            return fallback if allow_fallback else ""
         text = (content or "").strip()
-        return text or fallback
+        if text:
+            return text
+        return fallback if allow_fallback else ""
 
     def generate_candidate_extraction(
         self,
@@ -136,6 +139,10 @@ class CandidateLLMResponder:
                     "Avoid perfect polished structure and template transitions.",
                     "Do not use phrases like As an AI or Let me clarify.",
                     "Use context from the conversation instead of generic textbook replies.",
+                    "If there was already any previous outbound message in the thread, do not address the candidate by name.",
+                    "Never translate or localize the candidate name.",
+                    "Do not say thanks for your honesty, thanks for your candor, cheers, warm regards, or similar canned recruiter phrases.",
+                    "If the natural answer would be awkward or low confidence, return an empty string.",
                 ]
             )
         if instruction.strip():
@@ -193,6 +200,11 @@ class CandidateLLMResponder:
                 "resume_shared",
                 "not_interested",
                 "will_send_later",
+                "referral",
+                "budget_mismatch",
+                "part_time_only",
+                "location_mismatch",
+                "farewell_only",
                 "salary",
                 "stack",
                 "timeline",
@@ -200,7 +212,7 @@ class CandidateLLMResponder:
                 "default",
             ]
             if normalized_mode == "pre_resume"
-            else ["salary", "stack", "timeline", "default"]
+            else ["salary", "stack", "timeline", "referral", "budget_mismatch", "part_time_only", "location_mismatch", "farewell_only", "default"]
         )
         system_rules = [
             "You are Tener AI structured message extraction agent.",

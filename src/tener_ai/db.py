@@ -246,6 +246,11 @@ class Database:
             status TEXT NOT NULL,
             external_chat_id TEXT UNIQUE,
             linkedin_account_id INTEGER,
+            ai_enabled INTEGER NOT NULL DEFAULT 1,
+            operator_attention_required INTEGER NOT NULL DEFAULT 0,
+            terminal_reason TEXT,
+            closed_at TEXT,
+            closed_by TEXT,
             last_message_at TEXT,
             created_at TEXT NOT NULL,
             FOREIGN KEY(job_id) REFERENCES jobs(id),
@@ -1910,6 +1915,51 @@ class Database:
             )
             return cur.rowcount > 0
 
+    def update_conversation_control(
+        self,
+        conversation_id: int,
+        *,
+        status: Optional[str] = None,
+        ai_enabled: Optional[bool] = None,
+        operator_attention_required: Optional[bool] = None,
+        terminal_reason: Optional[str] = None,
+        closed_at: Optional[str] = None,
+        closed_by: Optional[str] = None,
+    ) -> bool:
+        fields: List[str] = []
+        values: List[Any] = []
+        if status is not None:
+            fields.append("status = ?")
+            values.append(str(status))
+        if ai_enabled is not None:
+            fields.append("ai_enabled = ?")
+            values.append(1 if bool(ai_enabled) else 0)
+        if operator_attention_required is not None:
+            fields.append("operator_attention_required = ?")
+            values.append(1 if bool(operator_attention_required) else 0)
+        if terminal_reason is not None:
+            fields.append("terminal_reason = ?")
+            values.append(str(terminal_reason).strip() or None)
+        if closed_at is not None:
+            fields.append("closed_at = ?")
+            values.append(str(closed_at).strip() or None)
+        if closed_by is not None:
+            fields.append("closed_by = ?")
+            values.append(str(closed_by).strip() or None)
+        if not fields:
+            return False
+        values.append(int(conversation_id))
+        with self.transaction() as conn:
+            cur = conn.execute(
+                f"""
+                UPDATE conversations
+                SET {", ".join(fields)}
+                WHERE id = ?
+                """,
+                tuple(values),
+            )
+            return cur.rowcount > 0
+
     def set_conversation_linkedin_account(self, conversation_id: int, account_id: Optional[int]) -> bool:
         with self.transaction() as conn:
             cur = conn.execute(
@@ -1939,6 +1989,8 @@ class Database:
             where_parts.append("conv.job_id = ?")
             args.append(int(job_id))
         if started_only:
+            where_parts.append("COALESCE(conv.status, 'active') <> ?")
+            args.append("closed")
             where_parts.append(
                 """
                 EXISTS (
@@ -1984,6 +2036,11 @@ class Database:
             conv.status AS conversation_status,
             conv.external_chat_id,
             conv.linkedin_account_id,
+            conv.ai_enabled,
+            conv.operator_attention_required,
+            conv.terminal_reason,
+            conv.closed_at,
+            conv.closed_by,
             conv.last_message_at,
             j.title AS job_title,
             j.job_state,
@@ -2026,6 +2083,11 @@ class Database:
                 conv.status AS conversation_status,
                 conv.external_chat_id,
                 conv.linkedin_account_id,
+                conv.ai_enabled,
+                conv.operator_attention_required,
+                conv.terminal_reason,
+                conv.closed_at,
+                conv.closed_by,
                 conv.last_message_at,
                 conv.created_at,
                 j.title AS job_title,
@@ -2098,6 +2160,52 @@ class Database:
             "SELECT * FROM messages WHERE conversation_id = ? ORDER BY id ASC",
             (conversation_id,),
         ).fetchall()
+        return [self._row_to_dict(r) for r in rows]
+
+    def list_recent_conversation_messages(
+        self,
+        *,
+        limit: int = 100,
+        job_id: Optional[int] = None,
+        direction: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 100), 2000))
+        where_parts = ["j.archived_at IS NULL"]
+        args: List[Any] = []
+        if job_id is not None:
+            where_parts.append("conv.job_id = ?")
+            args.append(int(job_id))
+        if direction is not None:
+            where_parts.append("m.direction = ?")
+            args.append(str(direction))
+        where = f"WHERE {' AND '.join(where_parts)}"
+        query = f"""
+        SELECT
+            m.*,
+            conv.job_id,
+            conv.candidate_id,
+            conv.status AS conversation_status,
+            conv.linkedin_account_id,
+            conv.ai_enabled,
+            conv.operator_attention_required,
+            conv.terminal_reason,
+            conv.closed_at,
+            conv.closed_by,
+            c.full_name AS candidate_name,
+            j.title AS job_title,
+            a.label AS linkedin_account_label,
+            a.provider_account_id AS linkedin_provider_account_id
+        FROM messages m
+        JOIN conversations conv ON conv.id = m.conversation_id
+        LEFT JOIN jobs j ON j.id = conv.job_id
+        LEFT JOIN candidates c ON c.id = conv.candidate_id
+        LEFT JOIN linkedin_accounts a ON a.id = conv.linkedin_account_id
+        {where}
+        ORDER BY m.created_at DESC, m.id DESC
+        LIMIT ?
+        """
+        args.append(safe_limit)
+        rows = self._conn.execute(query, tuple(args)).fetchall()
         return [self._row_to_dict(r) for r in rows]
 
     def log_operation(
@@ -4234,6 +4342,22 @@ class Database:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_provider_id ON candidates(provider_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_unipile_profile_id ON candidates(unipile_profile_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_candidates_attendee_provider_id ON candidates(attendee_provider_id)")
+        conversation_columns = self._table_columns("conversations")
+        if "ai_enabled" not in conversation_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE conversations ADD COLUMN ai_enabled INTEGER NOT NULL DEFAULT 1")
+        if "operator_attention_required" not in conversation_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE conversations ADD COLUMN operator_attention_required INTEGER NOT NULL DEFAULT 0")
+        if "terminal_reason" not in conversation_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE conversations ADD COLUMN terminal_reason TEXT")
+        if "closed_at" not in conversation_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE conversations ADD COLUMN closed_at TEXT")
+        if "closed_by" not in conversation_columns:
+            with self.transaction() as conn:
+                conn.execute("ALTER TABLE conversations ADD COLUMN closed_by TEXT")
 
         with self.transaction() as conn:
             conn.execute(

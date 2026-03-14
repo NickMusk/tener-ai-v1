@@ -13,13 +13,28 @@ PRE_RESUME_INTENTS = {
     "resume_shared",
     "not_interested",
     "will_send_later",
+    "referral",
+    "budget_mismatch",
+    "part_time_only",
+    "location_mismatch",
+    "farewell_only",
     "salary",
     "stack",
     "timeline",
     "send_jd_first",
     "default",
 }
-FAQ_INTENTS = {"salary", "stack", "timeline", "default"}
+FAQ_INTENTS = {
+    "salary",
+    "stack",
+    "timeline",
+    "referral",
+    "budget_mismatch",
+    "part_time_only",
+    "location_mismatch",
+    "farewell_only",
+    "default",
+}
 
 
 def parse_resume_links(text: str) -> List[str]:
@@ -138,6 +153,108 @@ def classify_pre_resume_intent(text: str) -> Tuple[str, List[str]]:
         )
     ):
         return "will_send_later", links
+
+    if any(
+        marker in lowered
+        for marker in (
+            "i can refer",
+            "i can recommend",
+            "i can suggest someone",
+            "i know someone",
+            "someone else looking",
+            "someone who is looking",
+            "recommend someone else",
+            "refer someone",
+            "могу порекомендовать",
+            "могу посоветовать",
+            "знаю человека",
+            "есть кто-то еще",
+            "puedo recomendar",
+            "conozco a alguien",
+            "te puedo referir",
+            "puedo sugerir a alguien",
+        )
+    ):
+        return "referral", links
+
+    if any(
+        marker in lowered
+        for marker in (
+            "part time only",
+            "only part time",
+            "can work only part time",
+            "part-time only",
+            "solo part time",
+            "solo medio tiempo",
+            "только part time",
+            "только частичная занятость",
+            "только на part time",
+            "only freelance",
+        )
+    ):
+        return "part_time_only", links
+
+    if any(
+        marker in lowered
+        for marker in (
+            "low budget",
+            "budget is low",
+            "too low for me",
+            "salary is too low",
+            "comp is too low",
+            "compensation is too low",
+            "outside my budget",
+            "не подходит по бюджету",
+            "слишком низкая зарплата",
+            "маленький бюджет",
+            "presupuesto bajo",
+            "salario muy bajo",
+            "muy bajo para mi",
+        )
+    ):
+        return "budget_mismatch", links
+
+    if any(
+        marker in lowered
+        for marker in (
+            "not open to relocate",
+            "can't relocate",
+            "cannot relocate",
+            "want to stay in",
+            "prefer to stay in",
+            "only in mexico",
+            "only in mexico city",
+            "solo en",
+            "quiero quedarme en",
+            "не готов к релокации",
+            "не готов переезжать",
+            "хочу оставаться в",
+        )
+    ):
+        return "location_mismatch", links
+
+    farewell_markers = (
+        "catch you later",
+        "take care",
+        "sure thanks",
+        "thank you so much",
+        "thanks",
+        "thanks!",
+        "thank you",
+        "take care too",
+        "увидимся",
+        "спасибо",
+        "до связи",
+        "gracias",
+        "muchas gracias",
+        "hasta luego",
+        "cuidate",
+        "cuidate!",
+    )
+    if any(marker in lowered for marker in farewell_markers):
+        short_text = re.sub(r"[^a-zа-яё0-9\s]", " ", lowered, flags=re.IGNORECASE)
+        if len(short_text.split()) <= 6:
+            return "farewell_only", links
 
     salary_markers = ("salary", "compensation", "pay", "range", "зарплат", "вилка", "salario", "compensación", "compensacion")
     stack_markers = ("stack", "technology", "tech", "tools", "requirements", "стек", "технолог", "tecnolog", "stack técnico")
@@ -308,6 +425,15 @@ def extract_pre_resume_heuristic_fields(
             "can't relocate",
             "cannot relocate",
             "not based",
+            "want to stay in",
+            "prefer to stay in",
+            "stay in",
+            "only in",
+            "quiero quedarme en",
+            "solo en",
+            "не готов к релокации",
+            "не готов переезжать",
+            "хочу оставаться в",
         )
         if location_text and location_text in lowered:
             out["location_confirmed"] = True

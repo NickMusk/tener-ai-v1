@@ -1313,6 +1313,10 @@
             <div class="value" id="casey-health-sent-24h">0</div>
           </div>
           <div class="ops-mini-card">
+            <div class="label">Replies 24h</div>
+            <div class="value" id="casey-health-replies-24h">0</div>
+          </div>
+          <div class="ops-mini-card">
             <div class="label">Failed 1h</div>
             <div class="value" id="casey-health-failed-1h">0</div>
           </div>
@@ -1417,17 +1421,18 @@
       </section>
 
       <section class="card">
-        <div class="panel-title"><span>Agent Chat Simulator</span><span class="mono" id="agent-chat-title">No conversation selected</span></div>
+        <div class="panel-title"><span>Conversation Thread</span><span class="mono" id="agent-chat-title">No conversation selected</span></div>
+        <div id="agent-chat-subtitle" class="muted mono" style="margin-bottom:8px;">Open any conversation to see the real thread.</div>
         <div id="agent-chat-messages" class="chat-window">
           <div class="muted">Open any account to see dialogue.</div>
         </div>
         <div class="form-grid" style="margin-top:10px;">
           <div class="full">
-            <label class="muted">Candidate inbound message</label>
-            <textarea id="agent-inbound-input" placeholder="Type candidate reply and send to agent..."></textarea>
+            <label class="muted">Manual reply from our account</label>
+            <textarea id="agent-inbound-input" placeholder="Type a manual reply and send it from the assigned account..."></textarea>
           </div>
           <div class="full button-row" style="justify-content:flex-start;">
-            <button id="agent-send-inbound-btn">Send Candidate Message</button>
+            <button id="agent-send-inbound-btn">Send Manual Reply</button>
             <button id="agent-refresh-chat-btn">Reload Chat</button>
           </div>
         </div>
@@ -1473,6 +1478,14 @@
           <div class="ops-mini-card">
             <div class="label">Sent 1h</div>
             <div class="value" id="ops-summary-sent-1h">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Replies 1h</div>
+            <div class="value" id="ops-summary-replies-1h">0</div>
+          </div>
+          <div class="ops-mini-card">
+            <div class="label">Replies 24h</div>
+            <div class="value" id="ops-summary-replies-24h">0</div>
           </div>
           <div class="ops-mini-card">
             <div class="label">Failed 1h</div>
@@ -1529,6 +1542,7 @@
                 <th>Status</th>
                 <th>Active</th>
                 <th>Sent 1h/24h</th>
+                <th>Replies 1h/24h</th>
                 <th>Failed 1h/24h</th>
                 <th>Funnel</th>
                 <th>Recent Funnel</th>
@@ -1539,10 +1553,29 @@
               </tr>
             </thead>
             <tbody id="ops-accounts-tbody">
-              <tr><td colspan="13" class="muted">No data yet</td></tr>
+              <tr><td colspan="14" class="muted">No data yet</td></tr>
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section class="card">
+        <div class="panel-title"><span>Recent Candidate Replies</span><span class="mono">latest inbound</span></div>
+        <div id="ops-replies-box" class="ops-events">
+          <div class="muted">No replies yet</div>
+        </div>
+      </section>
+
+      <section class="card">
+        <details open>
+          <summary class="panel-title" style="cursor:pointer;">
+            <span>Latest Sent Messages</span>
+            <span class="mono">text • recipient • account • time</span>
+          </summary>
+          <div id="ops-outbound-log-box" class="ops-events" style="margin-top:10px;">
+            <div class="muted">No outbound messages yet</div>
+          </div>
+        </details>
       </section>
 
       <section class="card">
@@ -3376,6 +3409,7 @@
         applyHealthPill($("casey-health-pill"), "unknown");
         $("casey-health-sent-1h").textContent = "-";
         $("casey-health-sent-24h").textContent = "-";
+        $("casey-health-replies-24h").textContent = "-";
         $("casey-health-failed-1h").textContent = "-";
         $("casey-health-stuck").textContent = "-";
         $("casey-health-last-success").textContent = "-";
@@ -3391,6 +3425,7 @@
       applyHealthPill($("casey-health-pill"), summary.delivery_health || summary.health || "unknown");
       $("casey-health-sent-1h").textContent = String(Number(summary.sent_1h || 0));
       $("casey-health-sent-24h").textContent = String(Number(summary.sent_24h || 0));
+      $("casey-health-replies-24h").textContent = String(Number(summary.replies_24h || 0));
       $("casey-health-failed-1h").textContent = String(Number(summary.failed_1h || 0));
       $("casey-health-stuck").textContent = String(Number(summary.stuck_threads || 0));
       $("casey-health-last-success").textContent = formatTimestampCompact(summary.last_successful_send_at);
@@ -3413,6 +3448,8 @@
         $("ops-summary-new-threads").textContent = "-";
         $("ops-summary-waiting-connection").textContent = "-";
         $("ops-summary-sent-1h").textContent = "-";
+        $("ops-summary-replies-1h").textContent = "-";
+        $("ops-summary-replies-24h").textContent = "-";
         $("ops-summary-failed-1h").textContent = "-";
         $("ops-summary-stuck").textContent = "-";
         $("ops-summary-last-success").textContent = "-";
@@ -3431,6 +3468,8 @@
       $("ops-summary-new-threads").textContent = String(Number(backlogSummary.new_threads || 0));
       $("ops-summary-waiting-connection").textContent = String(Number(backlogSummary.waiting_connection || summary.waiting_connection || 0));
       $("ops-summary-sent-1h").textContent = String(Number(summary.sent_1h || 0));
+      $("ops-summary-replies-1h").textContent = String(Number(summary.replies_1h || 0));
+      $("ops-summary-replies-24h").textContent = String(Number(summary.replies_24h || 0));
       $("ops-summary-failed-1h").textContent = String(Number(summary.failed_1h || 0));
       $("ops-summary-stuck").textContent = String(Number(backlogSummary.stuck_replies || summary.stuck_threads || 0));
       $("ops-summary-last-success").textContent = formatTimestampCompact(summary.last_successful_send_at);
@@ -3645,12 +3684,12 @@
       const body = $("ops-accounts-tbody");
       if (!body) return;
       if (!state.outreachOps) {
-        body.innerHTML = '<tr><td colspan="13" class="muted">Loading account telemetry...</td></tr>';
+        body.innerHTML = '<tr><td colspan="14" class="muted">Loading account telemetry...</td></tr>';
         return;
       }
       const rows = Array.isArray((state.outreachOps || {}).accounts) ? state.outreachOps.accounts : [];
       if (!rows.length) {
-        body.innerHTML = '<tr><td colspan="13" class="muted">No LinkedIn account telemetry yet</td></tr>';
+        body.innerHTML = '<tr><td colspan="14" class="muted">No LinkedIn account telemetry yet</td></tr>';
         return;
       }
       body.innerHTML = rows.map((row) => {
@@ -3661,6 +3700,7 @@
         const deliveryHealth = String(row.delivery_health || row.health || "unknown").toLowerCase();
         const backlogHealth = String(row.backlog_health || "unknown").toLowerCase();
         const sentPair = `${Number(row.sent_1h || 0)}/${Number(row.sent_24h || 0)}`;
+        const replyPair = `${Number(row.replies_1h || 0)}/${Number(row.replies_24h || 0)}`;
         const failedPair = `${Number(row.failed_1h || 0)}/${Number(row.failed_24h || 0)}`;
         const active = Number(row.active_conversations || 0);
         const stuck = Number(row.stuck_threads || 0);
@@ -3709,6 +3749,7 @@
             <td><div>${status}</div><div class="muted mono" style="font-size:11px;">conn:${connectionStatus}</div></td>
             <td class="mono">${active}</td>
             <td class="mono">${sentPair}</td>
+            <td class="mono">${replyPair}</td>
             <td class="mono">${failedPair}</td>
             <td>${funnelMarkup}</td>
             <td>${recentFunnelMarkup}</td>
@@ -3739,6 +3780,67 @@
           }, 1200);
         });
       });
+    }
+
+    function renderOutreachRecentReplies() {
+      const box = $("ops-replies-box");
+      if (!box) return;
+      if (!state.outreachOps) {
+        box.innerHTML = '<div class="muted">Loading recent replies...</div>';
+        return;
+      }
+      const items = Array.isArray((state.outreachOps || {}).recent_replies) ? state.outreachOps.recent_replies : [];
+      if (!items.length) {
+        box.innerHTML = '<div class="muted">No replies yet</div>';
+        return;
+      }
+      box.innerHTML = items.map((item) => {
+        const candidate = escapeHtml(item.candidate_name || `Candidate ${item.candidate_id || "-"}`);
+        const account = escapeHtml(item.linkedin_account_label || (item.linkedin_account_id ? outreachAccountLabel(item.linkedin_account_id) : "-"));
+        const ts = escapeHtml(formatTimestampCompact(item.created_at));
+        const text = escapeHtml(shortText(item.text || "", 220));
+        return `
+          <div class="ops-event-row">
+            <div><b>${candidate}</b> <span class="mono muted">${ts}</span></div>
+            <div class="muted">from ${account}</div>
+            <div style="margin-top:4px;white-space:pre-wrap;">${text || '<span class="muted">Empty message</span>'}</div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function renderOutreachRecentOutbound() {
+      const box = $("ops-outbound-log-box");
+      if (!box) return;
+      if (!state.outreachOps) {
+        box.innerHTML = '<div class="muted">Loading latest sent messages...</div>';
+        return;
+      }
+      const items = Array.isArray((state.outreachOps || {}).recent_outbound) ? state.outreachOps.recent_outbound : [];
+      if (!items.length) {
+        box.innerHTML = '<div class="muted">No outbound messages yet</div>';
+        return;
+      }
+      box.innerHTML = items.map((item) => {
+        const candidate = escapeHtml(item.candidate_name || `Candidate ${item.candidate_id || "-"}`);
+        const account = escapeHtml(item.linkedin_account_label || (item.linkedin_account_id ? outreachAccountLabel(item.linkedin_account_id) : "-"));
+        const ts = escapeHtml(formatTimestampCompact(item.created_at));
+        const badges = [
+          item.manual ? "manual" : "",
+          item.auto ? "auto" : "",
+          item.type ? String(item.type) : "",
+        ].filter(Boolean).map((label) => `<span class="mono muted" style="font-size:11px;">${escapeHtml(label)}</span>`).join(" • ");
+        return `
+          <div class="ops-event-row">
+            <div style="display:flex;justify-content:space-between;gap:12px;">
+              <div><b>${candidate}</b></div>
+              <div class="mono muted">${ts}</div>
+            </div>
+            <div class="muted" style="margin-top:4px;">from ${account}${badges ? ` • ${badges}` : ""}</div>
+            <div style="margin-top:4px;white-space:pre-wrap;">${escapeHtml(item.text || "")}</div>
+          </div>
+        `;
+      }).join("");
     }
 
     function renderOutreachOpsEvents() {
@@ -3848,6 +3950,8 @@
       renderOutreachOpsSummary();
       renderOutreachBacklog();
       renderOutreachOpsAccounts();
+      renderOutreachRecentReplies();
+      renderOutreachRecentOutbound();
       renderOutreachOpsEvents();
     }
 
@@ -3910,6 +4014,7 @@
         await openAgentConversation(state.agentConversationId);
       } else {
         $("agent-chat-title").textContent = "No conversation selected";
+        $("agent-chat-subtitle").textContent = "Open any conversation to see the real thread.";
         $("agent-chat-messages").innerHTML = '<div class="muted">Open any account to see dialogue.</div>';
       }
       if (state.activeView === "agent" || state.activeView === "ops") {
@@ -3926,6 +4031,15 @@
         ? `${account.candidate_name || 'Candidate'} • #${conversationId}`
         : `Conversation #${conversationId}`;
       $("agent-chat-title").textContent = title;
+      const accountLabel = convo.linkedin_account_id ? outreachAccountLabel(convo.linkedin_account_id) : "-";
+      const convoStatus = String(convo.status || convo.conversation_status || "active");
+      const extras = [
+        `account: ${accountLabel}`,
+        `status: ${convoStatus}`,
+        convo.operator_attention_required ? "operator attention" : "",
+        convo.closed_at ? `closed ${formatTimestampCompact(convo.closed_at)}` : "",
+      ].filter(Boolean);
+      $("agent-chat-subtitle").textContent = extras.join(" • ") || "Real thread";
       const items = out.items || [];
       if (!items.length) {
         $("agent-chat-messages").innerHTML = '<div class="muted">No messages yet</div>';
@@ -3936,12 +4050,19 @@
         const kind = direction === 'inbound' ? 'inbound' : 'outbound';
         const created = escapeHtml(msg.created_at || '');
         const content = escapeHtml(msg.content || '');
+        const meta = msg.meta || {};
+        const metaBits = [
+          meta.manual ? 'manual' : '',
+          meta.auto ? 'auto' : '',
+          meta.type ? String(meta.type) : '',
+        ].filter(Boolean).join(' • ');
         return `
           <div class="chat-msg ${kind}">
             <div style="display:flex;justify-content:space-between;gap:8px;">
               <b>${direction}</b>
               <span class="mono muted">${created}</span>
             </div>
+            ${metaBits ? `<div class="muted mono" style="margin-top:4px;">${escapeHtml(metaBits)}</div>` : ''}
             <div style="margin-top:6px;white-space:pre-wrap;">${content}</div>
           </div>
         `;
@@ -3959,11 +4080,11 @@
       if (!conversationId) return alert('Open conversation first');
       const text = $("agent-inbound-input").value.trim();
       if (!text) return alert('Message is required');
-      const out = await api(`/api/conversations/${conversationId}/inbound`, {
+      const out = await api(`/api/conversations/${conversationId}/messages`, {
         method: 'POST',
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, actor: 'operator' }),
       });
-      snapshot('agent.inbound', out);
+      snapshot('agent.manual_reply', out);
       $("agent-inbound-input").value = '';
       await openAgentConversation(conversationId);
       await refreshAgentAccounts();
@@ -4543,6 +4664,8 @@
     renderOutreachAtsBoard();
     renderOutreachBacklog();
     renderOutreachOpsAccounts();
+    renderOutreachRecentReplies();
+    renderOutreachRecentOutbound();
     renderOutreachOpsEvents();
     setInterval(() => {
       if (state.activeView !== "agent" && state.activeView !== "ops") return;

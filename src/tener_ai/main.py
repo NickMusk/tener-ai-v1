@@ -736,6 +736,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "interview_sync": "POST /api/interviews/sync",
                         "interview_followups_run": "POST /api/interviews/followups/run",
                         "conversation_messages": "GET /api/conversations/{conversation_id}/messages",
+                        "conversation_manual_reply": "POST /api/conversations/{conversation_id}/messages",
                         "conversation_resume_backfill": "POST /api/conversations/{conversation_id}/resume-backfill",
                         "chats_overview": "GET /api/chats/overview?limit=200",
                         "outreach_ops": "GET /api/outreach/ops?job_id=...",
@@ -3354,6 +3355,49 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.OK, reply)
             return
 
+        if parsed.path.startswith("/api/conversations/") and parsed.path.endswith("/messages"):
+            conversation_id = self._extract_id(parsed.path, pattern=r"^/api/conversations/(\d+)/messages$")
+            if conversation_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid conversation id"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid payload"})
+                return
+            text = str(body.get("message") or "").strip()
+            if not text:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "message is required"})
+                return
+            actor = str(body.get("actor") or "operator").strip() or "operator"
+            try:
+                result = SERVICES["workflow"].send_manual_conversation_message(
+                    conversation_id=int(conversation_id),
+                    message=text,
+                    actor=actor,
+                )
+            except ValueError as exc:
+                message = str(exc)
+                status = HTTPStatus.BAD_REQUEST
+                if message in {"conversation not found", "candidate not found", "job not found"}:
+                    status = HTTPStatus.NOT_FOUND
+                self._json_response(status, {"error": message})
+                return
+            except Exception as exc:
+                SERVICES["db"].log_operation(
+                    operation="conversation.manual_reply.error",
+                    status="error",
+                    entity_type="conversation",
+                    entity_id=str(conversation_id),
+                    details={"error": str(exc)},
+                )
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "manual reply failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, result)
+            return
+
         if parsed.path.startswith("/api/conversations/") and parsed.path.endswith("/resume-backfill"):
             conversation_id = self._extract_id(parsed.path, pattern=r"^/api/conversations/(\d+)/resume-backfill$")
             if conversation_id is None:
@@ -4109,12 +4153,16 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "stuck_candidates": [],
                 "sent_1h": 0,
                 "sent_24h": 0,
+                "replies_1h": 0,
+                "replies_24h": 0,
                 "failed_1h": 0,
                 "failed_24h": 0,
                 "last_send_at": None,
+                "last_reply_at": None,
                 "last_error_at": None,
                 "last_error": "",
                 "_last_send_dt": None,
+                "_last_reply_dt": None,
                 "_last_error_dt": None,
             }
 
@@ -4134,12 +4182,16 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "stuck_candidates": [],
                 "sent_1h": 0,
                 "sent_24h": 0,
+                "replies_1h": 0,
+                "replies_24h": 0,
                 "failed_1h": 0,
                 "failed_24h": 0,
                 "last_send_at": None,
+                "last_reply_at": None,
                 "last_error_at": None,
                 "last_error": "",
                 "_last_send_dt": None,
+                "_last_reply_dt": None,
                 "_last_error_dt": None,
             }
             account_map[account_id] = fallback
@@ -4180,6 +4232,51 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "stuck_reply": "Stuck reply",
             }
             return mapping.get(str(reason or "").strip().lower(), str(reason or "").replace("_", " ").strip().title() or "Unknown")
+
+        def _serialize_message_row(row: Dict[str, Any]) -> Dict[str, Any]:
+            meta = row.get("meta") if isinstance(row.get("meta"), dict) else {}
+            account_id = cls._safe_int(row.get("linkedin_account_id"), 0) or cls._safe_int(meta.get("linkedin_account_id"), 0) or 0
+            account = _ensure_account(account_id) if account_id > 0 else None
+            return {
+                "message_id": int(row.get("id") or 0),
+                "conversation_id": int(row.get("conversation_id") or 0),
+                "job_id": int(row.get("job_id") or 0),
+                "job_title": str(row.get("job_title") or "").strip() or "-",
+                "candidate_id": int(row.get("candidate_id") or 0),
+                "candidate_name": str(row.get("candidate_name") or "").strip() or f"Candidate {int(row.get('candidate_id') or 0)}",
+                "linkedin_account_id": account_id or None,
+                "linkedin_account_label": (
+                    str(row.get("linkedin_account_label") or "").strip()
+                    or (str(account.get("label") or "").strip() if isinstance(account, dict) else "")
+                    or None
+                ),
+                "direction": str(row.get("direction") or "").strip().lower() or None,
+                "text": str(row.get("content") or "").strip(),
+                "created_at": row.get("created_at"),
+                "type": str(meta.get("type") or "").strip() or None,
+                "manual": bool(meta.get("manual")),
+                "auto": bool(meta.get("auto")),
+            }
+
+        recent_outbound_messages = db.list_recent_conversation_messages(limit=60, job_id=job_id, direction="outbound")
+        recent_inbound_messages = db.list_recent_conversation_messages(limit=60, job_id=job_id, direction="inbound")
+
+        for row in recent_inbound_messages or []:
+            account_id = cls._safe_int(row.get("linkedin_account_id"), 0) or 0
+            if account_id <= 0:
+                continue
+            created_dt = cls._parse_iso_datetime(row.get("created_at"))
+            if created_dt is None:
+                continue
+            entry = _ensure_account(account_id)
+            if created_dt >= last_hour:
+                entry["replies_1h"] += 1
+            if created_dt >= last_day:
+                entry["replies_24h"] += 1
+            current_dt = entry.get("_last_reply_dt")
+            if current_dt is None or created_dt > current_dt:
+                entry["_last_reply_dt"] = created_dt
+                entry["last_reply_at"] = created_dt.isoformat()
 
         for item in logs or []:
             operation = str(item.get("operation") or "").strip().lower()
@@ -4394,6 +4491,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             row["dispatch_state"] = dispatch_state
             row["dispatch_state_label"] = dispatch_state_label
             row.pop("_last_send_dt", None)
+            row.pop("_last_reply_dt", None)
             row.pop("_last_error_dt", None)
             if dispatch_state != "removed":
                 rows.append(row)
@@ -4427,6 +4525,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
 
         sent_1h_total = sum(int(item.get("sent_1h") or 0) for item in rows)
         sent_24h_total = sum(int(item.get("sent_24h") or 0) for item in rows)
+        replies_1h_total = sum(int(item.get("replies_1h") or 0) for item in rows)
+        replies_24h_total = sum(int(item.get("replies_24h") or 0) for item in rows)
         failed_1h_total = sum(int(item.get("failed_1h") or 0) for item in rows)
         failed_24h_total = sum(int(item.get("failed_24h") or 0) for item in rows)
         stuck_threads_total = sum(int(item.get("stuck_threads") or 0) for item in rows)
@@ -4588,6 +4688,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "active_conversations": active_conversations_total,
                 "sent_1h": sent_1h_total,
                 "sent_24h": sent_24h_total,
+                "replies_1h": replies_1h_total,
+                "replies_24h": replies_24h_total,
                 "failed_1h": failed_1h_total,
                 "failed_24h": failed_24h_total,
                 "stuck_threads": stuck_threads_total,
@@ -4603,6 +4705,8 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                 "items": backlog_rows[:200],
             },
             "events": recent_events,
+            "recent_replies": [_serialize_message_row(row) for row in (recent_inbound_messages or [])[:20]],
+            "recent_outbound": [_serialize_message_row(row) for row in (recent_outbound_messages or [])[:20]],
         }
 
     @staticmethod

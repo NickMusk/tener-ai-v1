@@ -40,6 +40,7 @@ TERMINAL_PRE_RESUME_STATUSES = {
     "ready_for_interview",
     "ready_for_screening_call",
     "not_interested",
+    "closed_not_fit",
     "unreachable",
     "stalled",
     "delivery_blocked_identity",
@@ -1841,6 +1842,69 @@ class WorkflowService:
             )
         job_paused = self._job_is_paused(job)
 
+        if self._conversation_is_closed(conversation) or not bool(conversation.get("ai_enabled", 1)):
+            self.db.log_operation(
+                operation="conversation.inbound.ignored",
+                status="ok",
+                entity_type="conversation",
+                entity_id=str(conversation_id),
+                details={"reason": "conversation_closed", "message_id": inbound_id},
+            )
+            return {
+                "language": inbound_language,
+                "intent": str(extraction.intent or "default"),
+                "reply": "",
+                "mode": "closed",
+                "conversation_status": "closed",
+                "operator_attention_required": bool(conversation.get("operator_attention_required")),
+            }
+
+        operator_attention_reason = self._detect_operator_attention_reason(extraction=extraction, text=text)
+        if operator_attention_reason:
+            self.db.update_conversation_control(
+                conversation_id=conversation_id,
+                operator_attention_required=True,
+            )
+            self.db.log_operation(
+                operation="conversation.operator_attention.flagged",
+                status="ok",
+                entity_type="conversation",
+                entity_id=str(conversation_id),
+                details={
+                    "reason": operator_attention_reason,
+                    "message_id": inbound_id,
+                    "intent": extraction.intent,
+                },
+            )
+            return {
+                "language": inbound_language,
+                "intent": str(extraction.intent or "default"),
+                "reply": "",
+                "mode": "operator_attention",
+                "operator_attention_required": True,
+            }
+
+        terminal_reason = self._detect_terminal_candidate_reason(
+            extraction=extraction,
+            text=text,
+            job=job,
+        )
+        if terminal_reason:
+            return self._close_conversation_from_inbound(
+                conversation=conversation,
+                candidate=candidate,
+                job=job,
+                match=match,
+                pre_resume=pre_resume,
+                text=text,
+                extraction=extraction,
+                inbound_id=inbound_id,
+                language=inbound_language,
+                reason=terminal_reason,
+                job_paused=job_paused,
+                history=llm_history,
+            )
+
         if pre_resume and self.pre_resume_service is not None:
             session_id = str(pre_resume.get("session_id") or "")
             state = pre_resume.get("state_json")
@@ -1866,10 +1930,12 @@ class WorkflowService:
                         candidate=candidate,
                         inbound_text=text,
                         history=llm_history,
-                        fallback_reply=outbound,
+                        fallback_reply="",
                         language=language,
                         state=state_out if isinstance(state_out, dict) else None,
+                        allow_fallback=False,
                     )
+                outbound = str(outbound or "").strip()
                 if isinstance(state_out, dict):
                     self.db.upsert_pre_resume_session(
                         session_id=session_id,
@@ -2090,10 +2156,22 @@ class WorkflowService:
             candidate=candidate,
             inbound_text=text,
             history=llm_history,
-            fallback_reply=reply,
+            fallback_reply="",
             language=lang,
             state=None,
+            allow_fallback=False,
         )
+        reply = str(reply or "").strip()
+        if not reply:
+            self._record_communication_dialogue_assessment(
+                job_id=int(conversation["job_id"]),
+                candidate_id=int(conversation["candidate_id"]),
+                mode="faq_silent",
+                intent=intent,
+                state=None,
+                inbound_text=text,
+            )
+            return {"language": lang, "intent": intent, "reply": "", "mode": "silent"}
         delivery = self._send_auto_reply(candidate=candidate, message=reply, conversation=conversation)
         outbound_id = self.db.add_message(
             conversation_id=conversation_id,
@@ -2119,6 +2197,229 @@ class WorkflowService:
         )
 
         return {"language": lang, "intent": intent, "reply": reply}
+
+    @staticmethod
+    def _conversation_is_closed(conversation: Dict[str, Any] | None) -> bool:
+        if not isinstance(conversation, dict):
+            return False
+        status = str(conversation.get("status") or "").strip().lower()
+        if status == "closed":
+            return True
+        return bool(conversation.get("closed_at"))
+
+    @staticmethod
+    def _detect_operator_attention_reason(*, extraction: Any, text: str) -> str | None:
+        intent = str(getattr(extraction, "intent", "") or "").strip().lower()
+        if intent == "referral":
+            return "referral_offer"
+        lowered = str(text or "").strip().lower()
+        referral_markers = (
+            "recommend someone",
+            "refer someone",
+            "i know someone",
+            "могу порекомендовать",
+            "могу посоветовать",
+            "conozco a alguien",
+            "puedo recomendar",
+        )
+        if any(marker in lowered for marker in referral_markers):
+            return "referral_offer"
+        return None
+
+    @staticmethod
+    def _detect_terminal_candidate_reason(
+        *,
+        extraction: Any,
+        text: str,
+        job: Dict[str, Any],
+    ) -> str | None:
+        intent = str(getattr(extraction, "intent", "") or "").strip().lower()
+        if intent == "not_interested":
+            return "candidate_not_interested"
+        if intent == "budget_mismatch":
+            return "budget_mismatch"
+        if intent == "part_time_only":
+            return "part_time_only"
+        if intent == "location_mismatch":
+            return "location_mismatch"
+        location_confirmed = getattr(extraction, "location_confirmed", None)
+        work_authorization_confirmed = getattr(extraction, "work_authorization_confirmed", None)
+        if location_confirmed is False:
+            return "location_mismatch"
+        if bool(job.get("work_authorization_required")) and work_authorization_confirmed is False:
+            return "work_authorization_mismatch"
+        lowered = str(text or "").strip().lower()
+        if any(marker in lowered for marker in ("part time only", "only part time", "can work only part time", "только частичная занятость")):
+            return "part_time_only"
+        if any(
+            marker in lowered
+            for marker in (
+                "low budget",
+                "budget is low",
+                "too low for me",
+                "salary is too low",
+                "слишком низкая зарплата",
+                "не подходит по бюджету",
+            )
+        ):
+            return "budget_mismatch"
+        return None
+
+    def _close_conversation_from_inbound(
+        self,
+        *,
+        conversation: Dict[str, Any],
+        candidate: Dict[str, Any],
+        job: Dict[str, Any],
+        match: Dict[str, Any] | None,
+        pre_resume: Dict[str, Any] | None,
+        text: str,
+        extraction: Any,
+        inbound_id: int,
+        language: str,
+        reason: str,
+        job_paused: bool,
+        history: List[Dict[str, str]],
+    ) -> Dict[str, Any]:
+        conversation_id = int(conversation.get("id") or 0)
+        job_id = int(conversation.get("job_id") or 0)
+        candidate_id = int(conversation.get("candidate_id") or 0)
+        close_status = "not_interested" if reason == "candidate_not_interested" else "closed_not_fit"
+        rejection_reason = reason
+
+        if pre_resume and self.pre_resume_service is not None:
+            session_id = str(pre_resume.get("session_id") or "")
+            state = pre_resume.get("state_json") if isinstance(pre_resume.get("state_json"), dict) else {}
+            if session_id and isinstance(state, dict):
+                state["status"] = close_status
+                state["last_intent"] = str(getattr(extraction, "intent", "") or reason)
+                state["language"] = language
+                state["updated_at"] = utc_now_iso()
+                state["next_followup_at"] = None
+                self.db.upsert_pre_resume_session(
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    job_id=job_id,
+                    candidate_id=candidate_id,
+                    state=state,
+                    instruction=self.stage_instructions.get("pre_resume", ""),
+                )
+                self.pre_resume_service.seed_session(state)
+                self.db.insert_pre_resume_event(
+                    session_id=session_id,
+                    conversation_id=conversation_id,
+                    event_type="conversation_closed",
+                    intent=str(getattr(extraction, "intent", "") or "default"),
+                    inbound_text=text,
+                    outbound_text=None,
+                    state_status=state.get("status"),
+                    details={"reason": reason, "source": "inbound_terminal"},
+                )
+
+        self.db.update_conversation_control(
+            conversation_id=conversation_id,
+            status="closed",
+            ai_enabled=False,
+            operator_attention_required=False,
+            terminal_reason=reason,
+            closed_at=utc_now_iso(),
+            closed_by="agent",
+        )
+        self.db.update_candidate_match_status(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            status="rejected",
+            extra_notes={"rejected_at": utc_now_iso(), "rejection_reason": rejection_reason},
+        )
+        self.db.log_operation(
+            operation="conversation.closed",
+            status="ok",
+            entity_type="conversation",
+            entity_id=str(conversation_id),
+            details={"reason": reason, "message_id": inbound_id},
+        )
+
+        reply = ""
+        if not job_paused:
+            reply = self._generate_conversation_close_message(
+                job=job,
+                candidate=candidate,
+                language=language,
+                reason=reason,
+                inbound_text=text,
+                history=history,
+            )
+        if reply:
+            delivery = self._send_auto_reply(candidate=candidate, message=reply, conversation=conversation)
+            outbound_id = self.db.add_message(
+                conversation_id=conversation_id,
+                direction="outbound",
+                content=reply,
+                candidate_language=language,
+                meta={
+                    "type": "conversation_close",
+                    "intent": str(getattr(extraction, "intent", "") or "default"),
+                    "auto": True,
+                    "terminal_reason": reason,
+                    "delivery": delivery,
+                },
+            )
+            self.db.log_operation(
+                operation="conversation.close.reply",
+                status="ok" if delivery.get("sent") else "error",
+                entity_type="message",
+                entity_id=str(outbound_id),
+                details={"conversation_id": conversation_id, "reason": reason, "delivery": delivery},
+            )
+
+        response = {
+            "language": language,
+            "intent": str(getattr(extraction, "intent", "") or "default"),
+            "reply": "" if job_paused else reply,
+            "mode": "paused" if job_paused else "closed",
+            "conversation_status": "closed",
+            "terminal_reason": reason,
+        }
+        if job_paused:
+            response["job_paused"] = True
+        return response
+
+    def _generate_conversation_close_message(
+        self,
+        *,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        language: str,
+        reason: str,
+        inbound_text: str,
+        history: List[Dict[str, str]],
+    ) -> str:
+        reason_text = str(reason or "").strip().replace("_", " ")
+        instruction = (
+            "Write one short closing LinkedIn message and end the chat.\n"
+            f"Write in language: {language}.\n"
+            f"Closure reason: {reason_text}.\n"
+            "Goal: politely close this conversation because the candidate is not moving forward for this role.\n"
+            "Do not ask new qualifying questions.\n"
+            "Do not ask for CV.\n"
+            "Do not use the candidate name.\n"
+            "Do not sound corporate or over polite.\n"
+            "Do not say thanks for honesty, thanks for candor, cheers, or similar canned phrases.\n"
+            "Keep it natural and brief.\n"
+            f"Style rules:\n{self._linkedin_style_rules()}"
+        )
+        return self._maybe_llm_reply(
+            mode="faq",
+            instruction=instruction,
+            job=job,
+            candidate=candidate,
+            inbound_text=inbound_text,
+            history=history,
+            fallback_reply="",
+            language=language,
+            state={"terminal_reason": reason},
+            allow_fallback=False,
+        )
 
     def _sync_candidate_prescreen_from_state(
         self,
@@ -2156,6 +2457,92 @@ class WorkflowService:
             notes=None,
             updated_at=str(state_payload.get("updated_at") or utc_now_iso()),
         )
+
+    def send_manual_conversation_message(
+        self,
+        *,
+        conversation_id: int,
+        message: str,
+        actor: str = "operator",
+    ) -> Dict[str, Any]:
+        conversation = self.db.get_conversation(int(conversation_id))
+        if not conversation:
+            raise ValueError("conversation not found")
+        if self._conversation_is_closed(conversation):
+            raise ValueError("conversation is closed")
+        candidate = self.db.get_candidate(int(conversation.get("candidate_id") or 0))
+        if not candidate:
+            raise ValueError("candidate not found")
+        job = self.db.get_job(int(conversation.get("job_id") or 0))
+        if not job:
+            raise ValueError("job not found")
+
+        content = str(message or "").strip()
+        if not content:
+            raise ValueError("message is required")
+
+        history = self.db.list_messages(int(conversation_id))
+        previous_language = ""
+        for item in reversed(history):
+            language_value = str(item.get("candidate_language") or "").strip()
+            if language_value:
+                previous_language = language_value
+                break
+        language = resolve_conversation_language(
+            latest_message_text=content,
+            previous_language=previous_language,
+            profile_languages=candidate.get("languages"),
+            fallback="en",
+        )
+        delivery = self._send_auto_reply(candidate=candidate, message=content, conversation=conversation)
+        external_chat_id = str(delivery.get("chat_id") or "").strip()
+        chat_binding = None
+        if external_chat_id:
+            chat_binding = self.db.set_conversation_external_chat_id(
+                conversation_id=int(conversation_id),
+                external_chat_id=external_chat_id,
+            )
+        outbound_id = self.db.add_message(
+            conversation_id=int(conversation_id),
+            direction="outbound",
+            content=content,
+            candidate_language=language,
+            meta={
+                "type": "operator_manual_reply",
+                "manual": True,
+                "auto": False,
+                "actor": str(actor or "operator").strip() or "operator",
+                "delivery": delivery,
+                "external_chat_id": external_chat_id or None,
+                "chat_binding": chat_binding,
+                "linkedin_account_id": conversation.get("linkedin_account_id"),
+            },
+        )
+        if delivery.get("sent"):
+            self.db.update_conversation_control(
+                conversation_id=int(conversation_id),
+                operator_attention_required=False,
+            )
+        self.db.log_operation(
+            operation="conversation.manual_reply",
+            status="ok" if delivery.get("sent") else "error",
+            entity_type="message",
+            entity_id=str(outbound_id),
+            details={
+                "conversation_id": int(conversation_id),
+                "job_id": int(job.get("id") or 0),
+                "candidate_id": int(candidate.get("id") or 0),
+                "delivery": delivery,
+                "actor": str(actor or "operator").strip() or "operator",
+            },
+        )
+        return {
+            "conversation_id": int(conversation_id),
+            "message_id": outbound_id,
+            "language": language,
+            "delivery": delivery,
+            "operator_attention_required": False if delivery.get("sent") else bool(conversation.get("operator_attention_required")),
+        }
 
     def _normalize_inbound_meta(self, inbound_meta: Dict[str, Any] | None) -> Dict[str, Any]:
         out: Dict[str, Any] = {"type": "candidate_message"}
@@ -3007,6 +3394,29 @@ class WorkflowService:
                     }
                 )
                 continue
+            conversation = self.db.get_conversation(conversation_id)
+            if self._conversation_is_closed(conversation):
+                skipped += 1
+                items.append(
+                    {
+                        "session_id": session_id,
+                        "conversation_id": conversation_id,
+                        "status": "skipped",
+                        "reason": "conversation_closed",
+                    }
+                )
+                continue
+            if bool((conversation or {}).get("operator_attention_required")):
+                skipped += 1
+                items.append(
+                    {
+                        "session_id": session_id,
+                        "conversation_id": conversation_id,
+                        "status": "skipped",
+                        "reason": "operator_attention_required",
+                    }
+                )
+                continue
             state_json = row.get("state_json") if isinstance(row.get("state_json"), dict) else {}
             if self.pre_resume_service.get_session(session_id) is None and state_json:
                 self.pre_resume_service.seed_session(state_json)
@@ -3098,7 +3508,6 @@ class WorkflowService:
             )
             outbound = str(result.get("outbound") or "").strip()
             candidate = self.db.get_candidate(candidate_id)
-            conversation = self.db.get_conversation(conversation_id)
             if result.get("sent") and outbound and candidate and conversation:
                 language = resolve_conversation_language(
                     latest_message_text="",
@@ -3463,6 +3872,30 @@ class WorkflowService:
                     }
                 )
                 continue
+            if self._conversation_is_closed(conversation):
+                skipped += 1
+                items.append(
+                    {
+                        "job_id": job_ref,
+                        "candidate_id": candidate_id,
+                        "session_id": session_id,
+                        "status": "skipped",
+                        "reason": "conversation_closed",
+                    }
+                )
+                continue
+            if bool(conversation.get("operator_attention_required")):
+                skipped += 1
+                items.append(
+                    {
+                        "job_id": job_ref,
+                        "candidate_id": candidate_id,
+                        "session_id": session_id,
+                        "status": "skipped",
+                        "reason": "operator_attention_required",
+                    }
+                )
+                continue
 
             language = self._candidate_primary_language(candidate)
             message = self._compose_interview_followup_message(
@@ -3473,6 +3906,18 @@ class WorkflowService:
                 followup_number=followup_number,
                 conversation=conversation,
             )
+            if not str(message or "").strip():
+                skipped += 1
+                items.append(
+                    {
+                        "job_id": job_ref,
+                        "candidate_id": candidate_id,
+                        "session_id": session_id,
+                        "status": "skipped",
+                        "reason": "llm_message_unavailable",
+                    }
+                )
+                continue
             delivery = self._send_auto_reply(candidate=candidate, message=message, conversation=conversation)
             outbound_id = self.db.add_message(
                 conversation_id=int(conversation["id"]),
@@ -3623,6 +4068,15 @@ class WorkflowService:
             language=language,
             conversation=conversation,
         )
+        if not str(message or "").strip():
+            self.db.log_operation(
+                operation="agent.interview.invite",
+                status="skipped",
+                entity_type="candidate",
+                entity_id=str(candidate_id),
+                details={"job_id": job_id, "reason": "llm_message_unavailable"},
+            )
+            return {"started": False, "reason": "llm_message_unavailable", "session_id": session_id, "entry_url": entry_url}
         delivery = self._send_auto_reply(candidate=candidate, message=message, conversation=conversation)
         outbound_id = self.db.add_message(
             conversation_id=conversation_id,
@@ -3787,12 +4241,13 @@ class WorkflowService:
             candidate=candidate,
             inbound_text=f"Interview URL to include exactly: {entry_url}",
             history=[],
-            fallback_reply=fallback,
+            fallback_reply="",
             language=lang,
             state=None,
+            allow_fallback=False,
         )
-        with_greeting = self._ensure_candidate_greeting(text=generated, fallback=fallback)
-        return self._ensure_interview_url(text=with_greeting, fallback=fallback, entry_url=entry_url)
+        with_link = self._ensure_interview_url(text=generated, fallback="", entry_url=entry_url) if generated else ""
+        return str(with_link or "").strip()
 
     def _compose_interview_followup_message(
         self,
@@ -3803,21 +4258,20 @@ class WorkflowService:
         followup_number: int,
         conversation: Dict[str, Any] | None = None,
     ) -> str:
-        name = str(candidate.get("full_name") or "there").strip() or "there"
         title = str(job.get("title") or "this role").strip() or "this role"
         first = {
-            "en": '{name}, quick ping on "{title}": {url}\nwant me to help with anything before you do it',
-            "ru": '{name}, короткий пинг по "{title}": {url}\nесли нужна помощь перед прохождением, напишите',
-            "es": '{name}, ping rapido sobre "{title}": {url}\nsi quieres, te ayudo antes de hacerlo',
+            "en": 'Quick ping on "{title}": {url}\nwant me to help with anything before you do it',
+            "ru": 'Короткий пинг по "{title}": {url}\nесли нужна помощь перед прохождением, напишите',
+            "es": 'Ping rapido sobre "{title}": {url}\nsi quieres, te ayudo antes de hacerlo',
         }
         second = {
-            "en": '{name}, final reminder for "{title}": {url}\nif this role is still interesting, please do the quick pre vetting',
-            "ru": '{name}, финальное напоминание по "{title}": {url}\nесли роль все еще актуальна, пройдите короткий pre vetting',
-            "es": '{name}, ultimo recordatorio para "{title}": {url}\nsi el rol sigue siendo interesante, completa el pre vetting corto',
+            "en": 'Final reminder for "{title}": {url}\nif this role is still interesting, please do the quick pre vetting',
+            "ru": 'Финальное напоминание по "{title}": {url}\nесли роль все еще актуальна, пройдите короткий pre vetting',
+            "es": 'Ultimo recordatorio para "{title}": {url}\nsi el rol sigue siendo interesante, completa el pre vetting corto',
         }
         lang = str(language or "en").strip().lower()
         pool = first if int(followup_number) <= 1 else second
-        fallback = pool.get(lang, pool["en"]).format(name=name, title=title, url=entry_url)
+        fallback = pool.get(lang, pool["en"]).format(title=title, url=entry_url)
         instruction = self._linkedin_generation_instruction(
             kind="interview_followup",
             recruiter_name=self._linkedin_recruiter_name(conversation=conversation),
@@ -3830,11 +4284,13 @@ class WorkflowService:
             candidate=candidate,
             inbound_text=f"Followup number {followup_number}. Include this URL exactly: {entry_url}",
             history=[],
-            fallback_reply=fallback,
+            fallback_reply="",
             language=lang,
             state=None,
+            allow_fallback=False,
         )
-        return self._ensure_interview_url(text=generated, fallback=fallback, entry_url=entry_url)
+        with_link = self._ensure_interview_url(text=generated, fallback="", entry_url=entry_url) if generated else ""
+        return str(with_link or "").strip()
 
     def _apply_interview_progress_update(
         self,
@@ -5942,6 +6398,7 @@ class WorkflowService:
             fallback_reply=fallback,
             language=language,
             state=state,
+            allow_fallback=True,
         )
         return self._ensure_outreach_requirements(text=generated, fallback=fallback)
 
@@ -5964,17 +6421,19 @@ class WorkflowService:
         if not fallback:
             return ""
         instruction = self._linkedin_generation_instruction(kind="followup", recruiter_name=recruiter_name, language=language)
-        return self._maybe_llm_reply(
+        generated = self._maybe_llm_reply(
             mode="linkedin_followup",
             instruction=instruction,
             job=job,
             candidate=candidate,
             inbound_text="",
             history=history,
-            fallback_reply=fallback,
+            fallback_reply="",
             language=language,
             state=state,
+            allow_fallback=False,
         )
+        return str(generated or "").strip()
 
     def _linkedin_initial_fallback_message(self, *, job: Dict[str, Any], recruiter_name: str, request_resume: bool) -> str:
         position = str(job.get("title") or "AI Engineer").strip() or "AI Engineer"
@@ -6039,11 +6498,10 @@ class WorkflowService:
                 f"Write in language: {language}.\n"
                 f"Recruiter name context: {recruiter_context}\n"
                 "Goal: candidate already agreed to quick pre vetting, now send interview link in one natural message.\n"
-                "Required structure:\n"
-                "1) First line must be exactly: Hey,\n"
-                "2) Friendly short acknowledgement\n"
-                "3) Share the interview link exactly as provided in context\n"
-                "4) Ask for a short reply once finished\n"
+                "Required content:\n"
+                "1) Short natural acknowledgement\n"
+                "2) Share the interview link exactly as provided in context\n"
+                "3) Ask for a short reply once finished\n"
                 "Do not ask the candidate to repeat consent phrase.\n"
                 "Do not force corporate tone.\n"
                 "Do not invent recruiter names.\n"
@@ -6057,7 +6515,7 @@ class WorkflowService:
                 f"Write in language: {language}.\n"
                 f"Recruiter name context: {recruiter_context}\n"
                 "Goal: remind about quick pre vetting link in a casual way.\n"
-                "Required structure:\n"
+                "Required content:\n"
                 "1) Very short check in\n"
                 "2) Include interview link exactly as provided in context\n"
                 "3) Ask if help is needed or ask for quick status\n"
@@ -6068,27 +6526,18 @@ class WorkflowService:
                 "Adapt wording to context while preserving this structure and intent."
             )
         if normalized_kind == "followup":
-            signature_rule = (
-                "4) Optional signature block:\n"
-                "Warm regards,\n"
-                f"{normalized_recruiter}\n"
-                "Senior Talent Acquisition Manager at Tener\n"
-                if normalized_recruiter
-                else "4) Signature is optional and should not include a recruiter name when none is provided\n"
-            )
             return (
                 "Generate one LinkedIn follow up message as plain text with paragraph breaks.\n"
                 f"Write in language: {language}.\n"
                 f"Recruiter name context: {recruiter_context}\n"
-                "Required structure:\n"
-                "1) Start with a short greeting line like Hey,\n"
-                "2) Mention the role may not be a fit and ask for referral from the network\n"
-                "3) Ask for a short reply on current status\n"
-                f"{signature_rule}"
+                "Goal: send a short natural follow up based on the actual thread state.\n"
+                "Use the real conversation context from history.\n"
+                "Do not ask for referrals unless the candidate brought that up first.\n"
+                "Do not force a signature block.\n"
                 "Do not invent recruiter names.\n"
                 "Style rules:\n"
                 f"{style_rules}\n"
-                "Adapt wording to job and candidate context while preserving this structure and intent."
+                "Adapt wording to job and candidate context while preserving this goal."
             )
         signature_rule = (
             "5) Signature block exactly as:\n"
@@ -6155,33 +6604,20 @@ class WorkflowService:
     def _linkedin_style_rules() -> str:
         return (
             "Use an informal human tone.\n"
-            "Do not end paragraphs with a period.\n"
-            "Sometimes allow minor typos.\n"
-            "Use a little slang, not too much.\n"
-            "Sometimes keep it very short.\n"
-            "Do not make the message perfectly structured.\n"
-            "Avoid perfect logical transitions.\n"
-            "Do not use template phrases like As an AI or Let me clarify.\n"
-            "Vary rhythm from longer text to one sentence.\n"
-            "Sometimes include reactions like hm, mmm, hard, lol, interesting.\n"
-            "Sometimes ask casually for clarification like what exactly do you mean.\n"
-            "Allow slight incompleteness sometimes.\n"
-            "Do not provide exhaustive lists unless asked.\n"
-            "Do not sound like Wikipedia.\n"
-            "Sometimes acknowledge uncertainty, for example not sure or I may be wrong.\n"
+            "Keep it natural, short, and recruiter-like.\n"
             "Use conversation context, do not answer from a blank slate.\n"
+            "Do not sound corporate, scripted, or like customer support.\n"
+            "Do not use template phrases like As an AI or Let me clarify.\n"
+            "Do not over-explain.\n"
+            "Do not force perfect transitions or perfect conclusions.\n"
             "Do not be overly polite.\n"
-            "Do not use emoji in every message.\n"
-            "Sometimes use dry humor or light sarcasm.\n"
-            "Avoid heavy empathy in every reply.\n"
-            "Do not force perfect conclusions at the end.\n"
-            "Sometimes reply fast and direct.\n"
-            "Sometimes show delayed logic instead of instant total understanding.\n"
-            "Avoid generic universal advice.\n"
-            "Sometimes be slightly subjective.\n"
-            "Do not explain obvious things.\n"
-            "Do not summarize every message.\n"
-            "Do not try to be useful at 110 percent every time.\n"
+            "Do not use the candidate name if there was already any previous outbound message in the thread.\n"
+            "Use the candidate name at most once in the first outreach only.\n"
+            "Never translate, localize, or mutate the candidate name.\n"
+            "Do not say thanks for your honesty, thanks for your candor, thanks for being open, cheers, warm regards, best regards, or similar canned recruiter phrases.\n"
+            "Do not add a signature unless the instruction explicitly requires one.\n"
+            "Do not ask for referrals unless the candidate brought that up.\n"
+            "If the natural answer would be awkward, generic, or low confidence, return an empty string instead of a bad reply.\n"
             "Never use hyphen or dash punctuation outside URLs.\n"
             "Never use double dashes."
         )
@@ -6197,14 +6633,13 @@ class WorkflowService:
         fallback_reply: str,
         language: str,
         state: Dict[str, Any] | None,
+        allow_fallback: bool = True,
     ) -> str:
         fallback = (fallback_reply or "").strip()
-        if not fallback:
-            return fallback
         if self.llm_responder is None:
-            return fallback
-        source = "fallback"
-        reason = "llm_unavailable"
+            return fallback if allow_fallback else ""
+        source = "llm"
+        reason = "generated"
         try:
             generated = self.llm_responder.generate_candidate_reply(
                 mode=mode,
@@ -6216,6 +6651,7 @@ class WorkflowService:
                 fallback_reply=fallback,
                 language=language,
                 state=state,
+                allow_fallback=allow_fallback,
             )
         except Exception as exc:
             self.db.log_operation(
@@ -6225,14 +6661,12 @@ class WorkflowService:
                 entity_id=str(candidate.get("id") or candidate.get("linkedin_id") or "unknown"),
                 details={"mode": mode, "error": str(exc)},
             )
-            return fallback
+            return fallback if allow_fallback else ""
         generated_text = str(generated or "").strip()
-        if generated_text:
-            source = "llm"
-            reason = "generated"
-        else:
-            generated_text = fallback
+        if not generated_text:
+            source = "empty"
             reason = "empty_generation"
+            return fallback if allow_fallback else ""
 
         normalized_mode = str(mode or "").strip().lower()
         multiline_modes = {
@@ -6248,14 +6682,18 @@ class WorkflowService:
         if normalized_mode in {"linkedin_outreach", "linkedin_followup"}:
             final_text = self._sanitize_recruiter_outbound_text(final_text)
         if not final_text:
-            final_text = fallback
-            source = "fallback"
+            final_text = fallback if allow_fallback else ""
+            source = "empty"
             reason = "empty_after_sanitize"
+            if not final_text:
+                return ""
 
         if self._contains_template_placeholders(final_text):
-            final_text = fallback
-            source = "fallback"
+            final_text = fallback if allow_fallback else ""
+            source = "empty"
             reason = "template_placeholder"
+            if not final_text:
+                return ""
 
         if mode == "pre_resume" and self._should_require_resume_cta(state):
             if not self._has_resume_cta(final_text):

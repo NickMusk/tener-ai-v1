@@ -375,6 +375,8 @@ class PostgresReadDatabase:
             where_parts.append("conv.job_id = %s")
             args.append(int(job_id))
         if started_only:
+            where_parts.append("COALESCE(conv.status, 'active') <> %s")
+            args.append("closed")
             where_parts.append(
                 """
                 EXISTS (
@@ -421,6 +423,11 @@ class PostgresReadDatabase:
             conv.status AS conversation_status,
             conv.external_chat_id,
             conv.linkedin_account_id,
+            conv.ai_enabled,
+            conv.operator_attention_required,
+            conv.terminal_reason,
+            conv.closed_at,
+            conv.closed_by,
             conv.last_message_at,
             j.title AS job_title,
             c.full_name AS candidate_name,

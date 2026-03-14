@@ -20,6 +20,7 @@ TERMINAL_STATUSES = {
     "ready_for_interview",
     "ready_for_screening_call",
     "not_interested",
+    "closed_not_fit",
     "unreachable",
     "stalled",
     "delivery_blocked_identity",

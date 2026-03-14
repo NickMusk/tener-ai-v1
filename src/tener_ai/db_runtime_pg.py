@@ -1133,6 +1133,46 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                 )
                 return int(cur.rowcount or 0) > 0
 
+    def update_conversation_control(
+        self,
+        conversation_id: int,
+        *,
+        status: Optional[str] = None,
+        ai_enabled: Optional[bool] = None,
+        operator_attention_required: Optional[bool] = None,
+        terminal_reason: Optional[str] = None,
+        closed_at: Optional[str] = None,
+        closed_by: Optional[str] = None,
+    ) -> bool:
+        fields: List[str] = []
+        values: List[Any] = []
+        if status is not None:
+            fields.append("status = %s")
+            values.append(str(status))
+        if ai_enabled is not None:
+            fields.append("ai_enabled = %s")
+            values.append(bool(ai_enabled))
+        if operator_attention_required is not None:
+            fields.append("operator_attention_required = %s")
+            values.append(bool(operator_attention_required))
+        if terminal_reason is not None:
+            fields.append("terminal_reason = %s")
+            values.append(str(terminal_reason).strip() or None)
+        if closed_at is not None:
+            fields.append("closed_at = %s")
+            values.append(str(closed_at).strip() or None)
+        if closed_by is not None:
+            fields.append("closed_by = %s")
+            values.append(str(closed_by).strip() or None)
+        if not fields:
+            return False
+        values.append(int(conversation_id))
+        query = f"UPDATE conversations SET {', '.join(fields)} WHERE id = %s"
+        with self.transaction() as conn:
+            with conn.cursor() as cur:
+                cur.execute(query, tuple(values))
+                return int(cur.rowcount or 0) > 0
+
     def set_conversation_linkedin_account(self, conversation_id: int, account_id: Optional[int]) -> bool:
         with self.transaction() as conn:
             with conn.cursor() as cur:
@@ -1160,6 +1200,11 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                         conv.status AS conversation_status,
                         conv.external_chat_id,
                         conv.linkedin_account_id,
+                        conv.ai_enabled,
+                        conv.operator_attention_required,
+                        conv.terminal_reason,
+                        conv.closed_at,
+                        conv.closed_by,
                         conv.last_message_at,
                         conv.created_at,
                         j.title AS job_title,
@@ -1238,6 +1283,55 @@ class PostgresRuntimeDatabase(PostgresReadDatabase):
                     "SELECT * FROM messages WHERE conversation_id = %s ORDER BY id ASC",
                     (int(conversation_id),),
                 )
+                rows = cur.fetchall()
+        return [self._row_to_dict(dict(r)) for r in rows]
+
+    def list_recent_conversation_messages(
+        self,
+        *,
+        limit: int = 100,
+        job_id: Optional[int] = None,
+        direction: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        safe_limit = max(1, min(int(limit or 100), 2000))
+        where_parts = ["j.archived_at IS NULL"]
+        args: List[Any] = []
+        if job_id is not None:
+            where_parts.append("conv.job_id = %s")
+            args.append(int(job_id))
+        if direction is not None:
+            where_parts.append("m.direction = %s")
+            args.append(str(direction))
+        where = f"WHERE {' AND '.join(where_parts)}"
+        args.append(safe_limit)
+        query = f"""
+        SELECT
+            m.*,
+            conv.job_id,
+            conv.candidate_id,
+            conv.status AS conversation_status,
+            conv.linkedin_account_id,
+            conv.ai_enabled,
+            conv.operator_attention_required,
+            conv.terminal_reason,
+            conv.closed_at,
+            conv.closed_by,
+            c.full_name AS candidate_name,
+            j.title AS job_title,
+            a.label AS linkedin_account_label,
+            a.provider_account_id AS linkedin_provider_account_id
+        FROM messages m
+        JOIN conversations conv ON conv.id = m.conversation_id
+        LEFT JOIN jobs j ON j.id = conv.job_id
+        LEFT JOIN candidates c ON c.id = conv.candidate_id
+        LEFT JOIN linkedin_accounts a ON a.id = conv.linkedin_account_id
+        {where}
+        ORDER BY m.created_at DESC, m.id DESC
+        LIMIT %s
+        """
+        with self._connect() as conn:
+            with conn.cursor(row_factory=self._psycopg.rows.dict_row) as cur:
+                cur.execute(query, tuple(args))
                 rows = cur.fetchall()
         return [self._row_to_dict(dict(r)) for r in rows]
 

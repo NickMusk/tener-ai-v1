@@ -273,3 +273,76 @@ test("refreshOutreachOps keeps last good ATS board when ATS refresh fails", asyn
   assert.match(harness.element("ops-ats-summary").textContent, /12 candidates/);
   assert.match(harness.element("ops-ats-summary").textContent, /stale:/);
 });
+
+test("refreshOutreachOps renders reply counters and recent message logs", async () => {
+  const harness = buildHarness();
+  harness.state.opsJobId = 27;
+  harness.responses.set(
+    "/api/outreach/ops?limit_logs=1000&limit_chats=800&job_id=27",
+    {
+      summary: {
+        health: "warning",
+        delivery_health: "ok",
+        backlog_health: "warning",
+        active_accounts: 1,
+        connected_accounts: 1,
+        waiting_connection: 0,
+        stuck_threads: 1,
+        sent_1h: 2,
+        sent_24h: 5,
+        replies_1h: 1,
+        replies_24h: 3,
+        failed_1h: 0,
+        last_successful_send_at: "2026-03-14T00:00:00+00:00",
+        delivery_issues: [],
+        backlog_issues: ["1 stuck thread"],
+      },
+      backlog: {
+        summary: {
+          new_threads: 0,
+          unassigned_recovery: 0,
+          waiting_connection: 0,
+          stuck_replies: 1,
+          selected_jobs: 1,
+        },
+        items: [],
+      },
+      accounts: [],
+      recent_replies: [
+        {
+          candidate_name: "Reply Candidate",
+          linkedin_account_label: "QA Sender",
+          text: "Sounds good, will send later today",
+          created_at: "2026-03-14T01:00:00+00:00",
+        },
+      ],
+      recent_outbound: [
+        {
+          candidate_name: "Outbound Candidate",
+          linkedin_account_label: "QA Sender",
+          text: "Quick ping from our side",
+          created_at: "2026-03-14T00:30:00+00:00",
+          type: "pre_resume_followup",
+          auto: true,
+          manual: false,
+        },
+      ],
+      events: [],
+      thresholds: { stale_minutes: 10080 },
+    },
+  );
+  harness.responses.set(
+    "/api/outreach/ats-board?limit=200&job_id=27",
+    { status: "ok", summary: {}, columns: [] },
+  );
+
+  await harness.refreshOutreachOps();
+
+  assert.equal(harness.element("ops-summary-replies-1h").textContent, "1");
+  assert.equal(harness.element("ops-summary-replies-24h").textContent, "3");
+  assert.equal(harness.element("casey-health-replies-24h").textContent, "3");
+  assert.match(harness.element("ops-replies-box").innerHTML, /Reply Candidate/);
+  assert.match(harness.element("ops-replies-box").innerHTML, /QA Sender/);
+  assert.match(harness.element("ops-outbound-log-box").innerHTML, /Quick ping from our side/);
+  assert.match(harness.element("ops-outbound-log-box").innerHTML, /pre_resume_followup/);
+});
