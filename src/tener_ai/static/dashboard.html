@@ -1499,91 +1499,116 @@
         <div id="ops-summary-issues" class="ops-issues">No issues detected.</div>
       </section>
 
-      <section class="card">
-        <div class="panel-title"><span>ATS Board</span><span class="mono">GET /api/outreach/ats-board</span></div>
-        <div id="ops-ats-summary" class="ops-issues">No ATS candidates in scope.</div>
-        <div id="ops-ats-board" class="ats-board">
-          <div class="muted">Loading ATS board...</div>
+      <details class="card collapsible-card" open>
+        <summary>
+          <div class="collapsible-title"><span>ATS Board</span></div>
+          <div class="collapsible-meta mono">GET /api/outreach/ats-board</div>
+        </summary>
+        <div class="collapsible-body">
+          <div id="ops-ats-summary" class="ops-issues">No ATS candidates in scope.</div>
+          <div id="ops-ats-board" class="ats-board">
+            <div class="muted">Loading ATS board...</div>
+          </div>
         </div>
-      </section>
+      </details>
 
-      <section class="card">
-        <div class="panel-title"><span>Backlog Queue</span><span class="mono">latest auto jobs with open outreach backlog</span></div>
-        <div id="ops-backlog-summary" class="ops-issues">No backlog queued.</div>
-        <div style="overflow:auto;">
-          <table>
-            <thead>
-              <tr>
-                <th>Queue</th>
-                <th>Candidate</th>
-                <th>Job</th>
-                <th>Score</th>
-                <th>Last Activity</th>
-                <th>Account / Planned</th>
-                <th>Open</th>
-              </tr>
-            </thead>
-            <tbody id="ops-backlog-tbody">
-              <tr><td colspan="7" class="muted">No backlog queued</td></tr>
-            </tbody>
-          </table>
+      <details class="card collapsible-card">
+        <summary>
+          <div class="collapsible-title"><span>Backlog Queue</span></div>
+          <div class="collapsible-meta mono">latest auto jobs with open outreach backlog</div>
+        </summary>
+        <div class="collapsible-body">
+          <div id="ops-backlog-summary" class="ops-issues">No backlog queued.</div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Queue</th>
+                  <th>Candidate</th>
+                  <th>Job</th>
+                  <th>Score</th>
+                  <th>Last Activity</th>
+                  <th>Account / Planned</th>
+                  <th>Open</th>
+                </tr>
+              </thead>
+              <tbody id="ops-backlog-tbody">
+                <tr><td colspan="7" class="muted">No backlog queued</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </section>
+      </details>
 
-      <section class="card">
-        <div class="panel-title"><span>Per-Account Delivery Status</span><span class="mono">GET /api/outreach/ops</span></div>
-        <div style="overflow:auto;">
-          <table>
-            <thead>
-              <tr>
-                <th>Account</th>
-                <th>Delivery</th>
-                <th>Backlog</th>
-                <th>Status</th>
-                <th>Active</th>
-                <th>Sent 1h/24h</th>
-                <th>Replies 1h/24h</th>
-                <th>Failed 1h/24h</th>
-                <th>Funnel</th>
-                <th>Recent Funnel</th>
-                <th>Stuck</th>
-                <th>Stuck Candidates</th>
-                <th>Last Success</th>
-                <th>Last Error</th>
-              </tr>
-            </thead>
-            <tbody id="ops-accounts-tbody">
-              <tr><td colspan="14" class="muted">No data yet</td></tr>
-            </tbody>
-          </table>
+      <details class="card collapsible-card" open>
+        <summary>
+          <div class="collapsible-title"><span>Per-Account Delivery Status</span></div>
+          <div class="collapsible-meta mono">GET /api/outreach/ops</div>
+        </summary>
+        <div class="collapsible-body">
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Delivery</th>
+                  <th>Backlog</th>
+                  <th>Status</th>
+                  <th>Active</th>
+                  <th>Sent 1h/24h</th>
+                  <th>Replies 1h/24h</th>
+                  <th>Failed 1h/24h</th>
+                  <th>Funnel</th>
+                  <th>Recent Funnel</th>
+                  <th>Stuck</th>
+                  <th>Stuck Candidates</th>
+                  <th>Last Success</th>
+                  <th>Last Error</th>
+                </tr>
+              </thead>
+              <tbody id="ops-accounts-tbody">
+                <tr><td colspan="14" class="muted">No data yet</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </section>
+      </details>
 
-      <section class="card">
-        <div class="panel-title"><span>Recent Candidate Replies</span><span class="mono">latest inbound</span></div>
-        <div id="ops-replies-box" class="ops-events">
-          <div class="muted">No replies yet</div>
+      <details class="card collapsible-card">
+        <summary>
+          <div class="collapsible-title"><span>Recent Candidate Replies</span></div>
+          <div class="collapsible-meta mono">latest inbound</div>
+        </summary>
+        <div class="collapsible-body">
+          <div id="ops-replies-box" class="ops-events">
+            <div class="muted">No replies yet</div>
+          </div>
         </div>
-      </section>
+      </details>
 
-      <section class="card">
-        <details open>
-          <summary class="panel-title" style="cursor:pointer;">
-            <span>Latest Sent Messages</span>
-            <span class="mono">text • recipient • account • time</span>
-          </summary>
-          <div id="ops-outbound-log-box" class="ops-events" style="margin-top:10px;">
+      <details class="card collapsible-card">
+        <summary>
+          <div class="collapsible-title"><span>Latest Sent Messages</span></div>
+          <div class="collapsible-meta mono">text • recipient • account • time</div>
+        </summary>
+        <div class="collapsible-body">
+          <div id="ops-outbound-log-box" class="ops-events">
             <div class="muted">No outbound messages yet</div>
           </div>
-        </details>
-      </section>
-
-      <section class="card">
-        <div class="panel-title"><span>Recent Outreach Events</span><span class="mono">from operation logs</span></div>
-        <div id="ops-events-box" class="ops-events">
-          <div class="muted">No events yet</div>
         </div>
-      </section>
+      </details>
+
+      <details class="card collapsible-card">
+        <summary>
+          <div class="collapsible-title"><span>Recent Outreach Events</span></div>
+          <div class="collapsible-meta mono">from operation logs</div>
+        </summary>
+        <div class="collapsible-body">
+          <div id="ops-events-box" class="ops-events">
+            <div class="muted">No events yet</div>
+          </div>
+        </div>
+      </details>
     </section>
 
     <section class="card dashboard-footer-link">
