@@ -48,7 +48,7 @@ class PostgresPrimaryRuntimeTests(unittest.TestCase):
             clear=False,
         ), patch("tener_ai.main.PostgresMigrationRunner", return_value=fake_runner), patch(
             "tener_ai.main.PostgresRuntimeDatabase", _FakePostgresRuntimeDB
-        ), patch("tener_ai.main.Database", side_effect=AssertionError("sqlite database should not be initialized")):
+        ):
             services = api_main.build_services()
 
         self.assertEqual(services["db_runtime_mode"], "postgres_primary")

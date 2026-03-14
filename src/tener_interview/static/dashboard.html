@@ -352,7 +352,7 @@
         state.jobs = Array.isArray(out.items) ? out.items : [];
         const src = out.source_db || {};
         const sourceLabel = src.base_url || src.path || "not configured";
-        const sourceType = src.type || "sqlite";
+        const sourceType = src.type || "postgres";
         $("source-status").innerHTML =
           `Source (${safeText(sourceType)}): <span class="mono">${safeText(sourceLabel)}</span> ` +
           `<span class="${src.available ? "status-badge status-ok" : "status-badge status-err"}">` +
