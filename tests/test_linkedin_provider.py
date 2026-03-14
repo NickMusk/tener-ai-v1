@@ -245,6 +245,81 @@ class UnipileProviderParsingTests(unittest.TestCase):
         )
         self.assertEqual(normalized["languages"], [])
 
+    def test_enrich_profile_requests_linkedin_sections(self) -> None:
+        class FakeProvider(UnipileLinkedInProvider):
+            def __init__(self) -> None:
+                super().__init__(api_key="k", base_url="https://api.example.com", account_id="acc")
+                self.calls = []
+
+            def _request_json(self, method, url, payload=None):  # type: ignore[override]
+                self.calls.append((method, url, payload))
+                return {
+                    "provider_id": "cand-sections",
+                    "public_identifier": "mykola-berestok",
+                    "full_name": "Mykola B.",
+                    "headline": "Senior QA Engineer",
+                    "skills": [{"name": "Manual Testing"}],
+                }
+
+        provider = FakeProvider()
+        out = provider.enrich_profile({"provider_id": "cand-sections", "linkedin_id": "mykola-berestok"})
+        self.assertEqual(out["skills"], ["manual testing"])
+        enrich_url = provider.calls[0][1]
+        self.assertIn("linkedin_sections=skills", enrich_url)
+        self.assertIn("linkedin_sections=experience", enrich_url)
+        self.assertIn("linkedin_sections=languages", enrich_url)
+
+    def test_normalize_profile_extracts_skills_from_linkedin_sections(self) -> None:
+        normalized = self.provider._normalize_profile(
+            {
+                "provider_id": "cand-skills-1",
+                "public_identifier": "mykola-berestok",
+                "headline": "Senior QA Engineer",
+                "primary_locale": {"country": "US", "language": "en"},
+                "languages": [
+                    {"name": "English", "proficiency": "Limited working proficiency"},
+                    {"name": "Russian", "proficiency": "Native or bilingual proficiency"},
+                ],
+                "skills": [
+                    {"name": "Manual Testing", "endorsement_count": 22},
+                    {"name": "JIRA", "endorsement_count": 20},
+                    {"name": "Regression Testing", "endorsement_count": 18},
+                    {"name": "Test Cases", "endorsement_count": 18},
+                ],
+            }
+        )
+        self.assertEqual(
+            normalized["skills"],
+            ["manual testing", "jira", "regression testing", "test cases"],
+        )
+        self.assertEqual(normalized["languages"], ["en-us", "english", "russian"])
+
+    def test_normalize_profile_estimates_years_from_work_experience(self) -> None:
+        normalized = self.provider._normalize_profile(
+            {
+                "provider_id": "cand-exp-1",
+                "public_identifier": "mykola-berestok",
+                "headline": "Senior QA Engineer",
+                "work_experience": [
+                    {
+                        "company": "Kaleris",
+                        "position": "Senior QA Engineer",
+                        "start": "4/2024",
+                        "end": None,
+                        "skills": [],
+                    },
+                    {
+                        "company": "IT Craft",
+                        "position": "QA Engineer",
+                        "start": "3/2015",
+                        "end": "4/2017",
+                        "skills": ["Agile"],
+                    },
+                ],
+            }
+        )
+        self.assertGreaterEqual(normalized["years_experience"], 9)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,6 +4,7 @@ import json
 import os
 import re
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib import error, parse, request
@@ -281,11 +282,27 @@ class UnipileLinkedInProvider(LinkedInProvider):
 
         endpoint = self._build_url(f"/api/v1/users/{provider_id}")
         endpoint = self._with_account_id(endpoint, self.account_id)
+        for section in self._linkedin_profile_sections():
+            endpoint = f"{endpoint}{'&' if '?' in endpoint else '?'}{parse.urlencode({'linkedin_sections': section})}"
         detail = self._request_json("GET", endpoint)
 
         merged = dict(profile)
         # Apply richer detail fields while preserving sourced defaults.
-        for key in ("first_name", "last_name", "full_name", "name", "headline", "location", "primary_locale", "languages", "skills"):
+        for key in (
+            "first_name",
+            "last_name",
+            "full_name",
+            "name",
+            "headline",
+            "location",
+            "primary_locale",
+            "languages",
+            "skills",
+            "work_experience",
+            "education",
+            "recommendations",
+            "member_urn",
+        ):
             if detail.get(key):
                 merged[key] = detail.get(key)
 
@@ -820,6 +837,100 @@ class UnipileLinkedInProvider(LinkedInProvider):
         obj = (item.get("object") or "").strip()
         return obj == "UserProfile" and public_identifier == "search"
 
+    @staticmethod
+    def _linkedin_profile_sections() -> List[str]:
+        return ["skills", "experience", "languages", "education", "recommendations_received"]
+
+    @staticmethod
+    def _normalize_locale_value(value: Any) -> Optional[str]:
+        if isinstance(value, dict):
+            language = str(value.get("language") or "").strip().lower()
+            country = str(value.get("country") or "").strip().lower()
+            name = str(value.get("name") or "").strip().lower()
+            if language and country:
+                return f"{language}-{country}"
+            if language:
+                return language
+            if name:
+                return name
+            if country:
+                return country
+            return None
+        text = str(value or "").strip().lower()
+        return text or None
+
+    @staticmethod
+    def _extract_skill_names(value: Any) -> List[str]:
+        out: List[str] = []
+        if not isinstance(value, list):
+            return out
+        for item in value:
+            if isinstance(item, str):
+                text = item.strip()
+                if text:
+                    out.append(text)
+                continue
+            if not isinstance(item, dict):
+                continue
+            for key in ("name", "skill", "title", "label"):
+                text = str(item.get(key) or "").strip()
+                if text:
+                    out.append(text)
+                    break
+        return out
+
+    @staticmethod
+    def _parse_month_year(value: Any) -> Optional[tuple[int, int]]:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        parts = text.split("/")
+        if len(parts) != 2:
+            return None
+        try:
+            month = int(parts[0])
+            year = int(parts[1])
+        except (TypeError, ValueError):
+            return None
+        if not (1 <= month <= 12) or year <= 1900:
+            return None
+        return (year, month)
+
+    @classmethod
+    def _extract_years_from_experience(cls, item: Dict[str, Any]) -> int:
+        entries = item.get("work_experience")
+        if not isinstance(entries, list):
+            entries = item.get("experience")
+        if not isinstance(entries, list):
+            return 0
+        starts: List[tuple[int, int]] = []
+        ends: List[tuple[int, int]] = []
+        for entry in entries:
+            if not isinstance(entry, dict):
+                continue
+            start = cls._parse_month_year(entry.get("start") or entry.get("started_at"))
+            end = cls._parse_month_year(entry.get("end") or entry.get("ended_at"))
+            if start:
+                starts.append(start)
+            if end:
+                ends.append(end)
+        if not starts:
+            return 0
+        start_year, start_month = min(starts)
+        has_current_role = any(not cls._parse_month_year((entry or {}).get("end") or (entry or {}).get("ended_at")) for entry in entries if isinstance(entry, dict))
+        if has_current_role:
+            today = datetime.utcnow()
+            end_year, end_month = today.year, today.month
+        elif ends:
+            end_year, end_month = max(ends)
+        else:
+            today = datetime.utcnow()
+            end_year, end_month = today.year, today.month
+        month_span = (end_year - start_year) * 12 + (end_month - start_month)
+        if month_span < 0:
+            return 0
+        return month_span // 12
+
     def _normalize_profile(self, item: Dict[str, Any]) -> Dict[str, Any]:
         first_name = (item.get("first_name") or "").strip()
         last_name = (item.get("last_name") or "").strip()
@@ -838,19 +949,39 @@ class UnipileLinkedInProvider(LinkedInProvider):
         ordered_languages = []
         primary_locale = item.get("primary_locale")
         if primary_locale:
-            ordered_languages.append(primary_locale)
+            normalized_locale = self._normalize_locale_value(primary_locale)
+            if normalized_locale:
+                ordered_languages.append(normalized_locale)
         if isinstance(languages, list):
-            ordered_languages.extend(languages)
+            for value in languages:
+                normalized_language = self._normalize_locale_value(value)
+                if normalized_language:
+                    ordered_languages.append(normalized_language)
         elif item.get("language"):
-            ordered_languages.append(item.get("language"))
+            normalized_language = self._normalize_locale_value(item.get("language"))
+            if normalized_language:
+                ordered_languages.append(normalized_language)
 
-        skills = item.get("skills")
-        if not isinstance(skills, list):
-            skills = []
+        skills = self._extract_skill_names(item.get("skills"))
+        if not skills:
+            for entry in item.get("work_experience") or []:
+                if not isinstance(entry, dict):
+                    continue
+                skills.extend(self._extract_skill_names(entry.get("skills")))
         if not skills:
             skills = self._extract_skills_from_text(headline)
+        deduped_skills: List[str] = []
+        seen_skills: set[str] = set()
+        for skill in skills:
+            normalized_skill = str(skill or "").strip().lower()
+            if not normalized_skill or normalized_skill in seen_skills:
+                continue
+            seen_skills.add(normalized_skill)
+            deduped_skills.append(normalized_skill)
 
         years_experience = item.get("years_experience") or item.get("experience_years") or 0
+        if not years_experience:
+            years_experience = self._extract_years_from_experience(item)
         if not years_experience:
             years_experience = self._extract_years_from_text(headline)
         try:
@@ -867,7 +998,7 @@ class UnipileLinkedInProvider(LinkedInProvider):
             "headline": headline,
             "location": location,
             "languages": [str(x).lower() for x in ordered_languages if x],
-            "skills": [str(x).lower() for x in skills if x],
+            "skills": deduped_skills,
             "years_experience": years_experience,
             "raw": item,
         }
