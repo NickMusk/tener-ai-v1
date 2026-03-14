@@ -604,6 +604,7 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
                         "job_source_filters": "GET /api/jobs/{job_id}/source-filters",
                         "job_source_top_up": "POST /api/jobs/{job_id}/source-top-up",
                         "candidate_profile": "GET /api/candidates/{candidate_id}/profile?job_id=...&audit=0|1",
+                        "candidate_reenrich": "POST /api/candidates/{candidate_id}/re-enrich",
                         "candidate_resume_preview": "GET /api/candidates/{candidate_id}/resume-preview?job_id=...&url=...",
                         "candidate_resume_content": "GET /api/candidates/{candidate_id}/resume-preview/content?url=...",
                         "candidate_demo_profile": "POST /api/candidates/demo-profile",
@@ -1417,6 +1418,44 @@ class TenerRequestHandler(BaseHTTPRequestHandler):
             self._json_response(HTTPStatus.CREATED, out)
             return
 
+
+        match_candidate_reenrich = re.match(r"^/api/candidates/(\d+)/re-enrich$", parsed.path)
+        if match_candidate_reenrich:
+            if not self._require_admin_access():
+                return
+            candidate_id = self._safe_int(match_candidate_reenrich.group(1), None)
+            if candidate_id is None:
+                self._json_response(HTTPStatus.BAD_REQUEST, {"error": "invalid candidate id"})
+                return
+            body = payload or {}
+            if not isinstance(body, dict):
+                body = {}
+            job_id = self._safe_int(body.get("job_id"), None)
+            account_id = self._safe_int(body.get("account_id"), None)
+            backfill_resume = self._safe_bool(body.get("backfill_resume"), True)
+            resume_backfill_limit = self._safe_int(body.get("resume_backfill_limit"), 50) or 50
+            try:
+                out = SERVICES["workflow"].re_enrich_candidate(
+                    candidate_id=int(candidate_id),
+                    job_id=job_id,
+                    account_id=account_id,
+                    backfill_resume=bool(backfill_resume),
+                    resume_backfill_limit=resume_backfill_limit,
+                )
+            except ValueError as exc:
+                self._json_response(HTTPStatus.NOT_FOUND, {"error": str(exc)})
+                return
+            except JobOperationBlockedError as exc:
+                self._json_response(HTTPStatus.CONFLICT, {"error": str(exc)})
+                return
+            except Exception as exc:
+                self._json_response(
+                    HTTPStatus.INTERNAL_SERVER_ERROR,
+                    {"error": "candidate re-enrich failed", "details": str(exc)},
+                )
+                return
+            self._json_response(HTTPStatus.OK, out)
+            return
         if parsed.path == "/api/admin/seeds/full-demo-job":
             if not self._require_admin_access():
                 return

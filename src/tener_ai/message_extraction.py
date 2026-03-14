@@ -5,7 +5,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from .attachments import AttachmentDescriptor, descriptors_to_text
+from .attachments import AttachmentDescriptor, descriptors_to_text, is_supported_resume_url
 from .language import normalize_language, resolve_conversation_language
 from .prescreen_policy import collapse_salary_range_to_expectation
 
@@ -45,6 +45,8 @@ def parse_resume_links(text: str) -> List[str]:
     seen: set[str] = set()
     for link in links:
         lowered = link.lower()
+        if not is_supported_resume_url(lowered):
+            continue
         if any(
             marker in lowered
             for marker in ("resume", "cv", "curriculum", "currículum", ".pdf", ".doc", ".docx", "drive.", "dropbox", "notion.")
@@ -76,6 +78,8 @@ def parse_resume_links(text: str) -> List[str]:
     )
     if links and any(marker in lowered_text for marker in attachment_markers):
         for link in links:
+            if not is_supported_resume_url(link):
+                continue
             if link not in seen:
                 selected.append(link)
                 seen.add(link)

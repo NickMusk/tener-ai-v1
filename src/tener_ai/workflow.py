@@ -548,47 +548,17 @@ class WorkflowService:
         rejected = 0
 
         for profile in enriched_profiles:
-            score, status, notes = self.verification_agent.verify_candidate(job=job, profile=profile)
-            notes = dict(notes or {})
-            if job_culture_profile and not isinstance(notes.get("company_culture_profile"), dict):
-                notes["company_culture_profile"] = job_culture_profile
-            forced_identifier = self._forced_test_identifier_for_profile(profile, forced_test_ids)
-            if forced_identifier:
-                score = max(float(score), self.forced_test_score)
-                status = "verified"
-                notes["forced_test_candidate"] = True
-                notes["forced_test_identifier"] = forced_identifier
-                notes["forced_score"] = self.forced_test_score
-                notes["human_explanation"] = (
-                    "Forced test candidate prioritized: "
-                    f"score set to {self.forced_test_score}."
-                )
-            if self.contact_all_mode and status == "rejected":
-                status = "needs_resume"
-                notes = dict(notes)
-                notes["pre_resume_status"] = "rejected"
-                notes["screening_outcome"] = "needs_resume"
-                existing = str(notes.get("human_explanation") or "").strip()
-                if existing:
-                    notes["human_explanation"] = (
-                        existing
-                        + " Decision at this stage: request CV/resume and clarify experience before final verdict."
-                    )
-                else:
-                    notes["human_explanation"] = (
-                        "Insufficient confirmed profile data. Requesting CV/resume for final decision."
-                    )
-            record = {
-                "profile": profile,
-                "score": score,
-                "status": status,
-                "notes": notes,
-            }
+            record = self._evaluate_enriched_profile(
+                job=job,
+                profile=profile,
+                forced_test_ids=forced_test_ids,
+                job_culture_profile=job_culture_profile,
+            )
             items.append(record)
 
-            if status == "verified":
+            if record["status"] == "verified":
                 verified += 1
-            elif status == "needs_resume":
+            elif record["status"] == "needs_resume":
                 needs_resume += 1
             else:
                 rejected += 1
@@ -599,7 +569,7 @@ class WorkflowService:
                 status="ok",
                 entity_type="candidate_profile",
                 entity_id=entity_id,
-                details={"job_id": job_id, "result": status, "score": score},
+                details={"job_id": job_id, "result": record["status"], "score": record["score"]},
             )
 
         return {
@@ -612,6 +582,51 @@ class WorkflowService:
             "enriched_total": enrich_summary["total"],
             "enrich_failed": enrich_summary["failed"],
             "instruction": self.stage_instructions.get("verification", ""),
+        }
+
+    def _evaluate_enriched_profile(
+        self,
+        *,
+        job: Dict[str, Any],
+        profile: Dict[str, Any],
+        forced_test_ids: List[str] | None = None,
+        job_culture_profile: Dict[str, Any] | None = None,
+    ) -> Dict[str, Any]:
+        score, status, notes = self.verification_agent.verify_candidate(job=job, profile=profile)
+        notes = dict(notes or {})
+        if isinstance(job_culture_profile, dict) and job_culture_profile and not isinstance(notes.get("company_culture_profile"), dict):
+            notes["company_culture_profile"] = job_culture_profile
+        forced_identifier = self._forced_test_identifier_for_profile(profile, forced_test_ids or [])
+        if forced_identifier:
+            score = max(float(score), self.forced_test_score)
+            status = "verified"
+            notes["forced_test_candidate"] = True
+            notes["forced_test_identifier"] = forced_identifier
+            notes["forced_score"] = self.forced_test_score
+            notes["human_explanation"] = (
+                "Forced test candidate prioritized: "
+                f"score set to {self.forced_test_score}."
+            )
+        if self.contact_all_mode and status == "rejected":
+            status = "needs_resume"
+            notes = dict(notes)
+            notes["pre_resume_status"] = "rejected"
+            notes["screening_outcome"] = "needs_resume"
+            existing = str(notes.get("human_explanation") or "").strip()
+            if existing:
+                notes["human_explanation"] = (
+                    existing
+                    + " Decision at this stage: request CV/resume and clarify experience before final verdict."
+                )
+            else:
+                notes["human_explanation"] = (
+                    "Insufficient confirmed profile data. Requesting CV/resume for final decision."
+                )
+        return {
+            "profile": profile,
+            "score": score,
+            "status": status,
+            "notes": notes,
         }
 
     def enrich_profiles(self, job_id: int, profiles: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -650,6 +665,144 @@ class WorkflowService:
             "failed": failed,
             "instruction": self.stage_instructions.get("enrich", ""),
         }
+
+    def re_enrich_candidate(
+        self,
+        *,
+        candidate_id: int,
+        job_id: int | None = None,
+        account_id: int | None = None,
+        backfill_resume: bool = True,
+        resume_backfill_limit: int = 50,
+    ) -> Dict[str, Any]:
+        candidate = self.db.get_candidate(int(candidate_id))
+        if not candidate:
+            raise ValueError("candidate not found")
+        if not self._managed_linkedin_available():
+            raise RuntimeError("managed_linkedin_unavailable")
+
+        conversation = self._select_candidate_conversation(candidate_id=int(candidate_id), job_id=job_id)
+        selected_account = self._select_reenrich_account(
+            candidate_id=int(candidate_id),
+            job_id=job_id,
+            account_id=account_id,
+            conversation=conversation,
+        )
+        if not selected_account:
+            raise RuntimeError("linkedin_account_not_found_for_reenrich")
+        if not self._is_operational_linkedin_account(selected_account):
+            raise RuntimeError("linkedin_account_not_operational")
+
+        provider_account_id = str(selected_account.get("provider_account_id") or "").strip()
+        if not provider_account_id:
+            raise RuntimeError("provider_account_id_missing")
+        provider = self._build_managed_provider(account_id=provider_account_id)
+        enriched_profile = provider.enrich_profile(candidate)
+        persisted_candidate_id = self.db.upsert_candidate(enriched_profile, source="linkedin_reenrich")
+        updated_candidate = self.db.get_candidate(persisted_candidate_id) or enriched_profile
+
+        result: Dict[str, Any] = {
+            "candidate_id": int(persisted_candidate_id),
+            "job_id": int(job_id) if job_id is not None else None,
+            "account_id": int(selected_account.get("id") or 0) or None,
+            "provider_account_id": provider_account_id,
+            "candidate": updated_candidate,
+        }
+
+        if backfill_resume and conversation is not None:
+            result["resume_backfill"] = self.backfill_resume_assets_for_conversation(
+                conversation_id=int(conversation.get("id") or conversation.get("conversation_id") or 0),
+                per_chat_limit=resume_backfill_limit,
+            )
+
+        if job_id is not None:
+            job = self._get_job_or_raise(int(job_id))
+            self._assert_job_automation_allowed(job, operation="re_enrich_candidate")
+            evaluation = self._evaluate_enriched_profile(
+                job=job,
+                profile=updated_candidate if isinstance(updated_candidate, dict) else enriched_profile,
+                forced_test_ids=self._load_forced_test_identifiers(),
+                job_culture_profile=(
+                    job.get("company_culture_profile")
+                    if isinstance(job.get("company_culture_profile"), dict)
+                    else {}
+                ),
+            )
+            self.db.create_candidate_match(
+                job_id=int(job_id),
+                candidate_id=int(persisted_candidate_id),
+                score=float(evaluation.get("score") or 0.0),
+                status=str(evaluation.get("status") or "review"),
+                verification_notes=evaluation.get("notes") if isinstance(evaluation.get("notes"), dict) else {},
+            )
+            self._record_sourcing_vetting_assessment(
+                job_id=int(job_id),
+                candidate_id=int(persisted_candidate_id),
+                screening_status=str(evaluation.get("status") or "review"),
+                match_score=float(evaluation.get("score") or 0.0),
+                notes=evaluation.get("notes") if isinstance(evaluation.get("notes"), dict) else {},
+            )
+            self._upsert_agent_assessment(
+                job_id=int(job_id),
+                candidate_id=int(persisted_candidate_id),
+                agent_key="interview_evaluation",
+                stage_key="interview_results",
+                score=None,
+                status="not_started",
+                reason="Interview step has not started yet.",
+                details={"source": "workflow.re_enrich"},
+            )
+            result["verification"] = {
+                "score": float(evaluation.get("score") or 0.0),
+                "status": str(evaluation.get("status") or "review"),
+                "notes": evaluation.get("notes") if isinstance(evaluation.get("notes"), dict) else {},
+            }
+            result["match"] = self.db.get_candidate_match(job_id=int(job_id), candidate_id=int(persisted_candidate_id))
+
+        self.db.log_operation(
+            operation="candidate.re_enrich",
+            status="ok",
+            entity_type="candidate",
+            entity_id=str(persisted_candidate_id),
+            details={
+                "job_id": int(job_id) if job_id is not None else None,
+                "account_id": int(selected_account.get("id") or 0) or None,
+                "provider_account_id": provider_account_id,
+                "backfill_resume": bool(backfill_resume),
+            },
+        )
+        return result
+
+    def _select_candidate_conversation(self, *, candidate_id: int, job_id: int | None) -> Dict[str, Any] | None:
+        conversations = self.db.list_conversations_for_candidate(candidate_id=int(candidate_id), limit=200)
+        if job_id is not None:
+            for row in conversations:
+                if int(row.get("job_id") or 0) == int(job_id):
+                    return row
+        return conversations[0] if conversations else None
+
+    def _select_reenrich_account(
+        self,
+        *,
+        candidate_id: int,
+        job_id: int | None,
+        account_id: int | None,
+        conversation: Dict[str, Any] | None,
+    ) -> Dict[str, Any] | None:
+        if account_id is not None:
+            row = self.db.get_linkedin_account(int(account_id))
+            return row if isinstance(row, dict) else None
+        conversation_account_id = int((conversation or {}).get("linkedin_account_id") or 0)
+        if conversation_account_id > 0:
+            row = self.db.get_linkedin_account(conversation_account_id)
+            if isinstance(row, dict):
+                return row
+        if job_id is not None:
+            assigned = self.db.list_job_linkedin_accounts(job_id=int(job_id), status="connected")
+            if assigned:
+                return assigned[0]
+        connected = self.db.list_linkedin_accounts(limit=200, status="connected")
+        return connected[0] if connected else None
 
     def add_verified_candidates(self, job_id: int, verified_items: List[Dict[str, Any]]) -> Dict[str, Any]:
         job = self._get_job_or_raise(job_id)
@@ -3311,12 +3464,12 @@ class WorkflowService:
             if not self._is_inbound_provider_message(message=message, candidate=candidate):
                 continue
             attachments = message.get("attachments") if isinstance(message.get("attachments"), list) else []
-            if not attachments:
-                continue
             provider_message_id = str(message.get("provider_message_id") or "").strip()
             text = str(message.get("text") or "").strip()
             if not text:
                 text = self._extract_attachment_text_from_provider_message(message)
+            if not attachments and not parse_resume_links(text):
+                continue
             stored_row = by_provider_message_id.get(provider_message_id)
             inbound_message_id = int(stored_row.get("id") or 0) if isinstance(stored_row, dict) else 0
             self._capture_resume_assets_from_inbound(

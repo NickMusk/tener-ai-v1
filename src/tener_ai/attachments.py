@@ -42,6 +42,27 @@ RESUME_MARKERS: Sequence[str] = (
     ".doc",
     ".docx",
 )
+RESUME_HOST_MARKERS: Sequence[str] = (
+    "drive.google.com",
+    "docs.google.com",
+    "dropbox.com",
+    "notion.site",
+    "notion.so",
+    "1drv.ms",
+    "onedrive.live.com",
+    "sharepoint.com",
+    "box.com",
+)
+PROFILE_URL_MARKERS: Sequence[str] = (
+    "linkedin.com/in/",
+    "linkedin.com/pub/",
+    "linkedin.com/company/",
+    "github.com/",
+    "twitter.com/",
+    "x.com/",
+    "facebook.com/",
+    "instagram.com/",
+)
 
 
 @dataclass
@@ -103,12 +124,27 @@ def is_resume_like_name_or_url(value: str) -> bool:
     return any(marker in lowered for marker in RESUME_MARKERS)
 
 
+def is_supported_resume_url(value: str) -> bool:
+    lowered = str(value or "").strip().lower()
+    if not lowered:
+        return False
+    if lowered.startswith("att://"):
+        return True
+    if not (lowered.startswith("http://") or lowered.startswith("https://")):
+        return False
+    if any(marker in lowered for marker in PROFILE_URL_MARKERS):
+        return False
+    if any(marker in lowered for marker in RESUME_HOST_MARKERS):
+        return True
+    return is_resume_like_name_or_url(lowered)
+
+
 def extract_resume_urls(descriptors: Sequence[AttachmentDescriptor]) -> List[str]:
     out: List[str] = []
     seen: set[str] = set()
     for item in descriptors:
         url = str(item.url or "").strip()
-        if not (url.startswith("http://") or url.startswith("https://")):
+        if not is_supported_resume_url(url):
             continue
         name = str(item.name or "").strip()
         mime_type = str(item.mime_type or "").strip().lower()

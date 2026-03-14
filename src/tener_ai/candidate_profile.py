@@ -6,6 +6,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
+from .attachments import is_supported_resume_url
 from .candidate_scoring import CandidateScoringPolicy
 from .db import AGENT_DEFAULT_NAMES, Database
 from .llm_responder import CandidateLLMResponder
@@ -191,16 +192,17 @@ class CandidateProfileService:
                 )
                 culture_analysis = fit_breakdown.get("culture_fit") if isinstance(fit_breakdown.get("culture_fit"), dict) else {}
                 if culture_analysis:
+                    analysis = culture_analysis.get("analysis") if isinstance(culture_analysis.get("analysis"), dict) else {}
                     signals.insert(
                         0,
                         {
                             "kind": "culture_analysis",
                             "job_id": job_id,
-                            "created_at": datetime.now(UTC).isoformat(),
+                            "created_at": analysis.get("observed_at"),
                             "agent_key": "culture_analyst",
                             "agent_name": AGENT_DEFAULT_NAMES.get("culture_analyst", "Harper AI (Culture Analyst)"),
                             "status": "generated",
-                            "reason": str((culture_analysis.get("analysis") or {}).get("summary") or "Culture fit analysis updated."),
+                            "reason": str(analysis.get("summary") or "Culture fit analysis updated."),
                             "signals": {
                                 "alignment_highlights": culture_analysis.get("alignment_highlights") or [],
                                 "concerns": culture_analysis.get("concerns") or [],
@@ -1097,7 +1099,7 @@ class CandidateProfileService:
         if not alignment:
             concerns.append("limited direct evidence for culture alignment from resume, chat, and interview data")
 
-        analysis = self._build_culture_agent_analysis(
+        analysis = self._resolve_culture_agent_analysis(
             job=job,
             candidate=candidate,
             company_culture_profile=raw_profile,
@@ -1109,6 +1111,7 @@ class CandidateProfileService:
             alignment=alignment,
             concerns=concerns,
             predictive_signals=predictive_signals,
+            conversation_id=int((conversations[0] or {}).get("conversation_id") or 0) if conversations else None,
         )
 
         return {
@@ -1119,6 +1122,108 @@ class CandidateProfileService:
             "predictive_signals": predictive_signals[:6],
             "analysis": analysis,
         }
+
+    def _resolve_culture_agent_analysis(
+        self,
+        *,
+        job: Dict[str, Any],
+        candidate: Dict[str, Any],
+        company_culture_profile: Dict[str, Any],
+        values: List[str],
+        resume_links: List[str],
+        chat_signal_lines: List[str],
+        interview_score: float | None,
+        interview_signals: Dict[str, Any],
+        alignment: List[str],
+        concerns: List[str],
+        predictive_signals: List[str],
+        conversation_id: int | None,
+    ) -> Dict[str, Any]:
+        fingerprint_payload = {
+            "candidate_id": int(candidate.get("id") or 0),
+            "job_id": int(job.get("id") or 0),
+            "candidate_name": str(candidate.get("full_name") or "").strip(),
+            "candidate_headline": str(candidate.get("headline") or "").strip(),
+            "candidate_location": str(candidate.get("location") or "").strip(),
+            "candidate_skills": [str(item).strip().lower() for item in (candidate.get("skills") or []) if str(item).strip()],
+            "company_culture_profile": company_culture_profile,
+            "company_values": values,
+            "resume_links": sorted(str(item).strip() for item in resume_links if str(item).strip()),
+            "chat_signal_lines": chat_signal_lines[:12],
+            "interview_score": interview_score,
+            "interview_signals": interview_signals,
+            "alignment": alignment[:6],
+            "concerns": concerns[:4],
+            "predictive_signals": predictive_signals[:6],
+        }
+        fingerprint = hashlib.sha256(
+            json.dumps(fingerprint_payload, sort_keys=True, ensure_ascii=False).encode("utf-8")
+        ).hexdigest()
+        persisted = self._load_persisted_culture_analysis(
+            job_id=int(job.get("id") or 0),
+            candidate_id=int(candidate.get("id") or 0),
+        )
+        if persisted is not None:
+            persisted_fingerprint = str(persisted.get("fingerprint") or "").strip().lower()
+            persisted_analysis = persisted.get("analysis") if isinstance(persisted.get("analysis"), dict) else {}
+            persisted_summary = str(persisted_analysis.get("summary") or "").strip()
+            if persisted_fingerprint == fingerprint and persisted_summary:
+                analysis = dict(persisted_analysis)
+                analysis["observed_at"] = persisted.get("observed_at")
+                return analysis
+
+        analysis = self._build_culture_agent_analysis(
+            job=job,
+            candidate=candidate,
+            company_culture_profile=company_culture_profile,
+            values=values,
+            resume_links=resume_links,
+            chat_signal_lines=chat_signal_lines,
+            interview_score=interview_score,
+            interview_signals=interview_signals,
+            alignment=alignment,
+            concerns=concerns,
+            predictive_signals=predictive_signals,
+        )
+        observed_at = datetime.now(UTC).isoformat()
+        analysis = dict(analysis)
+        analysis["observed_at"] = observed_at
+        self.db.upsert_candidate_signal(
+            job_id=int(job.get("id") or 0),
+            candidate_id=int(candidate.get("id") or 0),
+            conversation_id=conversation_id,
+            source_type="culture_analysis",
+            source_id="latest",
+            signal_type="culture_analysis",
+            signal_category="culture",
+            title="Culture analysis updated",
+            detail=str(analysis.get("summary") or "").strip() or "Culture fit analysis updated.",
+            impact_score=1.0,
+            confidence=0.75 if str(analysis.get("source") or "") == "llm" else 0.6,
+            observed_at=observed_at,
+            signal_meta={
+                "fingerprint": fingerprint,
+                "analysis": analysis,
+                "alignment_highlights": alignment[:6],
+                "concerns": concerns[:4],
+                "predictive_signals": predictive_signals[:6],
+            },
+            signal_key=f"culture_analysis:{int(job.get('id') or 0)}:{int(candidate.get('id') or 0)}",
+        )
+        return analysis
+
+    def _load_persisted_culture_analysis(self, *, job_id: int, candidate_id: int) -> Dict[str, Any] | None:
+        rows = self.db.list_candidate_signals(candidate_id=int(candidate_id), job_id=int(job_id), limit=200)
+        for row in rows:
+            if str(row.get("signal_type") or "").strip().lower() != "culture_analysis":
+                continue
+            meta = row.get("signal_meta") if isinstance(row.get("signal_meta"), dict) else {}
+            return {
+                "fingerprint": str(meta.get("fingerprint") or "").strip(),
+                "analysis": meta.get("analysis") if isinstance(meta.get("analysis"), dict) else {},
+                "observed_at": row.get("observed_at"),
+            }
+        return None
 
     @staticmethod
     def _extract_chat_signal_lines(
@@ -1289,7 +1394,7 @@ class CandidateProfileService:
         )
         for row in ordered_assets:
             link = str(row.get("remote_url") or "").strip()
-            if not link or link in seen:
+            if not link or link in seen or not is_supported_resume_url(link):
                 continue
             seen.add(link)
             file_name = str(row.get("file_name") or "").strip()
@@ -1322,7 +1427,7 @@ class CandidateProfileService:
                 candidates.extend(nested)
             for raw in candidates:
                 link = str(raw or "").strip()
-                if not link or link in seen:
+                if not link or link in seen or not is_supported_resume_url(link):
                     continue
                 seen.add(link)
                 out.append(

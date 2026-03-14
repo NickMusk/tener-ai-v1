@@ -13,8 +13,10 @@ from tener_ai.matching import MatchingEngine
 class _LLMResponder:
     def __init__(self, text: str) -> None:
         self.text = text
+        self.calls = 0
 
     def generate_candidate_reply(self, **_: object) -> str:
+        self.calls += 1
         return self.text
 
 
@@ -88,13 +90,14 @@ class CandidateProfileServiceTests(unittest.TestCase):
         self.assertIn("weak_must_have_evidence", risk_types)
 
     def test_culture_summary_is_normalized_to_operator_facing_fallback_when_llm_addresses_candidate(self) -> None:
+        responder = _LLMResponder(
+            "Mykola, based on what we know so far, your strong communication skills make you a great fit."
+        )
         service = CandidateProfileService(
             db=self.db,
             matching_engine=self.matching,
             scoring_policy=self.scoring,
-            llm_responder=_LLMResponder(
-                "Mykola, based on what we know so far, your strong communication skills make you a great fit."
-            ),
+            llm_responder=responder,
         )
 
         analysis = service._build_culture_agent_analysis(
@@ -115,6 +118,85 @@ class CandidateProfileServiceTests(unittest.TestCase):
         self.assertTrue(summary.startswith("After reviewing Mykola B.'s communication"))
         self.assertNotIn(" your ", f" {summary.lower()} ")
         self.assertEqual(str(analysis.get("source") or ""), "fallback")
+
+    def test_build_candidate_profile_reuses_persisted_culture_analysis_without_regenerating(self) -> None:
+        responder = _LLMResponder(
+            "After reviewing Mykola B.'s communication and profile, he appears to be a strong fit for the role."
+        )
+        service = CandidateProfileService(
+            db=self.db,
+            matching_engine=self.matching,
+            scoring_policy=self.scoring,
+            llm_responder=responder,
+        )
+        job_id = self.db.insert_job(
+            title="Manual QA Engineer",
+            company="Tener",
+            jd_text="Need manual testing and clear communication.",
+            location="Remote",
+            preferred_languages=["en"],
+            seniority="middle",
+            must_have_skills=["manual testing"],
+        )
+        candidate_id = self.db.upsert_candidate(
+            {
+                "linkedin_id": "culture-persist-1",
+                "full_name": "Mykola B.",
+                "headline": "Senior QA Engineer",
+                "location": "Mexico",
+                "languages": ["en"],
+                "skills": ["manual testing"],
+                "years_experience": 6,
+            },
+            source="manual",
+        )
+        self.db.create_candidate_match(
+            job_id=job_id,
+            candidate_id=candidate_id,
+            score=0.72,
+            status="review",
+            verification_notes={"company_culture_profile": {"culture_values": ["quality bar"]}},
+        )
+
+        first = service.build_candidate_profile(candidate_id=candidate_id, selected_job_id=job_id, include_explanation=False)
+        second = service.build_candidate_profile(candidate_id=candidate_id, selected_job_id=job_id, include_explanation=False)
+
+        self.assertEqual(responder.calls, 1)
+        first_jobs = first.get("jobs") if isinstance(first.get("jobs"), list) else []
+        second_jobs = second.get("jobs") if isinstance(second.get("jobs"), list) else []
+        first_analysis = (((first_jobs[0] if first_jobs else {}).get("fit_breakdown") or {}).get("culture_fit") or {}).get("analysis") or {}
+        second_analysis = (((second_jobs[0] if second_jobs else {}).get("fit_breakdown") or {}).get("culture_fit") or {}).get("analysis") or {}
+        self.assertEqual(first_analysis.get("observed_at"), second_analysis.get("observed_at"))
+
+    def test_collect_resume_entries_filters_out_linkedin_profile_links(self) -> None:
+        entries = CandidateProfileService._collect_resume_entries(
+            sessions=[
+                {
+                    "updated_at": "2026-03-14T02:30:17+00:00",
+                    "resume_links": ["https://www.linkedin.com/in/not-a-resume"],
+                    "state_json": {},
+                }
+            ],
+            resume_assets=[
+                {
+                    "remote_url": "https://www.linkedin.com/in/not-a-resume",
+                    "file_name": None,
+                    "processing_status": "download_failed",
+                    "storage_path": None,
+                    "observed_at": "2026-03-14T02:30:17+00:00",
+                },
+                {
+                    "remote_url": "https://drive.google.com/file/d/abc/resume.pdf",
+                    "file_name": "resume.pdf",
+                    "processing_status": "processed",
+                    "storage_path": "/tmp/resume.pdf",
+                    "observed_at": "2026-03-14T02:31:17+00:00",
+                },
+            ],
+        )
+
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0].get("url"), "https://drive.google.com/file/d/abc/resume.pdf")
 
 
 if __name__ == "__main__":
