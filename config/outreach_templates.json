@@ -8,9 +8,9 @@
   },
   "outreach_resume_request": {
     "en": "Hi {name}, thanks for connecting regarding \"{job_title}\". To run final matching on real scope ({core_profile_summary}), could you share your latest CV/resume and key project highlights?",
-    "ru": "Привет, {name}! Спасибо за интерес к роли \"{job_title}\". Чтобы сделать финальный мэтчинг по ключевому профилю ({core_profile_summary}), отправьте, пожалуйста, актуальное CV/резюме и 2-3 релевантных проекта.",
-    "uk": "Привіт, {name}! Дякую за інтерес до ролі \"{job_title}\". Щоб зробити фінальний метчинг за ключовим профілем ({core_profile_summary}), надішліть, будь ласка, актуальне CV/резюме та 2-3 релевантні проєкти.",
-    "es": "Hola {name}, gracias por tu interés en \"{job_title}\". Para hacer el matching final sobre el perfil clave ({core_profile_summary}), ¿puedes compartir tu CV actualizado y 2-3 proyectos relevantes?"
+    "ru": "Привет, {name}! Спасибо за интерес к роли \"{job_title}\". Чтобы сделать финальный мэтчинг по ключевому профилю ({core_profile_summary}), отправьте, пожалуйста, актуальное CV/резюме и 2 или 3 релевантных проекта.",
+    "uk": "Привіт, {name}! Дякую за інтерес до ролі \"{job_title}\". Щоб зробити фінальний метчинг за ключовим профілем ({core_profile_summary}), надішліть, будь ласка, актуальне CV/резюме та 2 або 3 релевантні проєкти.",
+    "es": "Hola {name}, gracias por tu interés en \"{job_title}\". Para hacer el matching final sobre el perfil clave ({core_profile_summary}), ¿puedes compartir tu CV actualizado y 2 o 3 proyectos relevantes?"
   },
   "faq": {
     "salary": {
